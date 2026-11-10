@@ -950,6 +950,77 @@ The drawing pass at the 11 spots of `ab-phone.mjs pair` (stage 1 off in both pic
 
 (the test route's reports, pasted whole, newest last — each with the commit it was run on)
 
+**Run 1, the first numbers from the device since the mainland, the big mall and the film were built** (the site's build at `85c3f48` = the
+game from `13d5767` without stage 4.2; the pause menu's route or `?perftest=1`, with the new parts on or not - the report does not say; the
+phone at 26% battery; Chrome 157). The report, whole:
+
+```
+Beyond the Outline — מסלול מבחן (60 שניות, 1213 פריימים)
+מכשיר: ANGLE (Qualcomm, Adreno (TM) 730, OpenGL ES 3.2)
+מסך: 1764×822 · קנה מידה 0.88 · ציור חכם כבוי · טלפון
+פריימים בשנייה, ממוצע: 11.8 · 1% האיטיים: 5.3 · הפריים האיטי ביותר: 246.4ms
+קצב הפריימים במשחק: יציב (30) · המסלול עצמו נמדד בקצב הרגיל
+פריימים: עד 17ms 0% · עד 34ms 2% · יותר 98% · הכנת שיידרים 50 (22ms)
+עומדים במקום, פריימים בשנייה: רגיל 13.1 · כמו קודם 12.9 · רזולוציה נמוכה 16.2 · בלי השתקפות 12.7 · בלי צל 12.7 · בלי אנשים ומכוניות 12.7 · בלי ציור 60.0 · שוב רגיל 11.4
+מזה, זמן בכל פריים מחוץ לקוד המשחק (ms): רגיל 49 · כמו קודם 56 · רזולוציה נמוכה 36 · בלי השתקפות 53 · בלי צל 57 · בלי אנשים ומכוניות 58 · בלי ציור 7 · שוב רגיל 65
+עומדים במקום, אלפי משולשים / קריאות ציור: רגיל 918/231 · כמו קודם 1001/229 · רזולוציה נמוכה 969/236 · בלי השתקפות 962/238 · בלי צל 894/206 · בלי אנשים ומכוניות 849/172 · בלי ציור 0/0 · שוב רגיל 993/238
+הקניון מבחוץ: עכשיו 10.0 (1561/476) · כמו קודם 8.3 (3190/506) · בתוך הקניון: עכשיו 6.7 (2181/467) · כמו קודם 6.4 (2441/469)
+נסיעה ביבשה, מהגשר אל הקניון (42 שניות, 20 מ' לשנייה, 640 פריימים): פריימים בשנייה 15.4 · 1% האיטיים 3.6 · הפריים האיטי ביותר 521ms
+בנסיעה: פריימים מעל 50ms 443 (69%) · מעל 100ms 56 (9%) · הארוך ביותר 521ms · מעבד: משחק 19.1ms, שליחת הציור 14.7ms
+הבנייה בנסיעה: הוצגו 12 תאים, שוחררו 6 · הכי קרוב שהיה חסר 4 מ' (b104, במטר 543 של הנסיעה) · הכנת שיידרים בנסיעה 0 (0ms) · זיכרון הקוד 842→842 מ"ב, 0 איסופי זבל
+חמשת הפריימים האיטיים ביותר בנסיעה, ומה נבנה בהם:
+  1. 521ms בשנייה 10.1 (מטר 203): משחק 14 · שליחת ציור 11 · מחוץ לקוד 496 — מחוץ לקוד המשחק: ההמתנה לכרטיס או לדפדפן · היבשה 0.7ms (העלאה לכרטיס b65 (17) · ממתינים 1) · חנויות 0.1ms
+  2. 292ms בשנייה 27.0 (מטר 540): משחק 5 · שליחת ציור 14 · מחוץ לקוד 273 — מחוץ לקוד המשחק: ההמתנה לכרטיס או לדפדפן · היבשה 0.1ms (בונה b104)
+  3. 218ms בשנייה 3.0 (מטר 59): משחק 3 · שליחת ציור 8 · מחוץ לקוד 207 — מחוץ לקוד המשחק: ההמתנה לכרטיס או לדפדפן · היבשה 0.1ms (בונה lm15)
+  4. 213ms בשנייה 17.5 (מטר 350): משחק 11 · שליחת ציור 13 · מחוץ לקוד 189 — מחוץ לקוד המשחק: ההמתנה לכרטיס או לדפדפן · היבשה 1.4ms (הוצג lm16)
+  5. 204ms בשנייה 26.9 (מטר 537): משחק 6 · שליחת ציור 9 · מחוץ לקוד 190 — מחוץ לקוד המשחק: ההמתנה לכרטיס או לדפדפן · היבשה 0.2ms (בונה b104)
+דפדפן: Chrome 157 · המשחק פתוח 1 דקות · סוללה 26%
+מהירות המכשיר (ms לאותה עבודה, פחות זה מהר יותר): מעבד בהתחלה 19.0, בסוף 19.4 · כרטיס מסך בהתחלה 9.6, בסוף 10.6
+משימות ארוכות בכל שנייה: של המשחק 142ms · של הדף שמסביב 0ms
+מעבד: משחק 15.05ms · שליחת הציור 14.21ms
+עומק קודם: לא · עומק הקירות קודם: לא
+ציור העטים: בשלב אחד · הבחירה בהגדרות: אוטומטי · עוד לא נבדק במשחק
+כל שלב לבד, נמדד ישירות בסוף (ms): צל 2.4 · השתקפות 0.5 · ציור 75.9 · דיו 5.6 · זוהר 2.3 · סיום 3.1 · פריים שלם 85.3
+הציור בדרך השנייה (ms): בשני שלבים 58.3 · ככה: 75.9
+הציור (ms): כמו שהוא 75.9 · בלי אנשים ומכוניות 68.4 · ב-1/16 מהפיקסלים 30.5 · עם עומק הקירות קודם 63.7 · עם עומק קודם מלא 68.5 · בחומרים הישנים (עם discard) 90.3
+הציור בלי חלק אחד (ms): בלי העטים 49.9 · בלי הצל של השמש 75.5 · בלי הפנסים 69.7 · בלי הערפל 76.5 · רק צבע 31.0 · בלי ההשתקפות ברחוב 78.3 · המראה עם עטים 0.4 (ככה: 0.5)
+כרטיס מסך: הדפדפן לא מאפשר למדוד
+draw calls: ממוצע 240 · שיא 430 · 0.94M משולשים
+לפי מעבר: צל 39 · השתקפות 19 · ציור 173 · דיו 1 · זוהר 7 · סיום 1
+מערכות (ms): civilians.update 3.35 · civilians.draw 1.20 · traffic.update 0.87 · hud.update 0.58 · enemies.draw 0.49 · streetlife.update 0.48 · figures.end 0.47 · traffic.draw 0.44
+הכנת השיידרים: בלי הערות של הדפדפן (89)
+```
+
+Read (ROADMAP 19.6 has the same in Hebrew):
+
+- **The game at full quality is nowhere near 30 on this phone.** The route: 11.8 frames a second (98% of frames over 34 ms), the slowest
+  1% at 5.3. The processor is not the wall: game 15 ms + sending the draws 14 ms a frame; not drawn at all the game runs at 60. The
+  card is: at the island's start the whole frame is 85.3 ms, **the drawing 75.9 ms** of it (the shadow 2.4, the mirror 0.5, ink 5.6, glow
+  2.3, the last pass 3.1). Section 3.1's "37 ms" was before the mainland, the mall and the film: the game has grown to twice that.
+- **What the drawing's 75.9 ms is made of** (the pass-by-pass lines): at a sixteenth of the pixels 30.5 ms - what the triangles (918 K) and the
+  draws (173) cost by themselves - so about 45 ms are the pixels' work, nearly all of it the pens (all but the colour left out: 31.0;
+  without the pens' strokes: 49.9). People and cars together 7.5 ms (68.4 without them), the lamps 6.2, the sun's shadow 0.4, the haze 0.
+- **A faster way of drawing is on the shelf and is not used.** The report's three other ways, each the same picture: the pens in two
+  passes **58.3 ms** (17.6 less, 23%), the walls' depth first 63.7 (12.2 less), the whole depth first 68.5 (7.4 less). The game tries them
+  in play by itself (`render/depthtrial.js`: at 4 s and 120 s of play) and keeps the answer per build and per `gpu|browser` -
+  `main.js trialDev` includes the browser's version, so every Chrome update forgets it - and the test route stops the trial while it
+  runs. "עוד לא נבדק במשחק": this session had not tried yet.
+- **What stages 1, 2 and 4.1 did, at the same places as before (now / as before):** the island's start 13.1 / 12.9 frames a second (918 K / 1,001 K
+  triangles) - nothing; the street before the mall **10.0 / 8.3 (+20%)**, triangles 1,561 K / 3,190 K (half); inside the mall 6.7 / 6.4 (+5%),
+  2,181 K / 2,441 K. Two stands of one setting differ by 13% on their own (13.1 first, 11.4 last): the heat and the walking people; a
+  difference under 10% between two stands in a row says nothing (this is why the focused test turns the two about in seconds).
+- **Inside the mall, 6.7 frames a second (150 ms)** is the worst place: 2.2 M triangles, 467 draws. The processor is not the wall there
+  either, so stage 3.4 (the rooms' own walls and fixtures, 598 K triangles) is not made worse by the draws it adds: it is worth building.
+- **The drive:** 15.4 frames a second, 69% of the frames over 50 ms, 9% over 100 ms, the longest 521 ms. The slowest five are all "waiting
+  for the card or the browser", at the moment a block's meshes are sent up to the card (the game's own part 3-14 ms): the stalls are the
+  card receiving new things, not the building. And at 543 m, by the mall, the block `b104` was missing 4 m from the car.
+- **Shaders made in the run: 50 (22 ms of the page's time)** - most likely the pass-by-pass timing's other way of drawing (not counted
+  against the game: `profile()` makes the other pens' shaders), and 0 in the drive. To be confirmed on a run without that timing.
+- **The route's own "stuck":** the report is whole, so on this run the test ran to its end. Where a page can be held for tens of seconds
+  is known: the mainland's places built in one go (`mainland.fill`, 5 s here, several times that on a phone), the timing of every way of
+  drawing (`profile`), and a frame that throws: game.js's loop used to be asked for again only at the end of a frame that got there.
+  ROADMAP 19.6.
+
 ---
 
 ## Appendix A — where things are

@@ -1004,7 +1004,7 @@ export class Game {
     const hold = { scale: { v: 0, at: -1e9, for: 0, ms: 0 }, taa: { v: 0, at: -1e9, for: 0, ms: 0 }, detail: { v: -1, at: -1e9, for: 0, ms: 0 } };
     const held = (h, v, now, ms) => v <= h.v + 0.001 && now - h.at < h.for && ms < h.ms * 1.3;
     const pace = this.pace;
-    const tick = (ts) => {
+    const tickBody = (ts) => {
       const perf = this.perf;
       // (the steady pace instead, a choice in the settings, game/pace.js: a frame drawn on a fixed
       // beat of the screen's refreshes, the game moved on by just that much, the drawing's
@@ -1147,7 +1147,30 @@ export class Game {
       }
       requestAnimationFrame(tick);
     };
+    // (a frame that throws is not the last one: the loop used to be asked for again only by a frame that got to its end, so
+    // one error in the middle of one - and the picture stood still for good, the game stuck and nothing said, as on a phone in
+    // the test route. Now the error is noted (loopError) and the next frame is asked for all the same)
+    const tick = (ts) => {
+      try {
+        tickBody(ts);
+      } catch (e) {
+        this.loopError(e);
+        requestAnimationFrame(tick);
+      }
+    };
     requestAnimationFrame(tick);
+  }
+
+  // a frame of the loop threw: the first three in the console, all of them counted, the first and the last kept
+  // (the test route's report has them: game/perf.js), and a test route that is running stops there with what it has
+  loopError(e) {
+    const L = this.loopErrors || (this.loopErrors = { n: 0, first: null, last: null });
+    L.n++;
+    const msg = e && (e.stack || e.message) ? String(e.stack || e.message).slice(0, 700) : String(e);
+    if (!L.first) L.first = msg;
+    L.last = msg;
+    if (L.n <= 3) console.error('[loop] a frame threw', e);
+    if (this.perf && this.perf.loopError) this.perf.loopError(e, L);
   }
 
   update(dt) {

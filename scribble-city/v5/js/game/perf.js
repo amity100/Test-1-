@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { groundHeight } from '../world/layout.js';
 import { shared } from '../render/materials.js';
 import { GFX } from '../core/util.js';
+import { folkLook } from './looks.js';
 
 const ROUTE_SECONDS = 60;
 // after the route, standing at its start a few seconds each way, to see what holds the frames up
@@ -40,6 +41,30 @@ const PLACES = [
 const DRIVE_SPEED = 20;
 const DRIVE_SECONDS = 30;
 const DRIVE = [[-420, -379], [-560, -379], [-640, -379], [-672, -377], [-692, -365], [-700, -343], [-700, -300], [-700, -200], [-700, -100], [-700, -37]];
+// (ROADMAP 19.6, the owner's word: "a test specifically for the places where the speed was improved, not the regular one that
+// runs in random places") the focused test: the places where something was made faster, each seen as it is now and as it was before
+// (GFX.off), the two taken turn about in blocks of a second at the same place - so the people who walk, the cars that pass and a
+// phone that warms up are the same for both. x, z, yaw: where the player is put; pos, look: the camera. key: the place is also seen
+// at the lowest resolution and without drawing (the card's share of the frame, and the processor's). what: what was made faster there
+const FOCUS_SPOTS = [
+  { id: 'island', name: 'השדרה הראשית באי', what: 'מכוניות רחוקות בפחות נקודות · אנשים לפי המרחק · חנויות לאורך הרחוב', x: 5, z: 25, yaw: Math.PI, pos: [5, 2.4, 25], look: [5, 2.1, -35], key: true },
+  { id: 'crowd', name: 'קהל של 54 אנשים סביבך (3.5 עד 29 מטר)', what: 'האנשים בצורות קלות לפי המרחק', x: 5, z: 25, yaw: Math.PI, pos: [5, 1.8, 25], look: [5, 1.7, -35], crowd: true },
+  { ...PLACES[0], id: 'mall_out', name: 'הרחוב מול הקניון', what: 'הסחורה שהקירות מסתירים · מכוניות חונות · אנשים', mainland: true },
+  { ...PLACES[1], id: 'mall_in', name: 'בתוך הקניון, מתחת לכיפה', what: 'מאות חנויות: הסחורה שהקירות מסתירים · אנשים באולם', mainland: true, key: true },
+];
+// a block of one condition is a second of the game, the first 0.3 s of it not counted (the card's queue still holds the other
+// condition's frames); a place is left when each condition has FOCUS_MIN frames and three rounds were made, or after FOCUS_SPOT_MAX
+const FOCUS_BLOCK = 1.0;
+const FOCUS_DROP = 0.3;
+const FOCUS_MIN = 90;
+const FOCUS_SPOT_MAX = 100000;
+// the people of the crowd: their looks (game/looks.js folkLook) and the rows they stand in, metres from the camera
+const CROWD_KINDS = [0, 6, 13, 21, 30, 41];
+const CROWD_ROWS = [3.5, 5, 6.5, 8.5, 11, 14, 18, 23, 29];
+// a place built round the player, a little a frame (buildStep): the longest it may take, ms, before the test goes on without it
+const BUILD_MAX = 150000;
+// where the test's state is kept (crumb, recover)
+const STORE_KEY = 'sc5-bench';
 // the route: along the boulevard, through the shops and the park, up the avenue into downtown,
 // over the towers and out over the bay to the pier (x, height, z)
 const ROUTE = [
@@ -292,6 +317,29 @@ export class ClockTimer {
   }
 }
 
+// (the report copied, or sent: the share sheet of the phone where it has one)
+function copyText(text, g) {
+  const done = () => g.hud.toast('הועתק', 'good', 1.5);
+  const fallback = () => g.hud.toast('אי אפשר להעתיק אוטומטית: סמנו את הטקסט והעתיקו', 'warn', 3);
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+  } catch (e) {
+    fallback();
+  }
+}
+function shareText(text) {
+  try {
+    if (navigator.share) {
+      navigator.share({ title: 'Beyond the Outline — דוח בדיקת ביצועים', text }).catch(() => {});
+      return true;
+    }
+  } catch (e) {
+    // (no share sheet here: it is copied instead)
+  }
+  return false;
+}
+
 export class Perf {
   constructor(game) {
     this.game = game;
@@ -539,14 +587,16 @@ export class Perf {
     if (this.frameMs.length > 240) this.frameMs.shift();
     if (this.bench) {
       // (ROADMAP 19.4, 5.1: the drive's frames carry what the streamers did in them)
-      if (this.bench.drive) {
+      if (this.bench.focus) this.focusFrame(f);
+      else if (this.bench.drive) {
         this.driveNote(f);
         this.bench.drive.frames.push(f);
       } else (this.bench.still ? this.bench.still.frames : this.bench.frames).push(f);
-      // (and its progress on the screen, twice a second)
+      // (and its progress on the screen, twice a second, and its crumbs where a stuck page leaves them)
       if (now - (this._progAt || 0) > 500) {
         this._progAt = now;
         this.progress(this.bench);
+        this.crumb();
       }
     }
     if (this.on && now - this.shownAt > 250) {
@@ -633,7 +683,7 @@ export class Perf {
   }
 
   // ---------------------------------------------------------------- the test route
-  startBench(seconds = ROUTE_SECONDS, stillSeconds = STILL_SECONDS, driveSeconds = DRIVE_SECONDS) {
+  startBench(seconds = ROUTE_SECONDS, stillSeconds = STILL_SECONDS, driveSeconds = DRIVE_SECONDS, mode = 'route') {
     const g = this.game;
     if (this.bench) return;
     const pl = g.player;
@@ -661,7 +711,7 @@ export class Perf {
       }
     }
     // (ROADMAP 19.4, 5.1: and the drive after them, where the mainland is built: driveSecs)
-    const driveSecs = g.world && g.world.mainland && g.world.mainland.on ? driveSeconds : 0;
+    const driveSecs = mode !== 'focus' && g.world && g.world.mainland && g.world.mainland.on ? driveSeconds : 0;
     this.bench = { t: 0, pts, acc, len: acc[acc.length - 1], frames: [], scale: g.pipe.scale, taaFrac: g.pipe.taaFrac, warm: 1.5, secs: seconds, stillSecs: stillSeconds, from: [pl.pos.x, pl.pos.z, pl.yaw], still: null, drive: null, driveSecs, noDraw: false, refl: g.pipe.reflections, compiles: 0, compileMs: 0, stands, islandN };
     this.gpu.take(true);
     // the shaders made ready on the way (each a pause where it is first seen: on a phone, long)
@@ -707,6 +757,28 @@ export class Perf {
       b.battery = null;
     }
     b.t0 = performance.now();
+    // (ROADMAP 19.6) the page's own heartbeat: a main thread held for seconds - a place built in one go, a long timing - shows in
+    // the gaps between the beats, and is told in the report with the stage it was in. And the test's state is kept (crumb) where it
+    // survives a stuck page, to be read the next time the link is opened (recover)
+    b.mode = mode;
+    b.blocks = [];
+    b.builds = [];
+    b.crumbLines = [];
+    b.wdLast = performance.now();
+    b.wd = setInterval(() => {
+      const now = performance.now();
+      const gap = now - b.wdLast;
+      b.wdLast = now;
+      if (gap > 2000 && !document.hidden) b.blocks.push({ at: Math.round((now - b.t0) / 1000), gap: Math.round(gap), stage: this.stageName(b) });
+    }, 500);
+    // (and the page put aside - another app, the screen dark - is no stall: the beat starts again, and the test says it was cut)
+    b.onVis = () => {
+      b.wdLast = performance.now();
+      if (document.hidden) b.interrupted = true;
+    };
+    document.addEventListener('visibilitychange', b.onVis);
+    if (mode === 'focus') b.focus = this.focusInit(b);
+    this.crumb(true);
     // the test is at the drawing's full quality: the self-adjusting resolution waits
     g.pipe.scale = g.pipe.defaultScale || g.pipe.scale;
     g.pipe.taaFrac = 0.67;
@@ -729,69 +801,121 @@ export class Perf {
       b.lock = null;
     }
     // (v5: and at the very end a few seconds with the picture still, each pass timed on its own)
-    g.hud.toast(driveSecs > 0 ? 'מסלול מבחן: דקה, ואחריה עוד כחצי דקה במקום, ובסוף נסיעה של חצי דקה ביבשה. בלי לגעת…' : 'מסלול מבחן: דקה, ואחריה עוד כחצי דקה במקום. בסוף התמונה עומדת כמה שניות. בלי לגעת…', 'info', 4);
+    g.hud.toast(mode === 'focus' ? 'בדיקה ממוקדת במקומות ששופרו: ארבעה מקומות, בכל אחד "עכשיו" מול "כמו קודם". בלי לגעת…' : driveSecs > 0 ? 'מסלול מבחן: דקה, ואחריה עוד כחצי דקה במקום, ובסוף נסיעה של חצי דקה ביבשה. בלי לגעת…' : 'מסלול מבחן: דקה, ואחריה עוד כחצי דקה במקום. בסוף התמונה עומדת כמה שניות. בלי לגעת…', 'info', 4);
   }
 
   // (?perftest, main.js: the owner's word - a link that runs the test by itself, without entering the game) the
-  // test route without the pause menu: the game is already in the city behind a card with one big button; a tap
+  // test without the pause menu: the game is already in the city behind a card with one big button; a tap
   // on it - the one thing a browser wants before it will go full screen and sideways, where the numbers are those
   // of the game as it is played - and the test goes by itself, once the picture has stopped changing size.
-  // quick: a few seconds of each part, to try the link itself
-  autoBench(quick = false) {
+  // mode 'focus': the test of the places that were made faster (focusInit), not the route. quick: a few seconds
+  // of each part, to try the link itself
+  autoBench(quick = false, mode = 'route') {
     const g = this.game;
-    if (document.getElementById('perf-start')) return;
-    const el = document.createElement('div');
-    el.id = 'perf-start';
-    el.style.cssText = 'position:fixed;inset:0;z-index:46;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;background:rgba(16,12,30,0.62);direction:rtl;font-family:"Rubik",system-ui,sans-serif';
-    el.innerHTML =
-      '<div style="max-width:min(460px,92vw);box-sizing:border-box;padding:14px 18px 16px;border-radius:14px;background:#fff8ec;color:#1b1430;text-align:center;box-shadow:0 6px 30px rgba(0,0,0,0.45)">' +
-      '<div style="font-size:21px;font-weight:700;margin-bottom:6px">מבחן ביצועים</div>' +
-      '<div style="font-size:14px;line-height:1.5;margin-bottom:10px">המבחן עובר לבד: הליכה ברחובות, עמידה במקום ובקניון, ובסוף נסיעה ביבשה. כשלוש דקות. אחרי הלחיצה לא נוגעים במסך. בסוף יופיע דוח עם כפתור "העתקה".</div>' +
-      '<button data-a="go" style="font-weight:700;font-size:20px;line-height:1.2;font-family:inherit;padding:12px 30px;border:3px solid #1b1430;border-radius:12px;background:#ffd23f;color:#1b1430;box-shadow:2px 3px 0 #1b1430">התחלת המבחן</button>' +
-      '<div data-a="note" style="font-size:12px;opacity:0.75;margin-top:8px">הלחיצה מעבירה את המסך למסך מלא ולרוחב, כמו במשחק</div>' +
-      '</div>';
-    (document.getElementById('app') || document.body).appendChild(el);
-    const note = el.querySelector('[data-a="note"]');
-    const portrait = () => window.innerHeight > window.innerWidth;
-    const hint = () => {
-      if (!el.isConnected) return;
-      note.textContent = portrait() ? 'הטלפון מוחזק לאורך: הלחיצה תסובב אותו לרוחב' : 'הלחיצה מעבירה את המסך למסך מלא ולרוחב, כמו במשחק';
-      setTimeout(hint, 1000);
-    };
-    hint();
-    const begin = () => {
-      el.remove();
-      // (full screen and sideways, as the game takes the phone when it begins: start() in game.js)
-      try {
-        if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
-        if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
-      } catch (e) {
-        // (optional: the test goes on in the screen it has)
-      }
-      // (a moment for the screen to settle: the test begins when the picture has kept its size for a second, and
-      // the game is in play - at the latest after eight seconds; again each second if it did not begin)
-      const t0 = performance.now();
-      let size = '';
-      let same = 0;
-      const wait = () => {
-        if (this.bench) return;
-        const c = g.renderer.domElement;
-        const s = `${c.width}x${c.height}`;
-        same = s === size ? same + 1 : 0;
-        size = s;
-        const waited = performance.now() - t0;
-        if ((same >= 4 && waited > 1500 && g.state === 'play' && !(g.prologue && g.prologue.active)) || waited > 8000) {
-          if (quick) this.startBench(3, 1, 4);
-          else this.startBench();
-          if (this.bench) return;
-          setTimeout(wait, 1000);
-          return;
-        }
-        setTimeout(wait, 250);
+    if (document.getElementById('perf-start') || document.getElementById('perf-recover')) return;
+    const focus = mode === 'focus';
+    const card = () => {
+      const el = document.createElement('div');
+      el.id = 'perf-start';
+      el.style.cssText = 'position:fixed;inset:0;z-index:46;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;background:rgba(16,12,30,0.62);direction:rtl;font-family:"Rubik",system-ui,sans-serif';
+      el.innerHTML =
+        '<div style="max-width:min(480px,92vw);box-sizing:border-box;padding:14px 18px 16px;border-radius:14px;background:#fff8ec;color:#1b1430;text-align:center;box-shadow:0 6px 30px rgba(0,0,0,0.45)">' +
+        `<div style="font-size:21px;font-weight:700;margin-bottom:6px">${focus ? 'בדיקה ממוקדת במקומות ששופרו' : 'מבחן ביצועים'}</div>` +
+        `<div style="font-size:14px;line-height:1.5;margin-bottom:10px">${focus ? 'ארבעה מקומות: השדרה הראשית באי, קהל אנשים, הרחוב מול הקניון ובתוך הקניון. בכל אחד המשחק מצויר לסירוגין "עכשיו" ו"כמו קודם", כדי לראות כמה מהר נהיה. כארבע דקות. אחרי הלחיצה לא נוגעים במסך. בסוף יופיע דוח מפורט עם כפתורי "העתקה" ו"שיתוף".' : 'המבחן עובר לבד: הליכה ברחובות, עמידה במקום ובקניון, ובסוף נסיעה ביבשה. כשלוש דקות. אחרי הלחיצה לא נוגעים במסך. בסוף יופיע דוח עם כפתורי "העתקה" ו"שיתוף".'}</div>` +
+        '<button data-a="go" style="font-weight:700;font-size:20px;line-height:1.2;font-family:inherit;padding:12px 30px;border:3px solid #1b1430;border-radius:12px;background:#ffd23f;color:#1b1430;box-shadow:2px 3px 0 #1b1430">התחלת המבחן</button>' +
+        '<div data-a="note" style="font-size:12px;opacity:0.75;margin-top:8px">הלחיצה מעבירה את המסך למסך מלא ולרוחב, כמו במשחק</div>' +
+        '</div>';
+      (document.getElementById('app') || document.body).appendChild(el);
+      const note = el.querySelector('[data-a="note"]');
+      const portrait = () => window.innerHeight > window.innerWidth;
+      const hint = () => {
+        if (!el.isConnected) return;
+        note.textContent = portrait() ? 'הטלפון מוחזק לאורך: הלחיצה תסובב אותו לרוחב' : 'הלחיצה מעבירה את המסך למסך מלא ולרוחב, כמו במשחק';
+        setTimeout(hint, 1000);
       };
-      wait();
+      hint();
+      const begin = () => {
+        el.remove();
+        // (full screen and sideways, as the game takes the phone when it begins: start() in game.js)
+        try {
+          if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+          if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+        } catch (e) {
+          // (optional: the test goes on in the screen it has)
+        }
+        // (a moment for the screen to settle: the test begins when the picture has kept its size for a second, and
+        // the game is in play - at the latest after eight seconds; again each second if it did not begin)
+        const t0 = performance.now();
+        let size = '';
+        let same = 0;
+        const wait = () => {
+          if (this.bench) return;
+          const c = g.renderer.domElement;
+          const sz = `${c.width}x${c.height}`;
+          same = sz === size ? same + 1 : 0;
+          size = sz;
+          const waited = performance.now() - t0;
+          if ((same >= 4 && waited > 1500 && g.state === 'play' && !(g.prologue && g.prologue.active)) || waited > 8000) {
+            if (focus) {
+              this.startBench(0, 0, 0, 'focus');
+              if (this.bench && quick) this.bench.focus.quick = true;
+            } else if (quick) this.startBench(3, 1, 4);
+            else this.startBench();
+            if (this.bench) return;
+            setTimeout(wait, 1000);
+            return;
+          }
+          setTimeout(wait, 250);
+        };
+        wait();
+      };
+      el.querySelector('button').addEventListener('click', begin);
     };
-    el.querySelector('button').addEventListener('click', begin);
+    // (a test that did not end the last time - the page stuck, closed, put out of memory - or ended a short while ago: what was
+    // kept of it comes first, to be copied or sent; then a new one)
+    if (!this.recover(card)) card();
+  }
+
+  // what a test kept of itself (crumb, finishBench), shown when the link is opened again: next() starts a new one. false: nothing to show
+  recover(next) {
+    let saved = null;
+    try {
+      saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+    } catch (e) {
+      saved = null;
+    }
+    if (!saved || !saved.at) return false;
+    const age = Date.now() - saved.at;
+    if (age > (saved.done ? 30 * 60000 : 24 * 3600000)) return false;
+    const mins = Math.max(0, Math.round(age / 60000));
+    const text = saved.done
+      ? saved.text
+      : `Beyond the Outline — בדיקה שלא הסתיימה (${saved.mode === 'focus' ? 'ממוקדת' : 'מסלול'})\nהיא נעצרה בשלב: ${saved.stage} (אחרי ${saved.secs} שניות)\n${(saved.blocks || []).length ? `חסימות של הדף: ${saved.blocks.map((x) => `${x.gap}ms בשנייה ${x.at} בשלב ${x.stage}`).join(' · ')}\n` : ''}מה שנאסף עד אז:\n${(saved.lines || []).join('\n') || '(עוד לא נאסף כלום)'}`;
+    const el = document.createElement('div');
+    el.id = 'perf-recover';
+    el.style.cssText = 'position:fixed;inset:0;z-index:47;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;background:rgba(16,12,30,0.7);direction:rtl;font-family:"Rubik",system-ui,sans-serif';
+    el.innerHTML =
+      '<div style="max-width:min(520px,94vw);box-sizing:border-box;padding:14px 18px 16px;border-radius:14px;background:#fff8ec;color:#1b1430;text-align:center;box-shadow:0 6px 30px rgba(0,0,0,0.45)">' +
+      `<div style="font-size:19px;font-weight:700;margin-bottom:6px">${saved.done ? `הדוח של הבדיקה האחרונה (לפני ${mins} דקות)` : 'הבדיקה הקודמת לא הסתיימה'}</div>` +
+      `<div style="font-size:14px;line-height:1.5;margin-bottom:10px">${saved.done ? 'אפשר להעתיק או לשלוח אותו שוב.' : `היא נעצרה בשלב: ${saved.stage} (אחרי ${saved.secs} שניות). מה שנאסף עד אז נשמר: אפשר להעתיק או לשלוח אותו.`}</div>` +
+      '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
+      '<button data-a="copy" style="font-weight:700;font-size:17px;font-family:inherit;padding:9px 20px;border:3px solid #1b1430;border-radius:12px;background:#fff;color:#1b1430">העתקה</button>' +
+      '<button data-a="share" style="font-weight:700;font-size:17px;font-family:inherit;padding:9px 20px;border:3px solid #1b1430;border-radius:12px;background:#fff;color:#1b1430">שיתוף</button>' +
+      '<button data-a="new" style="font-weight:700;font-size:17px;font-family:inherit;padding:9px 20px;border:3px solid #1b1430;border-radius:12px;background:#ffd23f;color:#1b1430">בדיקה חדשה</button>' +
+      '</div></div>';
+    (document.getElementById('app') || document.body).appendChild(el);
+    el.addEventListener('click', (e) => {
+      const a = e.target && e.target.dataset ? e.target.dataset.a : null;
+      if (a === 'copy') copyText(text, this.game);
+      else if (a === 'share') {
+        if (!shareText(text)) copyText(text, this.game);
+      }
+      else if (a === 'new') {
+        el.remove();
+        next();
+      }
+    });
+    return true;
   }
 
   // (the test route's progress on the screen, twice a second: which part of it it is in, and how far; b: the
@@ -813,10 +937,13 @@ export class Perf {
     const n = b.driveSecs > 0 ? 3 : 2;
     const sec = (v, of) => `${Math.max(0, Math.min(Math.round(of), Math.round(v)))} מתוך ${Math.round(of)} שניות`;
     let part;
-    if (b.drive) part = `חלק 3 מתוך ${n}: נסיעה ביבשה, ${sec(b.drive.t - b.drive.settle, b.drive.secs)}`;
-    else if (b.still) part = `חלק 2 מתוך ${n}: עומדים במקום, ${Math.max(1, Math.min(b.still.i + 1, b.stands.length))} מתוך ${b.stands.length}`;
+    if (b.focus) {
+      const F = b.focus;
+      part = F.spot ? `מקום ${F.i + 1} מתוך ${F.spots.length}: ${F.spot.name} · ${F.phaseHe}` : 'מתחילים';
+    } else if (b.drive) part = `חלק 3 מתוך ${n}: נסיעה ביבשה, ${b.drive.build ? 'בונים את ההתחלה' : sec(b.drive.t - b.drive.settle, b.drive.secs)}`;
+    else if (b.still) part = `חלק 2 מתוך ${n}: עומדים במקום, ${Math.max(1, Math.min(b.still.i + 1, b.stands.length))} מתוך ${b.stands.length}${b.still.build ? ' · בונים את המקום' : ''}`;
     else part = `חלק 1 מתוך ${n}: הליכה ברחובות, ${sec(b.t - b.warm, b.secs)}`;
-    const text = `מבחן הביצועים רץ · ${part}\nבלי לגעת במסך. בסוף יופיע דוח עם כפתור העתקה`;
+    const text = `מבחן הביצועים רץ · ${part}\nבלי לגעת במסך. בסוף יופיע דוח עם כפתורי העתקה ושיתוף`;
     if (el.dataset.t !== text) {
       el.dataset.t = text;
       el.innerHTML = '';
@@ -855,6 +982,11 @@ export class Perf {
     const b = this.bench;
     if (!b) return false;
     b.t += dt;
+    // (ROADMAP 19.6: the focused test has its own way)
+    if (b.focus) {
+      this.focusStep(dt);
+      return true;
+    }
     // (ROADMAP 19.4, 5.1: after the stands, the drive)
     if (b.drive) {
       this.driveStep(dt);
@@ -928,7 +1060,8 @@ export class Perf {
     // were, before the places of the mainland
     if (s.i === b.islandN && b.stages === undefined) {
       try {
-        b.stages = this.stages();
+        // (on a phone the few passes that matter: a timing of everything held the page for as long as it took)
+        b.stages = this.stages(GFX.phone);
       } catch (e) {
         b.stages = null;
       }
@@ -945,13 +1078,11 @@ export class Perf {
     if (P && s.place !== P) {
       s.place = P;
       g.hud.toast(`בונים את ${P.name}…`, 'info', 4);
-      try {
-        g.world.mainland.fill({ x: P.x, z: P.z, y: 0 });
-      } catch (e) {
-        // (a place that cannot be built is stood in as it is)
-      }
+      // (the player put there, and the place built round him a little a frame, the picture going on - not mainland.fill, which holds
+      // the page for as long as it takes: on a phone many seconds each time, and the test looked stuck. buildStep)
       g.player.spawn(P.x, P.z, P.yaw);
       g.camRig.yaw = P.yaw;
+      s.build = { x: P.x, z: P.z, y: 0, t0: performance.now(), max: BUILD_MAX, name: P.name };
     }
     s.at = P;
     // (settled, not counted: a second; at a place of the mainland two, and then STILL_SECONDS counted)
@@ -964,6 +1095,440 @@ export class Perf {
     else if (what === 'life') pipe.hideLife = true;
     else if (what === 'draw') b.noDraw = true;
     else if (what === 'old') GFX.off = true;
+  }
+
+  // ---------------------------------------------------------------- a test that cannot stop the page (ROADMAP 19.6)
+  // (the owner's word: the test route "stopped after about a minute, nothing moved, and then it got stuck". What can do that: a page
+  // held for tens of seconds by a place built in one go (mainland.fill), a timing of every pass (render/pipeline.js profile), or a frame
+  // that threw and so was the last one - game.js tick used to ask for the next frame only at the end of one.)
+
+  // where the test is, in words (the progress, the page's heartbeat, the crumbs)
+  stageName(b) {
+    if (!b) return '';
+    if (b.focus) {
+      const F = b.focus;
+      return F.spot ? `${F.spot.name} · ${F.phaseHe || F.phase}` : 'התחלה';
+    }
+    if (b.drive) return `נסיעה ביבשה${b.drive.build ? ' · בונים את ההתחלה' : ''}`;
+    if (b.still) {
+      const s = b.still;
+      const st = b.stands[s.i];
+      return `עומדים במקום ${Math.max(1, s.i + 1)}/${b.stands.length}${st ? ` · ${st.name}${st.place ? ` · ${st.place.name}` : ''}` : ''}${s.build ? ' · בונים את המקום' : ''}`;
+    }
+    return 'הליכה ברחובות';
+  }
+
+  // the test's state kept where a stuck page leaves it: the next time the link is opened it can be read and sent (recover)
+  crumb(force = false) {
+    const b = this.bench;
+    if (!b) return;
+    const now = performance.now();
+    if (!force && now - (this._crumbAt || 0) < 1500) return;
+    this._crumbAt = now;
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({ at: Date.now(), mode: b.mode, done: false, stage: this.stageName(b), secs: Math.round((now - b.t0) / 1000), lines: (b.crumbLines || []).slice(-60), blocks: (b.blocks || []).slice(-5) }));
+    } catch (e) {
+      // (kept or not, the test goes on)
+    }
+  }
+
+  // a frame of the loop threw (game.js loopError): a test that is running ends there, with what it has, and says what threw
+  loopError(e) {
+    if (this.bench) this.abortBench(e);
+  }
+
+  abortBench(e) {
+    const b = this.bench;
+    if (!b || b.aborting) return;
+    b.aborting = true;
+    b.error = `${e && e.message ? e.message : e}`.slice(0, 300) + (e && e.stack ? `\n${String(e.stack).split('\n').slice(0, 5).join('\n').slice(0, 600)}` : '');
+    try {
+      this.endBench();
+    } catch (err) {
+      // (even the report would not be made: the error alone is told, with what was kept)
+      this.bench = null;
+      this.progress(null);
+      this.report(`Beyond the Outline — המבחן נעצר בגלל שגיאה\n${b.error}\nבשלב: ${this.stageName(b)}\nמה שנאסף עד אז:\n${(b.crumbLines || []).join('\n')}\nושגיאה נוספת בהכנת הדוח: ${err && err.message}`);
+    }
+  }
+
+  // one frame's share of getting a place built round the player, as the game builds it as you come (the streamers' own updates), only many
+  // to a frame - as many as fit in some 70 ms - and the picture going on: the page keeps answering, the progress shows, and nothing holds
+  // it for tens of seconds the way mainland.fill does (on a phone, many seconds each time). Returns true when nothing wanted round the
+  // place is missing or waiting - or when the time ran out (B.timedOut)
+  buildStep(B, dt) {
+    const g = this.game;
+    const ml = g.world.mainland;
+    const il = g.world.interiors;
+    if (!ml || !ml.on) return true;
+    const pos = B.pos || (B.pos = { x: B.x, z: B.z });
+    const vel = B.vel || (B.vel = { x: 0, z: 0 });
+    const t0 = performance.now();
+    let k = 0;
+    do {
+      ml.update(dt, pos, vel);
+      if (il) il.update(B.x, B.z, 0, 0, B.y);
+      k++;
+    } while (k < 60 && performance.now() - t0 < 70);
+    B.calls = (B.calls || 0) + k;
+    const idle = (st) => !st.job && !st.pending.length && !(st.parked && st.parked.length) && !st.pick(B.x, B.z, 0, 0);
+    if (idle(ml.stream) && (!il || idle(il.stream))) return true;
+    if (performance.now() - B.t0 > B.max) {
+      B.timedOut = true;
+      return true;
+    }
+    return false;
+  }
+
+  // (on a phone) the passes timed one by one, the few that matter: a timing of every way of drawing (render/pipeline.js profile: some twenty,
+  // each a dozen times, and the shaders of the other way of drawing made on the way) holds the page for as long as it takes - seconds on a
+  // computer, far longer on a phone
+  lightStages(center) {
+    const pipe = this.game.pipe;
+    const T = pipe.timer;
+    pipe.timer = null;
+    const time = (fn, reps = 4) => {
+      let best = Infinity;
+      for (let k = 0; k < 2; k++) {
+        pipe.syncGpu();
+        const t0 = performance.now();
+        for (let i = 0; i < reps; i++) fn();
+        pipe.syncGpu();
+        best = Math.min(best, (performance.now() - t0) / reps);
+      }
+      return best;
+    };
+    const out = {};
+    try {
+      out.shadow = time(() => pipe.renderShadows(center));
+      out.reflection = pipe.reflections ? time(() => pipe.renderReflection()) : 0;
+      out.main = time(() => pipe.drawMain());
+      const life = pipe.hideMoving().slice();
+      out.city = time(() => pipe.drawMain());
+      for (const o of life) o.visible = true;
+      out.ink = time(() => pipe.pass(pipe.steady ? pipe.mInkD : pipe.mInk, pipe.inkRT));
+      out.glow = time(() => pipe.drawGlow(pipe.mBright.uniforms.tSrc.value, pipe._glowSize));
+      out.final = time(() => pipe.pass(pipe.finalMat(), null));
+      out.frame = time(() => pipe.render(center));
+    } finally {
+      pipe.timer = T;
+    }
+    return out;
+  }
+
+  // the lines of a report both tests end with: how the places were built, what held the page, what was cut, what threw
+  healthLines(b) {
+    const g = this.game;
+    const L = [];
+    if (b.builds && b.builds.length) L.push(`בניית המקומות לפני המדידה (שניות): ${b.builds.map((x) => `${x.name} ${(x.ms / 1000).toFixed(1)}${x.timedOut ? ' (לא הסתיימה בזמן)' : ''}`).join(' · ')}`);
+    if (b.blocks && b.blocks.length) {
+      const long = b.blocks.slice().sort((x, y) => y.gap - x.gap)[0];
+      L.push(`חסימות של הדף (המסך לא ענה יותר משתי שניות): ${b.blocks.length} · הארוכה ${(long.gap / 1000).toFixed(1)} שניות, בשנייה ${long.at} של המבחן, בשלב: ${long.stage}`);
+    } else L.push('חסימות של הדף (המסך לא ענה יותר משתי שניות): אין');
+    if (b.interrupted) L.push('הבדיקה הופסקה בדרך (עברו לאפליקציה אחרת או שהמסך כבה): מה שנמדד אז לא אמין');
+    if (g.loopErrors) L.push(`שגיאות בלולאת המשחק: ${g.loopErrors.n} · הראשונה: ${String(g.loopErrors.first).split('\n').slice(0, 3).join(' | ')}`);
+    return L;
+  }
+
+  // ---------------------------------------------------------------- the focused test (ROADMAP 19.6)
+  // (the owner's word: "a test specifically for the places where the speed was improved, not the regular one that runs in random places".)
+  // Each place of FOCUS_SPOTS is stood in, built round the player if it is on the mainland, and seen in turn as the game draws it now (the
+  // phone's own way, as the address asks) and as it drew before (GFX.off), a second of one and a second of the other, again and again,
+  // at the same place and the same moment: what walks, what drives past and a phone that warms up are the same for both. At the places
+  // marked key there are two more conditions in the turn: the lowest resolution (what the card's pixels cost) and no drawing at all
+  // (the game's own code alone, the processor). The numbers of each condition are those of the frames after the first 0.3 s of its blocks
+
+  focusInit(b) {
+    const g = this.game;
+    const ml = !!(g.world && g.world.mainland && g.world.mainland.on);
+    return { spots: FOCUS_SPOTS.filter((sp) => !sp.mainland || ml), i: -1, spot: null, phase: 'next', phaseHe: '', t: 0, acc: {}, res: [], k: 0, cond: 'now', conds: ['now', 'before'], blockT: 0, measuring: false, spotT0: 0, over50: 0, over100: 0, frames: 0, longest: 0, crowd: null, build: null, fx: null, quick: false };
+  }
+
+  // a condition's state: as the game is, as it was before, at the lowest resolution, not drawn
+  focusCond(cond) {
+    const b = this.bench;
+    const pipe = this.game.pipe;
+    pipe.scale = pipe.defaultScale || b.scale;
+    pipe.reflections = b.refl;
+    pipe.noSunPass = false;
+    pipe.hideLife = false;
+    b.noDraw = false;
+    GFX.off = false;
+    if (cond === 'before') GFX.off = true;
+    else if (cond === 'scale') pipe.scale = pipe.minScale;
+    else if (cond === 'draw') b.noDraw = true;
+  }
+
+  // the next place (the one just done put away), or the end
+  focusNext() {
+    const b = this.bench;
+    const F = b.focus;
+    const g = this.game;
+    if (F.spot) this.focusClose();
+    F.i++;
+    if (F.i >= F.spots.length) {
+      this.endBench();
+      return;
+    }
+    const sp = F.spots[F.i];
+    F.spot = sp;
+    F.acc = {};
+    F.k = 0;
+    F.blockT = 0;
+    F.measuring = false;
+    F.fx = null;
+    F.t = 0;
+    F.spotT0 = performance.now();
+    F.conds = sp.key ? ['now', 'before', 'scale', 'draw'] : ['now', 'before'];
+    this.focusCond('now');
+    if (sp.mainland) {
+      g.hud.toast(`בונים את ${sp.name}…`, 'info', 4);
+      g.player.spawn(sp.x, sp.z, sp.yaw);
+      g.camRig.yaw = sp.yaw;
+      F.build = { x: sp.x, z: sp.z, y: 0, t0: performance.now(), max: BUILD_MAX, name: sp.name };
+      F.phase = 'build';
+      F.phaseHe = 'בונים את המקום';
+    } else {
+      if (sp.crowd) this.focusCrowd(sp);
+      F.phase = 'settle';
+      F.phaseHe = 'מתייצבים';
+    }
+    this.crumb(true);
+  }
+
+  // a crowd of 54 standing in rows in front of the camera, facing it: the city's own people walk away; these stay where they are put
+  focusCrowd(sp) {
+    const g = this.game;
+    const F = this.bench.focus;
+    const crowd = [];
+    const x0 = sp.pos[0];
+    const z0 = sp.pos[2];
+    for (const d of CROWD_ROWS) {
+      const sep = d <= 12 ? 1.0 : d <= 24 ? 1.3 : 1.6;
+      CROWD_KINDS.forEach((kind, i) => {
+        const x = x0 + (i - (CROWD_KINDS.length - 1) / 2) * sep;
+        const c = g.civilians.spawnScripted(x, z0 - d, folkLook(kind), { focus: true }, null);
+        c.fx = x;
+        c.fz = z0 - d;
+        c.yaw = 0;
+        if (c.fig) c.fig.yaw = 0;
+        crowd.push(c);
+      });
+    }
+    F.crowd = crowd;
+  }
+
+  // one frame of the focused test: the camera, the player, the crowd, and the turn of the conditions
+  focusStep(dt) {
+    const b = this.bench;
+    const F = b.focus;
+    const g = this.game;
+    if (F.phase === 'next') {
+      this.focusNext();
+      if (!this.bench) return;
+    }
+    const sp = F.spot;
+    const cam = g.camera;
+    cam.position.set(sp.pos[0], sp.pos[1], sp.pos[2]);
+    cam.lookAt(sp.look[0], sp.look[1], sp.look[2]);
+    if (!sp.mainland) {
+      // (the city's life lives round the player: he stands under the camera)
+      const gh = groundHeight(sp.x, sp.z);
+      if (gh >= 0) {
+        g.player.pos.set(sp.x, gh, sp.z);
+        g.player.vel.set(0, 0, 0);
+      }
+    }
+    if (F.crowd) {
+      for (const c of F.crowd) {
+        c.pos.x = c.fx;
+        c.pos.z = c.fz;
+        c.yaw = 0;
+        if (c.fig) c.fig.yaw = 0;
+      }
+    }
+    if (F.phase === 'build') {
+      // (a place built round the player a little a frame, the camera held: not counted)
+      if (!this.buildStep(F.build, dt)) return;
+      b.builds.push({ name: sp.name, ms: Math.round(performance.now() - F.build.t0), calls: F.build.calls || 0, timedOut: !!F.build.timedOut });
+      F.build = null;
+      F.phase = 'settle';
+      F.phaseHe = 'מתייצבים';
+      F.t = 0;
+      return;
+    }
+    if (F.phase === 'settle') {
+      F.t += dt;
+      if (F.t >= (F.quick ? 0.5 : 2)) {
+        F.phase = 'measure';
+        F.phaseHe = 'מודדים';
+        F.k = 0;
+        F.cond = F.conds[0];
+        this.focusCond(F.cond);
+        F.blockT = 0;
+        F.measuring = false;
+      }
+      return;
+    }
+    // measure: the conditions turn about in blocks of a second
+    F.blockT += dt;
+    F.measuring = F.blockT >= FOCUS_DROP;
+    if (F.blockT < FOCUS_BLOCK) return;
+    // (what the change did here, taken at the end of a block of 'now')
+    if (F.cond === 'now') F.fx = this.focusFx();
+    F.k++;
+    F.cond = F.conds[F.k % F.conds.length];
+    this.focusCond(F.cond);
+    F.blockT = 0;
+    F.measuring = false;
+    const n = (c) => (F.acc[c] ? F.acc[c].dt.length : 0);
+    const want = F.quick ? 6 : FOCUS_MIN;
+    const cycles = Math.floor(F.k / F.conds.length);
+    const enough = F.conds.every((c) => n(c) >= want) && cycles >= (F.quick ? 1 : 3);
+    if (enough || cycles >= 12 || performance.now() - F.spotT0 > FOCUS_SPOT_MAX) F.phase = 'next';
+  }
+
+  // (frameEnd) a frame of the focused test: counted for the stalls, and kept for its condition while it is measured
+  focusFrame(f) {
+    const F = this.bench.focus;
+    if (F.phase === 'measure' || F.phase === 'settle') {
+      F.frames++;
+      if (f.dt > 50) F.over50++;
+      if (f.dt > 100) F.over100++;
+      if (f.dt > F.longest) F.longest = f.dt;
+    }
+    if (F.phase !== 'measure' || !F.measuring) return;
+    const A = F.acc[F.cond] || (F.acc[F.cond] = { dt: [], upd: [], ren: [], calls: [], tris: [] });
+    A.dt.push(f.dt);
+    A.upd.push(f.upd);
+    A.ren.push(f.ren);
+    A.calls.push(f.calls);
+    A.tris.push(f.tris);
+  }
+
+  // what the change did at this place, in numbers: the shops whose goods were left out of the picture, the people and the cars drawn in lighter shapes
+  focusFx() {
+    const g = this.game;
+    const out = {};
+    const I = g.world.interiors;
+    if (I && I.viewStats) out.shops = { live: I.viewStats.live, hidden: I.viewStats.hidden };
+    const c = g.camera.position;
+    let near = 0;
+    let lite = 0;
+    for (const p of g.civilians.list || []) {
+      if (p.gone || !p.fig || p.inside) continue;
+      if (Math.hypot(p.pos.x - c.x, p.pos.z - c.z) > 40) continue;
+      near++;
+      if (p.fig._lodH || p.fig._lodB) lite++;
+    }
+    out.people = { near, lite };
+    const cm = g.cars && g.cars._lodWas;
+    if (cm && cm.size) {
+      let full = 0;
+      let mid = 0;
+      let far = 0;
+      for (const lv of cm.values()) {
+        if (lv === 0) full++;
+        else if (lv === 1) mid++;
+        else far++;
+      }
+      out.cars = { full, mid, far };
+    }
+    return out;
+  }
+
+  // the numbers of one condition at one place
+  focusSum(A) {
+    const n = A.dt.length;
+    const mean = (a) => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length);
+    const dt = mean(A.dt);
+    const sorted = A.dt.slice().sort((x, y) => y - x);
+    const worst = sorted.slice(0, Math.max(1, Math.floor(n / 100)));
+    const upd = mean(A.upd);
+    const ren = mean(A.ren);
+    return { n, ms: dt, fps: dt > 0 ? 1000 / dt : 0, low1: mean(worst) > 0 ? 1000 / mean(worst) : 0, upd, ren, wait: Math.max(0, dt - upd - ren), calls: mean(A.calls), tris: mean(A.tris) / 1000 };
+  }
+
+  // the place just done: its numbers put away, its crowd sent off
+  focusClose() {
+    const b = this.bench;
+    const F = b.focus;
+    const sp = F.spot;
+    if (!sp) return;
+    const sum = {};
+    for (const c of Object.keys(F.acc)) sum[c] = this.focusSum(F.acc[c]);
+    const r = { sp, sum, fx: F.fx, real: Math.round(performance.now() - F.spotT0), incomplete: F.phase !== 'next' };
+    F.res.push(r);
+    if (F.crowd) {
+      for (const c of F.crowd) c.gone = true;
+      F.crowd = null;
+    }
+    F.spot = null;
+    b.crumbLines.push(this.focusLine(r));
+    this.crumb(true);
+  }
+
+  // one line of a place: its frames a second now against before
+  focusLine(r) {
+    const a = r.sum.now;
+    const o = r.sum.before;
+    if (!a || !o) return `${r.sp.name}: לא נמדד עד הסוף`;
+    const d = (a.fps / Math.max(0.01, o.fps) - 1) * 100;
+    return `${r.sp.name}: ${a.fps.toFixed(1)} מול ${o.fps.toFixed(1)} פריימים בשנייה (${d >= 0 ? '+' : ''}${d.toFixed(0)}%) · פריים ${a.ms.toFixed(1)}ms מול ${o.ms.toFixed(1)}ms${r.incomplete ? ' (המקום לא נגמר)' : ''}`;
+  }
+
+  // the focused test's report
+  focusText(b, { device, c, secs }) {
+    const g = this.game;
+    const F = b.focus;
+    const f1 = (v) => (v || 0).toFixed(1);
+    const yn = (v) => (v ? 'כן' : 'לא');
+    const pc = (a, o) => {
+      const d = (a / Math.max(0.01, o) - 1) * 100;
+      return `${d >= 0 ? '+' : ''}${d.toFixed(0)}%`;
+    };
+    const cond = (label, x) => (x ? `  ${label}: ${f1(x.fps)} פריימים בשנייה (1% האיטיים ${f1(x.low1)}) · פריים ${f1(x.ms)}ms = משחק ${f1(x.upd)} + שליחת ציור ${f1(x.ren)} + המתנה ${f1(x.wait)} · ${Math.round(x.calls)} קריאות ציור · ${Math.round(x.tris)}K משולשים · ${x.n} פריימים` : null);
+    const L = [];
+    L.push(b.error ? `המבחן נעצר בגלל שגיאה (מה שנאסף עד אז בדוח): ${b.error}` : null);
+    L.push(`Beyond the Outline — בדיקת ביצועים ממוקדת במקומות ששופרו (${F.res.length} מקומות, ${Math.round(secs)} שניות)`);
+    L.push(`מכשיר: ${device || 'לא ידוע'}`);
+    L.push(`מסך: ${c.width}×${c.height} · קנה מידה ${g.pipe.scale.toFixed(2)} · ${navigator.userAgent.includes('Mobile') ? 'טלפון' : 'מחשב'} · דפדפן: ${browserName()}${b.battery ? ` · סוללה ${Math.round(b.battery.level * 100)}%${b.battery.charging ? ' בטעינה' : ''}` : ''}`);
+    L.push(`מה ש"עכשיו" כולל (הטלפון מצייר כך כשהקישור מבקש): חנויות שהקירות מסתירים את הסחורה שלהן ${yn(GFX.shopView)} · מכוניות רחוקות בפחות נקודות ${yn(GFX.carLod)} · אנשים בצורות קלות לפי המרחק ${yn(GFX.folkLod)} · מעבר סיום קל ${yn(GFX.finalLite)}. "כמו קודם": כל אלה כבויים.${GFX.on ? '' : ' (כאן החלקים כבויים - מחשב או ?oldgfx: אין מה להשוות)'}`);
+    L.push('');
+    L.push('תקציר: פריימים בשנייה "עכשיו" מול "כמו קודם". כל מקום נמדד בבלוקים של שנייה לסירוגין, באותו מקום ובאותו רגע:');
+    for (const r of F.res) L.push(`  ${this.focusLine(r)}`);
+    L.push('');
+    L.push('פירוט לפי מקום:');
+    F.res.forEach((r, i) => {
+      const S = r.sum;
+      L.push(`${i + 1}. ${r.sp.name} — מה שופר כאן: ${r.sp.what}${r.incomplete ? ' (המקום לא נגמר: המבחן נעצר)' : ''}`);
+      L.push(cond('עכשיו', S.now));
+      L.push(cond('כמו קודם', S.before));
+      if (S.now && S.before) L.push(`  ההפרש: ${pc(S.now.fps, S.before.fps)} פריימים בשנייה · ${(S.now.ms - S.before.ms >= 0 ? '+' : '') + f1(S.now.ms - S.before.ms)}ms בפריים · ${Math.round(S.now.calls - S.before.calls)} קריאות ציור · ${Math.round(S.now.tris - S.before.tris)}K משולשים`);
+      if (S.scale) L.push(cond('עכשיו ברזולוציה הנמוכה ביותר', S.scale));
+      if (S.draw) L.push(`  עכשיו בלי ציור בכלל (קוד המשחק לבד): משחק ${f1(S.draw.upd)}ms בפריים`);
+      if (S.now) {
+        const w = S.now.ms > 0 ? S.now.wait / S.now.ms : 0;
+        const part = w > 0.5 ? `הכרטיס (ההמתנה היא ${Math.round(w * 100)}% מהפריים)` : w > 0.25 ? `מעורב (ההמתנה ${Math.round(w * 100)}% מהפריים)` : `המעבד (ההמתנה רק ${Math.round(w * 100)}% מהפריים)`;
+        const more = S.scale ? ` · ברזולוציה נמוכה ${pc(S.scale.fps, S.now.fps)} פריימים בשנייה` : '';
+        L.push(`  מה מחזיק את הפריים כאן: ${part}${more}`);
+      }
+      const fx = r.fx;
+      if (fx) {
+        const parts = [];
+        if (fx.shops) parts.push(`חנויות שהסחורה שלהן הוסתרה: ${fx.shops.hidden} מתוך ${fx.shops.live} שנטענו`);
+        if (fx.people) parts.push(`אנשים עד 40 מטר: ${fx.people.near}, מהם בצורות קלות ${fx.people.lite}`);
+        if (fx.cars) parts.push(`מכוניות עומדות: ${fx.cars.full} מלאות, ${fx.cars.mid} בינוניות, ${fx.cars.far} רחוקות`);
+        if (parts.length) L.push(`  מה קרה כאן בפועל: ${parts.join(' · ')}`);
+      }
+    });
+    L.push('');
+    L.push(`פריימים בזמן המדידות: ${F.frames} · מעל 50ms: ${F.over50} · מעל 100ms: ${F.over100} · הארוך ביותר ${f1(F.longest)}ms · הכנת שיידרים בזמן הבדיקה: ${b.compiles} (${Math.round(b.compileMs)}ms)`);
+    L.push(`מהירות המכשיר (ms לאותה עבודה, פחות זה מהר יותר): מעבד בהתחלה ${f1(b.cpu[0])}, בסוף ${f1(b.cpu[1])} · כרטיס מסך בהתחלה ${f1(b.gpuMs[0])}, בסוף ${f1(b.gpuMs[1])}`);
+    L.push(b.po ? `משימות ארוכות בכל שנייה: של המשחק ${(b.busy.self / secs).toFixed(0)}ms · של הדף שמסביב ${(b.busy.other / secs).toFixed(0)}ms` : 'משימות ארוכות: הדפדפן לא מאפשר למדוד');
+    for (const x of this.healthLines(b)) L.push(x);
+    L.push(`${F.quick ? 'ריצה קצרה (לבדיקת הקישור): ' : ''}כל בלוק: ${FOCUS_BLOCK} שנייה, ${FOCUS_DROP} שנייה ראשונות לא נספרות; לכל מצב לפחות ${F.quick ? 6 : FOCUS_MIN} פריימים בכל מקום.`);
+    return L;
   }
 
   // ---------------------------------------------------------------- the drive (ROADMAP 19.4, 5.1)
@@ -1010,20 +1575,17 @@ export class Perf {
       ml: 0, il: 0, job: '', done: false, shown: '', warmed: '', freed: 0, far: false, ijob: '', pend: 0,
       // and over the whole drive
       built: 0, freedAll: 0, miss: 1e9, missId: '', missAt: 0, compiles0: b.compiles, compileMs0: b.compileMs, mem,
-      mem0: mem(), restore: null,
+      mem0: mem(), restore: null, build: null,
     };
     b.drive = D;
     g.hud.toast('נוסעים ביבשה…', 'info', 4);
     const x0 = DRIVE[0][0];
     const z0 = DRIVE[0][1];
     const yaw = Math.atan2(DRIVE[1][0] - x0, DRIVE[1][1] - z0);
-    try {
-      ml.fill({ x: x0, z: z0, y: 0 });
-    } catch (e) {
-      // (a drive whose start cannot be built is driven as it is)
-    }
+    // (the player put at the start, and its surroundings built a little a frame, the camera held there: driveStep)
     g.player.spawn(x0, z0, yaw);
     g.camRig.yaw = yaw;
+    D.build = { x: x0, z: z0, y: 0, t0: performance.now(), max: BUILD_MAX, name: 'תחילת הנסיעה' };
     // the two streamers' calls, each timed and noted (put back at the end: endBench)
     const s = ml.stream;
     const mUpdate = ml.update;
@@ -1075,7 +1637,14 @@ export class Perf {
     const D = b.drive;
     const g = this.game;
     const cam = g.camera;
-    D.t += dt;
+    if (D.build) {
+      // (held at the start while its surroundings are built; the settle begins when they are)
+      if (this.buildStep(D.build, dt)) {
+        b.builds.push({ name: D.build.name, ms: Math.round(performance.now() - D.build.t0), calls: D.build.calls || 0, timedOut: !!D.build.timedOut });
+        D.build = null;
+        D.t = 0;
+      }
+    } else D.t += dt;
     const run = D.t - D.settle;
     const d = Math.max(0, Math.min(D.len, run * DRIVE_SPEED));
     D.d = d;
@@ -1189,17 +1758,29 @@ export class Perf {
 
   // the passes timed one by one where the test stands (as the game draws it: the sun's box ahead of
   // the camera)
-  stages() {
+  stages(light = false) {
     const g = this.game;
     const cam = g.camera;
     cam.updateMatrixWorld();
     const f = cam.getWorldDirection(this._f || (this._f = new THREE.Vector3()));
     const c = cam.position;
-    return g.pipe.profile(new THREE.Vector3(c.x + f.x * 35, 0, c.z + f.z * 35));
+    const center = new THREE.Vector3(c.x + f.x * 35, 0, c.z + f.z * 35);
+    return light ? this.lightStages(center) : g.pipe.profile(center);
   }
 
   stillStep(dt) {
-    const s = this.bench.still;
+    const b = this.bench;
+    const s = b.still;
+    // (a place of the mainland being built round the player, a little a frame: not counted)
+    if (s.build) {
+      if (!this.buildStep(s.build, dt)) {
+        s.frames.length = 0;
+        return;
+      }
+      b.builds.push({ name: s.build.name, ms: Math.round(performance.now() - s.build.t0), calls: s.build.calls || 0, timedOut: !!s.build.timedOut });
+      s.build = null;
+      s.t = 0;
+    }
     s.t += dt;
     // (the first second settles: not counted - two at a place of the mainland, which is still filling in)
     if (s.t < (s.settle || 1)) s.frames.length = 0;
@@ -1209,6 +1790,8 @@ export class Perf {
   endBench() {
     const g = this.game;
     const b = this.bench;
+    // (the focused test: the place it is at put away - its crowd sent off - and its numbers kept)
+    if (b.focus && b.focus.spot) this.focusClose();
     const s = this.summary(b.frames);
     b.cpu.push(cpuSpeed());
     b.gpuMs.push(gpuSpeed(g.renderer));
@@ -1217,6 +1800,9 @@ export class Perf {
     const gpu = b.gpuRoute !== undefined ? b.gpuRoute : this.gpu.ok ? this.gpu.take(true) : null;
     this.bench = null;
     if (b.unhook) b.unhook();
+    // (ROADMAP 19.6: the page's heartbeat stopped)
+    if (b.wd) clearInterval(b.wd);
+    if (b.onVis) document.removeEventListener('visibilitychange', b.onVis);
     // (ROADMAP 19.4, 5.1: the streamers' calls as they were)
     if (b.drive && b.drive.restore) b.drive.restore();
     // (the screen let go of, and the progress taken off it)
@@ -1247,9 +1833,15 @@ export class Perf {
       device = '';
     }
     const c = g.renderer.domElement;
+    // (ROADMAP 19.6: the focused test has a report of its own)
+    if (b.focus) {
+      this.finishBench(b, this.focusText(b, { device, c, secs }).filter((x) => x !== null && x !== undefined).join('\n'), null);
+      return;
+    }
     const st = b.stages;
     const ms = (v) => (v || 0).toFixed(1);
     const lines = [
+      b.error ? `המבחן נעצר בגלל שגיאה (מה שנאסף עד אז בדוח): ${b.error}` : '',
       `Beyond the Outline — מסלול מבחן (${Math.round(b.secs)} שניות, ${b.frames.length} פריימים)`,
       `מכשיר: ${device || 'לא ידוע'}`,
       `מסך: ${c.width}×${c.height} · קנה מידה ${g.pipe.scale.toFixed(2)} · ציור חכם ${g.pipe.taa ? `${Math.round(g.pipe.taaFrac * 100)}%` : 'כבוי'} · ${navigator.userAgent.includes('Mobile') ? 'טלפון' : 'מחשב'}`,
@@ -1264,15 +1856,16 @@ export class Perf {
       b.still && b.stands.length > b.islandN && b.still.fps.length === b.stands.length ? placeLine(b) : '',
       // (ROADMAP 19.4, 5.1: the drive on the mainland: the stalls and what the streamers had in hand then)
       ...this.driveLines(b),
+      ...this.healthLines(b),
       `דפדפן: ${browserName()}${window.top !== window ? ' · בתוך מסגרת' : ''} · המשחק פתוח ${b.open.toFixed(0)} דקות${b.battery ? ` · סוללה ${Math.round(b.battery.level * 100)}%${b.battery.charging ? ' בטעינה' : ''}` : ''}`,
       `מהירות המכשיר (ms לאותה עבודה, פחות זה מהר יותר): מעבד בהתחלה ${b.cpu[0].toFixed(1)}, בסוף ${b.cpu[1].toFixed(1)} · כרטיס מסך בהתחלה ${b.gpuMs[0].toFixed(1)}, בסוף ${b.gpuMs[1].toFixed(1)}`,
       b.po ? `משימות ארוכות בכל שנייה: של המשחק ${(b.busy.self / secs).toFixed(0)}ms · של הדף שמסביב ${(b.busy.other / secs).toFixed(0)}ms` : 'משימות ארוכות: הדפדפן לא מאפשר למדוד',
       `מעבד: משחק ${s.upd.toFixed(2)}ms · שליחת הציור ${s.ren.toFixed(2)}ms`,
       `עומק קודם: ${g.pipe.depthFirst ? 'כן' : 'לא'}${g.depthTrial && g.depthTrial.result ? ` (נבדק: עם ${g.depthTrial.result.on}ms, בלי ${g.depthTrial.result.off}ms)` : ''} · עומק הקירות קודם: ${g.pipe.wallsFirst && g.pipe.walls ? 'כן' : 'לא'}${g.depthTrial && g.depthTrial.walls ? ` (נבדק: עם ${g.depthTrial.walls.on}ms, בלי ${g.depthTrial.walls.off}ms)` : ''}`,
       pensLine(g, false),
-      st ? `כל שלב לבד, נמדד ישירות בסוף (ms): צל ${ms(st.shadow)} · השתקפות ${ms(st.reflection)} · ציור ${ms(st.main)}${g.pipe.deferred ? ` (מזה העטים ${ms(st.pens)})` : ''} · דיו ${ms(st.ink)} · זוהר ${ms(st.glow)} · סיום ${ms(st.final)} · פריים שלם ${ms(st.frame)}` : 'כל שלב לבד: המדידה לא הצליחה',
+      st ? `כל שלב לבד, נמדד ישירות בסוף (ms): צל ${ms(st.shadow)} · השתקפות ${ms(st.reflection)} · ציור ${ms(st.main)}${g.pipe.deferred && st.pens !== undefined ? ` (מזה העטים ${ms(st.pens)})` : ''} · דיו ${ms(st.ink)} · זוהר ${ms(st.glow)} · סיום ${ms(st.final)} · פריים שלם ${ms(st.frame)}` : 'כל שלב לבד: המדידה לא הצליחה',
       st && st.other ? `הציור בדרך השנייה (ms): ${g.pipe.deferred ? 'בשלב אחד, כמו קודם' : 'בשני שלבים'} ${ms(st.other)} · ככה: ${ms(st.main)}` : '',
-      st ? `הציור (ms): כמו שהוא ${ms(st.main)} · בלי אנשים ומכוניות ${ms(st.city)} · ב-1/16 מהפיקסלים ${ms(st.tiny)} · ${g.pipe.wallsFirst ? 'בלי' : 'עם'} עומק הקירות קודם ${ms(st.walls)} · ${g.pipe.depthFirst ? 'בלי' : 'עם'} עומק קודם מלא ${ms(st.flip)}${st.kill !== undefined ? ` · בחומרים הישנים (עם discard) ${ms(st.kill)}` : ''}` : '',
+      st && st.flip !== undefined ? `הציור (ms): כמו שהוא ${ms(st.main)} · בלי אנשים ומכוניות ${ms(st.city)} · ב-1/16 מהפיקסלים ${ms(st.tiny)} · ${g.pipe.wallsFirst ? 'בלי' : 'עם'} עומק הקירות קודם ${ms(st.walls)} · ${g.pipe.depthFirst ? 'בלי' : 'עם'} עומק קודם מלא ${ms(st.flip)}${st.kill !== undefined ? ` · בחומרים הישנים (עם discard) ${ms(st.kill)}` : ''}` : st ? `הציור (ms): כמו שהוא ${ms(st.main)} · בלי אנשים ומכוניות ${ms(st.city)}` : '',
       st && st.noPens !== undefined ? `הציור בלי חלק אחד (ms): בלי העטים ${ms(st.noPens)} · בלי הצל של השמש ${ms(st.noSun)} · בלי הפנסים ${ms(st.noLamps)} · בלי הערפל ${ms(st.noHaze)} · רק צבע ${ms(st.flat)} · בלי ההשתקפות ברחוב ${ms(st.noReflImg)} · המראה ${g.pipe.mirrorPlain ? 'עם' : 'בלי'} עטים ${ms(st.reflFlip)} (ככה: ${ms(st.reflection)})` : '',
       gpu && Object.keys(gpu).length ? `כרטיס מסך: ${PASSES.filter((p) => gpu[p] !== undefined).map((p) => `${PASS_HE[p]} ${gpu[p].toFixed(2)}ms`).join(' · ')}` : 'כרטיס מסך: הדפדפן לא מאפשר למדוד',
       `draw calls: ממוצע ${Math.round(s.calls)} · שיא ${s.maxCalls} · ${(s.tris / 1e6).toFixed(2)}M משולשים`,
@@ -1281,8 +1874,18 @@ export class Perf {
       this.shaderLine(false) || `הכנת השיידרים: בלי הערות של הדפדפן (${this.shaderNotes().of})`,
     ];
     const text = lines.filter(Boolean).join('\n');
+    this.finishBench(b, text, st);
+  }
+
+  // the report shown, and kept where the next visit finds it (recover), and sent where there is a store (game/telemetry.js)
+  finishBench(b, text, st) {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({ at: Date.now(), mode: b.mode, done: true, text }));
+    } catch (e) {
+      // (kept or not, it is shown)
+    }
     this.report(text);
-    if (g.tele) g.tele.bench(text, st);
+    if (this.game.tele) this.game.tele.bench(text, st);
   }
 
   report(text) {
@@ -1292,17 +1895,15 @@ export class Perf {
       el = document.createElement('div');
       el.id = 'perf-report';
       el.className = 'overlay';
-      el.innerHTML = '<div class="sheet small"><h2>תוצאות מסלול המבחן</h2><pre></pre><div class="sheet-foot"><button class="btn" data-a="copy">העתקה</button> <button class="btn primary" data-a="close">סגירה</button></div></div>';
+      el.innerHTML = '<div class="sheet small"><h2>תוצאות המבחן</h2><pre></pre><div class="sheet-foot"><button class="btn" data-a="copy">העתקה</button> <button class="btn" data-a="share">שיתוף</button> <button class="btn primary" data-a="close">סגירה</button></div></div>';
       (document.getElementById('app') || document.body).appendChild(el);
       el.addEventListener('click', (e) => {
         const a = e.target && e.target.dataset ? e.target.dataset.a : null;
-        if (a === 'copy') {
-          try {
-            navigator.clipboard.writeText(el.querySelector('pre').textContent);
-            g.hud.toast('הועתק', 'good', 1.5);
-          } catch (err) {
-            // no clipboard: the text can be selected by hand
-          }
+        if (a === 'copy') copyText(el.querySelector('pre').textContent, g);
+        else if (a === 'share') {
+          // (the phone's own share sheet, where it has one - to a chat, a mail, a note; else copied)
+          const t = el.querySelector('pre').textContent;
+          if (!shareText(t)) copyText(t, g);
         } else if (a === 'close') {
           el.classList.add('hidden');
           this.reportOpen = false;

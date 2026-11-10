@@ -533,7 +533,8 @@ async function boot() {
     // put up over the city, game/perf.js)
     if (params.has('perftest')) {
       if (window.__loadLeave) window.__loadLeave();
-      game.perf.autoBench(params.get('perftest') === 'quick');
+      const pt = params.get('perftest') || '';
+      game.perf.autoBench(pt === 'quick' || pt === 'focusquick', pt.startsWith('focus') ? 'focus' : 'route');
     }
     window.__ready = true;
     console.log('load steps (ms)', JSON.stringify(loadT));
