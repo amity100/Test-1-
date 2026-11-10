@@ -15,7 +15,7 @@
 //                                                            then the same two places of each enlarged 3x
 //                                                            (the middle, and where they differ most)
 //
-// AB_SPOTS=blvd,mall_in picks spots; AB_QUERY="newgfx=1" adds to the address (so: once without it - the
+// AB_DESKTOP=1 shoots as a computer. AB_SPOTS=blvd,mall_in picks spots; AB_QUERY="newgfx=1" adds to the address (so: once without it - the
 // game as it is published - and once with it: PHONE_SPEED_PLAN.md, Stage 0.2).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -42,12 +42,22 @@ export const SPOTS = [
   ['inkwell', -835, 60, 0, [-835, 2.0, 40], [-835, 3, 110], 1],
 ];
 
+// (AB_CAM="name:px,pz,yaw:cx,cy,cz:lx,ly,lz:fill" adds a spot of its own, e.g. a view shopcheck.mjs printed)
+if (process.env.AB_CAM) {
+  const [name, pl, c, l, fill] = process.env.AB_CAM.split(':');
+  const [px, pz, yaw] = pl.split(',').map(Number);
+  SPOTS.push([name, px, pz, yaw, c.split(',').map(Number), l.split(',').map(Number), fill === '1' ? 1 : undefined]);
+}
+
 async function shoot(outDir, pair = false) {
   const dirs = pair ? [path.join(outDir, 'before'), path.join(outDir, 'after')] : [outDir];
   for (const d of dirs) fs.mkdirSync(d, { recursive: true });
   const server = await startServer();
   const browser = await launch();
-  const ctx = await browser.newContext({ viewport: { width: 882, height: 411 }, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true });
+  // (AB_DESKTOP=1: a computer instead - 1280 x 720, a mouse: the parts of the phone's own way of drawing
+  // must change nothing there, whatever the address says - PHONE_SPEED_PLAN.md 2.1)
+  const desk = !!process.env.AB_DESKTOP;
+  const ctx = await browser.newContext(desk ? { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 } : { viewport: { width: 882, height: 411 }, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true });
   const pg = await ctx.newPage();
   // (the dice seeded and the clock held still: lib.mjs - two runs of one build must be one picture)
   const det = !process.env.NODET;
@@ -132,6 +142,7 @@ async function shoot(outDir, pair = false) {
         const out = {};
         for (const [k, v] of Object.entries(S.pass)) out[k] = { calls: Math.round(v.calls / v.n), ktris: Math.round(v.tris / v.n / 1000) };
         out.t = +g.time.toFixed(4);
+        out.rn = globalThis.__rn;
         return out;
       }, off);
       const key = pair ? `${name}.${k ? 'after' : 'before'}` : name;

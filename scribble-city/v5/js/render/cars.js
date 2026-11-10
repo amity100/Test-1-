@@ -12,7 +12,8 @@ import { GFX } from '../core/util.js';
 // trims the same - the windows and their pillars exactly as they are); from LOD_FAR the sun's own
 // lean body and glasshouse. Each is taken where it differs from the full one by under a pixel.
 // A car keeps the make it had a frame ago until it is 8% past the line (LOD_HOLD): a car standing
-// by a line does not flicker between two makes as the camera moves a little.
+// by a line does not flicker between two makes as the camera moves a little. One draw of the glass for
+// all the makes of a kind, and the wheels in fewer points only from the far one: each make costs a draw.
 const LOD_MID = 26;
 const LOD_FAR = 9;
 const LOD_LINES = [LOD_MID, LOD_FAR];
@@ -456,7 +457,7 @@ function build(kind) {
   const lod = [null];
   if (GFX.carLod) {
     lod.push({ body: merge([lowerBody(K, 'mid').toNonIndexed(), gh.roof]), glass: gh.glass });
-    lod.push({ body: merge([lowerBody(K, true).toNonIndexed(), ghLo.roof]), glass: ghLo.glass, trim: merge([ghLo.frames, ...trimParts.slice(1)]) });
+    lod.push({ body: merge([lowerBody(K, true).toNonIndexed(), ghLo.roof]), trim: merge([ghLo.frames, ...trimParts.slice(1)]) });
   }
   return { body, glass: gh.glass, tail, head: merge(heads), trim: merge(trimParts), plate: merge(plates), wheels, K, inside, sunBody, lod };
 }
@@ -991,11 +992,18 @@ export class CarRenderer {
       const sun = byCorners(b.sunBody);
       // (ROADMAP 19.1) a make of it for each distance: [the full one, some way off, far off] - each
       // its shell and its glass, and the sun's view of the cars drawn with it
-      const makes = b.lod.map((src) => {
+      // (the glass of every make is the full one's - the windows exactly as they are, at the distance
+      // where the body is in fewer points - and one draw of it for all the cars of the kind, whatever make
+      // their body is: each make added is a draw of its body, no more)
+      let glass0 = null;
+      const makes = b.lod.map((src, i) => {
         const parts = src ? { ...b, ...src } : b;
-        const L = { shell: new Pool(scene, shellOf(parts), shellPen, n, true), glass: new Pool(scene, parts.glass, mats.glass, n, true), sun: null };
+        if (!glass0) {
+          glass0 = new Pool(scene, parts.glass, mats.glass, n, true);
+          glass0.mesh.userData.noShadow = true;
+        }
+        const L = { shell: new Pool(scene, shellOf(parts), shellPen, n, true), glass: glass0, ownGlass: i === 0, sun: null };
         L.shell.mesh.userData.noShadow = true;
-        L.glass.mesh.userData.noShadow = true;
         L.sun = new THREE.InstancedMesh(sun, mats.paint.userData.depth, n);
         L.sun.instanceMatrix = L.shell.mesh.instanceMatrix;
         L.sun.frustumCulled = false;
@@ -1035,10 +1043,8 @@ export class CarRenderer {
     this.tyreMakes = [this.tyres];
     this.rimMakes = [this.rims];
     if (GFX.carLod) {
-      for (const [ts, rs] of [[12, 10], [8, 6]]) {
-        this.tyreMakes.push(new Pool(scene, new THREE.CylinderGeometry(1, 1, 0.3, ts).rotateZ(Math.PI / 2), mats.tyre, cap * 4));
-        this.rimMakes.push(new Pool(scene, new THREE.CylinderGeometry(0.7, 0.7, 0.02, rs).rotateZ(Math.PI / 2), mats.rim, cap * 4));
-      }
+      this.tyreMakes.push(new Pool(scene, new THREE.CylinderGeometry(1, 1, 0.3, 8).rotateZ(Math.PI / 2), mats.tyre, cap * 4));
+      this.rimMakes.push(new Pool(scene, new THREE.CylinderGeometry(0.7, 0.7, 0.02, 6).rotateZ(Math.PI / 2), mats.rim, cap * 4));
     }
     // (a rim's shadow is inside its tyre's; in the mirror it is a smear inside the tyre's)
     for (const r of this.rimMakes) {
@@ -1176,8 +1182,9 @@ export class CarRenderer {
     const make = P.makes[lv];
     make.shell.push(_m, this.col(color), part, rv, D, o.open ? -1 : 0);
     make.glass.push(_m, D && D.glass ? (D.glass > 1 ? GLASS_BROKEN : GLASS_CRACKED) : WHITE, part + 0.3, rv, D, o.open ? -1 : 0);
-    const tyres = this.tyreMakes[lv] || this.tyres;
-    const rims = this.rimMakes[lv] || this.rims;
+    // (the wheels in fewer points only far off: some way off, a car's own are all but as they were, and a draw less)
+    const tyres = lv === 2 && this.tyreMakes.length > 1 ? this.tyreMakes[1] : this.tyres;
+    const rims = lv === 2 && this.rimMakes.length > 1 ? this.rimMakes[1] : this.rims;
     // (ROADMAP 4.5) the car you drive: its side windows down, the inside seen through them
     if (o.open) {
       P.inside.push(_m, WHITE, part + 0.5, null, D);
@@ -1436,7 +1443,7 @@ export class CarRenderer {
       for (let k = 0; k < P.makes.length; k++) {
         const L = P.makes[k];
         L.shell.end();
-        L.glass.end();
+        if (L.ownGlass) L.glass.end();
         L.sun.count = L.shell.mesh.count;
         L.sun.visible = L.shell.mesh.visible;
       }

@@ -24,7 +24,16 @@ import { startServer, launch } from '../shot.mjs';
 export async function seed(pg, value = 7) {
   await pg.addInitScript((v) => {
     let a = v >>> 0;
+    // (how many times it was asked: two runs that stand in one place must have asked the same number of times)
+    globalThis.__rn = 0;
+    // (and from the moment the game is ready the dice start again from their seed: what the loading asked of them
+    // depends on how fast the loading went - virtualClock)
+    globalThis.__reseed = () => {
+      a = v >>> 0;
+      globalThis.__rn = 0;
+    };
     Math.random = () => {
+      globalThis.__rn++;
       a = (a + 0x6d2b79f5) >>> 0;
       let t = a;
       t = Math.imul(t ^ (t >>> 15), t | 1);
@@ -36,6 +45,21 @@ export async function seed(pg, value = 7) {
       u = (u * 16807) % 2147483647;
       return u / 2147483647;
     };
+    // the graphics card is not asked to make shaders alongside the game: a streamed piece of the city waits for
+    // its shaders (world/mainland/index.js warm) for as many frames as the card takes, in the real time of the
+    // run - the same run twice would show it a different number of frames late. Without the extension the
+    // browser makes them at once (the game has its way for a card without it, main.js)
+    for (const C of [globalThis.WebGL2RenderingContext, globalThis.WebGLRenderingContext]) {
+      if (!C) continue;
+      const ge = C.prototype.getExtension;
+      C.prototype.getExtension = function (n) {
+        return n === 'KHR_parallel_shader_compile' ? null : ge.call(this, n);
+      };
+      const gs = C.prototype.getSupportedExtensions;
+      C.prototype.getSupportedExtensions = function () {
+        return (gs.call(this) || []).filter((n) => n !== 'KHR_parallel_shader_compile');
+      };
+    }
   }, value);
   await pg.route('**/three.module.min.js', async (route) => {
     const resp = await route.fetch();
@@ -50,6 +74,7 @@ export async function seed(pg, value = 7) {
 // after the game is ready (its own loading is left to the real clock)
 export async function virtualClock(pg) {
   await pg.evaluate(() => {
+    if (globalThis.__reseed) globalThis.__reseed();
     let t = performance.now();
     performance.now = () => t;
     const f = window.__frame;
@@ -68,8 +93,9 @@ export async function open({ where = process.env.WHERE || 'island', query = proc
   const ctx = await browser.newContext({ viewport: { width: 882, height: 411 }, deviceScaleFactor: dsf, isMobile: true, hasTouch: true });
   const pg = await ctx.newPage();
   pg.on('pageerror', (e) => console.log('PAGEERROR ' + e.message));
-  if (init) await pg.addInitScript(init);
   if (det) await seed(pg);
+  // (after the dice are seeded: what it wraps is the seeded Math.random)
+  if (init) await pg.addInitScript(init);
   const scene = /^s\d/.test(where) ? where : null;
   const q = `test=1&autostart=1&prologue=${scene || 0}${query ? '&' + query.replace(/^&/, '') : ''}`;
   await pg.goto(`http://127.0.0.1:${server.address().port}/v5/index.html?${q}`);

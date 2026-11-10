@@ -66,6 +66,23 @@ const rows = await pg.evaluate(async ([SHOPS]) => {
       ['above it', at(um, 16, -dep / 2), mid],
       ['behind it, high', at(um, 8, -dep - 9), mid],
     ];
+    // (and, for the first of them: all the way round it, in steps of 15 degrees at 12 metres, and in through
+    // its door in ten steps - what is seen of its goods must not change by a pixel anywhere on the way)
+    if (l === list[0]) {
+      const cu = (sp.u0 + sp.u1) / 2;
+      for (let k = 0; k < 24; k++) {
+        const a = (k / 24) * Math.PI * 2;
+        const ox = cu + Math.cos(a) * 12;
+        const ow = -dep / 2 + Math.sin(a) * 12;
+        views.push([`round it ${k * 15} deg`, at(ox, 1.7, ow), mid]);
+      }
+      const door = (sp.openings || []).find((o) => o.kind === 'door');
+      const du = door ? (door.u0 + door.u1) / 2 : cu;
+      for (let k = 0; k <= 10; k++) {
+        const w = 10 - (k / 10) * (10 + dep * 0.8);
+        views.push([`in through the door ${k}/10`, at(du, 1.6, w), at(du, 1.3, -dep)]);
+      }
+    }
     for (const [name, pos, look] of views) {
       window.__camOverride = { pos, look };
       const x = pos[0];
@@ -87,7 +104,7 @@ const rows = await pg.evaluate(async ([SHOPS]) => {
         if (d > 24) off++;
       }
       const n = A.length / 4;
-      const row = { shop: rec.kind, view: name, pct: (off / n) * 100, mean: sum / n, hiddenShops: hidden };
+      const row = { shop: rec.kind, view: name, pct: (off / n) * 100, mean: sum / n, hiddenShops: hidden, pos: pos.map((v) => +v.toFixed(1)), look: look.map((v) => +v.toFixed(1)) };
       out.push(row);
     }
   }
@@ -101,7 +118,7 @@ if (rows.error) {
   let worst = 0;
   for (const r of rows.rows) {
     worst = Math.max(worst, r.pct);
-    console.log(`  ${r.shop.padEnd(12)} ${r.view.padEnd(24)} ${r.pct.toFixed(3)}% of the pixels differ (mean ${r.mean.toFixed(3)}), shops left out of the last view: ${r.hiddenShops}`);
+    console.log(`  ${r.shop.padEnd(12)} ${r.view.padEnd(24)} ${r.pct.toFixed(3)}% of the pixels differ (mean ${r.mean.toFixed(3)}), shops left out of the last view: ${r.hiddenShops}   camera ${JSON.stringify(r.pos)} looking at ${JSON.stringify(r.look)}`);
   }
   console.log(worst < 0.02 ? `PASS: nothing differs (worst ${worst.toFixed(3)}%)` : `DIFFERS: worst ${worst.toFixed(3)}% - look at the views above that are not 0`);
 }
