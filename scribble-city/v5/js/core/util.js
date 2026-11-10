@@ -96,11 +96,14 @@ export function isTouchDevice() {
 // game/perf.js) - so every part reads its flag where it decides, each frame; what a part builds
 // once (lighter shapes) is built when its flag is on and simply not chosen while off is true.
 const APPROVED = { shopview: true, carlod: true, folklod: false, glowlite: false, finallite: false };
+const LOOK = new Set(['glowlite']);
 export const GFX = (() => {
   const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
   const phone = isTouchDevice() || q.has('low');
   const on = phone && !q.has('oldgfx');
-  const part = (name) => on && !q.has('no' + name) && (APPROVED[name] || q.has(name) || q.has('newgfx'));
+  // (?newgfx turns on every part that changes no picture; one that changes the look - the glow in five passes - only by
+  // its own name, ?glowlite, until the owner has said yes to its pictures)
+  const part = (name) => on && !q.has('no' + name) && (APPROVED[name] || q.has(name) || (q.has('newgfx') && !LOOK.has(name)));
   return {
     phone,
     on,

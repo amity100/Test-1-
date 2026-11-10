@@ -231,6 +231,9 @@ in vec2 vUv;
 layout(location = 0) out vec4 fragColor;
 uniform sampler2D tSrc;
 uniform vec2 uTexel;
+// (ROADMAP 19.4, GFX.glowLite: how far from the pixel the four taps are, in texels of the picture - 0.5, each a
+// pixel of the half-size glow; 1 for a glow made at a quarter, the four taps then cover its 4 x 4)
+uniform float uBrightO;
 // (the steady pace, DYN: the picture in the corner of the drawing's, as in the ink)
 #ifdef DYN
 uniform vec2 uUvK;
@@ -252,7 +255,7 @@ vec3 pick(vec2 uv) {
   return c.rgb * clamp(smoothstep(1.1, 2.6, l) + c.a * 0.7, 0.0, 2.0);
 }
 void main() {
-  vec2 o = uTexel * 0.5;
+  vec2 o = uTexel * uBrightO;
   vec3 c = pick(vUv + vec2(-o.x, -o.y)) + pick(vUv + vec2(o.x, -o.y)) + pick(vUv + vec2(-o.x, o.y)) + pick(vUv + vec2(o.x, o.y));
   fragColor = vec4(c * 0.25, 1.0);
 }`;
@@ -1056,7 +1059,7 @@ export class Pipeline {
       // (v5: the edge of the page, render/pagedge.js)
       ...pageUniforms, uFogDensity: shared.uFogDensity,
     });
-    this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uUvK: uvK, uUvLo: uvLo });
+    this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uBrightO: { value: 0.5 }, uUvK: uvK, uUvLo: uvLo });
     this.mDown = mk(DOWN_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.mUp = mk(UP_FRAG, { tSrc: { value: null }, tAdd: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo, tPaint: { value: BLANK }, tAux: { value: BLANK }, uPaint: { value: 0 }, uAuxTexel: { value: new THREE.Vector2(1, 1) }, uAuxK: { value: new THREE.Vector2(1, 1) }, uRimDir: { value: new THREE.Vector2(1, 0) }, uRimCol: { value: new THREE.Vector4(0, 0, 0, 0) }, uShadowT: { value: new THREE.Vector3(1, 1, 1) }, uLightT: { value: new THREE.Vector3(1, 1, 1) }, uGradeK: { value: 0 }, uGrainK: { value: 0 }, uGrainT: { value: 0 }, uComic: { value: 0 }, uSmear: { value: new THREE.Vector2() }, uEmote: { value: 0 }, uEmoteCol: { value: new THREE.Vector3(0.6, 0.1, 0.12) }, uFill: { value: 0 }, uFillCol: { value: new THREE.Vector3(1, 0.82, 0.62) }, uDotPx: { value: 4 }, uMis: { value: 0 }, uDotInk: { value: new THREE.Vector3(0.3, 0.22, 0.5) } });
@@ -1300,6 +1303,8 @@ export class Pipeline {
     this._outTaa = taa;
     (this.mips || []).forEach(dispose);
     (this.ups || []).forEach(dispose);
+    (this.mipsQ || []).forEach(dispose);
+    (this.upsQ || []).forEach(dispose);
     (this.hist || []).forEach(dispose);
     dispose(this.rainRT);
     dispose(this.paintRT);
@@ -1316,6 +1321,14 @@ export class Pipeline {
       this.ups.push(new THREE.WebGLRenderTarget(mw, mh, opt));
       mw = Math.max(1, mw >> 1);
       mh = Math.max(1, mh >> 1);
+    }
+    // (ROADMAP 19.4, a phone's, GFX.glowLite: the glow made at a quarter of the picture, one level fewer - its two
+    // half-size passes were three quarters of its pixels; the same sizes as the lower levels of the one above)
+    this.mipsQ = null;
+    this.upsQ = null;
+    if (GFX.glowLite && this.low) {
+      this.mipsQ = this.mips.slice(1).map((m) => new THREE.WebGLRenderTarget(m.width, m.height, opt));
+      this.upsQ = this.mips.slice(1).map((m) => new THREE.WebGLRenderTarget(m.width, m.height, opt));
     }
     if (taa) {
       // what was gathered (its colour; how much is gathered and how far away it is), the last
@@ -2781,7 +2794,7 @@ export class Pipeline {
     const f = this.mFinal.uniforms;
     f.tSrc.value = src;
     f.tBloom.value = cur.texture;
-    f.uBloom.value = this.bloom;
+    f.uBloom.value = this.bloom * (this._glowK || 1);
     f.uExposure.value = this.exposure;
     f.uSrcTexel.value.set(1 / sw.x, 1 / sw.y);
     let sharp = taa || this.scale < 0.99 ? 0.85 : 0.5;
@@ -3057,23 +3070,31 @@ export class Pipeline {
   }
 
   drawGlow(src, sw) {
+    // (ROADMAP 19.4, GFX.glowLite: from the bright parts straight to a quarter, one level fewer - five passes, not
+    // seven. The sum of the levels is the glow, so with one fewer its strength is made up in the last pass:
+    // glowK, uBloom)
+    const lite = !!(this.mipsQ && GFX.glowLite && !GFX.off);
+    this._glowK = lite ? this.levels / this.mipsQ.length : 1;
+    const mips = lite ? this.mipsQ : this.mips;
+    const ups = lite ? this.upsQ : this.ups;
     const b = this.mBright.uniforms;
     b.tSrc.value = src;
     b.uTexel.value.set(1 / sw.x, 1 / sw.y);
-    this.pass(this._corner ? this.mBrightD : this.mBright, this.mips[0]);
-    for (let i = 1; i < this.mips.length; i++) {
-      const m = this.mips[i - 1];
+    b.uBrightO.value = lite ? 1 : 0.5;
+    this.pass(this._corner ? this.mBrightD : this.mBright, mips[0]);
+    for (let i = 1; i < mips.length; i++) {
+      const m = mips[i - 1];
       this.mDown.uniforms.tSrc.value = m.texture;
       this.mDown.uniforms.uTexel.value.set(1 / m.width, 1 / m.height);
-      this.pass(this.mDown, this.mips[i]);
+      this.pass(this.mDown, mips[i]);
     }
-    let cur = this.mips[this.mips.length - 1];
-    for (let i = this.mips.length - 2; i >= 0; i--) {
+    let cur = mips[mips.length - 1];
+    for (let i = mips.length - 2; i >= 0; i--) {
       this.mUp.uniforms.tSrc.value = cur.texture;
-      this.mUp.uniforms.tAdd.value = this.mips[i].texture;
+      this.mUp.uniforms.tAdd.value = mips[i].texture;
       this.mUp.uniforms.uTexel.value.set(0.5 / cur.width, 0.5 / cur.height);
-      this.pass(this.mUp, this.ups[i]);
-      cur = this.ups[i];
+      this.pass(this.mUp, ups[i]);
+      cur = ups[i];
     }
     return cur;
   }
