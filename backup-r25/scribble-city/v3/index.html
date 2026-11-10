@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f8f4e9">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>עיר השרבוטים בצבעים</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gveret+Levin&family=Rubik:wght@400;600;800&family=Caveat:wght@500;700&family=Permanent+Marker&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">{ "imports": { "three": "../js/vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="wobble"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="3" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3.5"/></filter>
+  <filter id="wobble2"><feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="9" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.5"/></filter>
+</svg>
+
+<div id="app">
+  <div id="viewport"></div>
+
+  <div id="hud" class="hidden">
+    <div id="crosshair"><span></span><span></span><span></span><span></span></div>
+    <div id="hitmarker">✕</div>
+    <div id="vignette"></div>
+    <div id="damage"></div>
+    <div id="splats"></div>
+    <div id="wanted" class="hidden" aria-label="רמת חיפוש משטרתי"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
+
+    <div id="topbar">
+      <div id="health" class="paper-card">
+        <div class="label">חיים</div>
+        <div class="bar"><div class="fill"></div></div>
+      </div>
+      <div id="vehicle-hp" class="paper-card hidden">
+        <div class="label">כלי</div>
+        <div class="bar"><div class="fill"></div></div>
+      </div>
+      <div id="district" class="paper-card"></div>
+    </div>
+
+    <div id="goals" class="sticky"></div>
+
+    <div id="minimap-wrap" class="paper-card"><canvas id="minimap" width="200" height="200"></canvas></div>
+
+    <div id="weapon" class="paper-card">
+      <canvas id="weapon-icon" width="120" height="72"></canvas>
+      <div id="weapon-name"></div>
+      <div id="weapon-ammo"></div>
+      <div id="weapon-grade"></div>
+    </div>
+
+    <div id="hidden-tag" class="hidden">מוסתר</div>
+    <div id="prompt" class="hidden"></div>
+    <div id="toasts"></div>
+    <div id="bigmsg" class="hidden"></div>
+    <div id="dialog" class="paper-card hidden"><div class="who"></div><div class="text"></div><div class="choices"></div></div>
+  </div>
+  <div id="pageflip"><div class="page"></div></div>
+
+  <div id="touch" class="hidden">
+    <div id="stick-zone"><div id="stick-base"><div id="stick-knob"></div></div></div>
+    <div id="look-zone"></div>
+    <button id="btn-fire" class="tbtn big" aria-label="ירי"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="1.6"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5"/></svg></button>
+    <button id="btn-jump" class="tbtn" aria-label="קפיצה"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20V5M6 10l6-6 6 6M5 21h14"/></svg></button>
+    <button id="btn-draw" class="tbtn empty" aria-label="לצייר באוויר"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20l1.2-4.6L16.6 4a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8z"/><path d="M14.6 6l3.4 3.4M4 20l4.6-1.2"/></svg><span class="lbl">לצייר</span><span class="badge hidden"></span></button>
+    <div id="draw-hint" class="hidden"><svg viewBox="0 0 120 90"><path d="M10 12 C 50 6, 92 22, 100 70"/><path d="M86 58 L 100 72 L 108 52"/></svg><span>לחצו על העיפרון כדי לצייר באוויר!</span></div>
+    <button id="btn-photo" class="tbtn hidden" aria-label="צילום"><span class="lbl">לצלם</span><svg class="ico" viewBox="0 0 24 24"><path d="M3 8.5h4l1.6-2.5h6.8L17 8.5h4V19H3z"/><circle cx="12" cy="13.2" r="3.6"/></svg></button>
+    <button id="btn-enter" class="tbtn hidden" aria-label="כניסה לרכב"><svg class="ico" viewBox="0 0 24 24"><path d="M2.5 15.5v-3l2.5-.5 2.5-4h8l3.5 4 2.5.6v2.9z"/><circle cx="7" cy="16.5" r="2"/><circle cx="17" cy="16.5" r="2"/></svg></button>
+    <button id="btn-swap" class="tbtn" aria-label="החלפת נשק"><svg class="ico" viewBox="0 0 24 24"><path d="M4 9h13l-3-3M20 15H7l3 3"/></svg></button>
+    <button id="btn-up" class="tbtn small hidden">▲</button>
+    <button id="btn-down" class="tbtn small hidden">▼</button>
+    <button id="btn-pause" class="tbtn small" aria-label="הפסקה"><svg class="ico" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></button>
+  </div>
+
+  <div id="flash"></div>
+  <div id="photo-pop" class="hidden"><div class="polaroid"><canvas width="360" height="240"></canvas><div class="caption"></div></div></div>
+
+  <div id="album" class="overlay hidden">
+    <div class="sheet">
+      <h2>האלבום שלי — מה לצייר?</h2>
+      <div id="album-list"></div>
+      <div class="sheet-foot">
+        <button id="album-close" class="btn">סגור</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="airdraw" class="hidden">
+    <div id="air-danger"></div>
+    <div id="air-input"></div>
+    <div id="air-ref" class="polaroid">
+      <canvas width="600" height="400"></canvas>
+      <div class="caption"></div>
+      <button id="air-zoom" class="ref-btn" aria-label="הגדלה"><svg class="ico" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5l5 5M10.5 7.5v6M7.5 10.5h6"/></svg></button>
+      <button id="air-prev" class="ref-btn ref-nav" aria-label="השרטוט הקודם">‹</button>
+      <button id="air-next" class="ref-btn ref-nav" aria-label="השרטוט הבא">›</button>
+      <div id="air-count"></div>
+    </div>
+    <div id="air-head"><div id="air-title"></div><div id="air-status"></div></div>
+    <div id="air-foot">
+      <button id="air-done" class="btn primary">✓ סיימתי!</button>
+      <button id="air-undo" class="btn">↶ בטל קו</button>
+      <button id="air-clear" class="btn">נקה</button>
+      <button id="air-ghost" class="btn" title="השרטוט מופיע חלש באוויר ואפשר לעבור עליו — אבל הציון מוגבל ל־70">נייר העתקה</button>
+      <button id="air-cancel" class="btn danger">✕ ברח!</button>
+    </div>
+  </div>
+
+  <div id="title" class="overlay">
+    <div class="cover">
+      <div class="spiral"></div>
+      <h1>עיר השרבוטים</h1>
+      <p class="sub">ציירת את זה? זה אמיתי.</p>
+      <div class="howto">
+        <div class="col desktop-only">
+          <h3>מחשב</h3>
+          <p><b>WASD</b> הליכה · <b>עכבר</b> הסתכלות · <b>קליק</b> ירי/מחיקה</p>
+          <p><b>Shift</b> ריצה · <b>רווח</b> קפיצה · <b>1-0</b>, גלגלת או <b>X</b> החלפת נשק</p>
+          <p><b>F</b> צילום שלט · <b>Q</b> ציור · <b>E</b> רכב / דלת / שיחה · <b>M</b> מפה</p>
+          <p>ברכב: <b>WASD</b> נהיגה · <b>קליק</b> תותח/קרן · <b>רווח/C</b> גובה בחללית · <b>Esc</b> הפסקה</p>
+        </div>
+        <div class="col touch-only">
+          <h3>טלפון</h3>
+          <p>ג׳ויסטיק משמאל · גרירה מימין להסתכלות</p>
+          <p>מצלמה — צילום שלט · עיפרון "לצייר" — ציור באוויר · כוונת — ירי</p>
+        </div>
+        <div class="col">
+          <h3>איך משחקים</h3>
+          <p>מצלמים שלטים עם ציורים, מתחבאים, ומציירים אותם באוויר — כמעט עשרים נשקים ורכבים מחכים בעיר: מרובה עפרונות וחרב סרגל ועד לייזר מרקר, מיניגאן מחדדים, אופנוע ומסוק נייר. ככה שהציור טוב יותר, הנשק טוב יותר! המחק מוחק כל דבר בעיר, גם קירות: משפשפים קיר של בית ונכנסים פנימה. אפשר להיכנס לכל חנות (המוכרים מציירים לכם מה שתבקשו), ובטיילת יש דוכן שבו מציירים לעצמכם חברה. כל מכונית אפשר לקחת — רק שהמשטרה לא תראה, ויש בר מעבר לפינה… שעה ומזג אוויר — בתפריט ההפסקה.</p>
+        </div>
+      </div>
+      <button id="start-btn" class="btn primary huge" disabled>טוען את המחברת…</button>
+      <div id="load-status"></div>
+    </div>
+  </div>
+
+  <div id="intro-flash" class="hidden"></div>
+
+  <div id="pause" class="overlay hidden">
+    <div class="sheet small">
+      <h2>הפסקה</h2>
+      <button id="resume-btn" class="btn primary">המשך</button>
+      <label class="opt"><input type="checkbox" id="opt-sound" checked> צלילים</label>
+      <label class="opt"><input type="checkbox" id="opt-boil" checked> קווים רועדים</label>
+      <label class="opt"><input type="checkbox" id="opt-look" checked> השתקפויות ברחוב הרטוב</label>
+      <label class="opt"><input type="checkbox" id="opt-magic" checked> איכות גבוהה (עוד צבעים בכל משיכה)</label>
+      <label class="opt">שעה <select id="opt-time"><option value="dusk">שקיעה</option><option value="cycle">מתחלפת</option><option value="day">יום</option><option value="night">לילה</option><option value="dawn">זריחה</option></select></label>
+      <label class="opt">מזג אוויר <select id="opt-weather"><option value="auto">משתנה</option><option value="clear">בהיר</option><option value="cloudy">מעונן</option><option value="rain">גשם</option><option value="storm">סערה</option><option value="fog">ערפל</option><option value="windy">רוח</option><option value="rainbow">קשת</option></select></label>
+      <label class="opt">רגישות <input type="range" id="opt-sens" min="0.3" max="2.5" step="0.1" value="1"></label>
+    </div>
+  </div>
+
+  <div id="death" class="overlay hidden">
+    <div class="sheet small">
+      <h2>נמחקת!</h2>
+      <p>מישהו מחק אותך מהמחברת… אבל אפשר לצייר אותך מחדש.</p>
+      <button id="respawn-btn" class="btn primary">צייר אותי מחדש</button>
+    </div>
+  </div>
+
+  <div id="rotate-hint" class="overlay hidden"><div class="sheet small"><h2>סובבו את הטלפון לרוחב</h2><p>המשחק עובד הכי טוב לרוחב.</p></div></div>
+  <div id="fatal" class="hidden"></div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

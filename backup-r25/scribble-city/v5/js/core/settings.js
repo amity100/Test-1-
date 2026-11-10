@@ -1,0 +1,103 @@
+// The player's settings (ROADMAP 2.3), kept between visits: the three volumes, the controls, what is
+// on the screen and the drawing's options. All under one key with a version number, so a save
+// made by an older version still loads (what it does not know keeps its default).
+
+const KEY = 'scribble-city-v5-settings';
+// (2: ROADMAP 15.5 - "every blueprint open" was on by itself until then; a save from before keeps
+// everything else, and begins the story. 3: round 22 - the frames' pace as the device likes it, a
+// steady 30 on a phone: a save from before keeps everything but its pace)
+const VERSION = 3;
+
+export const DEFAULTS = {
+  sound: true,
+  // the volumes, 0..1: effects (and the city's own sounds), music in places, the car radio
+  fx: 1,
+  music: 1,
+  radio: 1,
+  sens: 1,
+  invertY: false,
+  // (on a phone, at the wheel) the buttons of the big phone games: ◀ ▶ under the left thumb, the
+  // pedals under the right; or 'stick', the stick drives as it always did
+  touchDrive: 'buttons',
+  // the radio's words on the screen, and what people say (near you, behind you, or aloud)
+  subtitles: true,
+  // (what people say, aloud in the browser's own voice: gone - heard as a narrator over the city,
+  // game/voices.js. Always false; a true saved before is not loaded)
+  voices: false,
+  perf: false,
+  // null: as the device likes it (the lines tremble with a mouse and keep still on a phone, a
+  // phone draws with fewer colours a stroke)
+  boil: null,
+  reflections: null,
+  quality: null,
+  // (render/pipeline.js) the smart drawing: fewer pixels each frame, the sharpness gathered from
+  // the frames before. A choice to make: faster, but softer as you move (off to begin with)
+  smart: false,
+  // (game/pace.js) the frames' pace: free (as many as can be, as it always was), or steady: auto,
+  // 60, 30 a second. (round 22, the player's word: a steady 30 on a phone - 'device': free on a
+  // computer, 30 on a phone, game/game.js bindSettings)
+  pace: 'device',
+  // (ROADMAP 11.4, render/pipeline.js) how the drawing is made on a computer: 'auto' - in two passes
+  // (the surfaces, then the pens over the whole picture, once a pixel) or in one, whichever is
+  // faster here, tried in play; 'two'; 'one', as it always was
+  pens: 'auto',
+  // (ROADMAP 9.1, not with ?classic) every blueprint open to draw from the start; off, they are
+  // found in the city (photographed, bought, won, given: ui/album.js). (ROADMAP 15.5: the sandbox -
+  // every drawing and part open, the ink without end; off (as a new game begins), the story: found,
+  // learned and opened up along the way). (v5, ROADMAP 18.9: on for a new player - the trial is to
+  // have all of it to play with: every drawing, every part on the car)
+  allOpen: true,
+  // (ROADMAP 11.24, the lab) drawing on your car: 'parts' - a category said (a weapon, movement,
+  // protection), then drawn, and which of its things it is read (game/partpen.js, ROADMAP 11.25);
+  // 'old', as in 11.22 - what is drawn is read as what it looks like, where it is
+  carPen: 'parts',
+};
+
+export class Settings {
+  constructor() {
+    this.v = { ...DEFAULTS };
+    this.load();
+  }
+
+  load() {
+    let s = null;
+    try {
+      s = JSON.parse(localStorage.getItem(KEY) || 'null');
+    } catch (e) {
+      s = null;
+    }
+    if (!s || typeof s !== 'object' || !s.v || !(s.version <= VERSION)) return;
+    for (const k of Object.keys(DEFAULTS)) {
+      if (!(k in s.v)) continue;
+      if (k === 'allOpen' && !(s.version >= 2)) continue;
+      if (k === 'pace' && !(s.version >= 3)) continue;
+      if (k === 'voices') continue;
+      const d = DEFAULTS[k];
+      const x = s.v[k];
+      if (d === null ? x === null || typeof x === 'boolean' : typeof x === typeof d) this.v[k] = x;
+    }
+  }
+
+  save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify({ version: VERSION, v: this.v }));
+    } catch (e) {
+      // (no storage: the settings last as long as the page)
+    }
+  }
+
+  get(k) {
+    return this.v[k];
+  }
+
+  set(k, x) {
+    if (this.v[k] === x) return;
+    this.v[k] = x;
+    this.save();
+  }
+
+  reset() {
+    this.v = { ...DEFAULTS };
+    this.save();
+  }
+}

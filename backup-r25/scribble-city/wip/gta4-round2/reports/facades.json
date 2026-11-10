@@ -1,0 +1,53 @@
+{
+ "aspect": "facades",
+ "worktree": "/home/user/Test-1-/.claude/worktrees/wf_a71e1740-598-1",
+ "branch": "gta4/facades",
+ "commits": [
+  "65963ea v5 GTA IV facades: windows set into the wall, the old walk-ups' hand, life on the fronts",
+  "4ae5bab v5 GTA IV facades: fascias on the rows, Deco panels, Juliet rails, no fighting layers"
+ ],
+ "files_changed": [
+  "scribble-city/v5/js/world/facades.js (new, 822 lines)",
+  "scribble-city/v5/js/world/deco.js",
+  "scribble-city/v5/js/world/kits.js",
+  "scribble-city/v5/js/world/hotels.js"
+ ],
+ "summary": "Close up, mainland buildings no longer look like boxes. The pen style is unchanged, and the city's layout, shops and names are identical. Each building now has three things: a dialect chosen by district (Little Havana = 'havana'; downtown, paintwood and brickton = old 'walkup'; everywhere else = 'deco'), its own dice seeded from where it stands (diceAt), and a set of soups, one per pen, holding all its parts merged as a single geometry.\n\nNew world/facades.js holds the architectural kit:\n- Parts: a soup builder with face skipping, panes, oriented bars and atlas stickers.\n- skin(): builds the wall as piers and bands around real window holes, so windows sit back 15-20 cm in true reveals.\n- deepWindow(): glass at the back, sash with mullions and transom; stone sill; keystone, hood or flat head; optional surround and paired shutters; behind the glass, curtains, a pelmet, a half-down blind with slats, a pushed-up sash showing the dark room, or a plant on the sill; or an in-window AC on diagonal brackets with a drip streak.\n- balconette(): iron rail with pots, laundry or a chair.\n- Cornices on brackets, belt courses, downpipes, gas and electric meters, wall lamps.\n- flatsDoor(): the door to the flats with fanlight, gilt number, panel or glazed door, kick plate, mail slot, knob, bell plate and step.\n- fireStairs(): a fire escape with slatted landings, rails, stairs and a drop ladder.\n- shopHardware(): shutter housing with end caps, runners, hasp, doormat, 'OPEN 24' and 'come in, we're open' stickers, and posters on the glass.\n- bladeSign() on a bracket (neon both faces, reading direction computed), plus tags.\n\ndeco.js (walk-ups over shops) is rewritten on top of this:\n- The body front is recessed behind the skin.\n- Old walk-ups get their own window layout per dialect. Havana: tall casements with hoods, surrounds and shutters, first-floor or random balconettes, ACs. Walkup: keystone, hood or flat heads, window ACs, belt course, bracketed cornice. Havana also gets parapet panels and urns. Deco keeps its original layout and city dice, now set into the wall, with fluted relief panels under the windows.\n- On longer old buildings: a flats door beside the shop, and a front fire escape at the other end (62% of walk-ups of 3+ floors).\n- Pier weathering streaks, pilaster plinths with rusticated joints, a corner downpipe, meters, blade signs, and painted name boards with neon.\n- Side walls get their own skin, so side windows are no longer floating.\n- fbox now uses one cached unit box, which makes block builds faster.\n\nkits.js:\n- Shop rows: a moulding at the coping, a fascia frame per shop, pilaster feet, brackets under the coping in old districts, a downpipe and meter, blade signs.\n- Storefronts: bulkhead foot and chrome line, transom bars, shop hardware, and tags on closed shutters.\n- Garden apartments: window reveals and curtains, Juliet rails with pots (18% of upstairs windows that have no AC), and walk-up doors with brass numbers, lamp, mat and pot.\n- Houses: window bars in Havana (60%), number plate, doormat.\n- Condos: balcony life (pots, chair and table, laundry rack, condenser).\n- Modern glass: blinds with slats, mullions and transoms.\n- MiMo (Miami Modern): catwalk door numbers, mats, chairs, towels.\n\nhotels.js:\n- Window reveals with sills, curtains and blinds, and through-wall ACs.\n- Mediterranean ones: louvred shutters, pots on balconettes, tile-roof beam ends, lanterns and pipes.\n- Shop hardware and blade signs on their mainland shops.\n\nLayering depths were raised (curtains 3 cm off the glass, streaks and tags 1.4-2.6 cm off the wall) so nothing fights at a distance. Phones and ?low (DETAIL_LOW) skip the finest parts: louvres, slats, joints, dentils, and some bars.",
+ "images": [
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/facades_1.jpg",
+   "caption_he": "בית דירות בהוואנה הקטנה: חלונות שקועים בקיר עם משקופים ואדני חלון, תריסים, מרפסונים עם עציצים, כרכוב על זיזים ושלט על לוח"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/facades_2.jpg",
+   "caption_he": "בניין ישן במרכז העיר: מדרגות חירום על החזית, מזגנים בחלונות, אבני ראש מעל החלונות, פס אבן וכרכוב"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/facades_3.jpg",
+   "caption_he": "הבניין הספרדי: תריסים, וילונות מאחורי הזכוכית וקורות מתחת לגג הרעפים"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/facades_4.jpg",
+   "caption_he": "שורת חנויות: מסגרת לכל שלט, זיזים מתחת לגג, ארגז תריס, מוטות מעל הזכוכית ושטיח בכניסה"
+  }
+ ],
+ "tests": [
+  "node --check passes on facades.js, deco.js, kits.js and hotels.js",
+  "Node build harness (stub materials) on 17 mainland blocks across 8 districts: all build with no exceptions. Every block's lot list is identical before and after, so the city's dice are preserved. This holds on both the desktop path and the forced ?low phone path.",
+  "Browser, final AFTER run on a snapshot of HEAD (1280x720, 13:00): 18 shots plus 3 in-game perf probes, exit 0, 0 pageerror. Log: /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/shots/facades/after.log",
+  "Browser, BEFORE re-run on a pristine copy of 30f175c with the same script and cameras: exit 0, 0 pageerror. Log: /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/shots/facades/before.log",
+  "Earlier browser iterations it1, it2 and it3 (full shot set): 0 pageerror each",
+  "Island check before and after (start, Ocean Drive hotels, inland streets): 0 pageerror, island renders correctly"
+ ],
+ "perf": "The cost is static merged geometry only. There is no per-frame code and no new per-frame allocations. No new materials or pens: each building's parts are flushed into the existing per-pen batches, so small parts stay subject to the existing small-pen and far-pen culling (150/110 m and 260/200 m).\n\nVertices per mainland block (node, 17 blocks): total 2,547,442 -> 2,926,548 (+14.9%). The largest increase is Havana calle 5,7 at 112.5k -> 150.2k (+33.5%), under the +40% budget.\n- Havana calle 4,7: +29%\n- Havana calle 7,8: +22%\n- Downtown towers: +23% and +29%\n- Offices: +33%\n- Condos: +26%\n- Lofts: +18%\n- Bungalows: +16%\n- Apartments, houses, boulevard, mansions: +4% to +9%\n- Phone/?low path: +10.7% total, at most +21.6% on any block.\n\nDraw objects per block (node): 1314 -> 1329 total (+1.1%); per block between -1 and +5.\n\nIn-browser perf probe (same cameras, 40 frames, before -> after):\n- Main-pass draw calls: Havana 402 -> 401, downtown 379 -> 385, homes 330 -> 338.\n- Reflection pass: 323 -> 322, 305 -> 309, 266 -> 272.\n- Total calls fell (841 -> 786, 834 -> 752, 790 -> 748) and total triangles were flat or lower (2.35M -> 2.26M, 1.97M -> 1.89M, 1.85M -> 1.85M). Both totals are dominated by when the background shadow map happened to refresh, so they are not a real gain.\n- Frame times in this headless software-GL setup mean nothing; only the counts are meaningful.\n\nBlock build CPU (node, best of 3, 8 blocks): 3987 ms -> 3613 ms (-9%), thanks to the cached unit box in fbox and the per-building soups.",
+ "known_issues": [
+  "The order in which ctx.wear is consumed changed. This is cosmetic only: which walls carry grime differs. ctx.rng is consumed exactly as before, so lots, shops and names are identical.",
+  "Island buildings from the deco kit (no ctx.block) also get the deep-window Deco treatment. It looks consistent, but they are not only mainland buildings.",
+  "The havana_row camera ended up against a blank side wall (in an earlier iteration, a bus shelter). The street-perspective comparison is therefore only meaningful downtown (down_row); havana_row is not one of the composite images.",
+  "On shops with no awning, the shutter housing reads as a thin canopy from low angles.",
+  "Seen from directly below, the painted name board over Havana walk-ups can hide the bottom edge of the first-floor windows. This is parallax and physically correct.",
+  "Blinds, slats and louvres are skipped on phones (DETAIL_LOW), and small parts vanish past the existing small-pen cull distance, as designed.",
+  "Perf counts come from a headless software-GL browser. Real-GPU frame times on a phone were not measured."
+ ],
+ "outside_edits": []
+}
