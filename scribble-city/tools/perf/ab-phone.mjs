@@ -15,6 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { startServer, launch } from '../shot.mjs';
+import { seed, virtualClock } from './lib.mjs';
 
 const SEED = 7;
 
@@ -42,35 +43,15 @@ async function shoot(outDir) {
   const browser = await launch();
   const ctx = await browser.newContext({ viewport: { width: 882, height: 411 }, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true });
   const pg = await ctx.newPage();
-  await pg.addInitScript((seed) => {
-    let a = seed >>> 0;
-    Math.random = () => {
-      a = (a + 0x6d2b79f5) >>> 0;
-      let t = a;
-      t = Math.imul(t ^ (t >>> 15), t | 1);
-      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }, SEED);
-  // (three.js draws on the same dice for the id of every new object: its ids get dice of their own,
-  // so a build that makes one more object does not shift every roll after it - tools/ab.mjs)
-  await pg.addInitScript(() => {
-    let u = 99991;
-    globalThis.__uuidRand = () => {
-      u = (u * 16807) % 2147483647;
-      return u / 2147483647;
-    };
-  });
-  await pg.route('**/three.module.min.js', async (route) => {
-    const resp = await route.fetch();
-    const body = (await resp.text()).replaceAll('4294967295*Math.random()', '4294967295*(globalThis.__uuidRand||Math.random)()');
-    await route.fulfill({ response: resp, body });
-  });
+  // (the dice seeded and the clock held still: lib.mjs - two runs of one build must be one picture)
+  const det = !process.env.NODET;
+  if (det) await seed(pg, SEED);
   const errors = [];
   pg.on('pageerror', (e) => errors.push(e.message));
   const extra = process.env.AB_QUERY ? `&${process.env.AB_QUERY}` : '';
   await pg.goto(`http://127.0.0.1:${server.address().port}/v5/index.html?test=1&autostart=1&prologue=0${extra}`);
   await pg.waitForFunction('window.__ready === true', null, { timeout: 1500000, polling: 1000 });
+  if (det) await virtualClock(pg);
   await pg.evaluate(() => {
     const g = window.__game;
     const r = g.renderer;

@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { groundHeight } from '../world/layout.js';
 import { shared } from '../render/materials.js';
+import { GFX } from '../core/util.js';
 
 const ROUTE_SECONDS = 60;
 // after the route, standing at its start a few seconds each way, to see what holds the frames up
@@ -18,8 +19,18 @@ const ROUTE_SECONDS = 60;
 // (the game alone, on the processor)
 // (and as it is once more at the end: if the device has slowed down on its own meanwhile, warming
 // up, the first and the last tell)
-const STILL = [['רגיל', null], ['רזולוציה נמוכה', 'scale'], ['בלי השתקפות', 'mirror'], ['בלי צל', 'shadow'], ['בלי אנשים ומכוניות', 'life'], ['בלי ציור', 'draw'], ['שוב רגיל', null]];
+// (ROADMAP 19: 'כמו קודם' - the phone's own way of drawing, GFX, switched off for the stand: the same
+// place drawn as it was before it, right after the first, on a device where it is on)
+const STILL = [['רגיל', null], ['כמו קודם', 'old'], ['רזולוציה נמוכה', 'scale'], ['בלי השתקפות', 'mirror'], ['בלי צל', 'shadow'], ['בלי אנשים ומכוניות', 'life'], ['בלי ציור', 'draw'], ['שוב רגיל', null]];
 const STILL_SECONDS = 5;
+// (ROADMAP 19: after those, two places of the mainland where a frame is heaviest - the street east of
+// Bayview Mall, looking at it, and under its dome - each stood in as it is and, where GFX is on, as it
+// was before it. x, z, yaw: where the player is put; pos, look: the camera. Settled 2 seconds, then
+// STILL_SECONDS counted)
+const PLACES = [
+  { name: 'הקניון מבחוץ', x: -700, z: -37, yaw: -1.57, pos: [-694, 2.2, -32], look: [-760, 6, -40] },
+  { name: 'בתוך הקניון', x: -835, z: -37, yaw: -1.57, pos: [-828, 2.0, -37], look: [-880, 2.4, -37] },
+];
 // the route: along the boulevard, through the shops and the park, up the avenue into downtown,
 // over the towers and out over the bay to the pier (x, height, z)
 const ROUTE = [
@@ -27,6 +38,18 @@ const ROUTE = [
   [-80, 2.4, 29], [-130, 2.4, 29], [-135, 2.4, 15], [-135, 2.4, -230], [-120, 20, -280], [-60, 80, -260],
   [0, 60, -100], [40, 25, 100], [30, 8, 230],
 ];
+// (ROADMAP 19) the places of the mainland in the report: 'הקניון מבחוץ: עכשיו 31.0 (950/260) · כמו קודם 14.2 (3400/410) · …'
+function placeLine(b) {
+  const S = b.still;
+  const out = [];
+  for (let i = b.islandN; i < b.stands.length; i++) {
+    const st = b.stands[i];
+    const num = `${S.fps[i].toFixed(1)} (${S.tr[i].toFixed(0)}/${Math.round(S.cl[i])})`;
+    if (!out.length || out[out.length - 1].place !== st.place) out.push({ place: st.place, text: [] });
+    out[out.length - 1].text.push(`${st.name} ${num}`);
+  }
+  return out.map((o) => `${o.place.name}: ${o.text.join(' · ')}`).join(' · ');
+}
 // the systems of the game, timed by wrapping their methods while the numbers are shown
 const SYSTEMS = [
   ['civilians', 'update'], ['civilians', 'draw'], ['traffic', 'update'], ['traffic', 'draw'], ['enemies', 'update'], ['enemies', 'draw'],
@@ -607,7 +630,17 @@ export class Perf {
     // shaders counted below)
     const cpu0 = cpuSpeed();
     const gpu0 = gpuSpeed(g.renderer);
-    this.bench = { t: 0, pts, acc, len: acc[acc.length - 1], frames: [], scale: g.pipe.scale, taaFrac: g.pipe.taaFrac, warm: 1.5, secs: seconds, stillSecs: stillSeconds, from: [pl.pos.x, pl.pos.z, pl.yaw], still: null, noDraw: false, refl: g.pipe.reflections, compiles: 0, compileMs: 0 };
+    // (ROADMAP 19) the stands of this run: the island's (the one 'כמו קודם' only where GFX is on), then the
+    // mainland's places, if it is built
+    const stands = STILL.filter(([, what]) => what !== 'old' || GFX.on).map(([name, what]) => ({ name, what }));
+    const islandN = stands.length;
+    if (g.world && g.world.mainland && g.world.mainland.fill) {
+      for (const P of PLACES) {
+        stands.push({ name: GFX.on ? 'עכשיו' : 'רגיל', what: null, place: P });
+        if (GFX.on) stands.push({ name: 'כמו קודם', what: 'old', place: P });
+      }
+    }
+    this.bench = { t: 0, pts, acc, len: acc[acc.length - 1], frames: [], scale: g.pipe.scale, taaFrac: g.pipe.taaFrac, warm: 1.5, secs: seconds, stillSecs: stillSeconds, from: [pl.pos.x, pl.pos.z, pl.yaw], still: null, noDraw: false, refl: g.pipe.reflections, compiles: 0, compileMs: 0, stands, islandN };
     this.gpu.take(true);
     // the shaders made ready on the way (each a pause where it is first seen: on a phone, long)
     const b = this.bench;
@@ -687,17 +720,24 @@ export class Perf {
     b.t += dt;
     const cam = this.game.camera;
     // (after the route: standing still at its start)
-    const d = b.still ? 0 : (Math.max(0, b.t - b.warm) / b.secs) * b.len;
-    const p = this.routeAt(d, this._p || (this._p = {}));
-    const q = this.routeAt(d + 14, this._q || (this._q = {}));
-    cam.position.set(p.x, p.y, p.z);
-    cam.lookAt(q.x, Math.min(q.y, p.y) - (p.y > 10 ? 6 : 0.3), q.z);
-    // the city's life lives around the player: the player (unseen) rides along under the camera
-    const gh = groundHeight(p.x, p.z);
-    if (gh >= 0) {
-      const pl = this.game.player;
-      pl.pos.set(p.x, gh, p.z);
-      pl.vel.set(0, 0, 0);
+    const at = b.still ? b.still.at : null;
+    if (at) {
+      // (ROADMAP 19: standing at a place of the mainland - the player was put there, and stays)
+      cam.position.set(at.pos[0], at.pos[1], at.pos[2]);
+      cam.lookAt(at.look[0], at.look[1], at.look[2]);
+    } else {
+      const d = b.still ? 0 : (Math.max(0, b.t - b.warm) / b.secs) * b.len;
+      const p = this.routeAt(d, this._p || (this._p = {}));
+      const q = this.routeAt(d + 14, this._q || (this._q = {}));
+      cam.position.set(p.x, p.y, p.z);
+      cam.lookAt(q.x, Math.min(q.y, p.y) - (p.y > 10 ? 6 : 0.3), q.z);
+      // the city's life lives around the player: the player (unseen) rides along under the camera
+      const gh = groundHeight(p.x, p.z);
+      if (gh >= 0) {
+        const pl = this.game.player;
+        pl.pos.set(p.x, gh, p.z);
+        pl.vel.set(0, 0, 0);
+      }
     }
     // (the first moments settle; they are not counted)
     if (b.t < b.warm) {
@@ -713,20 +753,24 @@ export class Perf {
   beginStill() {
     const b = this.bench;
     b.gpuRoute = this.gpu.ok ? this.gpu.take(true) : null;
-    b.still = { i: -1, t: 0, frames: [], fps: [] };
+    b.still = { i: -1, t: 0, frames: [], fps: [], tr: [], cl: [], at: null, place: null, settle: 1, total: 0 };
     this.nextStill();
   }
 
   nextStill() {
     const b = this.bench;
     const s = b.still;
-    const pipe = this.game.pipe;
+    const g = this.game;
+    const pipe = g.pipe;
     if (s.i >= 0) {
       const sm = this.summary(s.frames);
       s.fps.push(sm.fps);
       // (of each frame, the time not in the game's own code: the browser, the page around it, and
       // waiting for the graphics card)
       (s.gap || (s.gap = [])).push(Math.max(0, sm.ms - sm.upd - sm.ren));
+      // (ROADMAP 19: and what the stand drew - thousands of triangles, and draw calls, a frame)
+      s.tr.push(sm.tris / 1000);
+      s.cl.push(sm.calls);
     }
     // (back as it was)
     pipe.scale = pipe.defaultScale || b.scale;
@@ -734,25 +778,48 @@ export class Perf {
     pipe.noSunPass = false;
     pipe.hideLife = false;
     b.noDraw = false;
+    GFX.off = false;
     s.i++;
     s.t = 0;
     s.frames = [];
-    if (s.i >= STILL.length) {
-      // (v5) and each pass on its own, timed straight (render/pipeline.js profile)
+    // (v5) each pass on its own, timed straight (render/pipeline.js profile): where the island's stands
+    // were, before the places of the mainland
+    if (s.i === b.islandN && b.stages === undefined) {
       try {
         b.stages = this.stages();
       } catch (e) {
         b.stages = null;
       }
+    }
+    if (s.i >= b.stands.length) {
       this.endBench();
       return;
     }
-    const what = STILL[s.i][1];
+    const st = b.stands[s.i];
+    // (ROADMAP 19) a place of the mainland: built round the player, who is put there
+    const P = st.place || null;
+    if (P && s.place !== P) {
+      s.place = P;
+      g.hud.toast(`בונים את ${P.name}…`, 'info', 4);
+      try {
+        g.world.mainland.fill({ x: P.x, z: P.z, y: 0 });
+      } catch (e) {
+        // (a place that cannot be built is stood in as it is)
+      }
+      g.player.spawn(P.x, P.z, P.yaw);
+      g.camRig.yaw = P.yaw;
+    }
+    s.at = P;
+    // (settled, not counted: a second; at a place of the mainland two, and then STILL_SECONDS counted)
+    s.settle = P ? 2 : 1;
+    s.total = P ? 2 + b.stillSecs : b.stillSecs;
+    const what = st.what;
     if (what === 'scale') pipe.scale = pipe.minScale;
     else if (what === 'mirror') pipe.reflections = false;
     else if (what === 'shadow') pipe.noSunPass = true;
     else if (what === 'life') pipe.hideLife = true;
     else if (what === 'draw') b.noDraw = true;
+    else if (what === 'old') GFX.off = true;
   }
 
   // the passes timed one by one where the test stands (as the game draws it: the sun's box ahead of
@@ -769,9 +836,9 @@ export class Perf {
   stillStep(dt) {
     const s = this.bench.still;
     s.t += dt;
-    // (the first second settles: not counted)
-    if (s.t < 1) s.frames.length = 0;
-    if (s.t >= this.bench.stillSecs) this.nextStill();
+    // (the first second settles: not counted - two at a place of the mainland, which is still filling in)
+    if (s.t < (s.settle || 1)) s.frames.length = 0;
+    if (s.t >= (s.total || this.bench.stillSecs)) this.nextStill();
   }
 
   endBench() {
@@ -790,6 +857,7 @@ export class Perf {
     g.pipe.reflections = b.refl;
     g.pipe.noSunPass = false;
     g.pipe.hideLife = false;
+    GFX.off = false;
     // how the frames came: in time for a 60 Hz screen, for 30, or later
     const dts = b.frames.map((f) => f.dt);
     const share = (lo, hi) => Math.round((100 * dts.filter((x) => x > lo && x <= hi).length) / Math.max(1, dts.length));
@@ -814,8 +882,12 @@ export class Perf {
       `פריימים בשנייה, ממוצע: ${s.fps.toFixed(1)} · 1% האיטיים: ${s.low1.toFixed(1)} · הפריים האיטי ביותר: ${s.worst.toFixed(1)}ms`,
       g.pace && g.pace.on ? `קצב הפריימים במשחק: יציב (${{ auto: 'אוטומטי', 60: '60', 30: '30' }[g.pace.mode]}) · המסלול עצמו נמדד בקצב הרגיל` : 'קצב הפריימים במשחק: רגיל',
       `פריימים: עד 17ms ${share(0, 17.5)}% · עד 34ms ${share(17.5, 34.5)}% · יותר ${share(34.5, 1e9)}% · הכנת שיידרים ${b.compiles} (${Math.round(b.compileMs)}ms)`,
-      b.still && b.still.fps.length === STILL.length ? `עומדים במקום, פריימים בשנייה: ${STILL.map(([name], i) => `${name} ${b.still.fps[i].toFixed(1)}`).join(' · ')}` : '',
-      b.still && b.still.gap && b.still.gap.length === STILL.length ? `מזה, זמן בכל פריים מחוץ לקוד המשחק (ms): ${STILL.map(([name], i) => `${name} ${b.still.gap[i].toFixed(0)}`).join(' · ')}` : '',
+      b.still && b.still.fps.length >= b.islandN ? `עומדים במקום, פריימים בשנייה: ${b.stands.slice(0, b.islandN).map(({ name }, i) => `${name} ${b.still.fps[i].toFixed(1)}`).join(' · ')}` : '',
+      b.still && b.still.gap && b.still.gap.length >= b.islandN ? `מזה, זמן בכל פריים מחוץ לקוד המשחק (ms): ${b.stands.slice(0, b.islandN).map(({ name }, i) => `${name} ${b.still.gap[i].toFixed(0)}`).join(' · ')}` : '',
+      // (ROADMAP 19) what each stand drew: thousands of triangles / draw calls a frame
+      b.still && b.still.tr.length >= b.islandN ? `עומדים במקום, אלפי משולשים / קריאות ציור: ${b.stands.slice(0, b.islandN).map(({ name }, i) => `${name} ${b.still.tr[i].toFixed(0)}/${Math.round(b.still.cl[i])}`).join(' · ')}` : '',
+      // (and the places of the mainland: frames a second (thousands of triangles / draw calls))
+      b.still && b.stands.length > b.islandN && b.still.fps.length === b.stands.length ? placeLine(b) : '',
       `דפדפן: ${browserName()}${window.top !== window ? ' · בתוך מסגרת' : ''} · המשחק פתוח ${b.open.toFixed(0)} דקות${b.battery ? ` · סוללה ${Math.round(b.battery.level * 100)}%${b.battery.charging ? ' בטעינה' : ''}` : ''}`,
       `מהירות המכשיר (ms לאותה עבודה, פחות זה מהר יותר): מעבד בהתחלה ${b.cpu[0].toFixed(1)}, בסוף ${b.cpu[1].toFixed(1)} · כרטיס מסך בהתחלה ${b.gpuMs[0].toFixed(1)}, בסוף ${b.gpuMs[1].toFixed(1)}`,
       b.po ? `משימות ארוכות בכל שנייה: של המשחק ${(b.busy.self / secs).toFixed(0)}ms · של הדף שמסביב ${(b.busy.other / secs).toFixed(0)}ms` : 'משימות ארוכות: הדפדפן לא מאפשר למדוד',
