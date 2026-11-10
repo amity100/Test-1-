@@ -886,6 +886,28 @@ The drawing pass at the 11 spots of `ab-phone.mjs pair` (stage 1 off in both pic
 - What the numbers cannot say: milliseconds. The pixels' work for tiny heads falls more than their triangles' (a head
   14 pixels high was some 28 triangles a pixel). The owner's test route says.
 
+### 14.2d Stage 3 as it turned out (see ROADMAP 19.3): two of its three ideas did not hold, measured here
+
+- **3.2 `farHide`, proved before it was built, and it failed.** At `mall_in` the 218 K triangles "of the island" are not the
+  island: the world's own pieces that are not the mainland's - the ground (`whole`, radius 1,230 m), the hills, the shore, the
+  pier, the page's wire, stack and pencil, the mountains of the skyline, the second area's tiles. Hidden all at once from deep
+  inside the hall (`deepInside`, 145 pieces), 5 places x 8 yaws x 3 pitches: pixels differ in every view, up to 117,000 (10%)
+  looking up through the glass roof, 1,000 to 5,000 looking at a door (the far towers and the pier through it). By group, each
+  one alone: the tiles (81 pieces) 41 to 5,373 pixels in six views; the landmarks (13) up to 5,303. No rule "hide when deep inside"
+  is exact; a narrower one (only looking away from the doors, never up) was not built. The code was taken out.
+- **3.3 `goodsFar`, measured, and it saves too little.** All 48 products: full make 9,296 triangles, the phone's low make 6,016, a
+  far make by the simplifier at 5 mm (farthest 3 to 11 mm from the low make, one shoe 29 mm at one corner) 4,928: 18% fewer. A
+  shirt, 376 in the low make, 296 to 302. The models are already coarse, and the shops' goods are clothes in their hundreds
+  (231 K for one fashion shop). Not built.
+- **3.4 what is there.** `shopshell.mjs` at `mall_in`: 493 rooms; the drawing pass 2,036 K triangles in 318 pieces; goods 547 K;
+  598 K of the other 1,489 K lie inside a room's own volume - its shell and fixtures, 164 K shoes, 96 K fashion, 74 K cafes, 51 K
+  boutiques, 45 K ice cream, 35 K perfume, 34 K jewellery; and pieces of 30 to 41 K triangles that are 100% inside one (cluster
+  of) rooms. The rule that hides a room's goods (stage 1) would hide these too, exactly - if each room's fixtures are a piece of
+  their own (`Batch.add`'s `chunk` key makes that a one-line change in `world/rooms.js`). Cost: one draw for each pen of each
+  room seen, today a piece holds several rooms' worth. At 20 to 30 shops seen from under the dome that is some 60 to 100 draws
+  more for some 400 K triangles fewer: it depends on whether the processor or the card is the one that waits, which only the
+  owner's test route says (its "draws" and "processor" lines). Not built.
+
 ### 14.3 From the owner's phone
 
 (the test route's reports, pasted whole, newest last — each with the commit it was run on)

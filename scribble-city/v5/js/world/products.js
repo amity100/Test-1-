@@ -360,6 +360,10 @@ export function model(name, low = false) {
 export function hasModel(name) {
   return !!MAKERS[name];
 }
+// (ROADMAP 19.3: every product the shops can make - the tests' list, tools/perf/lod.html)
+export function modelNames() {
+  return Object.keys(MAKERS);
+}
 
 const STEEL = [0.78, 0.8, 0.84];
 const WHITE = [0.96, 0.95, 0.92];

@@ -5,6 +5,7 @@ import { HEAD, FUNCS, PENS_FRAG } from './glsl.js';
 import { Occlusion } from './occlusion.js';
 import { motion, motionUpload } from './motion.js';
 import { Solid } from './solid.js';
+import { GFX } from '../core/util.js';
 // (v5) the edge of the page: the drawing thinning out to the paper there (render/pagedge.js)
 import { PAGE_GLSL, pageUniforms } from './pagedge.js';
 
@@ -520,6 +521,11 @@ vec3 comicPrint(vec3 c, vec2 uv) {
   c *= mix(vec3(1.0), vec3(1.0, 0.985, 0.94), 0.5 * k * bg);
   return c;
 }
+// (ROADMAP 19.4, GFX.finalLite: the glow is a blur - read once at this pixel, not at each of the five places the
+// sharpening looks at, a texel of the picture apart)
+#ifdef LITE
+vec3 gBloom;
+#endif
 vec3 grade(vec2 uv, float paint) {
   vec3 s = fin3(texture(tSrc, TC(uv)).rgb);
   if (dot(uSmear, uSmear) > 1e-6) {
@@ -550,11 +556,18 @@ vec3 grade(vec2 uv, float paint) {
     vec4 rn = texture(tRain, uv);
     if (!nonum4(rn)) s = s * (1.0 - rn.a) + rn.rgb;
   }
+#ifdef LITE
+  vec3 c = tonemap((s + gBloom * uBloom) * uExposure);
+#else
   vec3 c = tonemap((s + fin3(texture(tBloom, uv).rgb) * uBloom) * uExposure);
+#endif
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   return clamp(vec3(l) + (c - vec3(l)) * 1.25, 0.0, 1.0);
 }
 void main() {
+#ifdef LITE
+  gBloom = fin3(texture(tBloom, vUv).rgb);
+#endif
   // contrast-adaptive sharpening (after AMD's CAS): crisp pen lines even when the drawing was
   // made at a lower resolution than the screen
   float pk = uPaint > 0.001 ? uPaint * (1.0 - people(vUv)) : 0.0;
@@ -1068,6 +1081,10 @@ export class Pipeline {
     this.mInkD = mk(INK_FRAG, this.mInk.uniforms, { DYN: '' });
     this.mBrightD = mk(BRIGHT_FRAG, this.mBright.uniforms, { DYN: '' });
     this.mFinalD = mk(FINAL_FRAG, this.mFinal.uniforms, { DYN: '' });
+    // (ROADMAP 19.4, a phone's, GFX.finalLite: the same pass reading the glow once - finalMat chooses; made
+    // with the others so that no frame waits for its shader)
+    this.mFinalL = GFX.finalLite ? mk(FINAL_FRAG, this.mFinal.uniforms, { LITE: '' }) : null;
+    this.mFinalDL = GFX.finalLite ? mk(FINAL_FRAG, this.mFinal.uniforms, { DYN: '', LITE: '' }) : null;
     // (ROADMAP 11.4) the pens over the whole picture, once a pixel (drawPens)
     this.mPens = mk('#define cameraPosition uCamPos\nuniform vec3 uCamPos;\n' + HEAD + FUNCS + PENS_FRAG, {
       ...shared,
@@ -1502,7 +1519,7 @@ export class Pipeline {
       if (this.afterInk.children.length) add(r.compile(this.afterInk, this.camera));
       quad([this.mInk, this.mInkD, this.mBright, this.mBrightD, this.mDown, this.mUp, this.mTaa, this.mPaint, this.mPaintD, this.deferred ? this.mPens : null]);
       r.setRenderTarget(null);
-      quad([this.mFinal, this.mFinalD]);
+      quad([this.mFinal, this.mFinalD, this.mFinalL, this.mFinalDL]);
       // (and a speech bubble's, ui/bubbles.js - made by the first one said, in play - a stand-in
       // with a picture of its own, the same kind; its material stays, and with it the shader)
       const bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: BLANK, transparent: true, depthWrite: false, fog: false, toneMapped: false }));
@@ -1839,6 +1856,14 @@ export class Pipeline {
       this.solid.key = NaN;
     }
     if (this.touchesStatic(root)) this.staticSoft = true;
+  }
+
+  // the last pass's shader: (ROADMAP 19.4, a phone's) the one that reads the glow once, when the frame has no
+  // whip's smear, painted look or rain picture over it - the film and the smart drawing keep the old way
+  finalMat() {
+    const u = this.mFinal.uniforms;
+    const lite = this.mFinalL && this.low && GFX.finalLite && !GFX.off && !(u.uSmear.value.lengthSq() > 1e-6 || u.uPaint.value > 0.001 || u.uRainOn.value > 0.5);
+    return this._corner ? (lite ? this.mFinalDL : this.mFinalD) : lite ? this.mFinalL : this.mFinal;
   }
 
   // leave out (for this one pass) the pieces surely behind the buildings, as cam sees them
@@ -2768,7 +2793,7 @@ export class Pipeline {
     this.drawPaint(src, sw, taa);
     this.setLook();
     if (T) T.begin('final');
-    this.pass(this._corner ? this.mFinalD : this.mFinal, null);
+    this.pass(this.finalMat(), null);
     if (this.overlay.children.length) {
       r.autoClear = false;
       r.setRenderTarget(null);
@@ -3145,7 +3170,7 @@ export class Pipeline {
     }
     out.ink = time(() => this.pass(this.steady ? this.mInkD : this.mInk, this.inkRT));
     out.glow = time(() => this.drawGlow(this.mBright.uniforms.tSrc.value, this._glowSize));
-    out.final = time(() => this.pass(this._corner ? this.mFinalD : this.mFinal, null));
+    out.final = time(() => this.pass(this.finalMat(), null));
     out.frame = time(() => this.render(center));
     this.timer = T;
     return out;
@@ -3218,7 +3243,7 @@ export class Pipeline {
       } else if (key === 'pens') out = this.deferred ? time(() => this.drawPens()) : undefined;
       else if (key === 'ink') out = time(() => this.pass(this.steady ? this.mInkD : this.mInk, this.inkRT));
       else if (key === 'glow') out = this._glowSize ? time(() => this.drawGlow(this.mBright.uniforms.tSrc.value, this._glowSize)) : undefined;
-      else if (key === 'final') out = time(() => this.pass(this._corner ? this.mFinalD : this.mFinal, null));
+      else if (key === 'final') out = time(() => this.pass(this.finalMat(), null));
       else if (key === 'frame') out = time(() => this.render(center));
       else if (key === 'basic') {
         // (the same draws, each in the plainest material three.js has: what the draws cost apart
