@@ -844,6 +844,48 @@ Pause menu on the phone: the sheet shows 356 of its 652 pixels; the test route's
 - What the numbers cannot say: milliseconds. The pixels' work (about 12 of the 37 ms the owner's card took
   in 11.1ד) does not change in this stage; only triangles and draws do. The owner's test route says.
 
+### 14.2c Stage 2 as carried out (see ROADMAP 19.2), measured here, the people's lighter shapes off against on (`GFX.folkLod`; stage 1 off in both)
+
+What moves in the drawing pass (`moving.mjs`, phone settings; "off" = the same build, the parts not asked for):
+
+| place | people | triangles, K | draws |
+|---|---|---|---|
+| island (the start) | 33 | 385 → 197 (heads + their parts 255 → 87) | 76 → 79 |
+| the street east of Bayview Mall | 50 | 575 → 296 | 78 → 81 |
+
+The drawing pass at the 11 spots of `ab-phone.mjs pair` (stage 1 off in both pictures; `AB_QUERY="noshopview=1&nocarlod=1&folklod=1"`):
+
+| spot | drawing pass, K triangles | drawing pass, draws | pixels that differ |
+|---|---|---|---|
+| blvd | 1,125 → 1,000 | 219 → 221 | 0.01% |
+| blvd_south | 1,120 → 891 | 171 → 174 | 0.03% |
+| avenue_wet | 1,268 → 1,194 | 206 → 209 | 0.02% |
+| downtown | 998 → 968 | 188 → 190 | 0.00% |
+| park | 1,229 → 1,168 | 237 → 239 | 0.00% |
+| shopfront | 1,159 → 946 | 236 → 252 | 0.05% |
+| pier | 222 → 222 | 86 → 86 | 0.00% |
+| ocean_cars | 904 → 745 | 158 → 160 | 0.00% |
+| mall_east | 3,192 → 3,072 | 394 → 391 | 0.00% |
+| mall_in | 1,981 → 1,919 | 366 → 368 | 0.02% |
+| inkwell | 2,043 → 1,782 | 320 → 321 | 0.02% |
+
+- The lists (`folklod.js`, 118 KB, 23 layouts, 24 lists): head 8,440 → 2,478 (farthest from the full shape 2.98 mm) and
+  796 (9.43 mm); body 1,024 → 722, neck 1,150 → 402, hair 1,736 → 1,198, band 800 → 202, tee 528 → 96, thigh 480 → 246,
+  shin 520 → 224, shoe 440 → 180, pelvis 432 → 282, upper arm 396 → 206, forearm 360 → 186, hand 1,184 → 470; locks
+  (four layouts) 15 to 25% fewer; eyes 660 → 140. A kind of person is about 22 K triangles in full, about 9 K from 5.4 m,
+  7 K from 11 m.
+- Pictures: the ladder (27 rungs, six kinds of people each) 0.05–1.1% of the pixels of the row's crop, none of it on an
+  outline; the walk from 14 m to 3 m a difference falling smoothly from 1.1% to 0.1% with no step where a version changes;
+  the film (two moments of each of scenes 2–5) 0.08–0.52%, the difference on the halftone of the background; the computer
+  (4 spots, 1280 × 720): the same draws and triangles, 0.00–0.07% of the pixels.
+- Found on the way: a picture's place (uv) is not a length: parts have 0.5 to 30 units of it to a metre (a pelvis a half,
+  a hand thirty), so one tolerance for all was too strict for hands and locks and too loose for the pelvis - each part's is
+  in millimetres of surface now (`uvMm`). And the lists made from one kind of person's shape did not fit the others (hair caps
+  and torsos differ a great deal): the shape simplified is the mean of the kinds that share the layout, and the distance of
+  each kind from it is one of the attributes a collapse must keep (`bakeOne` in `tools/perf/lod.html`).
+- What the numbers cannot say: milliseconds. The pixels' work for tiny heads falls more than their triangles' (a head
+  14 pixels high was some 28 triangles a pixel). The owner's test route says.
+
 ### 14.3 From the owner's phone
 
 (the test route's reports, pasted whole, newest last — each with the commit it was run on)

@@ -13,7 +13,8 @@ import { buildPanes } from './world/glass.js';
 import { Game } from './game/game.js';
 import { prebuildFolkBodies } from './render/folkshapes.js';
 import { FOLK, FOLK_PHONE } from './render/folkspec.js';
-import { isTouchDevice } from './core/util.js';
+import { isTouchDevice, GFX } from './core/util.js';
+import { initLod } from './render/lod.js';
 import { warmPortraitMaps, portraitStandIn } from './render/portrait.js';
 import { initProvoke } from './render/provoke.js';
 import { cacheUniformArrays } from './render/glcache.js';
@@ -191,6 +192,9 @@ const frame = () => new Promise((r) => setTimeout(r, 10));
 async function boot() {
   const touch = isTouchDevice();
   if (touch) document.body.classList.add('touch');
+  // (ROADMAP 19.2, a phone's: the people's lighter shapes, made beforehand - render/lod.js: asked for now, awaited
+  // before the game builds its people)
+  const lodReady = GFX.folkLod ? initLod() : null;
   // (round 16: the start screen's language choice, and its words in it - ui/startlang.js)
   setupStartLang();
   setStatus('מחדדים את העטים…');
@@ -457,6 +461,7 @@ async function boot() {
   window.addEventListener('resize', resize);
   resize();
 
+  if (lodReady) await lodReady;
   const game = new Game({ renderer, scene, camera, pipe, world, atlas, touch, params });
   window.__game = game;
   if (params.has('test')) {
