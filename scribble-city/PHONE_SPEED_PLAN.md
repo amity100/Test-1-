@@ -1086,3 +1086,8 @@ Chrome 157), battery 87% (run 1: 26%), screen 1706×822. The island's boulevard 
 54: 16.8 against 12.8 (+31%, 779 K triangles fewer). Frames over 50 ms: 281 of 1,013 (most in the crowd), over 100 ms 10; the processor's
 fixed sum 6.4 ms at the start and 18.9 at the end (it slowed threefold: heat), the card's 8.0 then 6.0. Not separable in this run: how much
 of 76 -> 30 ms is the two passes and how much the other browser and battery - the same link in Chrome says.
+
+**Run 3, the same link in Chrome 157** (battery 77%): the boulevard 26.7 frames a second, 37.5 ms = game 16.1 + sending 15.7 + waiting 5.8 -
+**the processor is the wall now**; the slowest 1% at 5.2. The drawing 29.0 ms (run 1, same browser: 75.9) - the two passes and the
+far-lighter pens (34.6 without them: 5.6 ms) took 47 ms off it. The crowd 14.8 against 11.1 (+33%). Frames over 100 ms: 76 of 1,040. The
+processor's fixed sum 7.4 at the start, 16.1 at the end (heat). Samsung Internet's processor numbers (run 2) were about 60% of Chrome's.

@@ -86,6 +86,7 @@ function placeLine(b) {
 }
 // the systems of the game, timed by wrapping their methods while the numbers are shown
 const SYSTEMS = [
+  ['world.mainland', 'update'], ['world.interiors', 'update'], ['world', 'update'],
   ['civilians', 'update'], ['civilians', 'draw'], ['traffic', 'update'], ['traffic', 'draw'], ['enemies', 'update'], ['enemies', 'draw'],
   ['player', 'update'], ['player', 'draw'], ['vehicles', 'update'], ['weapons', 'update'], ['streetlife', 'update'], ['streetlife', 'draw'],
   ['nightlife', 'update'], ['vignettes', 'update'], ['vignettes', 'draw'], ['police', 'update'], ['ambient', 'update'], ['ambient', 'draw'],
@@ -511,7 +512,7 @@ export class Perf {
     this.wrapped = true;
     const g = this.game;
     for (const [k, m] of SYSTEMS) {
-      const o = g[k];
+      const o = k.split('.').reduce((a, p) => (a ? a[p] : null), g);
       if (!o || typeof o[m] !== 'function') continue;
       const f = o[m].bind(o);
       const label = `${k}.${m}`;
@@ -1415,11 +1416,24 @@ export class Perf {
       F.skipFrame = false;
       return;
     }
+    // (the page's heap a frame: a fall of a megabyte or more is a collection - the browser stopping to sweep)
+    const mem = performance.memory ? performance.memory.usedJSHeapSize : 0;
+    const gc = F.mem && mem && F.mem - mem > 1e6 ? (F.mem - mem) / 1e6 : 0;
+    F.mem = mem;
     if (F.phase === 'measure' || F.phase === 'settle') {
       F.frames++;
       if (f.dt > 50) F.over50++;
       if (f.dt > 100) F.over100++;
       if (f.dt > F.longest) F.longest = f.dt;
+      if (gc) F.gcs = (F.gcs || 0) + 1;
+      // (ROADMAP 19.8) the five slowest frames, and what ran in them: a jolt is told apart from the rest by its own numbers
+      const W = F.worst || (F.worst = []);
+      if (f.dt > 50 && (W.length < 5 || f.dt > W[W.length - 1].dt)) {
+        const sys = Object.entries(f.sys || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} ${v.toFixed(1)}`);
+        W.push({ dt: f.dt, upd: f.upd, ren: f.ren, where: F.spot ? F.spot.name : '', cond: F.phase === 'settle' ? 'התייצבות' : F.cond, sys, gc });
+        W.sort((a, b) => b.dt - a.dt);
+        if (W.length > 5) W.pop();
+      }
     }
     if (F.phase !== 'measure' || !F.measuring) return;
     const A = F.acc[F.cond] || (F.acc[F.cond] = { dt: [], upd: [], ren: [], calls: [], tris: [] });
@@ -1569,6 +1583,12 @@ export class Perf {
       }
     });
     L.push('');
+    if (F.worst && F.worst.length) {
+      const CN = { now: 'עכשיו', before: 'כמו קודם', scale: 'רזולוציה נמוכה', draw: 'בלי ציור' };
+      L.push('חמשת הפריימים האיטיים ביותר, ומה רץ בהם (ms):');
+      for (const w of F.worst) L.push(`  ${w.dt.toFixed(0)}ms · ${w.where} (${CN[w.cond] || w.cond}) · משחק ${w.upd.toFixed(0)} · שליחת ציור ${w.ren.toFixed(0)} · המתנה ${Math.max(0, w.dt - w.upd - w.ren).toFixed(0)}${w.sys.length ? ` · הכי כבדים: ${w.sys.join(', ')}` : ''}${w.gc ? ` · איסוף זבל ${w.gc.toFixed(1)} מ"ב` : ''}`);
+    }
+    L.push(`איסופי זבל בזמן המדידות: ${F.gcs || 0}`);
     L.push(`פריימים בזמן המדידות: ${F.frames} · מעל 50ms: ${F.over50} · מעל 100ms: ${F.over100} · הארוך ביותר ${f1(F.longest)}ms · הכנת שיידרים בזמן הבדיקה: ${b.compiles} (${Math.round(b.compileMs)}ms)`);
     L.push(`מהירות המכשיר (ms לאותה עבודה, פחות זה מהר יותר): מעבד בהתחלה ${f1(b.cpu[0])}, בסוף ${f1(b.cpu[1])} · כרטיס מסך בהתחלה ${f1(b.gpuMs[0])}, בסוף ${f1(b.gpuMs[1])}`);
     L.push(b.po ? `משימות ארוכות בכל שנייה: של המשחק ${(b.busy.self / secs).toFixed(0)}ms · של הדף שמסביב ${(b.busy.other / secs).toFixed(0)}ms` : 'משימות ארוכות: הדפדפן לא מאפשר למדוד');
