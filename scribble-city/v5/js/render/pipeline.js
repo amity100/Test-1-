@@ -1844,10 +1844,8 @@ export class Pipeline {
   // leave out (for this one pass) the pieces surely behind the buildings, as cam sees them
   occlude(cam) {
     const occ = this.occlusion;
-    const hidden = this._occHidden || (this._occHidden = []);
+    const hidden = this._occHidden;
     hidden.length = 0;
-    // (ROADMAP 19.1: what its own walls hide from this view - a shop's goods, world/interiors.js)
-    if (this.viewHide) this.viewHide(cam, hidden);
     if (!occ || !this.occlusionOn) return hidden;
     occ.begin(cam, this.occHoles ? this.occHoles() : null);
     for (const p of this.occPieces) {

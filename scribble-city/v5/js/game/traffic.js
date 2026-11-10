@@ -1609,9 +1609,7 @@ export class Traffic {
     // the same to draw as one beside you)
     const parked = this.parked;
     const T = cars.tyres;
-    // (ROADMAP 19.1: the wheels of every make of car count - render/cars.js wheelsUsed - as before,
-    // when there was one)
-    const room = T && T.cap ? Math.floor((T.cap - (cars.wheelsUsed !== undefined ? cars.wheelsUsed : T.n) - 48) / 4) : 1e9;
+    const room = T && T.cap ? Math.floor((T.cap - T.n - 48) / 4) : 1e9;
     const maxR = this.game.touch ? 110 : 190;
     const R = Math.min(this.parkR, maxR);
     const R2 = R * R;

@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { Streamer } from './mainland/stream.js';
 import { buildStock } from './rooms.js';
-import { GFX } from '../core/util.js';
 
 // (v5, ROADMAP 11.18) The insides of the shops, streamed in. A shop of the real world is a thousand
 // small things - the cans, the boxes, the bottles, the clothes on their hangers - and the city has
@@ -38,10 +37,6 @@ export class Interiors {
     this.stream = new Streamer([], { budget: o.low ? 1.2 : 2.5, rush: o.low ? 2.5 : 7, warm: this.warmFn });
     this.byRec = new Map();
     this.verts = 0;
-    // (ROADMAP 19.1) a shop's goods left out of the picture while its own walls hide them: the
-    // renderer asks before each view it draws (render/pipeline.js occlude)
-    this.viewStats = { live: 0, hidden: 0 };
-    if (this.pipe && GFX.shopView) this.pipe.viewHide = (cam, hidden) => this.viewHide(cam, hidden);
     // (ROADMAP 11.45) the shops being drawn in: { id, t0, group }
     this.reveals = [];
   }
@@ -160,39 +155,6 @@ export class Interiors {
     const st = this.stream;
     if (this.verts > most) st.scale = Math.max(0.55, st.scale * 0.985);
     else if (this.verts < most * 0.8) st.scale = Math.min(1, st.scale * 1.01);
-  }
-
-  // (ROADMAP 19.1, the phone's own way of drawing: by the mall two thirds of all the triangles of a
-  // frame were the goods on the shelves of shops nobody could see into.) A room is three solid walls,
-  // a ceiling and its front (world/rooms.js shell): what is on its shelves is seen only from inside
-  // it, or from in front of its front, through the door and the windows. From behind that front's
-  // line and outside the room - the street behind a mall, the next shop, the hall round the corner -
-  // nothing of it can be seen: left out of this view (hidden: put back after it, render/pipeline.js).
-  // The same picture: only what no ray from the eye reaches is left out
-  viewHide(cam, hidden) {
-    const e = cam.matrixWorld.elements;
-    const cx = e[12];
-    const cz = e[14];
-    const st = this.viewStats;
-    st.live = 0;
-    st.hidden = 0;
-    for (const l of this.stream.live.values()) {
-      const g = l.group;
-      const rec = l.cell && l.cell.rec;
-      if (!g || !rec || !g.visible) continue;
-      st.live++;
-      const f = rec.f;
-      const sp = rec.spec;
-      // (in front of its front - or at it, half a metre for the door's own depth)
-      const w = f.toW(cx, cz);
-      if (w > -0.5) continue;
-      // (inside it, and a metre round it: a camera behind his shoulder in the doorway)
-      const u = f.toU(cx, cz);
-      if (u > sp.u0 - 1 && u < sp.u1 + 1 && w > -sp.depth - 1) continue;
-      g.visible = false;
-      hidden.push(g);
-      st.hidden++;
-    }
   }
 
   // a shop's goods in their own pens while they are drawn in (render/solid.js)
