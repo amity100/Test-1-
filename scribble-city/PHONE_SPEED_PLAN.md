@@ -1096,3 +1096,9 @@ processor's fixed sum 7.4 at the start, 16.1 at the end (heat). Samsung Internet
 the slowest 1% at 20.6; as before 32.3. The crowd 17.0 against 12.4. Frames over 100 ms: 24 (76 in run 3); the slowest five: 1,460 ms when
 the test's crowd of 54 is made, two at the switch to the lowest resolution, two of 210 ms waiting with little of the game's own in them.
 The processor's fixed sum 15.8 at the start and 16.0 at the end (already warm when it began).
+
+**Run 5, Samsung Internet 30, `?fast=1&perftest=focus`, four places** - the boulevard 35.0, the crowd 12.5, the street before Bayview Mall
+14.5 (as before 11.6), **inside the mall 9.9** (as before 9.1; the first report 6.7). Inside the mall each stage alone: shadow 9.1,
+reflection 25.1 (timed by the test even where the frame itself may not draw it), drawing 86.9 (92.9 without the far-lighter pens), without
+people and cars 70.7, the whole frame 112.4; 2.41 M triangles, 546 draws; the graphics card is the wall there (waiting 59%). Builds: the
+street before the mall 9.9 s, inside 5.4 s. -> round 4 (ROADMAP 19.10): the shops' rooms hidden behind their fronts.
