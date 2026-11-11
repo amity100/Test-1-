@@ -1595,6 +1595,10 @@ void main() {
     vec2 ruv = vRefl.xy / vRefl.w;
     float rip = street ? 0.004 : 0.012;
     vec2 wob = (vec2(vnoise(vWP.xz * vec2(0.9, 0.25) + uTime * vec2(0.0, 0.3)), vnoise(vWP.xz * 0.6 + 7.0)) - 0.5) * rip;
+    // (a wet street: puddles, wider the wetter, and between them a thin film)
+    float pud = street ? smoothstep(0.3 - 0.3 * uWet, 0.72 - 0.34 * uWet, vnoise(vWP.xz * vec2(0.21, 0.09))) : 1.0;
+    // (ROADMAP 20, the look: between the puddles the damp stone is rough - what it holds of the lights is scattered, not a mirror's picture)
+    if (street && uLook > 0.0) wob += (vec2(vnoise(vWP.xz * 7.0), vnoise(vWP.xz * 7.0 + 5.0)) - 0.5) * 0.03 * uLook * (1.0 - pud);
     if (uRain > 0.0) {
       // the rain falling into it: rings that push the mirror image about
       rings = rainRings(vWP.xz, length(cameraPosition - vWP), ringPx);
@@ -1613,16 +1617,16 @@ void main() {
       }
       r *= 0.2;
     } else r = skyColor(reflect(-V, N)) * 0.9;
-    float fr = mix(0.05 + 0.2 * uLook, street ? 0.72 + 0.14 * uLook : 0.92, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0));
-    // (a wet street: puddles, wider the wetter, and between them a thin film)
-    float wetK = street ? uWetK * uWet * (0.25 + 0.75 * smoothstep(0.3 - 0.3 * uWet, 0.72 - 0.34 * uWet, vnoise(vWP.xz * vec2(0.21, 0.09)))) : uWetK;
+    // (the look: as wet asphalt holds the light - almost nothing looking down at it, more the lower you look across it, never a sheet of ice)
+    float fr = mix(0.05 + 0.02 * uLook, street ? 0.72 - 0.14 * uLook : 0.92, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0 + 1.5 * uLook));
+    float wetK = street ? uWetK * uWet * (mix(0.25, 0.12, uLook) + mix(0.75, 0.88, uLook) * pud) : uWetK;
     // under the pens, the street holds the mirror image; the pens take their colours from it
     float k = fr * wetK;
     lit = mix(lit, r, k * 0.8);
     shade = mix(shade, r * 0.8, k * 0.8);
     light = mix(light, 0.5, k * 0.6);
     // (the look: where the street holds the mirror image the pens are fewer - the picture in it reads)
-    dens *= 1.0 - 0.55 * k * uLook;
+    dens *= 1.0 - 0.4 * k * uLook;
   }
   if (kind > 7.5 && kind < 8.5) {
     // neon tubes: almost no pen, just light
@@ -1739,9 +1743,27 @@ void main() {
     float cv = fbm(vec2(az * 1.3 + uTime * 0.01, el * 4.2) + 11.0) * 0.6 + cn * 0.4;
     cl = max(cl, smoothstep(0.62 - 0.4 * uOvercast, 0.8 - 0.36 * uOvercast, cv) * smoothstep(0.0, 0.05, el) * uOvercast);
   }
+  // (ROADMAP 20, the look: heaped clouds up the evening sky - their bellies in the shade's colour, their undersides and the side to the
+  // sun in its light, a scribbled dark line where each ends)
+  float cl2 = 0.0;
+  float clEdge = 0.0;
+  float clLit = 0.0;
+  if (uLook > 0.0) {
+    float n1 = fbm(vec2(az * 1.5 + uTime * 0.003, el * 5.0) + 21.0);
+    float n2 = fbm(vec2(az * 5.0, el * 15.0) + 7.0);
+    float cm = n1 * 0.72 + n2 * 0.28;
+    float band = smoothstep(0.06, 0.16, el) * (1.0 - smoothstep(0.55, 0.95, el));
+    cl2 = smoothstep(0.5, 0.58, cm) * band * uLook;
+    clEdge = smoothstep(0.47, 0.5, cm) * (1.0 - smoothstep(0.5, 0.545, cm)) * band * uLook;
+    // (lit from below and from the sun's side: the lower part of each heap, more toward the sun)
+    float under = fbm(vec2(az * 1.5 + uTime * 0.003, (el - 0.035) * 5.0) + 21.0) * 0.72 + n2 * 0.28;
+    clLit = clamp((cm - under) * 9.0 + 0.35 + 0.4 * toSun, 0.0, 1.0);
+  }
   // the page shows between the strokes, tinted by the sky
   // (the pens fewer - uPenDens: the sky itself, laid on, less of the page between)
   vec3 col = mix(uPaper * 0.97, sky, mix(0.97, 0.62, clamp(uPenDens, 0.0, 1.0)));
+  vec3 cloudCol = mix(lin(uCloudC[0]), lin(uCloudC[1]) * 1.2, clLit);
+  col = mix(col, cloudCol, cl2 * 0.8);
   float boost = 1.0 + 0.5 * exp(-acos(clamp(dot(dir, uSunDisc), -1.0, 1.0)) * 6.0);
   // (the graphics card's own test: the sky's pens left out, game/perf.js)
   if ((int(uProbe + 0.5) & 1) == 0) {
@@ -1751,6 +1773,8 @@ void main() {
     vec3 pa = skyPen(el + (fract(A.y * 3.77) - 0.5) * 0.08, fract(A.y * 5.31), toSun);
     pa = mix(pa, lin(uCloudC[0]), cl * step(0.5, fract(A.y * 2.3)) * (1.0 - toSun * 0.6) * 0.8);
     pa *= (0.78 + 0.44 * fract(A.y * 9.71)) * boost;
+    // (the look's clouds: the strokes over them in their own colours)
+    pa = mix(pa, cloudCol * (0.8 + 0.4 * fract(A.y * 9.71)), cl2 * 0.85);
     col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.9 * uPenDens));
     // B: across it, looser
     gZig = 0.38;
@@ -1764,6 +1788,8 @@ void main() {
       vec2 C = penLayer(p, dpx, dpy, 1.05, 5.0, 1.6, 13.0, 1.0);
       vec3 pc = skyPen(el + 0.12, fract(C.y * 5.31), toSun) * 0.7;
       col = mix(col, pc, C.x * step(fract(C.y * 7.13), (0.22 + 0.3 * cl) * uPenDens));
+      // (the look's clouds: their edges scribbled in a dark pen)
+      col = mix(col, lin(uCloudC[0]) * 0.35, C.x * clEdge * 0.9);
     }
   }
   gZig = 0.0;

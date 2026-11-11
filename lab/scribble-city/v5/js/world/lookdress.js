@@ -136,7 +136,7 @@ export function lookDress(ctx) {
       const f = h.spec.f;
       const a = f.p(f.toU(l.x, l.z), 5.3, 0.12);
       festoon(ctx, a, [l.x, CURB + 4.2, l.z], 0.95, 16);
-      addLight((a[0] + l.x) / 2, 3.6, l.z, 8.5, GLOW, 0.55);
+      addLight((a[0] + l.x) / 2, 3.4, l.z, 10.5, GLOW, 0.85);
     }
     for (const s of [-1, 1]) {
       const bx = l.x - 0.02;
