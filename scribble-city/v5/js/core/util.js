@@ -95,7 +95,7 @@ export function isTouchDevice() {
 // off: all of it switched off for a moment while the game runs (the test route's "as before" stand,
 // game/perf.js) - so every part reads its flag where it decides, each frame; what a part builds
 // once (lighter shapes) is built when its flag is on and simply not chosen while off is true.
-const APPROVED = { shopview: true, carlod: true, folklod: false, glowlite: false, finallite: false, pens2: false, penlite: false, peoplelite: false, roomhide: false };
+const APPROVED = { shopview: true, carlod: true, folklod: false, glowlite: false, finallite: false, pens2: false, penlite: false, peoplelite: false, roomhide: false, hallmirror: false, hallfar: false };
 const LOOK = new Set(['glowlite', 'penlite', 'peoplelite']);
 export const GFX = (() => {
   const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
@@ -119,6 +119,8 @@ export const GFX = (() => {
     finalLite: part('finallite'), // Stage 4: the last pass reads the glow once
     pens2: part('pens2'), // ROADMAP 19.7: the pens in two passes from the start (the same picture; the phone's report: 58 ms instead of 76)
     penLite: part('penlite'), // ROADMAP 19.7: far down a street fewer pens (a change of look, far away)
+    hallMirror: part('hallmirror'), // ROADMAP 19.11: deep in Bayview's hall no street mirror (the same picture: the 0.04% and 0.27% seen at first were the far cars' own, there without it too)
+    hallFar: part('hallfar'), // ROADMAP 19.12: deep in Bayview's hall the island's far pieces not drawn (far: a sliver through the roof)
     roomHide: part('roomhide'), // ROADMAP 19.10: the shops' rooms behind a front left out where nothing sees into them (the same picture)
     peopleLite: part('peoplelite'), // ROADMAP 19.9: people in their simple shapes from 22 m (32 before)
   };

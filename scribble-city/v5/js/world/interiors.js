@@ -180,6 +180,21 @@ export class Interiors {
     st.hidden = 0;
     // (the test route's 'as before' stand: all of it as it was drawn, game/perf.js)
     if (GFX.off) return;
+    // (ROADMAP 19.12, phones: GFX.hallFar) deep in Bayview's hall (game/mall.js deepInside) the island's pieces, hundreds of metres off
+    // behind the hall's walls, are not drawn: seen from there at most as a sliver through the glass roof or a door far off
+    if (GFX.hallFar && this.pipe && this.pipe.sunIndoors) {
+      const far = this._far || (this._far = this.world.group.children.filter((m) => m.isMesh && !m.name.startsWith('mainland') && !m.userData.dynamic));
+      for (const m of far) {
+        if (!m.visible) continue;
+        const g = m.geometry;
+        if (!g.boundingSphere) g.computeBoundingSphere();
+        const s = g.boundingSphere;
+        if (Math.hypot(s.center.x - cx, s.center.z - cz) - s.radius < 200) continue;
+        m.visible = false;
+        hidden.push(m);
+        st.far = (st.far || 0) + 1;
+      }
+    }
     for (const l of this.stream.live.values()) {
       const g = l.group;
       const rec = l.cell && l.cell.rec;
