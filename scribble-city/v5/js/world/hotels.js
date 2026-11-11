@@ -21,6 +21,8 @@ import { Parts, FB, COL, SHUTTERS, diceAt, dialectOf, shopHardware, bladeSign, d
 const WHITE = srgb(0.98, 0.97, 0.95);
 // (the look's balcony flowers: pinks, an orange, a white - and the leaves under them)
 const LOOK_FLOWERS = [srgb(0.92, 0.2, 0.52), srgb(1.0, 0.44, 0.68), srgb(1.0, 0.56, 0.22), srgb(0.98, 0.94, 0.9), srgb(0.22, 0.5, 0.26)];
+const LOOK_AC = srgb(0.8, 0.8, 0.82);
+const LOOK_AC_GRILLE = srgb(0.3, 0.3, 0.36);
 const GLASS_BLOCK = srgb(0.72, 0.9, 0.92);
 const TILE_RED = srgb(0.78, 0.36, 0.26);
 const IRON = srgb(0.16, 0.14, 0.2);
@@ -406,6 +408,19 @@ export function oceanHotel(ctx, spec) {
       fbox(ctx, sf, M.frame, u - 0.03, v0, out, u + 0.03, v1, out + 0.05, frameCol, fid);
     }
     if (v1 - v0 > 1.4) fbox(ctx, sf, M.frame, u0, v0 + (v1 - v0) * 0.68 - 0.025, out, u1, v0 + (v1 - v0) * 0.68 + 0.025, out + 0.05, frameCol, fid);
+    // (ROADMAP 20, the look: the life of the rooms on the opening street's fronts - an air conditioner under a window here, a little
+    // canopy in the building's accent over one there. No dice thrown: by where the window is)
+    if (STYLE.on && spec.shop && spec.shop.first && v0 > 4 && u1 - u0 > 0.9) {
+      const hsh = Math.abs(Math.round(u0 * 7 + v0 * 13)) % 10;
+      const uc = (u0 + u1) / 2;
+      if (hsh === 1 || hsh === 6) {
+        const aid = nextId();
+        fbox(ctx, sf, M.prop, uc - 0.34, v0 - 0.4, out + 0.02, uc + 0.34, v0 - 0.05, out + 0.44, LOOK_AC, aid);
+        fbox(ctx, sf, M.frame, uc - 0.28, v0 - 0.34, out + 0.44, uc + 0.28, v0 - 0.11, out + 0.46, LOOK_AC_GRILLE, aid);
+      } else if (hsh === 3 || hsh === 8) {
+        fbox(ctx, sf, M.awning, u0 - 0.12, v1 + 0.08, out, u1 + 0.12, v1 + 0.18, out + 0.6, hsh === 3 ? acc : LOOK_FLOWERS[2], nextId());
+      }
+    }
     // (v5, GTA IV) the rooms behind: curtains drawn, a blind down, by the building's own dice
     if (hr() < 0.42) {
       const cw = out + 0.034;

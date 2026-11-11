@@ -50,7 +50,8 @@ function festoon(ctx, a, b, sag, n, r = 0.085) {
 // a tuft of flowers or leaves: a ball pushed in and out, lit as a ball (streetscape.js clump) - with the id it is given, so a whole
 // cascade is outlined once, round all of it, and not ball by ball
 function puff(ctx, r, cx, cy, cz, rad, squash, color, mat, id) {
-  const g = new THREE.IcosahedronGeometry(rad, 1);
+  // (small and many, each a rough little shape: a mass of leaves and petals, not balls)
+  const g = new THREE.IcosahedronGeometry(rad, 0);
   const p = g.attributes.position;
   const n = g.attributes.normal;
   const seed = r() * 1000;
@@ -59,7 +60,7 @@ function puff(ctx, r, cx, cy, cz, rad, squash, color, mat, id) {
     const y = p.getY(i);
     const z = p.getZ(i);
     const q = 1 / rad;
-    const k = 1 + 0.22 * Math.sin(x * q * 3.1 + seed) * Math.cos(z * q * 2.7 + seed * 0.7) + 0.14 * Math.sin(y * q * 4.3 + seed * 1.3);
+    const k = 1 + 0.34 * Math.sin(x * q * 3.1 + seed) * Math.cos(z * q * 2.7 + seed * 0.7) + 0.14 * Math.sin(y * q * 4.3 + seed * 1.3);
     p.setXYZ(i, x * k, y * k * squash, z * k);
     const l = Math.hypot(x, y, z) || 1;
     n.setXYZ(i, x / l, y / l, z / l);
@@ -70,7 +71,7 @@ function puff(ctx, r, cx, cy, cz, rad, squash, color, mat, id) {
 
 // bougainvillea down a front: from v1 down to v0 at u, widening as it falls
 function cascade(ctx, r, f, u, v0, v1, w, side) {
-  const n = Math.max(10, Math.round((v1 - v0) * 5.5));
+  const n = Math.max(16, Math.round((v1 - v0) * 12));
   const idF = nextId();
   const idG = nextId();
   for (let i = 0; i < n; i++) {
@@ -79,7 +80,7 @@ function cascade(ctx, r, f, u, v0, v1, w, side) {
     const uu = u + side * t * r.range(0.1, 1.3) + r.range(-0.4, 0.4);
     const p = f.p(uu, v, w + r.range(-0.05, 0.22));
     const green = r() < 0.3;
-    puff(ctx, r, p[0], p[1], p[2], r.range(0.24, 0.5), r.range(0.6, 0.85), (green ? r.pick(GREENS) : r.pick(PINKS)).clone().multiplyScalar(r.range(0.9, 1.2)), green ? ctx.M.leaf : ctx.M.flower, green ? idG : idF);
+    puff(ctx, r, p[0], p[1], p[2], r.range(0.15, 0.34), r.range(0.5, 0.9), (green ? r.pick(GREENS) : r.pick(PINKS)).clone().multiplyScalar(r.range(0.9, 1.2)), green ? ctx.M.leaf : ctx.M.flower, green ? idG : idF);
   }
 }
 
