@@ -13,8 +13,8 @@ git fetch -q origin gh-pages
 git worktree add -q --detach "$tmp" origin/gh-pages
 git -C "$tmp" rm -r -q --ignore-unmatch lab >/dev/null
 mkdir -p "$tmp/lab"
-# (the pictures and the tools are not the game)
-git archive HEAD scribble-city ':!scribble-city/review' ':!scribble-city/tools' | tar -x -C "$tmp/lab"
+# (only what the game itself reads: its own folder and the shared three.js beside it)
+git archive HEAD scribble-city/v5 scribble-city/js | tar -x -C "$tmp/lab"
 # (the game's code in one file, made small - one download instead of hundreds, and less for a phone
 # to read before it can start; the files one by one stay too, for its helper thread. Without
 # esbuild: published as it is)
