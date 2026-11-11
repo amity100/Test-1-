@@ -249,7 +249,7 @@ class Room {
     // (ROADMAP 19.10, phones: GFX.roomHide) a shop's room drawn in the pieces of the rooms behind its front - not in the city's chunks
     // with the street round it - so a view that cannot see into any of them leaves them out (world/kit.js ROOM_GROUPS, world/interiors.js)
     this.R = ctx.R;
-    if (GFX.roomHide && spec.shop && spec.mode !== 'stock' && f && f.toU && f.toW) {
+    if (GFX.roomHide && ctx.roomGroups && spec.shop && spec.mode !== 'stock' && f && f.toU && f.toW) {
       const id = f.__rooms || (f.__rooms = ++roomSeq);
       const key = `rooms:${id}`;
       let G = ROOM_GROUPS.get(key);
