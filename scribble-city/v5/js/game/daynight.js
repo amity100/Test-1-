@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { shared, SKY_PENS, setLampK, refreshPen } from '../render/materials.js';
-import { LOOK } from '../core/util.js';
+import { STYLE } from '../core/util.js';
 import { LOOK_KEY, LOOK_SUN } from '../render/look.js';
 
 // The city's clock (ROADMAP 1.1).
@@ -267,7 +267,7 @@ export class DayNight {
     let KA = A;
     let KB = B;
     let kk = k;
-    const lk = LOOK.k;
+    const lk = STYLE.k;
     if (lk > 0.001) {
       KA = mixKey(A, B, k, this._mk || (this._mk = {}));
       KB = LOOK_KEY;

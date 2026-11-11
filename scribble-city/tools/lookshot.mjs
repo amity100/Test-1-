@@ -51,7 +51,7 @@ await pg.evaluate(() => {
     const el = document.getElementById(id);
     if (el) el.style.visibility = 'hidden';
   }
-  window.__frame(20, 1 / 30);
+  window.__frame(4, 1 / 30);
 });
 const only = process.env.CAMS ? process.env.CAMS.split(',') : null;
 for (const [name, px, pz, yaw, pos, look] of CAMS) {
@@ -63,7 +63,7 @@ for (const [name, px, pz, yaw, pos, look] of CAMS) {
     window.__camOverride = { pos, look };
     const r = g.renderer;
     r.info.autoReset = false;
-    window.__frame(24, 1 / 30);
+    window.__frame(Number(new URLSearchParams(location.search).get("settle") || 6), 1 / 30);
     r.info.reset();
     window.__frame(1, 1 / 30);
     return { calls: r.info.render.calls, ktris: Math.round(r.info.render.triangles / 1000) };

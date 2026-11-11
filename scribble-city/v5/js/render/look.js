@@ -2,10 +2,10 @@
 // hour's palette (the sun low at the end of the boulevard, a violet sky going to magenta and orange, the lamps and the windows lit), the
 // last pass's grade, how the pens and the ink are laid, how wet the street is, how far the glow reaches - given to the shaders through
 // the shared uniforms, by where the camera is: all of it inside the opening street's zone, fading out over PAD metres round it, none of
-// it beyond (LOOK.k, 0..1). Off unless the address asks for it (?look, core/util.js LOOK): without it the game draws as it always did.
+// it beyond (STYLE.k, 0..1). Off unless the address asks for it (?look, core/util.js STYLE): without it the game draws as it always did.
 import * as THREE from 'three';
 import { shared } from './materials.js';
-import { LOOK } from '../core/util.js';
+import { STYLE } from '../core/util.js';
 
 // the opening street: Ocean Drive between 11th and 9th, its hotels' fronts, the promenade, the park and the beach beside it
 export const ZONE = { x0: -72, x1: 118, z0: -118, z1: 44, pad: 45 };
@@ -41,14 +41,14 @@ export function lookAt(x, z) {
 
 // each frame, before it is drawn (game/game.js renderFrame): the look by where the camera is
 export function lookFrame(game) {
-  if (!LOOK.on) return;
+  if (!STYLE.on) return;
   const pipe = game.pipe;
   const c = game.camera.position;
   // (the opening film keeps its own light and colour: game/prologue/director.js)
   const film = !!(game.prologue && game.prologue.active);
-  const k = LOOK.off || film ? 0 : lookAt(c.x, c.z);
-  if (k === LOOK.k && k === 0) return;
-  LOOK.k = k;
+  const k = STYLE.off || film ? 0 : lookAt(c.x, c.z);
+  if (k === STYLE.k && k === 0) return;
+  STYLE.k = k;
   shared.uLook.value = k;
   // the ink's line, bolder
   pipe.lineW = 1.25 + 0.55 * k;
