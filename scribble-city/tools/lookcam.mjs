@@ -14,6 +14,8 @@ export const CAMS = [
   ['cafe', -7, -22, Math.PI, [-5.5, 1.9, -15], [-17, 3.2, -36]],
   ['prom', 17, -6, Math.PI, [19.5, 2.4, -1], [-16, 6, -34]],
   ['high', 5, 12, Math.PI, [9, 9, 30], [0, 3, -50]],
+  // (due south and up: where the sky's page meets itself)
+  ['skysouth', 5, -20, 0, [5, 2.2, -26], [5.5, 26, 40]],
 ];
 const out = process.argv[2] || 'lookshot-out';
 fs.mkdirSync(out, { recursive: true });
