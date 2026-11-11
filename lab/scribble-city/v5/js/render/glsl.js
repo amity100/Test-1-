@@ -426,7 +426,7 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
   // (D's and E's say in where they go)
   float dk = smoothstep(0.3, 0.035, lum(mid)) * mix(1.0, 0.35, onGround) * (1.0 - 0.75 * far);
   // (the look: the dark ink hatched into whatever is in the shade, not only into what is dark itself)
-  dk = max(dk, uLook * (1.0 - light) * 0.14 * (1.0 - 0.8 * far) * mix(1.0, 0.4, onGround));
+  dk = max(dk, uLook * (1.0 - light) * 0.1 * (1.0 - 0.8 * far) * mix(1.0, 0.4, onGround));
   float hiAll = max(hi, smoothstep(0.55, 1.0, light) * 0.12 * (1.0 - onGround)) * (1.0 - 0.6 * far);
   int pensN = uQuality > -1.0 ? 5 : 0;
   // (ROADMAP 19.7, phones only - uPenLite, render/pipeline.js) far down a street fewer pens, as an artist draws the far end of it:
@@ -1403,7 +1403,7 @@ void main() {
   if (uOvercast > 0.0) light = mix(light, 0.32 + 0.3 * max(N.y, 0.0), uOvercast * 0.85);
   // in the rain what is flat and outdoors gets darker and deeper in colour
   // (the look: the wet stone and asphalt darker and cooler under the lights in them)
-  if (uWet > 0.0 && !inside && N.y > 0.6 && kind < 8.5) alb *= mix(vec3(1.0), vec3(0.62, 0.6, 0.78), uLook) * (1.0 - 0.26 * uWet * smoothstep(0.6, 0.95, N.y));
+  if (uWet > 0.0 && !inside && N.y > 0.6 && kind < 8.5) alb *= mix(vec3(1.0), vec3(0.8, 0.78, 0.9), uLook) * (1.0 - 0.26 * uWet * smoothstep(0.6, 0.95, N.y));
   vec3 amb = ambientLight(N);
   vec3 pts = (probe & 4) != 0 ? vec3(0.0) : pointLights(vWP, N);
   vec3 key = uSunCol;
