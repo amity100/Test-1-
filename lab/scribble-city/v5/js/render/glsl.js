@@ -1753,17 +1753,17 @@ void main() {
     float n2 = fbm(vec2(az * 5.0, el * 15.0) + 7.0);
     float cm = n1 * 0.72 + n2 * 0.28;
     float band = smoothstep(0.06, 0.16, el) * (1.0 - smoothstep(0.55, 0.95, el));
-    cl2 = smoothstep(0.5, 0.58, cm) * band * uLook;
-    clEdge = smoothstep(0.47, 0.5, cm) * (1.0 - smoothstep(0.5, 0.545, cm)) * band * uLook;
+    cl2 = smoothstep(0.455, 0.52, cm) * band * uLook;
+    clEdge = smoothstep(0.425, 0.455, cm) * (1.0 - smoothstep(0.455, 0.5, cm)) * band * uLook;
     // (lit from below and from the sun's side: the lower part of each heap, more toward the sun)
     float under = fbm(vec2(az * 1.5 + uTime * 0.003, (el - 0.035) * 5.0) + 21.0) * 0.72 + n2 * 0.28;
-    clLit = clamp((cm - under) * 9.0 + 0.35 + 0.4 * toSun, 0.0, 1.0);
+    clLit = clamp((cm - under) * 14.0 + 0.3 + 0.45 * toSun, 0.0, 1.0);
   }
   // the page shows between the strokes, tinted by the sky
   // (the pens fewer - uPenDens: the sky itself, laid on, less of the page between)
   vec3 col = mix(uPaper * 0.97, sky, mix(0.97, 0.62, clamp(uPenDens, 0.0, 1.0)));
   vec3 cloudCol = mix(lin(uCloudC[0]), lin(uCloudC[1]) * 1.2, clLit);
-  col = mix(col, cloudCol, cl2 * 0.8);
+  col = mix(col, cloudCol, cl2 * 0.92);
   float boost = 1.0 + 0.5 * exp(-acos(clamp(dot(dir, uSunDisc), -1.0, 1.0)) * 6.0);
   // (the graphics card's own test: the sky's pens left out, game/perf.js)
   if ((int(uProbe + 0.5) & 1) == 0) {
@@ -1789,7 +1789,7 @@ void main() {
       vec3 pc = skyPen(el + 0.12, fract(C.y * 5.31), toSun) * 0.7;
       col = mix(col, pc, C.x * step(fract(C.y * 7.13), (0.22 + 0.3 * cl) * uPenDens));
       // (the look's clouds: their edges scribbled in a dark pen)
-      col = mix(col, lin(uCloudC[0]) * 0.35, C.x * clEdge * 0.9);
+      col = mix(col, lin(uCloudC[0]) * 0.3, min(1.0, C.x * 1.6) * clEdge);
     }
   }
   gZig = 0.0;
