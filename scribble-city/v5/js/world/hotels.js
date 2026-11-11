@@ -3,6 +3,7 @@ import { srgb, hex, addLight } from '../render/materials.js';
 import { nextId } from './kit.js';
 import { fbox, fcol, neonSign, roofStuff, backFront, adQuad, FH, GROUND, FRAME, frontMatrix } from './deco.js';
 import { CURB } from './layout.js';
+import { STYLE } from '../core/util.js';
 import { Parts, FB, COL, SHUTTERS, diceAt, dialectOf, shopHardware, bladeSign, downpipe, wallLamp, darker, lighter, plateSpans, doorSill, SILL, DETAIL_LOW } from './facades.js';
 
 // (v5) The hotels of the beach street, the way the real ones stand along the ocean in Miami:
@@ -557,9 +558,12 @@ export function oceanHotel(ctx, spec) {
     }
   }
   // balconies on the floors above (the bigger hotels): a slab, its pipe rails, the doors behind
-  const balc = !!spec.balcony && style !== 'med';
+  // (ROADMAP 20, the look: the opening street's own fronts of four floors and more get them too - no dice thrown for it, the city's
+  // stay where they were)
+  const lookBalc = STYLE.on && !spec.balcony && !!(spec.shop && spec.shop.first) && floors >= 4 && style !== 'med';
+  const balc = (!!spec.balcony && style !== 'med') || lookBalc;
   if (balc) {
-    const railCol = r() < 0.6 ? WHITE : acc;
+    const railCol = lookBalc ? WHITE : r() < 0.6 ? WHITE : acc;
     for (let fl = 1; fl < floors; fl++) {
       const [v0] = rowV(fl);
       const y = v0 - 0.75;

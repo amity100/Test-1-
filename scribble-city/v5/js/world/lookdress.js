@@ -88,7 +88,7 @@ export function lookDress(ctx) {
   const r = (ctx.rng = seeded(20261111));
   const M = ctx.M;
   // the flowers' pen: the leaves', holding a little of its colour in the shade
-  if (!M.flower) M.flower = makeSurface({ kind: 'leaf', vcolor: true, emVColor: true, emissive: new THREE.Color(0.3, 0.3, 0.3), ang: 0.6, line: 0.5, objMask: true });
+  if (!M.flower) M.flower = makeSurface({ kind: 'leaf', vcolor: true, emVColor: true, emissive: new THREE.Color(0.3, 0.3, 0.3), ang: 0.6, line: 0.22, objMask: true });
   const hotels = ((ctx.ocean && ctx.ocean.hotels) || []).filter((h) => h.spec && h.spec.f && h.z1 > ZONE.z0 + 4 && h.z0 < ZONE.z1 - 4);
   for (const h of hotels) {
     const f = h.spec.f;
