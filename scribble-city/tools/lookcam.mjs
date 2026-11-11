@@ -1,6 +1,6 @@
 // (GRAPHICS_PLAN.md) The opening street photographed from a few places, as a computer draws it (or a phone: PHONE=1), for the look's
 // rounds: once without the look and once with it gives the before and the after at the same moment (seeded, the clock held: lib.mjs).
-//   node tools/lookshot.mjs <outDir>      QUERY="look=1" (added to the address)   CAMS=road,hero (which)   W=1280 H=593   PHONE=1
+//   node tools/lookcam.mjs <outDir>      QUERY="look=1" (added to the address)   CAMS=road,hero (which)   W=1280 H=593   PHONE=1
 import fs from 'node:fs';
 import path from 'node:path';
 import { startServer, launch } from './shot.mjs';

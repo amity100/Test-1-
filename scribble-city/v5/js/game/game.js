@@ -35,7 +35,7 @@ import { CarRenderer, KINDS } from '../render/cars.js';
 import { buildWeaponModel } from './items.js';
 import { openWall } from '../world/rooms.js';
 import { BLACK_INK } from '../render/LineBatch.js';
-import { clamp, smoothstep, dampAngle, GFX } from '../core/util.js';
+import { clamp, smoothstep, dampAngle, GFX, STYLE } from '../core/util.js';
 import { lookFrame } from '../render/look.js';
 import { groundHeight } from '../world/layout.js';
 import { DayNight } from './daynight.js';
@@ -966,7 +966,17 @@ export class Game {
       const P = this.pipe;
       const wanted = P.mirrorWanted.bind(P);
       P._hallMirror = true;
-      P.mirrorWanted = () => wanted() && !(GFX.hallMirror && !GFX.off && P.sunIndoors && !(shared.uWet.value > 0) && !P.mirrorAlways);
+      // (ROADMAP 20: a phone under the look - the street is wet with no rain: the city is not drawn a second time for it, the wet street
+      // holds the sky; with rain, or water in sight, as it always was)
+      const dryWanted = () => {
+        const wet = shared.uWet.value;
+        if (!(P.low && STYLE.k > 0 && this.weather && !(this.weather.wet > 0))) return wanted();
+        shared.uWet.value = 0;
+        const w = wanted();
+        shared.uWet.value = wet;
+        return w;
+      };
+      P.mirrorWanted = () => dryWanted() && !(GFX.hallMirror && !GFX.off && P.sunIndoors && !(shared.uWet.value > 0) && !P.mirrorAlways);
     }
     // (under the water you see a few metres: ROADMAP 5.2)
     const fog = shared.uFogDensity.value;
