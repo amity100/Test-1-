@@ -267,7 +267,12 @@ export class DayNight {
     let KA = A;
     let KB = B;
     let kk = k;
-    const lk = STYLE.k;
+    // (the owner's word: the game has its morning, noon and evening - under the look too. The look's own hour is the evening's: all of
+    // it from five to half past seven, none before half past three or after half past eight; the rest of the day and the night keep
+    // the clock's colours, drawn in the look's pens and its wet street)
+    const hk = smoothstep(15.5, 17.0, h) * (1 - smoothstep(19.5, 20.5, h));
+    STYLE.hourK = hk;
+    const lk = STYLE.k * hk;
     if (lk > 0.001) {
       KA = mixKey(A, B, k, this._mk || (this._mk = {}));
       KB = LOOK_KEY;

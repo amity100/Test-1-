@@ -12,9 +12,9 @@ export const ZONE = { x0: -72, x1: 118, z0: -118, z1: 44, pad: 45 };
 
 // the hour as the look paints it (game/daynight.js KEYS: the same fields)
 export const LOOK_KEY = {
-  sun: [1.0, 0.56, 0.3], sunK: 1.55,
-  top: [0.24, 0.15, 0.5], mid: [0.9, 0.38, 0.44], hz: [1.0, 0.58, 0.2], glow: [1.0, 0.8, 0.36], bounce: [0.8, 0.56, 0.6], paper: [0.9, 0.82, 0.78],
-  fog: 0.00055, bloom: 1.05, exp: 1.16, lamp: 1.9, lit: 1.75, stars: 0.12,
+  sun: [1.0, 0.6, 0.34], sunK: 1.75,
+  top: [0.3, 0.2, 0.58], mid: [0.94, 0.44, 0.46], hz: [1.0, 0.62, 0.24], glow: [1.0, 0.82, 0.4], bounce: [0.96, 0.7, 0.7], paper: [0.95, 0.88, 0.84],
+  fog: 0.00055, bloom: 1.0, exp: 1.3, lamp: 1.9, lit: 1.75, stars: 0.08,
   pens: [
     [1.0, 0.74, 0.26], [1.0, 0.56, 0.22], [1.0, 0.46, 0.36], [1.0, 0.86, 0.48],
     [0.98, 0.4, 0.42], [0.82, 0.3, 0.58], [1.0, 0.52, 0.36], [0.62, 0.26, 0.66],
@@ -26,7 +26,7 @@ export const LOOK_KEY = {
 // the sun: just over the horizon, down the boulevard's far end and a little to the sea's side
 export const LOOK_SUN = new THREE.Vector3(0.13, 0.06, -1).normalize();
 // the last pass: the shadows to violet, the lights to gold, a fuller curve, more colour
-const GRADE = { grade: 0.55, shadowT: [0.88, 0.84, 1.12], lightT: [1.14, 1.0, 0.84], vib: 0.2 };
+const GRADE = { grade: 0.42, shadowT: [0.95, 0.9, 1.12], lightT: [1.12, 1.0, 0.86], vib: 0.2 };
 const PLAIN = { shadowT: [0.74, 0.9, 1.2], lightT: [1.13, 0.97, 0.8] };
 
 const smooth = (x) => x * x * (3 - 2 * x);
@@ -54,7 +54,8 @@ export function lookFrame(game) {
   pipe.lineW = 1.25 + 0.55 * k;
   if (film) return;
   const L = pipe.look;
-  L.grade = GRADE.grade * k;
+  // (the grade's violet and gold are the evening's: by day and by night a part of it)
+  L.grade = GRADE.grade * k * (0.4 + 0.6 * STYLE.hourK);
   for (let i = 0; i < 3; i++) {
     L.shadowT[i] = k > 0 ? GRADE.shadowT[i] : PLAIN.shadowT[i];
     L.lightT[i] = k > 0 ? GRADE.lightT[i] : PLAIN.lightT[i];

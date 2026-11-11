@@ -19,6 +19,8 @@ import { Parts, FB, COL, SHUTTERS, diceAt, dialectOf, shopHardware, bladeSign, d
 // oceanHotel); the street (world/ocean.js) cuts its blocks into lots and gives each a spec.
 
 const WHITE = srgb(0.98, 0.97, 0.95);
+// (the look's balcony flowers: pinks, an orange, a white - and the leaves under them)
+const LOOK_FLOWERS = [srgb(0.92, 0.2, 0.52), srgb(1.0, 0.44, 0.68), srgb(1.0, 0.56, 0.22), srgb(0.98, 0.94, 0.9), srgb(0.22, 0.5, 0.26)];
 const GLASS_BLOCK = srgb(0.72, 0.9, 0.92);
 const TILE_RED = srgb(0.78, 0.36, 0.26);
 const IRON = srgb(0.16, 0.14, 0.2);
@@ -576,6 +578,21 @@ export function oceanHotel(ctx, spec) {
         for (let u = b0 + 0.25; u <= b1 - 0.2; u += Math.max(1.0, (b1 - b0 - 0.4) / Math.round((b1 - b0) / 1.6))) fbox(ctx, f, M.frame, u - 0.03, y, 1.16, u + 0.03, y + 1.0, 1.24, railCol, rid);
         // the sides of the balcony
         for (const u of [b0 + 0.2, b1 - 0.2]) fbox(ctx, f, M.frame, u - 0.03, y + 0.95, 0, u + 0.03, y + 1.01, 1.24, railCol, rid);
+        // (ROADMAP 20, the look: boxes of flowers on the rails of the opening street's balconies - no dice thrown: by the floor and the bay)
+        if (STYLE.on && spec.shop && spec.shop.first) {
+          const bi = Math.round(b0 * 3) + fl;
+          if (bi % 3 !== 0) {
+            const fid = nextId();
+            const n = Math.max(1, Math.floor((b1 - b0 - 0.8) / 1.5));
+            const w = (b1 - b0 - 0.8) / n;
+            for (let q = 0; q < n; q++) {
+              const ua = b0 + 0.4 + w * q + 0.12;
+              const col = LOOK_FLOWERS[(bi + q) % LOOK_FLOWERS.length];
+              fbox(ctx, f, M.leaf, ua, y + 0.96, 1.14, ua + w - 0.24, y + 1.22 + 0.06 * ((bi + q) % 2), 1.44, col, fid);
+              fbox(ctx, f, M.leaf, ua + 0.1, y + 0.86, 1.2, ua + w - 0.34, y + 1.0, 1.5, LOOK_FLOWERS[4], fid);
+            }
+          }
+        }
       }
     }
   }

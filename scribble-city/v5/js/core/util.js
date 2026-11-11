@@ -135,7 +135,8 @@ export const GFX = (() => {
 // game runs (the tools' before and after)
 export const STYLE = (() => {
   const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
-  return { on: q.has('look') && q.get('look') !== '0' && !q.has('nolook'), k: 0, off: false };
+  // (hourK: how much of the look's own evening the clock gives now, 0..1 - game/daynight.js)
+  return { on: q.has('look') && q.get('look') !== '0' && !q.has('nolook'), k: 0, off: false, hourK: 1 };
 })();
 
 // A tiny pool helper for objects that are recycled often.
