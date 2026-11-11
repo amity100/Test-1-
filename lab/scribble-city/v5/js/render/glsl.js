@@ -1719,6 +1719,35 @@ vec3 skyPen(float el, float r, float toSun) {
   return mix(mix(lin(uSkyPen[i]), lin(uSkyPen[4 + i]), a), lin(uSkyPen[8 + i]), b);
 }
 
+// the sky's strokes over col, for one way of laying the sky out flat (p: where on that page, dpx, dpy: a pixel's step on it)
+vec3 skyStrokes(vec3 col, vec2 p, vec2 dpx, vec2 dpy, float el, float toSun, float cl, vec3 cloudCol, float cl2, float clEdge, float boost) {
+  // A: the main scribble, diagonal, every stroke its own pen
+  gZig = 0.26;
+  vec2 A = penLayer(p, dpx, dpy, 0.38, 3.6, 2.5, 5.0, 1.8);
+  vec3 pa = skyPen(el + (fract(A.y * 3.77) - 0.5) * 0.08, fract(A.y * 5.31), toSun);
+  pa = mix(pa, lin(uCloudC[0]), cl * step(0.5, fract(A.y * 2.3)) * (1.0 - toSun * 0.6) * 0.8);
+  pa *= (0.78 + 0.44 * fract(A.y * 9.71)) * boost;
+  // (the look's clouds: the strokes over them in their own colours)
+  pa = mix(pa, cloudCol * (0.8 + 0.4 * fract(A.y * 9.71)), cl2 * 0.85);
+  col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.9 * uPenDens));
+  // B: across it, looser
+  gZig = 0.38;
+  vec2 B = penLayer(p, dpx, dpy, -0.22, 4.4, 2.1, 9.0, 1.4);
+  vec3 pb = skyPen(el + (fract(B.y * 3.77) - 0.5) * 0.12, fract(B.y * 5.31), toSun) * (0.8 + 0.4 * fract(B.y * 9.71)) * boost;
+  pb = mix(pb, lin(uCloudC[1]) * 1.3, cl * toSun * step(0.5, fract(B.y * 2.9)));
+  col = mix(col, pb, B.x * step(fract(B.y * 7.13), (0.62 + 0.3 * cl) * uPenDens));
+  if (uQuality > 0.5) {
+    // C: a few steep accents in a darker pen
+    gZig = 0.18;
+    vec2 C = penLayer(p, dpx, dpy, 1.05, 5.0, 1.6, 13.0, 1.0);
+    vec3 pc = skyPen(el + 0.12, fract(C.y * 5.31), toSun) * 0.7;
+    col = mix(col, pc, C.x * step(fract(C.y * 7.13), (0.22 + 0.3 * cl) * uPenDens));
+    // (the look's clouds: their edges scribbled in a dark pen)
+    col = mix(col, lin(uCloudC[0]) * 0.3, min(1.0, C.x * 1.6) * clEdge);
+  }
+  return col;
+}
+
 void main() {
   if (uDepthOnly > 0.5) discard;
 #ifdef DEFERRED
@@ -1733,11 +1762,19 @@ void main() {
   vec2 dpy = dFdy(p) * uPxK;
   if (abs(dpx.x) > 100.0) dpx.x = 0.0;
   if (abs(dpy.x) > 100.0) dpy.x = 0.0;
+  vec2 p2 = vec2(atan(-dir.x, dir.z) + 9.0, el) * 220.0;
+  vec2 dpx2 = dFdx(p2) * uPxK;
+  vec2 dpy2 = dFdy(p2) * uPxK;
+  if (abs(dpx2.x) > 100.0) dpx2.x = 0.0;
+  if (abs(dpy2.x) > 100.0) dpy2.x = 0.0;
+  float seamK = smoothstep(2.9, 3.1, abs(az));
   vec3 sky = skyColor(dir);
   float toSun = pow(max(dot(normalize(dir.xz + vec2(1e-5)), normalize(uSunDisc.xz)), 0.0), 2.0);
   // clouds: long bands over the horizon, dark bellies, bright where they face the sun
   float cn = fbm(vec2(az * 2.4 + uTime * 0.004, el * 13.0)) * 0.7 + fbm(vec2(az * 7.0, el * 34.0) + 3.0) * 0.3;
   float cl = smoothstep(0.5, 0.66, cn) * smoothstep(0.03, 0.08, el) * (1.0 - smoothstep(0.22, 0.45, el));
+  // (the look: the old bands, laid along the sky's page, end before the line where it meets itself)
+  cl *= 1.0 - seamK * step(0.001, uLook);
   if (uOvercast > 0.0) {
     // a grey sky (game/weather.js): the clouds close over all of it, lumpy, drifting
     float cv = fbm(vec2(az * 1.3 + uTime * 0.01, el * 4.2) + 11.0) * 0.6 + cn * 0.4;
@@ -1749,14 +1786,16 @@ void main() {
   float clEdge = 0.0;
   float clLit = 0.0;
   if (uLook > 0.0) {
-    float n1 = fbm(vec2(az * 1.5 + uTime * 0.003, el * 5.0) + 21.0);
-    float n2 = fbm(vec2(az * 5.0, el * 15.0) + 7.0);
+    // (on a flat layer over the city, seen from under it: the same all the way round, no line where the sky's page meets itself)
+    vec2 cq = dir.xz / (max(dir.y, 0.0) + 0.3);
+    float n1 = fbm(cq * 0.85 + vec2(uTime * 0.003, 21.0));
+    float n2 = fbm(cq * 2.9 + 7.0);
     float cm = n1 * 0.72 + n2 * 0.28;
     float band = smoothstep(0.06, 0.16, el) * (1.0 - smoothstep(0.55, 0.95, el));
     cl2 = smoothstep(0.455, 0.52, cm) * band * uLook;
     clEdge = smoothstep(0.425, 0.455, cm) * (1.0 - smoothstep(0.455, 0.5, cm)) * band * uLook;
     // (lit from below and from the sun's side: the lower part of each heap, more toward the sun)
-    float under = fbm(vec2(az * 1.5 + uTime * 0.003, (el - 0.035) * 5.0) + 21.0) * 0.72 + n2 * 0.28;
+    float under = fbm(cq * 1.07 * 0.85 + vec2(uTime * 0.003, 21.0)) * 0.72 + n2 * 0.28;
     clLit = clamp((cm - under) * 14.0 + 0.3 + 0.45 * toSun, 0.0, 1.0);
   }
   // the page shows between the strokes, tinted by the sky
@@ -1767,30 +1806,12 @@ void main() {
   float boost = 1.0 + 0.5 * exp(-acos(clamp(dot(dir, uSunDisc), -1.0, 1.0)) * 6.0);
   // (the graphics card's own test: the sky's pens left out, game/perf.js)
   if ((int(uProbe + 0.5) & 1) == 0) {
-    // A: the main scribble, diagonal, every stroke its own pen
-    gZig = 0.26;
-    vec2 A = penLayer(p, dpx, dpy, 0.38, 3.6, 2.5, 5.0, 1.8);
-    vec3 pa = skyPen(el + (fract(A.y * 3.77) - 0.5) * 0.08, fract(A.y * 5.31), toSun);
-    pa = mix(pa, lin(uCloudC[0]), cl * step(0.5, fract(A.y * 2.3)) * (1.0 - toSun * 0.6) * 0.8);
-    pa *= (0.78 + 0.44 * fract(A.y * 9.71)) * boost;
-    // (the look's clouds: the strokes over them in their own colours)
-    pa = mix(pa, cloudCol * (0.8 + 0.4 * fract(A.y * 9.71)), cl2 * 0.85);
-    col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.9 * uPenDens));
-    // B: across it, looser
-    gZig = 0.38;
-    vec2 B = penLayer(p, dpx, dpy, -0.22, 4.4, 2.1, 9.0, 1.4);
-    vec3 pb = skyPen(el + (fract(B.y * 3.77) - 0.5) * 0.12, fract(B.y * 5.31), toSun) * (0.8 + 0.4 * fract(B.y * 9.71)) * boost;
-    pb = mix(pb, lin(uCloudC[1]) * 1.3, cl * toSun * step(0.5, fract(B.y * 2.9)));
-    col = mix(col, pb, B.x * step(fract(B.y * 7.13), (0.62 + 0.3 * cl) * uPenDens));
-    if (uQuality > 0.5) {
-      // C: a few steep accents in a darker pen
-      gZig = 0.18;
-      vec2 C = penLayer(p, dpx, dpy, 1.05, 5.0, 1.6, 13.0, 1.0);
-      vec3 pc = skyPen(el + 0.12, fract(C.y * 5.31), toSun) * 0.7;
-      col = mix(col, pc, C.x * step(fract(C.y * 7.13), (0.22 + 0.3 * cl) * uPenDens));
-      // (the look's clouds: their edges scribbled in a dark pen)
-      col = mix(col, lin(uCloudC[0]) * 0.3, min(1.0, C.x * 1.6) * clEdge);
-    }
+    vec3 base = col;
+    col = skyStrokes(base, p, dpx, dpy, el, toSun, cl, cloudCol, cl2, clEdge, boost);
+    // (ROADMAP 20, the owner's word: "the sky looks cut, as if two sides of a page were joined") the page the sky is laid out on
+    // meets itself due south, and the strokes of its two ends did not: towards that line the strokes of a second page, joined on
+    // the other side of the sky, come in over the first's - across the line itself they are all the second's, unbroken
+    if (uLook > 0.0 && seamK > 0.0) col = mix(col, skyStrokes(base, p2, dpx2, dpy2, el, toSun, cl, cloudCol, cl2, clEdge, boost), seamK);
   }
   gZig = 0.0;
   if (uStars > 0.01 && el > 0.03) {
