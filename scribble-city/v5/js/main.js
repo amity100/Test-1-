@@ -226,7 +226,7 @@ async function boot() {
   camera.rotation.order = 'YXZ';
   const pipe = new Pipeline(renderer, scene, camera, { low });
   // drawing pixels per CSS pixel: 1.75 on a phone, 1.5 on a computer (less if the screen has less)
-  const want = params.has('pr') ? +params.get('pr') : low ? 1.75 : 1.5;
+  const want = params.has('pr') ? +params.get('pr') : low ? (GFX.lite ? 1.45 : 1.75) : 1.5;
   pipe.scale = Math.min(1, want / pr);
   // (the test route is drawn at this, whatever the resolution has come down to: game/perf.js)
   pipe.defaultScale = pipe.scale;

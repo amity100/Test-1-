@@ -925,9 +925,29 @@ export class Game {
     pipe.detailShadowEvery = k >= 2 ? 2 : 1;
   }
 
+  // (ROADMAP 19.13) ?fps: how many frames a second are drawn, at the top of the screen, every second - for walking round and seeing it
+  fpsTick() {
+    if (this._fps === undefined) this._fps = this.params && this.params.has('fps') ? { n: 0, t0: performance.now(), el: null } : null;
+    const F = this._fps;
+    if (!F) return;
+    F.n++;
+    const now = performance.now();
+    if (now - F.t0 < 1000) return;
+    if (!F.el) {
+      F.el = document.createElement('div');
+      F.el.style.cssText = 'position:fixed;left:50%;top:6px;transform:translateX(-50%);z-index:9999;background:rgba(0,0,0,.62);color:#fff;font:600 14px system-ui,sans-serif;padding:3px 10px;border-radius:8px;pointer-events:none;direction:rtl';
+      document.body.appendChild(F.el);
+    }
+    F.el.textContent = `${Math.round((F.n * 1000) / (now - F.t0))} פריימים בשנייה`;
+    F.n = 0;
+    F.t0 = now;
+  }
+
   renderFrame() {
+    this.fpsTick();
     // (ROADMAP 19.7, phones: far down a street fewer pens - render/glsl.js drawPens; 'as before' without, game/perf.js)
-    shared.uPenLite.value = GFX.penLite && !GFX.off ? 1 : 0;
+    // (ROADMAP 19.13: the light version's - 2 - from the middle distance)
+    shared.uPenLite.value = GFX.penLite && !GFX.off ? (GFX.lite ? 2 : 1) : 0;
     // the sun's box follows a point ahead of the camera
     const c = this.camera.position;
     const f = this.camera.getWorldDirection(this._fwd || (this._fwd = new THREE.Vector3()));

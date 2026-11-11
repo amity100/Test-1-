@@ -428,8 +428,11 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
   // the cross-strokes, the dark ink and the light edges fade out between 30% and 55% of the way to "far" (some 60 to 110 m), and
   // the main pen too between 75% and 92% (some 140 to 175 m) - beyond that the colour's own wash. Each fades, nothing pops; and a
   // pen faded out is not worked out at all: those pixels cost a fraction of what they did
-  float liteB = uPenLite > 0.5 ? 1.0 - smoothstep(0.3, 0.55, far) : 1.0;
-  float liteA = uPenLite > 0.5 ? 1.0 - smoothstep(0.75, 0.92, far) : 1.0;
+  // (ROADMAP 19.13: uPenLite 2, the phone's light version - far is smoothstep(32, 190) of the distance: the cross-strokes, the dark ink
+  // and the light edges fade out from some 45 to 65 m, and the main pen from 88 to 116 m - where the others used to)
+  float liteS = clamp(uPenLite - 1.0, 0.0, 1.0);
+  float liteB = uPenLite > 0.5 ? 1.0 - smoothstep(mix(0.3, 0.03, liteS), mix(0.55, 0.12, liteS), far) : 1.0;
+  float liteA = uPenLite > 0.5 ? 1.0 - smoothstep(mix(0.75, 0.3, liteS), mix(0.92, 0.55, liteS), far) : 1.0;
   for (int i = 0; i < pensN; i++) {
     if (i == 0 ? liteA <= 0.0 : liteB <= 0.0) continue;
     // the pen: its direction, the spacing of its strokes (pixels), their width, its own dice, their length
