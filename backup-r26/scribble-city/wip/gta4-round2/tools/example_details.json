@@ -1,0 +1,70 @@
+[
+ {
+  "js": "(async () => { const m = await import('/v5/js/world/mainland/plan.js'); window.__plan = m; const g=window.__game; const D=g.daynight; if (D && D.setHour) D.setHour(13); const pick = (k, d) => m.M_BLOCKS.find(b => b.kind === k && (!d || b.district === d)); const hb = pick('calle'); const tb = pick('towers', 'downtown'); const vb = pick('houses'); const ab = pick('apartments') || pick('bungalows'); window.__B = { hb, tb, vb, ab }; g.world.mainland.fill({x:hb.cx, z:hb.cz}, 30000); g.player.spawn(hb.rect.x1 + 2.6, hb.cz + 10, Math.PI); g.camRig.yaw = Math.PI; g.camRig.pitch = 0.04; return { hb: [hb.col, hb.row, hb.kind], tb: tb && [tb.col, tb.row], vb: vb && [vb.col, vb.row], ab: ab && [ab.col, ab.row, ab.kind] }; })()",
+  "frames": 150,
+  "shot": "havana_street"
+ },
+ {
+  "js": "const g=window.__game; const hb=window.__B.hb; g.player.spawn(hb.rect.x1 + 3.2, hb.cz - 4, -Math.PI/2); g.camRig.yaw = -Math.PI/2 + 0.35; g.camRig.pitch = 0.12; null",
+  "frames": 40,
+  "shot": "havana_facade"
+ },
+ {
+  "js": "const g=window.__game; const hb=window.__B.hb; g.player.spawn(hb.rect.x1 + 7, hb.cz - 4, -Math.PI/2); g.camRig.yaw = -Math.PI/2 - 0.5; g.camRig.pitch = 0.25; null",
+  "frames": 40,
+  "shot": "havana_up"
+ },
+ {
+  "js": "const g=window.__game; const tb=window.__B.tb; g.world.mainland.fill({x:tb.cx, z:tb.cz}, 30000); g.player.spawn(tb.rect.x1 + 2.6, tb.cz + 20, Math.PI); g.camRig.yaw = Math.PI; g.camRig.pitch = 0.08; null",
+  "frames": 300,
+  "shot": "downtown_street"
+ },
+ {
+  "js": "({ civ: window.__game.civilians.list.length, browse: window.__game.civilians.list.filter(c => c.browse).length, far: window.__game.farcrowd ? window.__game.farcrowd.list.length : -1 })",
+  "frames": 300,
+  "shot": "downtown_street2"
+ },
+ {
+  "js": "({ civ: window.__game.civilians.list.length, browse: window.__game.civilians.list.filter(c => c.browse).length, browsing: window.__game.civilians.list.filter(c => c.browse && c.browse.at).length })",
+  "frames": 1
+ },
+ {
+  "js": "const g=window.__game; const vb=window.__B.vb; g.world.mainland.fill({x:vb.cx, z:vb.cz}, 30000); g.player.spawn(vb.rect.x1 + 2.6, vb.cz + 10, Math.PI); g.camRig.yaw = Math.PI; g.camRig.pitch = 0.04; null",
+  "frames": 150,
+  "shot": "valley_street"
+ },
+ {
+  "js": "(() => { const g=window.__game; const p = g.player.pos; const near = g.world.shops.filter(s => s.room && s.door && /^home/.test(s.kind)).sort((a,b)=>Math.hypot(a.door[0]-p.x,a.door[2]-p.z)-Math.hypot(b.door[0]-p.x,b.door[2]-p.z)); const s = near[0]; if (!s) return 'no home'; const R = s.room; const c = R.center; const fx = R.facade.nx, fz = R.facade.nz; g.world.interiors.fill(c.x, c.z, 20000); g.player.spawn(c.x + fx*1.4, c.z + fz*1.4, Math.atan2(-fx, -fz)); g.camRig.yaw = Math.atan2(-fx, -fz) + 0.2; g.camRig.pitch = 0.05; return s.kind + ':' + s.name; })()",
+  "frames": 60,
+  "shot": "home1"
+ },
+ {
+  "js": "(() => { const g=window.__game; g.camRig.yaw += 1.2; return g.world.interiors.info(); })()",
+  "frames": 2,
+  "shot": "home2"
+ },
+ {
+  "js": "(() => { const g=window.__game; g.camRig.yaw -= 2.4; return null; })()",
+  "frames": 2,
+  "shot": "home3"
+ },
+ {
+  "js": "const g=window.__game; const vb=window.__B.vb; g.player.spawn(vb.rect.x1 + 3.0, vb.cz - 6, -Math.PI/2); g.camRig.yaw = -Math.PI/2 + 0.3; g.camRig.pitch = 0.1; null",
+  "frames": 40,
+  "shot": "house_close"
+ },
+ {
+  "js": "(() => { const g=window.__game; const hb=window.__B.hb; g.world.mainland.fill({x:hb.cx, z:hb.cz}, 30000); g.player.spawn(hb.rect.x1 + 2.6, hb.cz, Math.PI); const p = g.player.pos; const list = g.world.shops.filter(s => s.room && s.door && /^(pizza|burger|tacos|diner|noodles)$/.test(s.kind)).sort((a,b)=>Math.hypot(a.door[0]-p.x,a.door[2]-p.z)-Math.hypot(b.door[0]-p.x,b.door[2]-p.z)); const s = list[0]; if (!s) return 'none'; const R = s.room; const c = R.center; const fx = R.facade.nx, fz = R.facade.nz; g.world.interiors.fill(c.x, c.z, 20000); g.player.spawn(c.x + fx*2.6, c.z + fz*2.6, Math.atan2(-fx, -fz)); g.camRig.yaw = Math.atan2(-fx, -fz) + 0.15; g.camRig.pitch = 0.1; return s.kind + ':' + s.name; })()",
+  "frames": 200,
+  "shot": "food"
+ },
+ {
+  "js": "(() => { const g=window.__game; g.camRig.yaw += 0.9; return null; })()",
+  "frames": 2,
+  "shot": "food2"
+ },
+ {
+  "js": "({ int: window.__game.world.interiors.info(), civ: window.__game.civilians.list.length })",
+  "frames": 1
+ }
+]

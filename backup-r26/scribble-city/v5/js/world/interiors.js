@@ -1,0 +1,254 @@
+import * as THREE from 'three';
+import { Streamer } from './mainland/stream.js';
+import { buildStock } from './rooms.js';
+import { GFX } from '../core/util.js';
+import { ROOM_MESHES } from './kit.js';
+
+// (v5, ROADMAP 11.18) The insides of the shops, streamed in. A shop of the real world is a thousand
+// small things - the cans, the boxes, the bottles, the clothes on their hangers - and the city has
+// hundreds of shops: all of them built at once would be millions of corners nobody is near. The
+// rooms are laid out with their blocks (world/rooms.js: the walls, the floor, the big furniture,
+// where people stand); what stands on the shelves is built here when you come near a shop (inside
+// 40 m: across the street you see it full), a little a frame, shown in one frame when it is all
+// there, and let go of when you have gone (past 65 m). The way the big games do their interiors.
+
+const NEAR = 40;
+const FAR = 65;
+// (ROADMAP 11.45) how long the things streamed into a shop take to be drawn in (ms)
+const REVEAL_MS = 600;
+
+let seq = 0;
+
+export class Interiors {
+  constructor(world, o = {}) {
+    this.world = world;
+    this.pipe = o.pipe || null;
+    this.warmFn = o.warm || null;
+    this.low = !!o.low;
+    // (the groups its rooms are shown in: the mainland's buckets, or one of its own)
+    this.buckets = world.buckets && world.buckets.length ? world.buckets : null;
+    if (!this.buckets) {
+      const g = new THREE.Group();
+      g.name = 'interiors';
+      g.matrixAutoUpdate = false;
+      world.group.add(g);
+      this.buckets = [g];
+    }
+    // (round 22b: a phone's frame of 33 ms has room for a few of them, not eight - the goods come in
+    // over a few more frames, drawn in all the same, and no frame waits for a shelf)
+    this.stream = new Streamer([], { budget: o.low ? 1.2 : 2.5, rush: o.low ? 2.5 : 7, warm: this.warmFn });
+    this.byRec = new Map();
+    this.verts = 0;
+    // (ROADMAP 19.1) a shop's goods left out of the picture while its own walls hide them: the
+    // renderer asks before each view it draws (render/pipeline.js occlude)
+    this.viewStats = { live: 0, hidden: 0 };
+    if (this.pipe && GFX.shopView) this.pipe.viewHide = (cam, hidden) => this.viewHide(cam, hidden);
+    // (ROADMAP 11.45) the shops being drawn in: { id, t0, group }
+    this.reveals = [];
+  }
+
+  // the rooms of a part of the city (the island's, at the start; a block's, when it is shown)
+  addAll(recs) {
+    for (const rec of recs || []) {
+      if (this.byRec.has(rec)) continue;
+      const id = `room${seq++}`;
+      const r = rec.r || 4;
+      const cell = {
+        id,
+        rect: { x0: rec.x - r, x1: rec.x + r, z0: rec.z - r, z1: rec.z + r },
+        near: this.low ? NEAR - 8 : NEAR,
+        far: FAR,
+        // (its floor: a store up in a mall is further off by the floors between)
+        y: rec.y,
+        rec,
+        build: (c) => this.build(c),
+      };
+      this.byRec.set(rec, id);
+      this.stream.add(cell);
+    }
+  }
+
+  removeAll(recs) {
+    for (const rec of recs || []) {
+      const id = this.byRec.get(rec);
+      if (id === undefined) continue;
+      this.byRec.delete(rec);
+      this.stream.remove(id);
+    }
+  }
+
+  *build(c) {
+    const world = this.world;
+    const group = new THREE.Group();
+    group.name = `stock ${c.rec.kind}`;
+    group.visible = false;
+    // (ROADMAP 11.45: its own id, so that it is drawn in - never there all at once)
+    const objs = world.objects || null;
+    const obj = objs && world.mergeObj ? objs.takeStockId() : 0;
+    // (not seen until it is drawn in: hidden from the start, before it ever reaches the screen)
+    if (obj) objs.maskAt(obj, 1);
+    let res;
+    let done = false;
+    try {
+      res = yield* buildStock(c.rec, world.ctx.M, group, { merge: obj ? world.mergeObj : world.merge, obj, low: this.low });
+      done = true;
+    } finally {
+      // (let go of before it was all there: its id back)
+      if (!done && obj) objs.giveStockId(obj);
+    }
+    let h = 0;
+    for (let i = 0; i < c.id.length; i++) h = (h * 31 + c.id.charCodeAt(i)) >>> 0;
+    const bucket = this.buckets[h % this.buckets.length];
+    const self = this;
+    const live = {
+      group,
+      verts: res.verts,
+      attach() {
+        bucket.add(group);
+        group.updateMatrixWorld(true);
+        if (self.pipe) self.pipe.addStatic(group);
+        if (obj) {
+          self.reveals.push({ id: obj, t0: performance.now(), group });
+          // (its pixels may go now: in its own pen, not the still city's twin, render/solid.js)
+          self.hold(group, true);
+        }
+        group.visible = true;
+        self.verts += res.verts;
+        // (ROADMAP 14.4: its live products and its doors, for its people - game/shoplife.js)
+        c.rec.live = res.live || null;
+        if (res.live) c.rec.liveGen = (c.rec.liveGen || 0) + 1;
+      },
+      detach() {
+        if (self.pipe) self.pipe.removeStatic(group);
+        if (group.parent) group.parent.remove(group);
+        if (c.rec.live === res.live) c.rec.live = null;
+        if (res.live) res.live.dispose();
+        live.dispose();
+        self.verts -= res.verts;
+      },
+      dispose() {
+        group.traverse((m) => {
+          if (m.isMesh) m.geometry.dispose();
+        });
+        if (obj && !live.freed) {
+          live.freed = true;
+          self.reveals = self.reveals.filter((r) => r.id !== obj);
+          objs.giveStockId(obj);
+        }
+      },
+    };
+    return live;
+  }
+
+  update(x, z, vx = 0, vz = 0, y = null) {
+    this.stream.update(x, z, vx, vz, y);
+    // (ROADMAP 11.45) what came into a shop is drawn in, a stroke at a time, not there at once
+    if (this.reveals.length) {
+      const now = performance.now();
+      const objs = this.world.objects;
+      this.reveals = this.reveals.filter((r) => {
+        const k = (now - r.t0) / REVEAL_MS;
+        objs.maskAt(r.id, 1 - Math.min(1, k));
+        if (k < 1) return true;
+        this.hold(r.group, false);
+        return false;
+      });
+    }
+    // (where the shops crowd together - a mall - the ring they are filled in narrows, so the
+    // corners on the shelves stay within what the graphics card is given: about a million on a
+    // computer, less than half that on a phone)
+    const most = this.low ? 450000 : 1200000;
+    const st = this.stream;
+    if (this.verts > most) st.scale = Math.max(0.55, st.scale * 0.985);
+    else if (this.verts < most * 0.8) st.scale = Math.min(1, st.scale * 1.01);
+  }
+
+  // (ROADMAP 19.1, the phone's own way of drawing: by the mall two thirds of all the triangles of a
+  // frame were the goods on the shelves of shops nobody could see into.) A room is three solid walls,
+  // a ceiling and its front (world/rooms.js shell): what is on its shelves is seen only from inside
+  // it, or from in front of its front, through the door and the windows. From behind that front's
+  // line and outside the room - the street behind a mall, the next shop, the hall round the corner -
+  // nothing of it can be seen: left out of this view (hidden: put back after it, render/pipeline.js).
+  // The same picture: only what no ray from the eye reaches is left out
+  viewHide(cam, hidden) {
+    const e = cam.matrixWorld.elements;
+    const cx = e[12];
+    const cy = e[13];
+    const cz = e[14];
+    const st = this.viewStats;
+    st.live = 0;
+    st.hidden = 0;
+    // (the test route's 'as before' stand: all of it as it was drawn, game/perf.js)
+    if (GFX.off) return;
+    // (ROADMAP 19.12, phones: GFX.hallFar) deep in Bayview's hall (game/mall.js deepInside) the island's pieces, hundreds of metres off
+    // behind the hall's walls, are not drawn: seen from there at most as a sliver through the glass roof or a door far off
+    if (GFX.hallFar && this.pipe && this.pipe.sunIndoors) {
+      const far = this._far || (this._far = this.world.group.children.filter((m) => m.isMesh && !m.name.startsWith('mainland') && !m.userData.dynamic));
+      for (const m of far) {
+        if (!m.visible) continue;
+        const g = m.geometry;
+        if (!g.boundingSphere) g.computeBoundingSphere();
+        const s = g.boundingSphere;
+        if (Math.hypot(s.center.x - cx, s.center.z - cz) - s.radius < 200) continue;
+        m.visible = false;
+        hidden.push(m);
+        st.far = (st.far || 0) + 1;
+      }
+    }
+    for (const l of this.stream.live.values()) {
+      const g = l.group;
+      const rec = l.cell && l.cell.rec;
+      if (!g || !rec || !g.visible) continue;
+      st.live++;
+      const f = rec.f;
+      const sp = rec.spec;
+      // (above its ceiling: a room's ceiling is a face turned down, and seen from above it is not there -
+      // the street, a roof, a rotor: the goods are seen through it, as they always were)
+      if (cy > rec.y + sp.h - 0.3) continue;
+      // (in front of its front - or at it, half a metre for the door's own depth)
+      const w = f.toW(cx, cz);
+      if (w > -0.5) continue;
+      // (inside it, and a metre round it: a camera behind his shoulder in the doorway)
+      const u = f.toU(cx, cz);
+      if (u > sp.u0 - 1 && u < sp.u1 + 1 && w > -sp.depth - 1) continue;
+      g.visible = false;
+      hidden.push(g);
+      st.hidden++;
+    }
+    // (the shops' own walls, shelves and counters, merged by their front - world/rooms.js, world/kit.js
+    // ROOM_GROUPS: the same rule, for the whole row of rooms behind one front)
+    if (!GFX.roomHide) return;
+    for (const m of ROOM_MESHES) {
+      if (!m.parent) {
+        ROOM_MESHES.delete(m);
+        continue;
+      }
+      if (!m.visible) continue;
+      const G = m.userData.rooms;
+      if (cy > G.y1 - 0.3) continue;
+      const f = G.f;
+      const w = f.toW(cx, cz);
+      if (w > -0.5) continue;
+      const u = f.toU(cx, cz);
+      if (u > G.u0 - 1 && u < G.u1 + 1 && w > -G.depth - 1) continue;
+      m.visible = false;
+      hidden.push(m);
+      st.rooms = (st.rooms || 0) + 1;
+    }
+  }
+
+  // a shop's goods in their own pens while they are drawn in (render/solid.js)
+  hold(group, on) {
+    const solid = this.pipe && this.pipe.solid;
+    if (solid) group.traverse((m) => m.isMesh && solid.hold(m, on));
+  }
+
+  // everything near p now (the start; a jump across the map; the tests)
+  fill(x, z, ms = 20000, y = null) {
+    this.stream.fill(x, z, ms, y);
+  }
+
+  info() {
+    return { ...this.stream.info(), verts: this.verts, rooms: this.byRec.size, scale: +this.stream.scale.toFixed(2) };
+  }
+}
