@@ -59,6 +59,8 @@ uniform vec4 uLightCol[MAX_LIGHTS];
 uniform float uLightN;
 uniform float uQuality;
 uniform float uPenLite;
+// (ROADMAP 20: how much of the new look there is here, 0..1 - render/look.js)
+uniform float uLook;
 uniform float uMirror;
 uniform sampler2D uObjMask;
 uniform vec4 uWErase[MAX_SPOTS];
@@ -414,7 +416,8 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
   vec3 mid = mix(shade, lit, light);
   float far = gFar;
   // the paper shows between the strokes only where the drawing is light; the shade is built up dark
-  float paperK = (1.0 - wash) * 0.55 * smoothstep(0.08, 0.9, lum(mid)) * (1.0 - 0.55 * far);
+  // (ROADMAP 20, the look: the colour laid full under the strokes - little of the paper between them)
+  float paperK = (1.0 - wash) * 0.55 * smoothstep(0.08, 0.9, lum(mid)) * (1.0 - 0.55 * far) * (1.0 - 0.72 * uLook);
   vec3 col = mix(mid, uPaper * 0.97, paperK);
   float wpx = 1.9;
   // on the ground the layers stay close to one direction: strokes turned towards the eye would
@@ -422,6 +425,8 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
   float spread = mix(1.0, 0.32, onGround);
   // (D's and E's say in where they go)
   float dk = smoothstep(0.3, 0.035, lum(mid)) * mix(1.0, 0.35, onGround) * (1.0 - 0.75 * far);
+  // (the look: the dark ink hatched into whatever is in the shade, not only into what is dark itself)
+  dk = max(dk, uLook * (1.0 - light) * 0.4 * (1.0 - 0.8 * far) * mix(1.0, 0.45, onGround));
   float hiAll = max(hi, smoothstep(0.55, 1.0, light) * 0.12 * (1.0 - onGround)) * (1.0 - 0.6 * far);
   int pensN = uQuality > -1.0 ? 5 : 0;
   // (ROADMAP 19.7, phones only - uPenLite, render/pipeline.js) far down a street fewer pens, as an artist draws the far end of it:
@@ -473,12 +478,13 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
       // A: the local colour; each stroke is a pen of the light or a pen of the shade (far away the
       // pens are closer to each other in colour and in strength)
       pc = fract(L.y * 3.77) < light ? lit : shade;
-      pc = hueShift(saturateC(pc, 1.15), (fract(L.y * 5.31) - 0.5) * mix(0.8, 0.3, far)) * mix(0.66 + 0.7 * fract(L.y * 9.71), 1.0, far * 0.65);
+      // (the look: the strokes nearer the colour itself - fuller, less of a scatter of hues and of light and dark)
+      pc = hueShift(saturateC(pc, 1.15 + 0.3 * uLook), (fract(L.y * 5.31) - 0.5) * mix(0.8, 0.3, far) * (1.0 - 0.45 * uLook)) * mix(mix(0.66 + 0.7 * fract(L.y * 9.71), 1.0, far * 0.65), 0.86 + 0.28 * fract(L.y * 9.71), uLook);
       k = L.x * step(fract(L.y * 7.13), 0.95 * dens) * (1.0 - 0.5 * far);
     } else if (i == 1) {
       // B: cross-strokes deepening the shade, in a cooler pen
-      pc = hueShift(shade * 0.7, -0.38 + (fract(L.y * 5.31) - 0.5) * 0.45);
-      k = L.x * step(fract(L.y * 7.13), ((1.0 - light) * 0.78 + 0.06) * dens) * (1.0 - 0.7 * far);
+      pc = hueShift(shade * mix(0.7, 0.5, uLook), -0.38 + (fract(L.y * 5.31) - 0.5) * 0.45);
+      k = L.x * step(fract(L.y * 7.13), ((1.0 - light) * 0.78 + 0.06) * dens * (1.0 + 0.3 * uLook)) * (1.0 - 0.7 * far);
     } else if (i == 2) {
       // C: a neighbouring colour now and then
       pc = hueShift(mid, fract(L.y * 5.31) > 0.5 ? 0.85 : -0.85) * 1.08;
@@ -1600,12 +1606,13 @@ void main() {
       // on Windows, has to work out for every pixel of every surface, mirror or not - its branches
       // all flattened)
       for (int i = 0; i < 5; i++) {
-        float o = (float(i) - 2.0) * (street ? 0.012 : 0.006);
+        // (the look: the lights drawn down into longer streaks)
+        float o = (float(i) - 2.0) * (street ? 0.012 + 0.012 * uLook : 0.006);
         r += textureLod(uRefl, clamp(ruv + wob + vec2(0.0, o), uReflLo, 1.0 - uReflLo) * uReflK, 0.0).rgb;
       }
       r *= 0.2;
     } else r = skyColor(reflect(-V, N)) * 0.9;
-    float fr = mix(0.05, street ? 0.72 : 0.92, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0));
+    float fr = mix(0.05 + 0.2 * uLook, street ? 0.72 + 0.14 * uLook : 0.92, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0));
     // (a wet street: puddles, wider the wetter, and between them a thin film)
     float wetK = street ? uWetK * uWet * (0.25 + 0.75 * smoothstep(0.3 - 0.3 * uWet, 0.72 - 0.34 * uWet, vnoise(vWP.xz * vec2(0.21, 0.09)))) : uWetK;
     // under the pens, the street holds the mirror image; the pens take their colours from it

@@ -36,6 +36,7 @@ import { buildWeaponModel } from './items.js';
 import { openWall } from '../world/rooms.js';
 import { BLACK_INK } from '../render/LineBatch.js';
 import { clamp, smoothstep, dampAngle, GFX } from '../core/util.js';
+import { lookFrame } from '../render/look.js';
 import { groundHeight } from '../world/layout.js';
 import { DayNight } from './daynight.js';
 import { Weather } from './weather.js';
@@ -945,6 +946,8 @@ export class Game {
 
   renderFrame() {
     this.fpsTick();
+    // (ROADMAP 20: the look by where the camera is - render/look.js)
+    lookFrame(this);
     // (ROADMAP 19.7, phones: far down a street fewer pens - render/glsl.js drawPens; 'as before' without, game/perf.js)
     // (ROADMAP 19.13: the light version's - 2 - from the middle distance)
     shared.uPenLite.value = GFX.penLite && !GFX.off ? (GFX.lite ? 2 : 1) : 0;

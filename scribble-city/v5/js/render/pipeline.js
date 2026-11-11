@@ -421,6 +421,8 @@ uniform vec4 uRimCol;
 uniform vec3 uShadowT;
 uniform vec3 uLightT;
 uniform float uGradeK;
+// (ROADMAP 20, the look: more colour - render/look.js)
+uniform float uVib;
 uniform float uGrainK;
 uniform float uGrainT;
 // (ROADMAP 18.9, round 8) the film as a comic book is printed (uComic, 0..1): its tones laid on in a
@@ -617,6 +619,12 @@ void main() {
     float l = lumc(c);
     vec3 tint = mix(uShadowT, uLightT, smoothstep(0.04, 0.55, l));
     c = mix(c, c * tint, uGradeK);
+  }
+  if (uVib > 0.001) {
+    // (the less a colour has, the more it is given: what is already full stays as it is)
+    float l = lumc(c);
+    float sat = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+    c = max(mix(vec3(l), c, 1.0 + uVib * (1.0 - 0.6 * clamp(sat, 0.0, 1.0))), 0.0);
   }
   c = toSRGB(clamp(c, 0.0, 1.0));
   if (uComic > 0.001) c = comicPrint(c, vUv);
@@ -1062,7 +1070,7 @@ export class Pipeline {
     this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uBrightO: { value: 0.5 }, uUvK: uvK, uUvLo: uvLo });
     this.mDown = mk(DOWN_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.mUp = mk(UP_FRAG, { tSrc: { value: null }, tAdd: { value: null }, uTexel: { value: new THREE.Vector2() } });
-    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo, tPaint: { value: BLANK }, tAux: { value: BLANK }, uPaint: { value: 0 }, uAuxTexel: { value: new THREE.Vector2(1, 1) }, uAuxK: { value: new THREE.Vector2(1, 1) }, uRimDir: { value: new THREE.Vector2(1, 0) }, uRimCol: { value: new THREE.Vector4(0, 0, 0, 0) }, uShadowT: { value: new THREE.Vector3(1, 1, 1) }, uLightT: { value: new THREE.Vector3(1, 1, 1) }, uGradeK: { value: 0 }, uGrainK: { value: 0 }, uGrainT: { value: 0 }, uComic: { value: 0 }, uSmear: { value: new THREE.Vector2() }, uEmote: { value: 0 }, uEmoteCol: { value: new THREE.Vector3(0.6, 0.1, 0.12) }, uFill: { value: 0 }, uFillCol: { value: new THREE.Vector3(1, 0.82, 0.62) }, uDotPx: { value: 4 }, uMis: { value: 0 }, uDotInk: { value: new THREE.Vector3(0.3, 0.22, 0.5) } });
+    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo, tPaint: { value: BLANK }, tAux: { value: BLANK }, uPaint: { value: 0 }, uAuxTexel: { value: new THREE.Vector2(1, 1) }, uAuxK: { value: new THREE.Vector2(1, 1) }, uRimDir: { value: new THREE.Vector2(1, 0) }, uRimCol: { value: new THREE.Vector4(0, 0, 0, 0) }, uShadowT: { value: new THREE.Vector3(1, 1, 1) }, uLightT: { value: new THREE.Vector3(1, 1, 1) }, uGradeK: { value: 0 }, uVib: { value: 0 }, uGrainK: { value: 0 }, uGrainT: { value: 0 }, uComic: { value: 0 }, uSmear: { value: new THREE.Vector2() }, uEmote: { value: 0 }, uEmoteCol: { value: new THREE.Vector3(0.6, 0.1, 0.12) }, uFill: { value: 0 }, uFillCol: { value: new THREE.Vector3(1, 0.82, 0.62) }, uDotPx: { value: 4 }, uMis: { value: 0 }, uDotInk: { value: new THREE.Vector3(0.3, 0.22, 0.5) } });
     // (ROADMAP 18.9) the film's painted look (PAINT_FRAG): how much of it (paint, 0 none - eased to
     // paintWant), the brush near and far (in pixels of the picture at 720 lines), where the film
     // looks (paintFocus, metres from the camera), the brush's streaks
@@ -3025,6 +3033,7 @@ export class Pipeline {
     const f = this.mFinal.uniforms;
     this.mInk.uniforms.uPersonW.value = L.personW;
     f.uGradeK.value = L.grade;
+    f.uVib.value = L.vib || 0;
     f.uShadowT.value.set(L.shadowT[0], L.shadowT[1], L.shadowT[2]);
     f.uLightT.value.set(L.lightT[0], L.lightT[1], L.lightT[2]);
     f.uGrainK.value = L.grain;

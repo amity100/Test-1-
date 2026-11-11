@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { shared } from '../render/materials.js';
+import { LOOK } from '../core/util.js';
 import { RainRenderer } from '../render/rain.js';
 
 // The city's weather (ROADMAP 1.2): clear, cloudy, drizzle, rain, a storm with lightning and
@@ -355,7 +356,8 @@ export class Weather {
     const f = this.flash;
     shared.uOvercast.value = o;
     shared.uRain.value = r;
-    shared.uWet.value = this.wet;
+    // (ROADMAP 20: the look's street, wet after the rain - no rain falling, render/look.js)
+    shared.uWet.value = Math.max(this.wet, LOOK.k * 0.85);
     shared.uMist.value = m;
     shared.uFlash.value = f;
     shared.uWind.value.set(this.windDir.x, this.windDir.y, this.windK);

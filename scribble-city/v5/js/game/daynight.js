@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { shared, SKY_PENS, setLampK, refreshPen } from '../render/materials.js';
+import { LOOK } from '../core/util.js';
+import { LOOK_KEY, LOOK_SUN } from '../render/look.js';
 
 // The city's clock (ROADMAP 1.1).
 //
@@ -142,6 +144,17 @@ const smooth = (x) => x * x * (3 - 2 * x);
 const lerp = (a, b, k) => a + (b - a) * k;
 const smoothstep = (a, b, x) => smooth(Math.min(1, Math.max(0, (x - a) / (b - a))));
 
+// two keys mixed into one (the look's hour is laid over it)
+const NUMS = ['sunK', 'fog', 'bloom', 'exp', 'lamp', 'lit', 'stars'];
+const COLS = ['sun', 'top', 'mid', 'hz', 'glow', 'bounce', 'paper', 'core', 'ring', 'sglow'];
+function mixKey(A, B, k, out) {
+  for (const n of NUMS) out[n] = lerp(A[n], B[n], k);
+  for (const c of COLS) out[c] = [lerp(A[c][0], B[c][0], k), lerp(A[c][1], B[c][1], k), lerp(A[c][2], B[c][2], k)];
+  out.pens = A.pens.map((p, i) => [lerp(p[0], B.pens[i][0], k), lerp(p[1], B.pens[i][1], k), lerp(p[2], B.pens[i][2], k)]);
+  out.cloud = A.cloud.map((p, i) => [lerp(p[0], B.cloud[i][0], k), lerp(p[1], B.cloud[i][1], k), lerp(p[2], B.cloud[i][2], k)]);
+  return out;
+}
+
 // the sun's height (radians, below 0 at night) and its direction at hour h
 export function sunAt(h, out) {
   // (only when it is out of the day: 18.3 must stay 18.3 exactly)
@@ -250,24 +263,38 @@ export class DayNight {
     const B = KEYS[i + 1];
     const k = smooth(Math.min(1, Math.max(0, (h - A.h) / Math.max(1e-6, B.h - A.h))));
     this.key = k < 0.5 ? A : B;
+    // (ROADMAP 20: the look's own hour over the clock's, by how much of the look there is here - render/look.js)
+    let KA = A;
+    let KB = B;
+    let kk = k;
+    const lk = LOOK.k;
+    if (lk > 0.001) {
+      KA = mixKey(A, B, k, this._mk || (this._mk = {}));
+      KB = LOOK_KEY;
+      kk = lk;
+    }
     const c = this._c;
     // a colour of the hour, linear (as the city's own srgb())
     const col = (u, a, b, s = 1) => {
-      c.setRGB(lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k), THREE.SRGBColorSpace);
+      c.setRGB(lerp(a[0], b[0], kk), lerp(a[1], b[1], kk), lerp(a[2], b[2], kk), THREE.SRGBColorSpace);
       u.value.copy(c);
       if (s !== 1) u.value.multiplyScalar(s);
     };
     // (sRGB as it is: the sky's shader turns it)
-    const raw = (v, a, b) => v.set(lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k));
+    const raw = (v, a, b) => v.set(lerp(a[0], b[0], kk), lerp(a[1], b[1], kk), lerp(a[2], b[2], kk));
     // the sun, the moon (full, across the sky from the sun) and which of them gives the light
-    const el = sunAt(h, this.sun);
+    let el = sunAt(h, this.sun);
+    if (lk > 0.001) {
+      this.sun.lerp(LOOK_SUN, lk).normalize();
+      el = Math.asin(this.sun.y);
+    }
     this.moon.copy(this.sun).negate();
     this.sunEl = el;
     const sunUp = smoothstep(-0.5 * RAD, 3 * RAD, el);
     const moonUp = smoothstep(4 * RAD, 14 * RAD, -el);
     if (sunUp > 0) {
       shared.uSunDir.value.copy(this.sun);
-      col(shared.uSunCol, A.sun, B.sun, lerp(A.sunK, B.sunK, k) * sunUp);
+      col(shared.uSunCol, KA.sun, KB.sun, lerp(KA.sunK, KB.sunK, kk) * sunUp);
     } else {
       shared.uSunDir.value.copy(this.moon);
       shared.uSunCol.value.setRGB(MOON[0], MOON[1], MOON[2], THREE.SRGBColorSpace).multiplyScalar(MOON_K * moonUp);
@@ -275,35 +302,35 @@ export class DayNight {
     shared.uSunDisc.value.copy(this.sun);
     shared.uSunDiscK.value = smoothstep(-3 * RAD, -0.5 * RAD, el);
     // the sky, the light thrown back by the street, the page, the haze
-    col(shared.uSkyTop, A.top, B.top);
-    col(shared.uSkyMid, A.mid, B.mid);
-    col(shared.uSkyHorizon, A.hz, B.hz);
-    col(shared.uSkySun, A.glow, B.glow);
-    col(shared.uBounce, A.bounce, B.bounce);
-    col(shared.uPaper, A.paper, B.paper);
-    shared.uFogDensity.value = lerp(A.fog, B.fog, k);
+    col(shared.uSkyTop, KA.top, KB.top);
+    col(shared.uSkyMid, KA.mid, KB.mid);
+    col(shared.uSkyHorizon, KA.hz, KB.hz);
+    col(shared.uSkySun, KA.glow, KB.glow);
+    col(shared.uBounce, KA.bounce, KB.bounce);
+    col(shared.uPaper, KA.paper, KB.paper);
+    shared.uFogDensity.value = lerp(KA.fog, KB.fog, kk);
     const pens = shared.uSkyPen.value;
-    for (let p = 0; p < 12; p++) raw(pens[p], A.pens[p], B.pens[p]);
-    raw(shared.uCloudC.value[0], A.cloud[0], B.cloud[0]);
-    raw(shared.uCloudC.value[1], A.cloud[1], B.cloud[1]);
-    raw(shared.uSunCore.value, A.core, B.core);
-    raw(shared.uSunRing.value, A.ring, B.ring);
-    raw(shared.uSunGlow.value, A.sglow, B.sglow);
+    for (let p = 0; p < 12; p++) raw(pens[p], KA.pens[p], KB.pens[p]);
+    raw(shared.uCloudC.value[0], KA.cloud[0], KB.cloud[0]);
+    raw(shared.uCloudC.value[1], KA.cloud[1], KB.cloud[1]);
+    raw(shared.uSunCore.value, KA.core, KB.core);
+    raw(shared.uSunRing.value, KA.ring, KB.ring);
+    raw(shared.uSunGlow.value, KA.sglow, KB.sglow);
     // the night: stars, the moon, lamps, lit windows
-    this.stars = lerp(A.stars, B.stars, k);
+    this.stars = lerp(KA.stars, KB.stars, kk);
     shared.uStars.value = this.stars;
     shared.uMoonDir.value.copy(this.moon);
     shared.uMoonK.value = Math.min(1, this.stars * 1.5) * smoothstep(-1 * RAD, 2 * RAD, -el);
-    shared.uLitK.value = lerp(A.lit, B.lit, k);
+    shared.uLitK.value = lerp(KA.lit, KB.lit, kk);
     const game = this.game;
     // (a dark grey day turns the lamps on: game/weather.js)
-    let lamp = lerp(A.lamp, B.lamp, k);
+    let lamp = lerp(KA.lamp, KB.lamp, kk);
     if (game.weather) lamp = game.weather.lamps(this, lamp);
     setLampK(lamp);
     this.setLampGlass(lamp);
     if (game.pipe) {
-      game.pipe.bloom = lerp(A.bloom, B.bloom, k);
-      game.pipe.exposure = lerp(A.exp, B.exp, k);
+      game.pipe.bloom = lerp(KA.bloom, KB.bloom, kk);
+      game.pipe.exposure = lerp(KA.exp, KB.exp, kk);
       // the shadows follow the light (in steps: render/pipeline.js)
       game.pipe.setShadowDir(shared.uSunDir.value);
     }

@@ -130,6 +130,14 @@ export const GFX = (() => {
   };
 })();
 
+// (GRAPHICS_PLAN.md, ROADMAP 20) The new look, on the opening street: on only when the address asks for it (?look; ?look=0 or ?nolook:
+// off). k: how much of it there is where the camera stands now (render/look.js lookFrame, 0..1); off: switched off for a moment while the
+// game runs (the tools' before and after)
+export const LOOK = (() => {
+  const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
+  return { on: q.has('look') && q.get('look') !== '0' && !q.has('nolook'), k: 0, off: false };
+})();
+
 // A tiny pool helper for objects that are recycled often.
 export class Pool {
   constructor(factory, size) {

@@ -150,6 +150,8 @@ export const shared = {
   uQuality: { value: 1 },
   // (ROADMAP 19.7, phones only: far down a street fewer pens - render/glsl.js drawPens; set each frame, render/pipeline.js)
   uPenLite: { value: 0 },
+  // (ROADMAP 20: how much of the new look there is here, 0..1 - render/look.js)
+  uLook: { value: 0 },
   uMirror: { value: 0 },
   uRefl: { value: blank },
   // (0: no mirror drawn this frame - no water in sight, the streets dry: the water reflects the
