@@ -2672,7 +2672,8 @@ export class Pipeline {
     // other one). In between the street reads the last one through the matrix it was drawn with;
     // but a reflection depends on where you stand, so what is near in it slides a little until
     // the next. A jump of the camera (a cut, a teleport) draws it at once.
-    const re = Math.max(this.reflEvery || 1, this.detailReflEvery || 1);
+    // (ROADMAP 20: under the look on a phone every third - lookReflEvery, render/look.js)
+    const re = Math.max(this.reflEvery || 1, this.detailReflEvery || 1, this.lookReflEvery || 1);
     this.trackCamera();
     // (v5: the test route's moments without the people and the cars, or without the sun's view of
     // what moves, game/perf.js: what they cost on this device)

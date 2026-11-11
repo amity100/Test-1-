@@ -61,6 +61,7 @@ uniform float uQuality;
 uniform float uPenLite;
 // (ROADMAP 20: how much of the new look there is here, 0..1 - render/look.js)
 uniform float uLook;
+uniform float uLookLow;
 uniform float uMirror;
 uniform sampler2D uObjMask;
 uniform vec4 uWErase[MAX_SPOTS];
@@ -426,7 +427,7 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
   // (D's and E's say in where they go)
   float dk = smoothstep(0.3, 0.035, lum(mid)) * mix(1.0, 0.35, onGround) * (1.0 - 0.75 * far);
   // (the look: the dark ink hatched into whatever is in the shade, not only into what is dark itself)
-  dk = max(dk, uLook * (1.0 - light) * 0.1 * (1.0 - 0.8 * far) * mix(1.0, 0.4, onGround));
+  dk = max(dk, uLook * (1.0 - uLookLow) * (1.0 - light) * 0.1 * (1.0 - 0.8 * far) * mix(1.0, 0.4, onGround));
   float hiAll = max(hi, smoothstep(0.55, 1.0, light) * 0.12 * (1.0 - onGround)) * (1.0 - 0.6 * far);
   int pensN = uQuality > -1.0 ? 5 : 0;
   // (ROADMAP 19.7, phones only - uPenLite, render/pipeline.js) far down a street fewer pens, as an artist draws the far end of it:
@@ -472,7 +473,7 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
       lenK = 0.9;
     }
     // (ROADMAP 20, the look: the cross-strokes and the dark ink scribbled - the pen going back and forth a little along each, a hand's)
-    gZig = (i == 1 || i == 3) ? 0.16 * uLook : 0.0;
+    gZig = (i == 1 || i == 3) ? 0.16 * uLook * (1.0 - uLookLow) : 0.0;
     vec2 L = penLayer(p, dpx, dpy, a, gap, w, seed, lenK);
     gZig = 0.0;
     vec3 pc;
@@ -1601,7 +1602,7 @@ void main() {
     // (a wet street: puddles, wider the wetter, and between them a thin film)
     float pud = street ? smoothstep(0.3 - 0.3 * uWet, 0.72 - 0.34 * uWet, vnoise(vWP.xz * vec2(0.21, 0.09))) : 1.0;
     // (ROADMAP 20, the look: between the puddles the damp stone is rough - what it holds of the lights is scattered, not a mirror's picture)
-    if (street && uLook > 0.0) wob += (vec2(vnoise(vWP.xz * 7.0), vnoise(vWP.xz * 7.0 + 5.0)) - 0.5) * 0.03 * uLook * (1.0 - pud);
+    if (street && uLook > 0.0 && uLookLow < 0.5) wob += (vec2(vnoise(vWP.xz * 7.0), vnoise(vWP.xz * 7.0 + 5.0)) - 0.5) * 0.03 * uLook * (1.0 - pud);
     if (uRain > 0.0) {
       // the rain falling into it: rings that push the mirror image about
       rings = rainRings(vWP.xz, length(cameraPosition - vWP), ringPx);
@@ -1613,12 +1614,14 @@ void main() {
       // loop that asks for the plain texture() is one that the browser's translation into Direct3D,
       // on Windows, has to work out for every pixel of every surface, mirror or not - its branches
       // all flattened)
-      for (int i = 0; i < 5; i++) {
+      // (the look on a phone: two readings of the mirror, wider apart, for the five)
+      int taps = uLookLow > 0.5 ? 2 : 5;
+      for (int i = 0; i < taps; i++) {
         // (the look: the lights drawn down into longer streaks)
-        float o = (float(i) - 2.0) * (street ? 0.012 + 0.012 * uLook : 0.006);
+        float o = (uLookLow > 0.5 ? (float(i) - 0.5) * 2.4 : float(i) - 2.0) * (street ? 0.012 + 0.012 * uLook : 0.006);
         r += textureLod(uRefl, clamp(ruv + wob + vec2(0.0, o), uReflLo, 1.0 - uReflLo) * uReflK, 0.0).rgb;
       }
-      r *= 0.2;
+      r /= float(taps);
     } else r = skyColor(reflect(-V, N)) * 0.9;
     // (the look: as wet asphalt holds the light - almost nothing looking down at it, more the lower you look across it, never a sheet of ice)
     float fr = mix(0.05 + 0.02 * uLook, street ? 0.72 - 0.14 * uLook : 0.92, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0 + 1.5 * uLook));
@@ -1791,14 +1794,15 @@ void main() {
   if (uLook > 0.0) {
     // (on a flat layer over the city, seen from under it: the same all the way round, no line where the sky's page meets itself)
     vec2 cq = dir.xz / (max(dir.y, 0.0) + 0.3);
-    float n1 = fbm(cq * 0.85 + vec2(uTime * 0.003, 21.0));
-    float n2 = fbm(cq * 2.9 + 7.0);
+    // (on a phone, uLookLow: each from one reading of the noise, not three)
+    float n1 = uLookLow > 0.5 ? vnoise(cq * 1.1 + vec2(uTime * 0.003, 21.0)) : fbm(cq * 0.85 + vec2(uTime * 0.003, 21.0));
+    float n2 = uLookLow > 0.5 ? vnoise(cq * 3.4 + 7.0) : fbm(cq * 2.9 + 7.0);
     float cm = n1 * 0.72 + n2 * 0.28;
     float band = smoothstep(0.06, 0.16, el) * (1.0 - smoothstep(0.55, 0.95, el));
     cl2 = smoothstep(0.455, 0.52, cm) * band * uLook;
     clEdge = smoothstep(0.425, 0.455, cm) * (1.0 - smoothstep(0.455, 0.5, cm)) * band * uLook;
     // (lit from below and from the sun's side: the lower part of each heap, more toward the sun)
-    float under = fbm(cq * 1.07 * 0.85 + vec2(uTime * 0.003, 21.0)) * 0.72 + n2 * 0.28;
+    float under = (uLookLow > 0.5 ? vnoise(cq * 1.07 * 1.1 + vec2(uTime * 0.003, 21.0)) : fbm(cq * 1.07 * 0.85 + vec2(uTime * 0.003, 21.0))) * 0.72 + n2 * 0.28;
     clLit = clamp((cm - under) * 14.0 + 0.3 + 0.45 * toSun, 0.0, 1.0);
   }
   // the page shows between the strokes, tinted by the sky
