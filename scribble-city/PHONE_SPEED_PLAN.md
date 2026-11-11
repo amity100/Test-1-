@@ -1102,3 +1102,8 @@ The processor's fixed sum 15.8 at the start and 16.0 at the end (already warm wh
 reflection 25.1 (timed by the test even where the frame itself may not draw it), drawing 86.9 (92.9 without the far-lighter pens), without
 people and cars 70.7, the whole frame 112.4; 2.41 M triangles, 546 draws; the graphics card is the wall there (waiting 59%). Builds: the
 street before the mall 9.9 s, inside 5.4 s. -> round 4 (ROADMAP 19.10): the shops' rooms hidden behind their fronts.
+
+**Run 6, Samsung Internet 30, after round 4** (battery 81%, screen 1610×678; the run was broken once - the screen off or another app - and
+the processor slowed from 8.8 to 19.3 ms on the fixed sum: all the places lower than run 5, the comparison within the run holds): the
+boulevard 17.3 against 16.5, the crowd 11.2 against 6.9, the street before the mall **16.2 against 12.0 (+35%; run 5 +25%)**, 1.31 M
+triangles against 2.94 M, inside the mall 10.9 against 9.9 (+10%). -> round 5 (ROADMAP 19.11): the hall itself.
