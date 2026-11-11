@@ -1107,3 +1107,9 @@ street before the mall 9.9 s, inside 5.4 s. -> round 4 (ROADMAP 19.10): the shop
 the processor slowed from 8.8 to 19.3 ms on the fixed sum: all the places lower than run 5, the comparison within the run holds): the
 boulevard 17.3 against 16.5, the crowd 11.2 against 6.9, the street before the mall **16.2 against 12.0 (+35%; run 5 +25%)**, 1.31 M
 triangles against 2.94 M, inside the mall 10.9 against 9.9 (+10%). -> round 5 (ROADMAP 19.11): the hall itself.
+
+**Run 7, Samsung Internet 30, after round 5** (battery 72%; the processor slowed from 8.4 to 28.4): the boulevard 17.9, the crowd 13.2, the
+street before the mall **33.4**, inside the mall **21.3** (run 6: 10.9). **Run 8, the same, after the island's rooms went back to their chunks**
+(battery 48%): the boulevard 17.2, the crowd 8.7, the street before the mall 13.4, inside the mall 9.9 - the very same build as run 7 at the
+mall, half as fast: the phone's own state moves the numbers twofold from run to run; only "now against as before" within a run compares
+(+13% to +37%). -> the light version, `?lite` (ROADMAP 19.13), shown on the island; kept, waiting for the owner's word to go on.
