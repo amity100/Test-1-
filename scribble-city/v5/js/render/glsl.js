@@ -471,7 +471,10 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
       seed = 67.0;
       lenK = 0.9;
     }
+    // (ROADMAP 20, the look: the cross-strokes and the dark ink scribbled - the pen going back and forth a little along each, a hand's)
+    gZig = (i == 1 || i == 3) ? 0.16 * uLook : 0.0;
     vec2 L = penLayer(p, dpx, dpy, a, gap, w, seed, lenK);
+    gZig = 0.0;
     vec3 pc;
     float k;
     if (i == 0) {
