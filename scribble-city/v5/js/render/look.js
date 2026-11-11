@@ -13,8 +13,8 @@ export const ZONE = { x0: -72, x1: 118, z0: -118, z1: 44, pad: 45 };
 // the hour as the look paints it (game/daynight.js KEYS: the same fields)
 export const LOOK_KEY = {
   sun: [1.0, 0.56, 0.3], sunK: 1.55,
-  top: [0.17, 0.1, 0.4], mid: [0.9, 0.38, 0.44], hz: [1.0, 0.58, 0.2], glow: [1.0, 0.8, 0.36], bounce: [0.5, 0.34, 0.46], paper: [0.86, 0.78, 0.76],
-  fog: 0.00055, bloom: 1.05, exp: 1.08, lamp: 1.5, lit: 1.75, stars: 0.12,
+  top: [0.24, 0.15, 0.5], mid: [0.9, 0.38, 0.44], hz: [1.0, 0.58, 0.2], glow: [1.0, 0.8, 0.36], bounce: [0.8, 0.56, 0.6], paper: [0.9, 0.82, 0.78],
+  fog: 0.00055, bloom: 1.05, exp: 1.16, lamp: 1.9, lit: 1.75, stars: 0.12,
   pens: [
     [1.0, 0.74, 0.26], [1.0, 0.56, 0.22], [1.0, 0.46, 0.36], [1.0, 0.86, 0.48],
     [0.98, 0.4, 0.42], [0.82, 0.3, 0.58], [1.0, 0.52, 0.36], [0.62, 0.26, 0.66],
@@ -26,7 +26,7 @@ export const LOOK_KEY = {
 // the sun: just over the horizon, down the boulevard's far end and a little to the sea's side
 export const LOOK_SUN = new THREE.Vector3(0.13, 0.06, -1).normalize();
 // the last pass: the shadows to violet, the lights to gold, a fuller curve, more colour
-const GRADE = { grade: 0.6, shadowT: [0.8, 0.8, 1.18], lightT: [1.16, 0.99, 0.82], vib: 0.18 };
+const GRADE = { grade: 0.55, shadowT: [0.88, 0.84, 1.12], lightT: [1.14, 1.0, 0.84], vib: 0.2 };
 const PLAIN = { shadowT: [0.74, 0.9, 1.2], lightT: [1.13, 0.97, 0.8] };
 
 const smooth = (x) => x * x * (3 - 2 * x);
