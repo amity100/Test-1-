@@ -200,6 +200,8 @@ export function blockCtx(world, b) {
   const bctx = {
     B: new Batch(),
     R: new Batch(),
+    // (ROADMAP 19.12: the shops' rooms by their fronts here only - world/rooms.js; the island keeps its rooms in its chunks, as in round 3)
+    roomGroups: true,
     M: world.mainM,
     col: new BoxList(),
     rng: r,
