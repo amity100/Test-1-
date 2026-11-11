@@ -9,6 +9,8 @@ import { buildGround } from './ground.js';
 import { buildFirstBoulevard } from './first.js';
 import { buildBlocks } from './blocks.js';
 import { buildOceanDrive, rollSurf } from './ocean.js';
+import { lookDress } from './lookdress.js';
+import { STYLE } from '../core/util.js';
 import { buildRoom } from './rooms.js';
 // (v5, ROADMAP 11.18: the shops laid out to the small things - their plans replace the old rooms')
 import './shops2.js';
@@ -126,6 +128,8 @@ export async function buildCity(scene, o = {}) {
   buildOceanDrive(ctx);
   await breathe('ocean');
   if (o.streets !== false) buildStreets(ctx);
+  // (ROADMAP 20: the opening street dressed for the look - world/lookdress.js)
+  if (STYLE.on && o.streets !== false) lookDress(ctx);
   await breathe('streets');
   if (o.extra) o.extra(ctx);
   await breathe('extra');
