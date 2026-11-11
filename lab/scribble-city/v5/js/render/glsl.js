@@ -426,7 +426,7 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
   // (D's and E's say in where they go)
   float dk = smoothstep(0.3, 0.035, lum(mid)) * mix(1.0, 0.35, onGround) * (1.0 - 0.75 * far);
   // (the look: the dark ink hatched into whatever is in the shade, not only into what is dark itself)
-  dk = max(dk, uLook * (1.0 - light) * 0.24 * (1.0 - 0.8 * far) * mix(1.0, 0.4, onGround));
+  dk = max(dk, uLook * (1.0 - light) * 0.14 * (1.0 - 0.8 * far) * mix(1.0, 0.4, onGround));
   float hiAll = max(hi, smoothstep(0.55, 1.0, light) * 0.12 * (1.0 - onGround)) * (1.0 - 0.6 * far);
   int pensN = uQuality > -1.0 ? 5 : 0;
   // (ROADMAP 19.7, phones only - uPenLite, render/pipeline.js) far down a street fewer pens, as an artist draws the far end of it:
@@ -483,7 +483,7 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
       k = L.x * step(fract(L.y * 7.13), 0.95 * dens) * (1.0 - 0.5 * far);
     } else if (i == 1) {
       // B: cross-strokes deepening the shade, in a cooler pen
-      pc = hueShift(shade * mix(0.7, 0.5, uLook), -0.38 + (fract(L.y * 5.31) - 0.5) * 0.45);
+      pc = hueShift(shade * mix(0.7, 0.62, uLook), -0.38 + (fract(L.y * 5.31) - 0.5) * 0.45);
       k = L.x * step(fract(L.y * 7.13), ((1.0 - light) * 0.78 + 0.06) * dens * (1.0 + 0.3 * uLook)) * (1.0 - 0.7 * far);
     } else if (i == 2) {
       // C: a neighbouring colour now and then
