@@ -105,7 +105,10 @@ export const GFX = (() => {
   // its own name, ?glowlite, until the owner has said yes to its pictures)
   // (ROADMAP 19.7, the owner's word: "build what is needed for it to be smooth" - ?fast: the phone's version being built, each
   // round of it on the way to being tried on the phone: every part that changes no picture, and those of this round that do)
-  const fast = q.has('fast');
+  // (ROADMAP 19.13, the owner's word: "build it" - ?lite: the phone's light version, a visible step down: fewer pixels, fewer pens from
+  // the middle distance, fewer people and cars, people's simple shapes nearer. It brings every ?fast part with it)
+  const lite = phone && !q.has('oldgfx') && q.has('lite');
+  const fast = q.has('fast') || lite;
   const part = (name) => on && !q.has('no' + name) && (APPROVED[name] || q.has(name) || ((q.has('newgfx') || fast) && !LOOK.has(name)) || (fast && (name === 'penlite' || name === 'peoplelite')));
   return {
     phone,
@@ -122,6 +125,7 @@ export const GFX = (() => {
     hallMirror: part('hallmirror'), // ROADMAP 19.11: deep in Bayview's hall no street mirror (the same picture: the 0.04% and 0.27% seen at first were the far cars' own, there without it too)
     hallFar: part('hallfar'), // ROADMAP 19.12: deep in Bayview's hall the island's far pieces not drawn (far: a sliver through the roof)
     roomHide: part('roomhide'), // ROADMAP 19.10: the shops' rooms behind a front left out where nothing sees into them (the same picture)
+    lite,
     peopleLite: part('peoplelite'), // ROADMAP 19.9: people in their simple shapes from 22 m (32 before)
   };
 })();

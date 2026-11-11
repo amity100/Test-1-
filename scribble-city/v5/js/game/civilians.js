@@ -6,7 +6,7 @@ import { AVES, STREETS, BLOCK_TYPES, groundHeight, blockRect, westRect, PIER, NO
 import { NODES, CYCLE } from '../world/roads.js';
 import { M_BLOCKS, mBlockRect, M_AVES } from '../world/mainland/plan.js';
 import { newDog, steerDog, dogCollar, drawDog } from './dogs.js';
-import { damp, dampAngle, clamp } from '../core/util.js';
+import { damp, dampAngle, clamp, GFX } from '../core/util.js';
 import { WORK_CLOTHES, NIGHT_CLOTHES } from './rhythm.js';
 import { downStep, drawStars, CIV_KO } from './fists.js';
 import { shared } from '../render/materials.js';
@@ -1728,7 +1728,8 @@ export class Civilians {
       this.t = 0.25;
       // a busy city: more people on the sidewalks around you (fewer late at night: game/rhythm.js)
       const R = game.rhythm;
-      const max = Math.round((game.touch ? 18 : 40) * (R ? R.people : 1));
+      // (ROADMAP 19.13, the phone's light version: 12)
+      const max = Math.round((game.touch ? (GFX.lite ? 12 : 18) : 40) * (R ? R.people : 1));
       // despawn far ones (scripted people belong to their scene, unless it let them go)
       for (const c of this.list) if ((!c.scripted || !c.owner) && Math.hypot(c.pos.x - p.x, c.pos.z - p.z) > 110) c.gone = true;
       this.list = this.list.filter((c) => {
@@ -2430,7 +2431,7 @@ export class Civilians {
   // way, if the street near you has room for one more
   fromFar(w) {
     const R = this.game.rhythm;
-    const max = Math.round((this.game.touch ? 18 : 40) * (R ? R.people : 1));
+    const max = Math.round((this.game.touch ? (GFX.lite ? 12 : 18) : 40) * (R ? R.people : 1));
     const social = this.game.crowds && this.game.crowds.social;
     let free = 0;
     for (const c of this.list) if (!c.scripted || (social && c.owner === social)) free++;

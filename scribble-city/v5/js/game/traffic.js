@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { NODES, lightAt, laneOffsets, stopDist, lanePoint, exitsFrom } from '../world/roads.js';
 import { randomCarSpec, drawWipers, wiperSweep, KINDS } from '../render/cars.js';
 import { civilianLook, copLook, swatLook, cityLook } from './looks.js';
-import { damp, dampAngle, angleDiff } from '../core/util.js';
+import { damp, dampAngle, angleDiff, GFX } from '../core/util.js';
 import { Curbs, lotHeight } from './curbs.js';
 import { seatPlace } from './vehicles.js';
 
@@ -427,7 +427,8 @@ export class Traffic {
       // (GTA IV: the mainland's grid is wide and its blocks big - more cars on it, nearer you, or
       // its avenues look empty)
       const main = !game.classic && p.x < -330;
-      const max = Math.round((game.touch ? (main ? 20 : 16) : main ? 44 : 32) * (game.rhythm ? game.rhythm.cars : 1));
+      // (ROADMAP 19.13, the phone's light version: 14 and 11)
+      const max = Math.round((game.touch ? (GFX.lite ? (main ? 14 : 11) : main ? 20 : 16) : main ? 44 : 32) * (game.rhythm ? game.rhythm.cars : 1));
       let n = 0;
       let buses = 0;
       for (const c of this.list) {
