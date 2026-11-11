@@ -1222,7 +1222,8 @@ export class Perf {
     const out = {};
     try {
       out.shadow = time(() => pipe.renderShadows(center));
-      out.reflection = pipe.reflections ? time(() => pipe.renderReflection()) : 0;
+      // (only where the frame itself draws it: deep in the mall's hall, on a phone, not - game.js GFX.hallMirror)
+      out.reflection = pipe.reflections && pipe.mirrorWanted() ? time(() => pipe.renderReflection()) : 0;
       out.main = time(() => pipe.drawMain());
       const life = pipe.hideMoving().slice();
       out.city = time(() => pipe.drawMain());

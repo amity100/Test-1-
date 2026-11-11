@@ -937,6 +937,14 @@ export class Game {
     this.world.sky.position.copy(c);
     // (ROADMAP 13.4: deep in the mall's great hall the sun's view of what moves is not drawn)
     this.pipe.sunIndoors = this.mallLife ? this.mallLife.deepInside(c) : false;
+    // (ROADMAP 19.11, phones: GFX.hallMirror) deep in the hall no water is seen - the street mirror was drawn there only because the
+    // sea's question to the card is asked before the hall's walls are drawn. Dry streets: not drawn there at all ('as before': drawn)
+    if (!this.pipe._hallMirror) {
+      const P = this.pipe;
+      const wanted = P.mirrorWanted.bind(P);
+      P._hallMirror = true;
+      P.mirrorWanted = () => wanted() && !(GFX.hallMirror && !GFX.off && P.sunIndoors && !(shared.uWet.value > 0) && !P.mirrorAlways);
+    }
     // (under the water you see a few metres: ROADMAP 5.2)
     const fog = shared.uFogDensity.value;
     if (this.swim && this.swim.wasUnder) shared.uFogDensity.value = 0.075;
