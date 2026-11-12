@@ -20,9 +20,11 @@ git archive HEAD scribble-city/v5 scribble-city/js | tar -x -C "$tmp/lab"
 # esbuild: published as it is)
 ESBUILD="${ESBUILD:-npx --yes esbuild@0.24.0}"
 v5="$tmp/lab/scribble-city/v5"
-if (cd "$tmp/lab/scribble-city" && $ESBUILD v5/js/main.js --bundle --format=esm --minify --target=es2020 --alias:three=./js/vendor/three.module.min.js --outfile=v5/js/main.bundle.js --log-level=error); then
-  sed -i 's#src="js/main.js"#src="js/main.bundle.js"#' "$v5/index.html"
-  echo "bundled: $(du -h "$v5/js/main.bundle.js" | cut -f1)"
+if (cd "$tmp/lab/scribble-city" && $ESBUILD v5/js/main.js --bundle --format=esm --minify --target=es2020 --alias:three=./js/vendor/three.module.min.js --outfile="v5/js/main.bundle.$src.js" --log-level=error); then
+  # (the file named by the commit it was made from: a phone that kept the last one asks for this one - the owner saw the sky of the
+  # build before on a link that had a newer one)
+  sed -i "s#src=\"js/main.js\"#src=\"js/main.bundle.$src.js\"#" "$v5/index.html"
+  echo "bundled: $(du -h "$v5/js/main.bundle.$src.js" | cut -f1)"
 else
   # (no bundle: every module the game reaches named up front in the page, so the browser asks for
   # all of them at once - not a level of imports at a time, each level a round trip)
