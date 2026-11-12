@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { shared, SKY_PENS, setLampK, refreshPen } from '../render/materials.js';
 import { STYLE } from '../core/util.js';
-import { LOOK_KEY, LOOK_SUN } from '../render/look.js';
+import { LOOK_KEY, LOOK_SUN, LOOK_DISC } from '../render/look.js';
 
 // The city's clock (ROADMAP 1.1).
 //
@@ -305,6 +305,7 @@ export class DayNight {
       shared.uSunCol.value.setRGB(MOON[0], MOON[1], MOON[2], THREE.SRGBColorSpace).multiplyScalar(MOON_K * moonUp);
     }
     shared.uSunDisc.value.copy(this.sun);
+    if (lk > 0.001 && sunUp > 0) shared.uSunDisc.value.lerp(LOOK_DISC, lk).normalize();
     shared.uSunDiscK.value = smoothstep(-3 * RAD, -0.5 * RAD, el);
     // the sky, the light thrown back by the street, the page, the haze
     col(shared.uSkyTop, KA.top, KB.top);

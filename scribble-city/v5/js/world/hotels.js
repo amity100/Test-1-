@@ -20,7 +20,7 @@ import { Parts, FB, COL, SHUTTERS, diceAt, dialectOf, shopHardware, bladeSign, d
 
 const WHITE = srgb(0.98, 0.97, 0.95);
 // (the look's balcony flowers: pinks, an orange, a white - and the leaves under them)
-const LOOK_FLOWERS = [srgb(0.92, 0.2, 0.52), srgb(1.0, 0.44, 0.68), srgb(1.0, 0.56, 0.22), srgb(0.98, 0.94, 0.9), srgb(0.22, 0.5, 0.26)];
+const LOOK_FLOWERS = [srgb(0.84, 0.08, 0.46), srgb(0.95, 0.16, 0.56), srgb(1.0, 0.5, 0.16), srgb(0.7, 0.05, 0.4), srgb(0.22, 0.5, 0.26)];
 const LOOK_AC = srgb(0.8, 0.8, 0.82);
 const LOOK_AC_GRILLE = srgb(0.3, 0.3, 0.36);
 const GLASS_BLOCK = srgb(0.72, 0.9, 0.92);

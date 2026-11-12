@@ -25,8 +25,11 @@ export const LOOK_KEY = {
 };
 // the sun: just over the horizon, down the boulevard's far end and a little to the sea's side
 export const LOOK_SUN = new THREE.Vector3(0.13, 0.06, -1).normalize();
+// (round 8) where its disc is drawn: half set at the very end of the boulevard, under the road sign - the owner's pictures. The
+// light and the shadows keep the sun above: a sun that low would lay every shadow the length of the street
+export const LOOK_DISC = new THREE.Vector3(0.012, 0.036, -1).normalize();
 // the last pass: the shadows to violet, the lights to gold, a fuller curve, more colour
-const GRADE = { grade: 0.42, shadowT: [0.95, 0.9, 1.12], lightT: [1.12, 1.0, 0.86], vib: 0.2 };
+const GRADE = { grade: 0.52, shadowT: [0.95, 0.88, 1.14], lightT: [1.14, 1.0, 0.84], vib: 0.3 };
 const PLAIN = { shadowT: [0.74, 0.9, 1.2], lightT: [1.13, 0.97, 0.8] };
 
 const smooth = (x) => x * x * (3 - 2 * x);
