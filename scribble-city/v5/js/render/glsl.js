@@ -1609,7 +1609,9 @@ void main() {
       wob += rings.xy * 0.006;
     }
     vec3 r = vec3(0.0);
-    if (uReflOn > 0.5) {
+    // (vRefl.w: a point behind the mirror's eye has no place in its picture - never so with the mirror drawn, and so close under
+    // a phone's eye looking down, whose mirror is the frame before: render/pipeline.js fakeMirror)
+    if (uReflOn > 0.5 && vRefl.w > 0.0) {
       // (textureLod: the mirror's picture has one size only, so it is the very same colour; but a
       // loop that asks for the plain texture() is one that the browser's translation into Direct3D,
       // on Windows, has to work out for every pixel of every surface, mirror or not - its branches

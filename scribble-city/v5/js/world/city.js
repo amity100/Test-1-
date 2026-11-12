@@ -231,7 +231,7 @@ export async function buildCity(scene, o = {}) {
   const cull = [];
   // (ROADMAP 21, the phone's light version: the little things and the rooms left out from nearer - the owner's phone, hot, draws the
   // boulevard at 18 frames a second, and the city's own triangles are most of it)
-  const LK = GFX.lite ? 0.7 : 1;
+  const LK = GFX.lite ? 0.55 : 1;
   for (const m of rooms) cull.push({ m, r: (o.low ? 45 : 55) * LK });
   for (const m of meshes) {
     if (special.has(m.name.split('#')[0]) || m.name.startsWith('lm_')) continue;

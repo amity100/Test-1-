@@ -2465,6 +2465,34 @@ export class Pipeline {
     return m.p.distanceToSquared(this.camera.position) > 4 || m.d.dot(_md) < 0.985;
   }
 
+  // (ROADMAP 21, the phone's light version) The street's mirror without drawing the city a second time: the frame before, as the
+  // ink left it, read upside down. A point of the road looks up that picture where the eye saw what lies as far over the eye's
+  // height as the point lies under it - the mirror image of all that is far: the sky, the lit fronts across the street, the
+  // palms, the lamps. It is not a mirror's picture: what stands near loses its foot in it (twice the eye's height of it), and
+  // what is over the picture's top edge is not there (its top row instead, where a street seen from above holds almost nothing
+  // anyway). But it is every frame's, so nothing in it slides, and it costs no triangle and no draw: the second drawing was a
+  // quarter again of the frame it fell in, on the owner's phone the frame that came late
+  fakeMirror(want) {
+    const rt = this.inkRT;
+    this.reflDone = false;
+    this._mirrorRect = null;
+    this.reflSmall = false;
+    if (!want || !this.reflections || this._fakeTex !== rt.texture || this._fakeN !== this.frameN - 1 || this.camera.position.y <= this.mirrorY) {
+      shared.uReflOn.value = 0;
+      return;
+    }
+    const tm = shared.uReflMatrix.value;
+    tm.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
+    tm.multiply(this._fakeVP);
+    _m.makeScale(1, -1, 1);
+    _m.elements[13] = 2 * this._fakeY;
+    tm.multiply(_m);
+    shared.uRefl.value = rt.texture;
+    shared.uReflK.value.set(this._fakeW / rt.width, this._fakeH / rt.height);
+    shared.uReflLo.value.set(0.5 / this._fakeW, 0.5 / this._fakeH);
+    shared.uReflOn.value = 1;
+  }
+
   // the mirror camera under the street (three.js Reflector, by hand)
   renderReflection() {
     const camera = this.camera;
@@ -2540,19 +2568,7 @@ export class Pipeline {
     if (floor) {
       if (!this.low) rc.layers.enable(MIRRORLESS);
     }
-    else {
-      this.hideFromMirror(this.scene, hidden);
-      // (the phone's light version: the street's mirror holds the city and the sky - not the people and the cars, a quarter of
-      // its triangles for a smear under them in a picture drawn at half its size and read twice)
-      if (this.liteMirror) {
-        for (const o of this.scene.children) {
-          if (o.visible && o.userData.dynamic) {
-            o.visible = false;
-            hidden.push(o);
-          }
-        }
-      }
-    }
+    else this.hideFromMirror(this.scene, hidden);
     const keep = shared.uRefl.value;
     shared.uRefl.value = BLANK;
     shared.uMirror.value = 1;
@@ -2685,12 +2701,9 @@ export class Pipeline {
     // but a reflection depends on where you stand, so what is near in it slides a little until
     // the next. A jump of the camera (a cut, a teleport) draws it at once.
     // (ROADMAP 20: under the look on a phone every third - lookReflEvery, render/look.js)
-    // (ROADMAP 21, the phone's light version - liteMirror, game/game.js: every fourth, and never in a frame that draws the shadows of
-    // what moves. Every third beside shadows every second, the two fell in the same frame one time in six: 375 draws and 1.5
-    // million triangles in it against 227 and 0.97 in the frame after - the owner's phone, 40 frames a second on the average in
-    // this street, and not a steady 30: it is the heaviest frame that comes late)
+    // (ROADMAP 21, the phone's light version - liteMirror, game/game.js: no second drawing of the city at all, fakeMirror)
     const lm = !!this.liteMirror && this.floorY === null;
-    const re = Math.max(this.reflEvery || 1, this.detailReflEvery || 1, this.lookReflEvery || 1, lm ? 4 : 1);
+    const re = Math.max(this.reflEvery || 1, this.detailReflEvery || 1, this.lookReflEvery || 1);
     const lse = this.liteShadowEvery || 1;
     this.trackCamera();
     // (v5: the test route's moments without the people and the cars, or without the sun's view of
@@ -2721,11 +2734,12 @@ export class Pipeline {
     // reflects the sky until the mirror is there, a frame or two later - mirrorWanted)
     this.floorMirror();
     const want = this.mirrorWanted();
-    shared.uReflOn.value = want && !this.reflSmall ? 1 : 0;
-    if (!want) this.reflDone = false;
-    else if (lm && lse > 1 && this.frameN % lse === 0 && this.reflDone) {
-      // (the shadows' frame: a mirror gone stale - a turn of the camera - waits for the next one)
-    } else if (re === 1 || this.frameN % re === 1 || !this.reflDone || this.mirrorStale() || !this.mirrorCovers()) {
+    if (lm) this.fakeMirror(want);
+    else shared.uReflOn.value = want && !this.reflSmall ? 1 : 0;
+    if (lm) {
+      // (nothing drawn for it)
+    } else if (!want) this.reflDone = false;
+    else if (re === 1 || this.frameN % re === 1 || !this.reflDone || this.mirrorStale() || !this.mirrorCovers()) {
       if (T) T.begin('reflection');
       this.renderReflection();
       if (T) T.end();
@@ -2776,6 +2790,15 @@ export class Pipeline {
       r.render(this.afterInk, this.camera);
       r.autoClear = true;
       if (T) T.end();
+    }
+    // (fakeMirror: this frame's picture, where it was drawn from and how big)
+    if (lm) {
+      (this._fakeVP || (this._fakeVP = new THREE.Matrix4())).multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+      this._fakeY = this.camera.matrixWorld.elements[13];
+      this._fakeW = this.size.x;
+      this._fakeH = this.size.y;
+      this._fakeTex = this.inkRT.texture;
+      this._fakeN = this.frameN;
     }
     // (the smart drawing: this frame put together with the ones before, at the picture's size; then
     // the rain over it, at that size, from the camera unshifted)
