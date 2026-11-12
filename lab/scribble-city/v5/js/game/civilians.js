@@ -1593,7 +1593,7 @@ class Civilian {
 // along it and a second row behind: [along the curb, back from it] (m)
 const CURB_SLOTS = [[0, 0], [0.8, 0], [-0.8, 0], [1.6, 0], [-1.6, 0], [0.4, 0.75], [-0.4, 0.75], [1.2, 0.75], [-1.2, 0.75], [0, 1.5]];
 
-const _near6 = new Float64Array(6);
+const _near6 = new Float64Array(4);
 
 export class Civilians {
   constructor(game) {
@@ -1730,8 +1730,8 @@ export class Civilians {
       this.t = 0.25;
       // a busy city: more people on the sidewalks around you (fewer late at night: game/rhythm.js)
       const R = game.rhythm;
-      // (ROADMAP 19.13, the phone's light version: 12)
-      const max = Math.round((game.touch ? (GFX.lite ? 12 : 18) : 40) * (R ? R.people : 1));
+      // (ROADMAP 19.13, 21, the phone's light version: 12, then 8)
+      const max = Math.round((game.touch ? (GFX.lite ? 8 : 18) : 40) * (R ? R.people : 1));
       // despawn far ones (scripted people belong to their scene, unless it let them go)
       for (const c of this.list) if ((!c.scripted || !c.owner) && Math.hypot(c.pos.x - p.x, c.pos.z - p.z) > 110) c.gone = true;
       this.list = this.list.filter((c) => {
@@ -2433,7 +2433,7 @@ export class Civilians {
   // way, if the street near you has room for one more
   fromFar(w) {
     const R = this.game.rhythm;
-    const max = Math.round((this.game.touch ? (GFX.lite ? 12 : 18) : 40) * (R ? R.people : 1));
+    const max = Math.round((this.game.touch ? (GFX.lite ? 8 : 18) : 40) * (R ? R.people : 1));
     const social = this.game.crowds && this.game.crowds.social;
     let free = 0;
     for (const c of this.list) if (!c.scripted || (social && c.owner === social)) free++;
@@ -2714,8 +2714,8 @@ export class Civilians {
     const mirror = pipe && pipe.reflections && shared.uReflOn.value > 0.5 && (floorM || !pipe.liteMirror);
     const my = mirror ? (floorM ? pipe.floorY : pipe.mirrorY) : 0;
     const list = this.list;
-    // (ROADMAP 21, the phone's light version: the six nearest people in full, the rest in the simple shapes - from 15 m at the
-    // most, as it was, and never nearer than 7. A terrace of ten at their tables beside you was ten people in full, every frame)
+    // (ROADMAP 21, the phone's light version: the four nearest people in full, the rest in the simple shapes - from 15 m at the
+    // most, as it was, and never nearer than 6. A terrace of ten at their tables beside you was ten people in full, every frame)
     if (GFX.lite && !GFX.off) {
       const near = _near6;
       near.fill(1e9);
@@ -2723,8 +2723,8 @@ export class Civilians {
         const c = list[i];
         if (c.inside) continue;
         let d = Math.hypot(c.pos.x - camPos.x, c.pos.z - camPos.z);
-        if (d >= near[5]) continue;
-        for (let k = 0; k < 6; k++) {
+        if (d >= near[3]) continue;
+        for (let k = 0; k < 4; k++) {
           if (d < near[k]) {
             const t = near[k];
             near[k] = d;
@@ -2732,7 +2732,7 @@ export class Civilians {
           }
         }
       }
-      bodies.liteCap = Math.min(15, Math.max(7, near[5] + 0.5));
+      bodies.liteCap = Math.min(15, Math.max(6, near[3] + 0.5));
     } else bodies.liteCap = 0;
     for (let i = 0; i < list.length; i++) {
       const c = list[i];
