@@ -1293,11 +1293,21 @@ export class Doodle {
     const bagC = L.bagColor || COL_16_14_16;
     if (L.acc.includes('crossbody')) {
       // a little bag on a strap across the body, from the right shoulder to the left hip
-      _a.copy(j.shoulderR).addScaledVector(fwd, 0.03 * S).addScaledVector(ax, 0.02 * S);
-      _b.copy(j.hipL).addScaledVector(ax, 0.06 * S).addScaledVector(fwd, 0.1 * this.bulk * S).addScaledVector(rgt, -0.05 * S);
-      this.capsule('torso', 'chest', _a, _b, 0.012 * S, bagC);
-      _b.addScaledVector(ax, -0.04 * S).addScaledVector(fwd, 0.02 * S);
-      this.ellipsoid('torso', 'chest', _b, rgt, ax, fwd, 0.1 * S, 0.075 * S, 0.035 * S, bagC);
+      // (cast round 2: the strap over the chest and not through it - from the top of the shoulder by the neck, out over the chest's
+      // front, down to the hip; the bag behind the hip, at the side)
+      const bk = this.bulk * S;
+      _a.lerpVectors(j.neck, j.shoulderR, 0.5).addScaledVector(ax, 0.006 * S).addScaledVector(fwd, 0.03 * S);
+      // (down the front of the shoulder onto the chest)
+      _e.lerpVectors(j.neck, j.shoulderR, 0.42).addScaledVector(ax, -0.075 * S).addScaledVector(fwd, 0.125 * bk);
+      _c.lerpVectors(j.hip, j.neck, 0.6).addScaledVector(fwd, 0.146 * bk).addScaledVector(rgt, 0.015 * S);
+      _b.copy(j.hipL).addScaledVector(ax, 0.07 * S).addScaledVector(fwd, 0.09 * bk).addScaledVector(rgt, -0.085 * bk);
+      this.capsule('torso', 'chest', _a, _e, 0.013 * S, bagC);
+      this.capsule('torso', 'chest', _e, _c, 0.013 * S, bagC);
+      this.capsule('torso', 'chest', _c, _b, 0.013 * S, bagC);
+      _d.lerpVectors(j.neck, j.shoulderR, 0.5).addScaledVector(ax, -0.03 * S).addScaledVector(fwd, -0.1 * bk);
+      this.capsule('torso', 'chest', _a, _d, 0.013 * S, bagC);
+      _b.addScaledVector(ax, -0.05 * S).addScaledVector(fwd, -0.11 * bk).addScaledVector(rgt, -0.06 * S);
+      this.ellipsoid('torso', 'chest', _b, rgt, ax, fwd, 0.045 * S, 0.1 * S, 0.13 * S, bagC);
     }
     if (L.acc.includes('handbag')) {
       // a handbag on the crook of the left arm
@@ -1344,13 +1354,16 @@ export class Doodle {
       const st = B.strap || B.color;
       for (const [sh, sd] of [[j.shoulderR, 1], [j.shoulderL, -1]]) {
         // over the shoulder by the neck, down the front of it, under the arm to the bottom of the pack
-        _a.lerpVectors(j.neck, sh, 0.55).addScaledVector(ax, 0.02 * S);
-        _b.copy(_a).addScaledVector(fwd, back * 0.95).addScaledVector(ax, -0.13 * S);
+        // (cast round 2: out over the shoulder and the chest - they ran through the body, only their ends showing on her chest)
+        _a.lerpVectors(j.neck, sh, 0.62).addScaledVector(ax, 0.045 * S).addScaledVector(fwd, 0.02 * S);
+        _b.lerpVectors(j.neck, sh, 0.66).addScaledVector(fwd, back * 1.24).addScaledVector(ax, -0.1 * S);
         _d.copy(_c).addScaledVector(rgt, sd * 0.1 * S).addScaledVector(ax, 0.17 * S);
-        this.capsule('torso', 'chest', _d, _a, 0.012 * S, st);
-        this.capsule('torso', 'chest', _a, _b, 0.012 * S, st);
+        this.capsule('torso', 'chest', _d, _a, 0.016 * S, st);
+        this.capsule('torso', 'chest', _a, _b, 0.016 * S, st);
+        _e.lerpVectors(j.neck, sh, 0.8).addScaledVector(fwd, back * 1.05).addScaledVector(ax, -0.25 * S).addScaledVector(rgt, sd * 0.03 * S);
+        this.capsule('torso', 'chest', _b, _e, 0.016 * S, st);
         _d.copy(_c).addScaledVector(rgt, sd * 0.11 * S).addScaledVector(ax, -0.16 * S);
-        this.capsule('torso', 'chest', _b, _d, 0.011 * S, st);
+        this.capsule('torso', 'chest', _e, _d, 0.013 * S, st);
       }
     }
   }

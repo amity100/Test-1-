@@ -68,6 +68,11 @@ await pg.evaluate(async ([X, Z, hour]) => {
   };
   window.__frame(8, 1 / 30);
 }, [X, Z, process.env.HOUR ? +process.env.HOUR : 0]);
+// (her pictures are painted beside the game the first time she is about: until then her tee is her trousers' plain colour)
+for (let i = 0; i < 6; i++) {
+  await pg.waitForTimeout(1500);
+  await pg.evaluate(() => window.__frame(4, 1 / 30));
+}
 // name, camera position, look-at, field of view
 const D = 1.78;
 const K = 1.26;

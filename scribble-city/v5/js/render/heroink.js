@@ -682,12 +682,15 @@ const regionOf = (c, r) => {
 
 // worn black-brown leather: its patina, the dark hatching, the sheen in broad soft strokes, the neon
 // in them, scuffs; over the box of a region (px), the strokes running along `ang`
+// (cast round 2, his sheet: the jacket a dark navy field jacket - TONE.navy while it is painted; the boots stay brown leather)
+const TONE = { navy: false };
 function leather(h, x0, y0, x1, y1, area, ang, sheen) {
   const g = h.g;
   const R = h.R;
   const s = h.s;
+  const nv = TONE.navy;
   g.globalAlpha = 1;
-  g.fillStyle = '#271d18';
+  g.fillStyle = nv ? '#171a25' : '#271d18';
   g.fillRect(x0, y0, x1 - x0, y1 - y0);
   const n = Math.round(area);
   // (its patina: soft patches lighter and darker)
@@ -696,23 +699,23 @@ function leather(h, x0, y0, x1, y1, area, ang, sheen) {
     const y = y0 + R() * (y1 - y0);
     const r = (24 + 70 * R()) * s;
     const gr = g.createRadialGradient(x, y, 0, x, y, r);
-    gr.addColorStop(0, R() < 0.5 ? 'rgba(78,56,44,0.4)' : 'rgba(8,5,4,0.45)');
+    gr.addColorStop(0, R() < 0.5 ? (nv ? 'rgba(52,58,82,0.4)' : 'rgba(78,56,44,0.4)') : nv ? 'rgba(5,6,12,0.45)' : 'rgba(8,5,4,0.45)');
     gr.addColorStop(1, 'rgba(0,0,0,0)');
     g.globalAlpha = 1;
     g.fillStyle = gr;
     g.fillRect(x - r, y - r, 2 * r, 2 * r);
   }
   const sh = (x, y) => sheen((x - x0) / (x1 - x0), (y - y0) / (y1 - y0));
-  h.hatch(x0, y0, x1, y1, n * 0.26, () => 0.8, ang, 22, 1.7, ['#0c0807', '#120c0a', '#18100d'], 0.42, 0.5);
-  h.hatch(x0, y0, x1, y1, n * 0.14, () => 0.65, ang + 0.75, 18, 1.5, ['#0e0a0c', '#181216', '#20141a'], 0.38, 0.5);
+  h.hatch(x0, y0, x1, y1, n * 0.26, () => 0.8, ang, 22, 1.7, nv ? ['#0a0b13', '#0e1019', '#141726'] : ['#0c0807', '#120c0a', '#18100d'], 0.42, 0.5);
+  h.hatch(x0, y0, x1, y1, n * 0.14, () => 0.65, ang + 0.75, 18, 1.5, nv ? ['#0c0c15', '#14141f', '#1a1b2a'] : ['#0e0a0c', '#181216', '#20141a'], 0.38, 0.5);
   // the sheen: broad soft strokes of light where the leather turns towards it, a few bright ones
-  h.hatch(x0, y0, x1, y1, n * 0.12, (x, y) => sh(x, y), ang, 44, 5.5, ['#7a5c48', '#8c6a52', '#6a4e3e'], 0.2, 0.2);
-  h.hatch(x0, y0, x1, y1, n * 0.1, (x, y) => sh(x, y) * 0.9, ang, 26, 1.4, ['#a07c62', '#b48a6a', '#c49a78'], 0.42, 0.25);
+  h.hatch(x0, y0, x1, y1, n * 0.12, (x, y) => sh(x, y), ang, 44, 5.5, nv ? ['#3a4258', '#464e66', '#333a4e'] : ['#7a5c48', '#8c6a52', '#6a4e3e'], 0.2, 0.2);
+  h.hatch(x0, y0, x1, y1, n * 0.1, (x, y) => sh(x, y) * 0.9, ang, 26, 1.4, nv ? ['#5c6680', '#69728c', '#767e96'] : ['#a07c62', '#b48a6a', '#c49a78'], 0.42, 0.25);
   // the neon in it: pink, violet, blue - the colored pencil of the city's light
   h.hatch(x0, y0, x1, y1, n * 0.035, (x, y) => sh(x, y) * 0.8, ang, 26, 1.3, ['#d05a9a', '#e070a8', '#8a5ad0', '#c050b0'], 0.42, 0.3);
-  h.hatch(x0, y0, x1, y1, n * 0.03, (x, y) => 0.25 + 0.5 * sh(x, y), ang, 24, 1.3, ['#4ab0d8', '#5a8ae0', '#3a9ac0'], 0.36, 0.3);
+  h.hatch(x0, y0, x1, y1, n * (nv ? 0.012 : 0.03), (x, y) => 0.25 + 0.5 * sh(x, y), ang, 24, 1.3, ['#4ab0d8', '#5a8ae0', '#3a9ac0'], 0.36, 0.3);
   // scuffs and scratches, pale
-  h.hatch(x0, y0, x1, y1, n * 0.02, () => 0.6, ang + 1.4, 12, 1.1, ['#9a8070', '#b09080'], 0.32, 1.2);
+  h.hatch(x0, y0, x1, y1, n * 0.02, () => 0.6, ang + 1.4, 12, 1.1, nv ? ['#8088a2', '#9098b2'] : ['#9a8070', '#b09080'], 0.32, 1.2);
 }
 
 // cloth: charcoal, its weave in short strokes, its folds
@@ -740,6 +743,14 @@ function fold(h, pts, w = 2) {
  * elbow, the cuffs), its collar, its front edges and its pockets' flaps (JK).
  */
 export function paintJacket(c, o = {}) {
+  TONE.navy = true;
+  try {
+    return paintJacketIn(c, o);
+  } finally {
+    TONE.navy = false;
+  }
+}
+function paintJacketIn(c, o = {}) {
   const g = c.getContext('2d', { willReadFrequently: true });
   const W = c.width;
   const s = W / 1024;
