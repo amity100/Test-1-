@@ -12,15 +12,15 @@ export const ZONE = { x0: -72, x1: 118, z0: -118, z1: 44, pad: 45 };
 
 // the hour as the look paints it (game/daynight.js KEYS: the same fields)
 export const LOOK_KEY = {
-  sun: [1.0, 0.6, 0.34], sunK: 1.75,
-  top: [0.3, 0.2, 0.58], mid: [0.94, 0.44, 0.46], hz: [1.0, 0.62, 0.24], glow: [1.0, 0.82, 0.4], bounce: [0.96, 0.7, 0.7], paper: [0.95, 0.88, 0.84],
-  fog: 0.00055, bloom: 1.0, exp: 1.3, lamp: 1.9, lit: 1.75, stars: 0.08,
+  sun: [1.0, 0.58, 0.28], sunK: 2.1,
+  top: [0.33, 0.16, 0.6], mid: [0.95, 0.36, 0.5], hz: [1.0, 0.64, 0.2], glow: [1.0, 0.82, 0.4], bounce: [0.96, 0.7, 0.7], paper: [0.95, 0.88, 0.84],
+  fog: 0.00055, bloom: 1.1, exp: 1.22, lamp: 2.5, lit: 2.2, stars: 0.08,
   pens: [
     [1.0, 0.74, 0.26], [1.0, 0.56, 0.22], [1.0, 0.46, 0.36], [1.0, 0.86, 0.48],
     [0.98, 0.4, 0.42], [0.82, 0.3, 0.58], [1.0, 0.52, 0.36], [0.62, 0.26, 0.66],
     [0.36, 0.17, 0.62], [0.27, 0.13, 0.52], [0.48, 0.2, 0.68], [0.2, 0.11, 0.46],
   ],
-  cloud: [[0.46, 0.2, 0.56], [1.0, 0.62, 0.36]],
+  cloud: [[0.5, 0.18, 0.58], [1.0, 0.6, 0.3]],
   core: [1.0, 0.97, 0.8], ring: [1.0, 0.7, 0.26], sglow: [1.0, 0.72, 0.36],
 };
 // the sun: just over the horizon, down the boulevard's far end and a little to the sea's side
@@ -29,7 +29,7 @@ export const LOOK_SUN = new THREE.Vector3(0.13, 0.06, -1).normalize();
 // light and the shadows keep the sun above: a sun that low would lay every shadow the length of the street
 export const LOOK_DISC = new THREE.Vector3(0.012, 0.036, -1).normalize();
 // the last pass: the shadows to violet, the lights to gold, a fuller curve, more colour
-const GRADE = { grade: 0.52, shadowT: [0.95, 0.88, 1.14], lightT: [1.14, 1.0, 0.84], vib: 0.3 };
+const GRADE = { grade: 0.66, shadowT: [0.88, 0.8, 1.14], lightT: [1.16, 1.02, 0.82], vib: 0.32 };
 const PLAIN = { shadowT: [0.74, 0.9, 1.2], lightT: [1.13, 0.97, 0.8] };
 
 const smooth = (x) => x * x * (3 - 2 * x);
@@ -59,7 +59,7 @@ export function lookFrame(game) {
   // (and the mirror under the street drawn every third frame there, not every other: the wet stone it is read through is rough)
   pipe.lookReflEvery = pipe.low && k > 0.5 ? 3 : 1;
   // the ink's line, bolder
-  pipe.lineW = 1.25 + 0.55 * k;
+  pipe.lineW = 1.25 + 0.8 * k;
   if (film) return;
   const L = pipe.look;
   // (the grade's violet and gold are the evening's: by day and by night a part of it)
