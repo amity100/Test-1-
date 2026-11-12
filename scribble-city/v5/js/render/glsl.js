@@ -1914,7 +1914,7 @@ void main() {
   float disc = (1.0 - smoothstep(R + ringN, R + 0.004 + ringN, sd)) * uSunDiscK;
   vec3 sunC = mix(lin(uSunRing), lin(uSunCore), 1.0 - smoothstep(R * 0.3, R, sd));
   col = mix(col, sunC * 2.6, disc);
-  col += lin(uSunGlow) * (exp(-sd * 20.0) * 0.45 + uLook * (exp(-sd * 7.0) * 0.1)) * uSunDiscK;
+  col += lin(uSunGlow) * (exp(-sd * 20.0) * 0.45 + uLook * (exp(-sd * 7.0) * 0.1 + exp(-sd * 2.4) * 0.12)) * uSunDiscK;
   float glow = disc * 0.6 + exp(-sd * 40.0) * 0.25 * uSunDiscK;
   // a flash of lightning: the clouds light up from inside
   if (uFlash > 0.0) col += vec3(0.62, 0.68, 0.95) * uFlash * (0.25 + 0.5 * cl);
