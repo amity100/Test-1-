@@ -1688,13 +1688,13 @@ export class PersonRenderer {
     const at = atW;
     const sit = w.sit || 0;
     const cheer = w.cheer || 0;
-    const hipY = 0.93 - Math.abs(Math.sin(ph)) * 0.05 * A - 0.46 * sit;
+    const hipY = 0.93 - 0.94 * (1 - (L.build.legs || 1)) - Math.abs(Math.sin(ph)) * 0.05 * A - 0.46 * sit;
     const lean = A * 0.12;
     at(J.hip, 0, hipY, 0);
     const ny = hipY + 0.5 * Math.cos(lean);
     const nz = 0.5 * Math.sin(lean);
     at(J.neck, 0, ny, nz);
-    const hOff = 0.1 + 0.12 * L.build.head;
+    const hOff = 0.075 - (L.build.neck || 0) + 0.12 * L.build.head;
     at(J.head, 0, ny + hOff, nz + hOff * Math.sin(lean));
     const sw = (fem ? 0.15 : 0.17) * Math.max(0.9, bulk * 0.96);
     const hw = (fem ? 0.095 : 0.085) * bulk;

@@ -290,7 +290,8 @@ export function paintFace(c, o = {}) {
     const cy = Y(0.0185);
     const ew = 0.0262 * K;
     // (wide open with the brows up; narrowed by a real smile, the cheeks pushing up under them)
-    const eh = 0.0064 * K * (brow === 'up' ? 1.28 : 1) * (1 - Math.max(0, smile) * 0.16);
+    // (cast round 1, his sheet: his eyes open - they were two slits)
+    const eh = 0.0072 * K * (brow === 'up' ? 1.25 : 1) * (1 - Math.max(0, smile) * 0.16);
     // (the inner corner by the nose, a touch lower; the outer a touch higher)
     const ix = cx + sd * ew * 0.5;
     const iy = cy + 0.06 * eh;
@@ -347,9 +348,9 @@ export function paintFace(c, o = {}) {
     // the iris: hazel, its strokes out from the pupil; the pupil; the light in it
     const irx = cx + sd * 0.0012 * K;
     const iry = cy - eh * 0.05;
-    const ir = 0.0054 * K;
+    const ir = 0.006 * K;
     g.globalAlpha = 1;
-    g.fillStyle = '#6a4a28';
+    g.fillStyle = '#4e3520';
     g.beginPath();
     g.arc(irx, iry, ir, 0, Math.PI * 2);
     g.fill();
@@ -357,7 +358,7 @@ export function paintFace(c, o = {}) {
       const a = R() * Math.PI * 2;
       const r0 = ir * (0.3 + 0.15 * R());
       const r1 = ir * (0.75 + 0.25 * R());
-      h.line(irx + Math.cos(a) * r0, iry + Math.sin(a) * r0, irx + Math.cos(a) * r1, iry + Math.sin(a) * r1, 1.3, h.pick(['#3a2410', '#8a6a30', '#9a8040', '#5a3a18', '#7a7a3a']), 0.75, 0.1);
+      h.line(irx + Math.cos(a) * r0, iry + Math.sin(a) * r0, irx + Math.cos(a) * r1, iry + Math.sin(a) * r1, 1.3, h.pick(['#2e1c0e', '#6a5026', '#74602e', '#4a3016', '#5c5a2c']), 0.75, 0.1);
     }
     g.globalAlpha = 0.9;
     g.strokeStyle = '#24160c';
@@ -583,8 +584,9 @@ export function paintFace(c, o = {}) {
     const ya = Y(-0.172);
     const yb = Y(-0.19);
     const gr = g.createLinearGradient(0, ya, 0, yb);
-    gr.addColorStop(0, 'rgba(30,26,36,0)');
-    gr.addColorStop(1, 'rgba(30,26,36,1)');
+    // (cast round 1: the shirt open at the neck - the shade of the collar on his skin, not a dark crew collar)
+    gr.addColorStop(0, 'rgba(120,78,62,0)');
+    gr.addColorStop(1, 'rgba(120,78,62,0.85)');
     g.globalAlpha = 1;
     g.fillStyle = gr;
     g.fillRect(0, ya, W, yb - ya);
@@ -1000,22 +1002,49 @@ export function paintPants(c, o = {}) {
     const Y1 = 0.48;
     const xAt = (y) => r.x((y - Y0) / (Y1 - Y0));
     const yAt = (u) => r.y(u);
-    cloth(h, r.x0, r.y0, r.x1, r.y1, 9000 * k, 0.1, '#2c2c33', ['#14141a', '#1a1a20', '#101014'], ['#4a4a54', '#56565e', '#5a5262']);
-    // the shirt's folds, its placket (a henley: a few buttons at the top)
+    // (cast round 1, his sheet: a cream linen shirt, a fine grey check in it, open at the neck, buttoned down its front - it was a
+    // charcoal henley, and the open jacket showed black on black)
+    cloth(h, r.x0, r.y0, r.x1, r.y1, 9000 * k, 0.1, '#e4d9c6', ['#b9ab94', '#c6b9a2', '#a89a84'], ['#f6efe2', '#fbf6ec', '#efe6d6']);
+    g.globalAlpha = 0.22;
+    g.strokeStyle = '#6f6a64';
+    g.lineWidth = 1.2 * s;
+    for (let y = 0.02; y < 0.47; y += 0.022) {
+      g.beginPath();
+      g.moveTo(xAt(y), r.y0);
+      g.lineTo(xAt(y), r.y1);
+      g.stroke();
+    }
+    for (let u = 0.06; u < 1; u += 0.11) {
+      g.beginPath();
+      g.moveTo(xAt(0.012), yAt(u));
+      g.lineTo(xAt(0.47), yAt(u));
+      g.stroke();
+    }
+    // the shirt's folds, its placket
     for (let i = 0; i < 10; i++) {
       const y = 0.05 + R() * 0.38;
       fold(h, [[xAt(y), yAt(0.1 + R() * 0.2)], [xAt(y + 0.02), yAt(0.5)], [xAt(y + 0.01), yAt(0.75 + R() * 0.2)]], 1.4);
     }
-    for (let i = 0; i < 3; i++) {
-      const [x, y] = [xAt(0.43 - i * 0.025), yAt(0.5)];
+    h.lines([[xAt(0.02), yAt(0.5)], [xAt(0.4), yAt(0.5)]], 1.6, '#8a7f70', 0.6, 2, 0.6);
+    for (let i = 0; i < 6; i++) {
+      const [x, y] = [xAt(0.36 - i * 0.062), yAt(0.5)];
       g.globalAlpha = 0.9;
-      g.fillStyle = '#5a5a62';
+      g.fillStyle = '#5c5448';
       g.beginPath();
       g.arc(x, y, 4 * s, 0, Math.PI * 2);
       g.fill();
     }
     // the shirt's hem over the belt
-    h.lines([[xAt(0.012), yAt(0)], [xAt(0.008), yAt(0.5)], [xAt(0.014), yAt(1)]], 2.2, '#0a0a0e', 0.75, 2, 1);
+    h.lines([[xAt(0.012), yAt(0)], [xAt(0.008), yAt(0.5)], [xAt(0.014), yAt(1)]], 2.2, '#5a5046', 0.75, 2, 1);
+    // (under the belt: the trousers' dark cloth, to the fly)
+    {
+      const xa = Math.min(r.x0, r.x1, xAt(-0.034));
+      const xb = Math.max(xAt(-0.034), Math.min(r.x0, r.x1));
+      const lo = xAt(-0.2) < xAt(-0.034);
+      cloth(h, lo ? r.x0 : xAt(-0.034), r.y0, lo ? xAt(-0.034) : r.x1, r.y1, 3000 * k, 0.1, '#1e1e24', ['#14141a', '#1a1a20', '#101014'], ['#3a3a44', '#46464e', '#4a4252']);
+      void xa;
+      void xb;
+    }
     // the belt, black leather; its buckle, steel
     g.globalAlpha = 1;
     g.fillStyle = '#121010';

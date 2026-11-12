@@ -343,7 +343,13 @@ export class Doodle {
     const hw = (fem ? 0.095 : 0.085) * bulk;
     const legGone = (this.parts.legL < 0.5 ? 1 : 0) + (this.parts.legR < 0.5 ? 1 : 0);
 
-    let hipY = 0.93 - Math.abs(Math.sin(ph)) * 0.05 * A + Math.sin(ph * 2) * 0.01;
+    // (cast round 1: a child's legs are shorter for their height - build.legs, the hips down with them, so the feet stay on the ground)
+    const legsK = this.look.build.legs || 1;
+    let hipY = 0.93 - 0.94 * (1 - legsK) - Math.abs(Math.sin(ph)) * 0.05 * A + Math.sin(ph * 2) * 0.01;
+    // (cast round 1, the owner's word: they stand like shop dummies) how much they are simply standing - then the weight on one leg,
+    // the other knee eased, the feet a little apart and turned out, the arms hanging a little off the body
+    const stand = (1 - wa) * (1 - sit) * (1 - crawl) * (1 - crouch) * (1 - this.sneak) * (1 - Math.min(1, this.ride)) * (this.air || this.dance > 0 || this.kick >= 0 || this.punch >= 0 || this.dead > 0 ? 0 : 1);
+    const wSide = this.seed % 2 < 1 ? 1 : -1;
     hipY += this.dance * Math.abs(Math.sin(ph)) * 0.05;
     hipY = lerp(hipY, 0.5, sit);
     hipY = lerp(hipY, 0.25, crawl);
@@ -374,7 +380,8 @@ export class Doodle {
       lean -= this.recoil * this.recoil * 0.42;
       leanSide += this.recoil * this.recoilSide * 0.12;
     }
-    this.toWorld(this.dance * Math.sin(ph * 0.5) * 0.05, hipY, 0, j.hip);
+    const hipX = wSide * 0.014 * stand;
+    this.toWorld(this.dance * Math.sin(ph * 0.5) * 0.05 + hipX, hipY, 0, j.hip);
     const spine = 0.5;
     // (standing, a breath: the chest and the shoulders rise and fall a little - and in the prologue's
     // film, where the camera comes close and stays, a deeper one, and the body above the hips swaying
@@ -385,19 +392,24 @@ export class Doodle {
     const ny = hipY + spine * Math.cos(lean) + Math.sin(this.breathT * 1.6) * 0.009 * idle;
     const nz = spine * Math.sin(lean);
     this.toWorld(nx, ny, nz, j.neck);
-    const hOff = 0.1 + 0.12 * this.headScale;
+    // (cast round 1: the head 2.5 cm lower on the shoulders and the shoulders 1.5 cm higher - the chin was 13 cm over the shoulder's
+    // top, a long bare neck on everybody; a person's is 9. A child's shorter still: build.neck)
+    const hOff = 0.075 - (this.look.build.neck || 0) + 0.12 * this.headScale;
+    // (the shoulder's joint where it was: its round top level with the slope down from the neck - higher, the sleeves stood over the
+    // shoulders like two posts)
+    const shY = 0.07;
     this.toWorld(nx * 1.2, ny + hOff * Math.cos(lean), nz + hOff * Math.sin(lean), j.headC);
     // (characters round: the shoulders turned with the chest, for a look far round)
     const chc = Math.cos(this.chestYaw);
     const chs = Math.sin(this.chestYaw);
-    this.toWorld(nx + sw * chc, ny - 0.07, nz + twist + sw * chs, j.shoulderR);
-    this.toWorld(nx - sw * chc, ny - 0.07, nz - twist - sw * chs, j.shoulderL);
+    this.toWorld(nx + sw * chc, ny - shY - wSide * 0.006 * stand, nz + twist + sw * chs, j.shoulderR);
+    this.toWorld(nx - sw * chc, ny - shY + wSide * 0.006 * stand, nz - twist - sw * chs, j.shoulderL);
     j.shoulder.copy(j.shoulderR);
-    this.toWorld(hw, hipY, 0, j.hipR);
-    this.toWorld(-hw, hipY, 0, j.hipL);
+    this.toWorld(hw + hipX, hipY, 0, j.hipR);
+    this.toWorld(-hw + hipX, hipY, 0, j.hipL);
 
     // legs
-    const legL = 0.47 * (this.look.build.legs || 1);
+    const legL = 0.47 * legsK;
     // (the joints never change: the lists are made once)
     const legs = this._legs || (this._legs = [[j.kneeR, j.footR, j.toeR, 0], [j.kneeL, j.footL, j.toeL, Math.PI]]);
     for (let li = 0; li < 2; li++) {
@@ -453,16 +465,22 @@ export class Doodle {
           kb = lerp(kb, 0.28, up);
         }
       }
-      const sx = side * hw * (1 + sit * 0.4);
+      // (standing: the leg the weight is not on eased at the knee, its foot a little ahead)
+      if (stand > 0 && side !== wSide) {
+        th += 0.09 * stand;
+        kb += 0.2 * stand;
+      }
+      const sx = side * hw * (1 + sit * 0.4) + hipX;
       const ky = hipY - Math.cos(th) * legL;
       const kz = Math.sin(th) * legL;
-      this.toWorld(sx, ky, kz, knee);
+      this.toWorld(sx + side * 0.014 * stand - hipX * 0.5, ky, kz, knee);
       const sh = th - kb;
       let fy = ky - Math.cos(sh) * legL;
       const fz = kz + Math.sin(sh) * legL;
       fy = Math.max(fy, 0.04);
-      this.toWorld(sx, fy, fz, foot);
-      this.toWorld(sx, Math.max(0.03, fy - 0.01), fz + 0.13, toe);
+      const fxS = sx + side * 0.036 * stand - hipX;
+      this.toWorld(fxS, fy, fz, foot);
+      this.toWorld(fxS + side * 0.04 * stand, Math.max(0.03, fy - 0.01), fz + 0.13, toe);
     }
     if (this.ride > 0) this.pedal(hw, legL);
 
@@ -549,9 +567,9 @@ export class Doodle {
         if (hand.distanceTo(shoulder) > reachMax) hand.sub(shoulder).setLength(reachMax).add(shoulder);
       } else {
         const a = -Math.sin(ph + off) * swing;
-        const out = 0.06 + (this.stagger ? 0.25 : 0);
+        const out = 0.06 + 0.07 * stand + (this.stagger ? 0.25 : 0);
         const sxl = side * (sw + out * 0.3);
-        const ey = ny - 0.07 - Math.cos(a) * armU;
+        const ey = ny - shY - Math.cos(a) * armU;
         const ez = Math.sin(a) * armU;
         // (hanging from the shoulder as the chest is turned)
         this.toWorld(nx + sxl * chc - ez * chs, ey, nz + sxl * chs + ez * chc, elbow);

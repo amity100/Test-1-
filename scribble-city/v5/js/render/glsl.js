@@ -1479,6 +1479,13 @@ void main() {
     key = mix(key, vec3(1.0, 0.52, 0.2) * 1.35, uLook);
     light = clamp(0.25 + 0.45 * up + 0.3 * hgt, 0.0, 1.0);
   }
+  // (cast round 1 - the look on people: the low sun's orange on them half as coloured - skin went red - and a fill of the sky's
+  // light on their shaded side, so that a face and a jacket are read and not a dark shape hatched over)
+  if (uLook > 0.0 && vX.x > 0.5 && !inside) {
+    key = mix(key, vec3(lum(key)) * vec3(1.05, 1.0, 0.95), 0.5 * uLook);
+    amb = mix(amb, amb * 1.3 + vec3(0.05, 0.045, 0.06), uLook);
+    light = max(light, 0.3 * uLook);
+  }
   vec3 shade = alb * (amb + pts);
   vec3 lit = alb * (amb + pts + key);
   // (the look, round 10: a room seen from the street is amber - its own white light and its white walls were a blank page)

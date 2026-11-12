@@ -47,6 +47,8 @@ export const IRIS = {
   brown: ['#3a2410', '#5a3a18', '#6a4a28', '#2a1a0c', '#7a5a30'],
   dark: ['#22140a', '#3a2412', '#2e1c0e', '#180e08', '#4a3018'],
   hazel: ['#3a2410', '#8a6a30', '#9a8040', '#5a3a18', '#7a7a3a'],
+  // (cast round 1: Lily's - a warm brown hazel, deep: the plain hazel glowed orange in a child's big eyes)
+  lilyHazel: ['#2e1a0c', '#5a3c1c', '#6e4c22', '#3e2812', '#58502a'],
   green: ['#2e4a28', '#4a6a34', '#6a8a44', '#3a5a30', '#8a9a50'],
   grey: ['#3a5068', '#5a7890', '#7a90a4', '#4a6278', '#90a4b4'],
   // (ROADMAP 14.9)
@@ -631,17 +633,21 @@ const PHONE_N = 36 + ROLE.filter((F) => F.phone).length;
 // over a cream tee with a rocket and stars on it; olive cargo trousers; purple sneakers.
 export const LILY = {
   key: 'lily', name: 'Lily', age: 9, fem: true, role: 'lily', how: 'cast',
-  build: { height: 0.71, head: 1.14, bulk: 0.86, limbs: 0.92 },
+  // (cast round 1: a child of seven or eight as her sheet has her - her head a fifth of her height and not a sixth, a short neck,
+  // shorter legs: she was a grown woman made small)
+  build: { height: 0.735, head: 1.24, bulk: 0.9, limbs: 0.92, legs: 0.9, neck: 0.022, arms: 0.93 },
   // (a child's: no waist or bust drawn in under the hoodie)
   body: { belly: 0, chest: -0.9, thick: -0.04 },
   morph: {
-    'head-age-decr': 1, 'head-round': 0.35, 'cheek-volume-incr': 0.35, 'eye-scale-incr': 0.22, 'nose-scale-vert-decr': 0.3, 'nose-point-up': 0.45, 'nose-scale-horiz-decr': 0.15,
-    'mouth-scale-horiz-incr': 0.12, 'mouth-angles-up': 0.25, 'ear-scale-incr': 0.8, 'chin-width-decr': 0.25, 'chin-prominent-decr': 0.1, 'eyebrows-angle-up': 0.04, 'forehead-scale-vert-incr': 0.15,
+    // (cast round 1, her sheet: a child's face - her eyes big in it, a small short nose, round cheeks, a small chin, the face short
+    // under a high forehead. Not the doll of round 10: her own features, a child's measures)
+    'head-age-decr': 1, 'head-round': 0.45, 'cheek-volume-incr': 0.45, 'eye-scale-incr': 0.42, 'nose-scale-vert-decr': 0.5, 'nose-scale-depth-decr': 0.3, 'nose-point-up': 0.45, 'nose-scale-horiz-decr': 0.2,
+    'mouth-scale-horiz-incr': 0.08, 'mouth-angles-up': 0.25, 'ear-scale-incr': 0.8, 'chin-width-decr': 0.3, 'chin-prominent-decr': 0.15, 'chin-height-decr': 0.3, 'eyebrows-angle-up': 0.04, 'forehead-scale-vert-incr': 0.2,
   },
   shape: { cheeks: 0.35, jaw: 0.9, dbl: 0, neck: 0.88 },
   expr: 'smile',
   head: { jaw: 0, chin: 0.9, nose: 0.88, lips: 1.02, brow: 0.58 },
-  skin: 'golden', eyes: { iris: 'hazel', open: 1.0, lid: 0.4, lashes: 0.5, liner: 0, irisK: 1.18 },
+  skin: 'golden', eyes: { iris: 'lilyHazel', open: 1.0, lid: 0.4, lashes: 0.6, liner: 0, irisK: 1.3 },
   // (uneven: the one arched higher than the other - render/folkink.js)
   brows: { col: ['#4e3020', '#5c3a26', '#3e2618'], thick: 0.8, arch: 0.26, uneven: 0.3 },
   mouth: { w: 1.04, full: 1.0, lip: [shade(SKINS.golden.warm[0], 0.85), SKINS.golden.warm[1]], lipstick: null },

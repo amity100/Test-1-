@@ -104,7 +104,7 @@ export function heroLook() {
   L.build = { height: 1.03, head: 1.02, bulk: 1.0, limbs: 1.04 };
   L.skin = [0.74, 0.54, 0.42];
   L.hair = { style: 'messy', color: [0.17, 0.11, 0.08] };
-  L.top = { kind: 'jacket', color: [0.2, 0.15, 0.13], sleeves: 'long', inner: [0.2, 0.2, 0.23] };
+  L.top = { kind: 'jacket', color: [0.2, 0.15, 0.13], sleeves: 'long', inner: [0.86, 0.81, 0.72] };
   L.bottom = { kind: 'cargo', color: [0.14, 0.14, 0.16] };
   L.shoes = [0.12, 0.1, 0.09];
   L.hat = null;

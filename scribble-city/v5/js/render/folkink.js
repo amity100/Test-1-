@@ -524,12 +524,14 @@ export function paintFolkFace(c, o = {}) {
       }
     }
   }
+  // (cast round 1: a child's cheeks hardly fold when she smiles - the lines from her nose to her mouth were a grown woman's)
+  const kidK = P.age && P.age < 13 ? 0.25 : 1;
   // the shade under the lower lip, the cleft of the chin, the folds from the nose to the mouth
   if (!flat) h.hatch(X(0.017), Y(-0.061), X(-0.017), Y(-0.07), 140, () => 0.7, 0.15, 14, 1.5, S.sh2, 0.45);
   if (!fem) h.path([[X(0.0005), Y(-0.083)], [X(-0.0005), Y(-0.092)]], 1.4, S.sh1[0], 0.35, 0.8);
   for (const sd of [1, -1]) {
     const sm = ex === 'half' && sd < 0 ? 0.15 : smile;
-    h.lines([[X(sd * 0.0188), Y(-0.0215)], [X(sd * (0.0262 + 0.004 * sm)), Y(-0.034)], [X(sd * (0.0292 + 0.007 * sm)), Y(-0.048)], [X(sd * (0.0298 + 0.006 * sm)), Y(-0.06)]], 1.7 + 0.5 * sm, S.sh1[0], 0.2 + 0.4 * age + 0.35 * sm, 2, 1.1);
+    h.lines([[X(sd * 0.0188), Y(-0.0215)], [X(sd * (0.0262 + 0.004 * sm)), Y(-0.034)], [X(sd * (0.0292 + 0.007 * sm)), Y(-0.048)], [X(sd * (0.0298 + 0.006 * sm)), Y(-0.06)]], 1.7 + 0.5 * sm, S.sh1[0], (0.2 + 0.4 * age + 0.35 * sm) * kidK, 2, 1.1);
     // (the cheek lifted over it, lit)
     if (sm > 0.2) h.hatch(X(sd * 0.05), Y(-0.008), X(sd * 0.026), Y(-0.034), 90, () => 0.6 * sm, 1.0, 16, 1.6, S.light, 0.35);
   }
