@@ -2691,7 +2691,9 @@ export class Pipeline {
         r.setRenderTarget(was);
       }
     }
-    if ((every === 1 || this.staticRoot || phase === 0 || !this.shadowDone) && !(this.noSunPass && this.shadowDone) && !(indoors && this.shadowDone)) {
+    // (ROADMAP 21, the phone's light version: what moves casts its shadow anew every other frame - liteShadowEvery, game/game.js)
+    const liteSkip = (this.liteShadowEvery || 1) > 1 && this.frameN % this.liteShadowEvery !== 0 && this.shadowDone;
+    if ((every === 1 || this.staticRoot || phase === 0 || !this.shadowDone) && !(this.noSunPass && this.shadowDone) && !(indoors && this.shadowDone) && !liteSkip) {
       if (T) T.begin('shadow');
       this.renderShadows(center);
       if (T) T.end();
