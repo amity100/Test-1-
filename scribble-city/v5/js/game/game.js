@@ -940,6 +940,21 @@ export class Game {
       document.body.appendChild(F.el);
     }
     F.el.textContent = `${Math.round((F.n * 1000) / (now - F.t0))} פריימים בשנייה`;
+    // (?fps=2: and under it what the pace has chosen and why, and the processor's and the card's share of a frame - one picture of the
+    // screen tells where the time goes)
+    if (this.params.get('fps') === '2' && this.pace) {
+      const c = this.pace.ctl;
+      let extra = '';
+      try {
+        extra = `${this.pace.line()}\nמעבד ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · פריים ${c && c.ema ? c.ema.toFixed(1) : '?'}ms · אנשים ${this.civilians ? this.civilians.list.length : '?'}`;
+      } catch (e) {
+        extra = String(e && e.message);
+      }
+      F.el.style.whiteSpace = 'pre-line';
+      F.el.style.font = '600 11px system-ui,sans-serif';
+      F.el.style.maxWidth = '70vw';
+      F.el.textContent += '\n' + extra;
+    }
     F.n = 0;
     F.t0 = now;
   }
