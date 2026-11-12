@@ -12,7 +12,7 @@ export const ZONE = { x0: -72, x1: 118, z0: -118, z1: 44, pad: 45 };
 
 // the hour as the look paints it (game/daynight.js KEYS: the same fields)
 export const LOOK_KEY = {
-  sun: [1.0, 0.6, 0.34], sunK: 1.35,
+  sun: [1.0, 0.62, 0.32], sunK: 1.7,
   top: [0.3, 0.2, 0.58], mid: [0.94, 0.44, 0.46], hz: [1.0, 0.62, 0.24], glow: [1.0, 0.82, 0.4], bounce: [0.96, 0.7, 0.7], paper: [0.95, 0.88, 0.84],
   fog: 0.00055, bloom: 0.5, exp: 1.3, lamp: 0.6, lit: 1.15, stars: 0.08,
   pens: [
@@ -27,7 +27,8 @@ export const LOOK_KEY = {
 export const LOOK_SUN = new THREE.Vector3(0.13, 0.06, -1).normalize();
 // (round 8) where its disc is drawn: half set at the very end of the boulevard, under the road sign - the owner's pictures. The
 // light and the shadows keep the sun above: a sun that low would lay every shadow the length of the street
-export const LOOK_DISC = new THREE.Vector3(0.012, 0.036, -1).normalize();
+// (round 13, the owner's picture: the sun seen - a little up the sky over the road sign, not behind it)
+export const LOOK_DISC = new THREE.Vector3(0.03, 0.135, -1).normalize();
 // the last pass: the shadows to violet, the lights to gold, a fuller curve, more colour
 // (round 11, the owner's word - the sky exactly as it was before the clouds were touched: the grade and the exposure are the whole
 // picture's, the sky's too, so they are round 8's again)

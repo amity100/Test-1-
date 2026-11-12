@@ -170,7 +170,8 @@ vec3 skyColor(vec3 dir) {
   float band = (1.0 - smoothstep(0.0, 0.24, abs(el))) * (0.25 + 0.75 * pow(az, 4.0));
   c = mix(c, uSkySun, band * 0.5);
   // (the look, round 12 - the owner's word: the sun far too strong)
-  c += uSkySun * (pow(s, 16.0) * 0.55 + pow(s, 260.0) * 1.4) * (1.0 - 0.7 * uLook);
+  // (round 13, the owner's picture: a warm sun, soft and wide - about a third more than round 12 left of it, not the glare of round 10)
+  c += uSkySun * (pow(s, 16.0) * 0.55 + pow(s, 260.0) * 1.4) * (1.0 - 0.58 * uLook);
   if (el < 0.0) c = mix(c, uSkyHorizon * 0.5, smoothstep(0.0, -0.25, el));
   return c;
 }
@@ -183,6 +184,13 @@ vec3 applyFog(vec3 col, vec3 wp) {
   float k = 1.0 - exp(-dist * uFogDensity);
   k *= mix(1.0, 0.6, smoothstep(15.0, 160.0, wp.y));
   vec3 fc = mix(skyColor(normalize(vec3(dir.x, max(dir.y, 0.0) * 0.3 + 0.05, dir.z))), uSkyTop, 0.62) * 0.85;
+  // (the look, round 13 - the owner's picture: what lies toward the low sun melts into its warm haze, the further the more - the
+  // light is in the air, not only in the sky)
+  if (uLook > 0.0) {
+    float ts = pow(max(dot(normalize(vec3(dir.x, 0.0, dir.z) + vec3(1e-5)), normalize(vec3(uSunDisc.x, 0.0, uSunDisc.z))), 0.0), 5.0) * uLook * smoothstep(-0.05, 0.02, uSunDisc.y);
+    fc = mix(fc, uSkySun * 1.05, ts * 0.75);
+    k += ts * (1.0 - exp(-dist * 0.007)) * 0.3;
+  }
   return mix(col, fc, clamp(k, 0.0, 1.0));
 }
 
@@ -1484,7 +1492,7 @@ void main() {
   float hi = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0) * back * sh * smoothstep(-0.15, 0.35, ndl) * 0.9;
   if (N.y > 0.7) hi *= 0.25;
   // (the look: the gold edge the sun behind everything draws round it, bolder)
-  hi *= 1.0 + (N.y > 0.7 ? 0.0 : 0.2) * uLook;
+  hi *= 1.0 + (N.y > 0.7 ? 0.0 : 0.5) * uLook;
   if (uOvercast > 0.0) hi *= 1.0 - uOvercast;
   // pictures (shop windows, signs, murals) and glass keep their own light
   if ((kind > 4.5 && kind < 6.5) || inside) hi = 0.0;
@@ -1892,12 +1900,14 @@ void main() {
   vec2 sv = vec2(dot(dir - uSunDisc, normalize(vec3(-uSunDisc.z, 0.0, uSunDisc.x))), dir.y - uSunDisc.y);
   float ringN = (vnoise(vec2(atan(sv.y, sv.x) * 7.0, 3.0)) - 0.5) * 0.006;
   // (the look: a bigger sun, and its gold wide over the end of the street)
-  float R = 0.03 - 0.004 * uLook;
-  float disc = (1.0 - smoothstep(R + ringN, R + 0.004 + ringN, sd)) * uSunDiscK;
+  float R = 0.03 + 0.008 * uLook;
+  // (the look: its edge soft, as a sun through warm air)
+  float disc = (1.0 - smoothstep(R + ringN * (1.0 - uLook), R + 0.004 + 0.014 * uLook + ringN * (1.0 - uLook), sd)) * uSunDiscK;
   vec3 sunC = mix(lin(uSunRing), lin(uSunCore), 1.0 - smoothstep(R * 0.3, R, sd));
-  col = mix(col, sunC * mix(2.6, 1.25, uLook), disc);
-  col += lin(uSunGlow) * exp(-sd * 20.0) * 0.45 * (1.0 - 0.7 * uLook) * uSunDiscK;
-  float glow = (disc * 0.6 + exp(-sd * 40.0) * 0.25 * uSunDiscK) * (1.0 - 0.8 * uLook);
+  col = mix(col, sunC * mix(2.6, 2.0, uLook), disc);
+  // (a tight glow round the disc, and a wide soft one - warm air round the sun, no hard edge to it)
+  col += lin(uSunGlow) * (exp(-sd * 20.0) * 0.45 * (1.0 - 0.6 * uLook) + uLook * (exp(-sd * 5.0) * 0.27 + exp(-sd * 1.7) * 0.1)) * uSunDiscK;
+  float glow = (disc * 0.6 + exp(-sd * 40.0) * 0.25 * uSunDiscK) * (1.0 - 0.66 * uLook);
   // a flash of lightning: the clouds light up from inside
   if (uFlash > 0.0) col += vec3(0.62, 0.68, 0.95) * uFlash * (0.25 + 0.5 * cl);
   gColor = vec4(col, clamp(glow, 0.0, 1.0));
