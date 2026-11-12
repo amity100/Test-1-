@@ -7,18 +7,22 @@ import { srgb, addLight, makeSurface } from '../render/materials.js';
 import { nextId, seeded } from './kit.js';
 import { CURB, STREETS, STREET_X0, STREET_X1, PROM_X1 } from './layout.js';
 import { ZONE } from '../render/look.js';
+import { GFX } from '../core/util.js';
 import { clump, globeLamp, planter } from './streetscape.js';
 import { bench } from './blocks.js';
 import { free, trashCan } from './streets.js';
+import { blossom, flowerMat } from './petals.js';
 
 // (round 8: the bougainvillea of the owner's pictures - deep magenta, not a pale pink the light washes out)
 const PINKS = [srgb(0.78, 0.06, 0.42), srgb(0.9, 0.1, 0.5), srgb(0.62, 0.04, 0.4), srgb(0.95, 0.16, 0.56), srgb(0.84, 0.08, 0.3)];
-const WARMS = [srgb(1.0, 0.5, 0.2), srgb(1.0, 0.74, 0.26), srgb(0.98, 0.94, 0.9), srgb(0.96, 0.3, 0.62)];
+const WARMS = [srgb(1.0, 0.46, 0.14), srgb(1.0, 0.7, 0.2), srgb(0.95, 0.24, 0.2), srgb(0.9, 0.16, 0.5)];
 const GREENS = [srgb(0.2, 0.46, 0.24), srgb(0.28, 0.56, 0.26), srgb(0.16, 0.38, 0.26)];
 const BANNERS = [srgb(0.46, 0.16, 0.6), srgb(0.86, 0.2, 0.5), srgb(1.0, 0.5, 0.2), srgb(0.2, 0.5, 0.62)];
 const WIRE = srgb(0.1, 0.08, 0.14);
 const GLOW = srgb(1.0, 0.82, 0.5);
 const TW = 3.2;
+// (the phone's light version: the flowers from fewer bracts)
+const DENS = GFX.lite ? 0.55 : 1;
 
 const _d = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -72,33 +76,56 @@ function puff(ctx, r, cx, cy, cz, rad, squash, color, mat, id) {
   ctx.B.add(mat, g, null, id, { color });
 }
 
-// bougainvillea down a front: from v1 down to v0 at u, widening as it falls
+// bougainvillea on a front (round 11, the owner's pictures): a mass of it at the first balcony, wide over the awnings and spilling
+// out from the wall, strands of it hanging down from the mass, and a thin climb of it up the wall above
 function cascade(ctx, r, f, u, v0, v1, w, side) {
-  const n = Math.max(16, Math.round((v1 - v0) * 12));
-  const idF = nextId();
-  const idG = nextId();
+  const o = { mat: ctx.M.flower, leafMat: ctx.M.leaf, idF: nextId(), idG: nextId(), base: null, greens: GREENS, green: 0.24 };
+  const base = r.pick(PINKS);
+  const vM = Math.min(v1 - 0.4, v0 + 1.5);
+  const half = r.range(1.8, 2.7);
+  // (in from the front's end, not round its corner)
+  u += side * half * 0.75;
+  // the mass: fullest in its middle
+  const n = Math.round(half * 16 * DENS);
   for (let i = 0; i < n; i++) {
-    const t = i / (n - 1);
-    const v = v1 - (v1 - v0) * t + r.range(-0.3, 0.3);
-    const uu = u + side * t * r.range(0.1, 1.3) + r.range(-0.4, 0.4);
-    const p = f.p(uu, v, w + r.range(-0.05, 0.22));
-    const green = r() < 0.3;
-    puff(ctx, r, p[0], p[1], p[2], r.range(0.15, 0.34), r.range(0.5, 0.9), (green ? r.pick(GREENS) : r.pick(PINKS)).clone().multiplyScalar(green ? r.range(0.9, 1.2) : r.range(0.75, 1.0)), green ? ctx.M.leaf : ctx.M.flower, green ? idG : idF);
+    const t = r.range(-1, 1);
+    const k = 1 - t * t * 0.7;
+    const p = f.p(u + t * half, vM + r.range(-0.7, 1.1) * k, w + r.range(0.05, 0.9) * k);
+    o.base = r() < 0.75 ? base : r.pick(PINKS);
+    blossom(ctx, r, p[0], p[1], p[2], r.range(0.36, 0.58) * (0.6 + 0.4 * k), Math.round(r.range(20, 28) * DENS), o);
   }
-  // (round 8: a mass of it where it comes over the top, spilling to both sides - the owner's pictures)
-  for (let i = 0; i < 16; i++) {
-    const p = f.p(u + r.range(-1.5, 1.5), v1 + r.range(-0.55, 0.35), w + r.range(0, 0.4));
-    const green = r() < 0.22;
-    puff(ctx, r, p[0], p[1], p[2], r.range(0.24, 0.46), r.range(0.55, 0.9), (green ? r.pick(GREENS) : r.pick(PINKS)).clone().multiplyScalar(green ? r.range(0.9, 1.2) : r.range(0.75, 1.0)), green ? ctx.M.leaf : ctx.M.flower, green ? idG : idF);
+  // the strands down from it
+  const strands = 3 + Math.floor(r() * 3);
+  for (let q = 0; q < strands; q++) {
+    const us = u + r.range(-1, 1) * half * 0.85;
+    const len = r.range(0.5, Math.max(0.6, vM - v0 + 0.5));
+    const wS = w + r.range(0.3, 0.75);
+    for (let d = 0.25; d < len; d += r.range(0.22, 0.34)) {
+      const p = f.p(us + r.range(-0.08, 0.08), vM - 0.3 - d, wS - d * 0.12);
+      o.base = base;
+      blossom(ctx, r, p[0], p[1], p[2], r.range(0.18, 0.27) * (1 - 0.4 * (d / len)), Math.round(r.range(10, 14) * DENS), o);
+    }
   }
+  // the climb above: sparse, mostly leaves
+  o.green = 0.5;
+  for (let v = vM + 0.7; v < v1; v += r.range(0.4, 0.7)) {
+    const p = f.p(u + side * (v - vM) * r.range(0.05, 0.3) + r.range(-0.25, 0.25), v, w + r.range(0, 0.15));
+    o.base = base;
+    blossom(ctx, r, p[0], p[1], p[2], r.range(0.2, 0.32), Math.round(r.range(9, 13) * DENS), o);
+  }
+}
+
+// a tuft of flowers (a basket, a pot, a wall's top): leaves under, the flower's bracts over them
+function tuft(ctx, r, x, y, z, rad, n, pal) {
+  blossom(ctx, r, x, y, z, rad, Math.round(n * 1.5 * DENS), { mat: ctx.M.flower, leafMat: ctx.M.leaf, idF: nextId(), idG: nextId(), base: r.pick(pal), greens: GREENS, green: 0.3, sq: 0.7 });
 }
 
 // a pot of flowers at the curb: the planter's leaves, and flowers over them
 function flowerPot(ctx, r, x, z) {
   planter(ctx, r, x, z, { r: 0.52, color: srgb(0.74, 0.42, 0.3), trim: srgb(0.56, 0.3, 0.22) });
-  for (let k = 0; k < 6; k++) {
-    const a = (k / 6) * Math.PI * 2 + r.range(-0.4, 0.4);
-    clump(ctx, r, x + Math.cos(a) * 0.3, CURB + 0.86 + r.range(0, 0.22), z + Math.sin(a) * 0.3, r.range(0.2, 0.3), 0.85, r.pick(k % 3 === 2 ? WARMS : PINKS).clone(), ctx.M.flower, false);
+  for (let k = 0; k < 5; k++) {
+    const a = (k / 5) * Math.PI * 2 + r.range(-0.4, 0.4);
+    tuft(ctx, r, x + Math.cos(a) * 0.28, CURB + 0.92 + r.range(0, 0.2), z + Math.sin(a) * 0.28, r.range(0.24, 0.32), 14, k % 3 === 2 ? WARMS : PINKS);
   }
 }
 
@@ -106,9 +133,7 @@ export function lookDress(ctx) {
   const dice = ctx.rng;
   const r = (ctx.rng = seeded(20261111));
   const M = ctx.M;
-  // the flowers' pen: the leaves', fuller (round 8: no light of its own - the hour's own lit windows' strength went into it, and
-  // every flower was white)
-  if (!M.flower) M.flower = makeSurface({ kind: 'leaf', vcolor: true, ang: 0.6, line: 0.3, objMask: true, wash: 0.9, density: 1.2 });
+  flowerMat(M);
   const hotels = ((ctx.ocean && ctx.ocean.hotels) || []).filter((h) => h.spec && h.spec.f && h.z1 > ZONE.z0 + 4 && h.z0 < ZONE.z1 - 4);
   for (const h of hotels) {
     const f = h.spec.f;
@@ -127,7 +152,8 @@ export function lookDress(ctx) {
         if (Math.abs(u - uD) < 2.0) continue;
         const p = f.p(u, CURB + 0.98 + r.range(-0.03, 0.06), TW + 0.02);
         const q = r();
-        clump(ctx, r, p[0], p[1], p[2], r.range(0.2, 0.3), 0.8, (q < 0.25 ? r.pick(GREENS) : q < 0.7 ? r.pick(PINKS) : r.pick(WARMS)).clone(), q < 0.25 ? null : M.flower, false);
+        if (q < 0.25) clump(ctx, r, p[0], p[1], p[2], r.range(0.2, 0.3), 0.8, r.pick(GREENS).clone(), null, false);
+        else tuft(ctx, r, p[0], p[1] + 0.05, p[2], r.range(0.2, 0.28), 11, q < 0.7 ? PINKS : WARMS);
       }
     }
   }
@@ -164,7 +190,7 @@ export function lookDress(ctx) {
       wire(ctx, [l.x, CURB + 3.75, l.z], [bx, CURB + 3.6, bz], 0.014);
       wire(ctx, [bx, CURB + 3.6, bz], [bx, CURB + 3.28, bz], 0.008);
       clump(ctx, r, bx, CURB + 3.2, bz, 0.3, 0.75, r.pick(GREENS).clone());
-      clump(ctx, r, bx + r.range(-0.08, 0.08), CURB + 3.34, bz + r.range(-0.08, 0.08), 0.26, 0.8, r.pick(k % 2 ? WARMS : PINKS).clone(), M.flower, false);
+      tuft(ctx, r, bx, CURB + 3.36, bz, 0.3, 16, k % 2 ? WARMS : PINKS);
     }
     // (the banner: across the way you walk, seen from along the street)
     const g = new THREE.BoxGeometry(0.56, 1.5, 0.03);
@@ -198,7 +224,7 @@ export function lookDress(ctx) {
           wire(ctx, [x, CURB + 3.75, z], [x, CURB + 3.6, bz], 0.014);
           wire(ctx, [x, CURB + 3.6, bz], [x, CURB + 3.28, bz], 0.008);
           clump(ctx, r, x, CURB + 3.2, bz, 0.3, 0.75, r.pick(GREENS).clone());
-          clump(ctx, r, x + r.range(-0.08, 0.08), CURB + 3.34, bz + r.range(-0.08, 0.08), 0.26, 0.8, r.pick(k % 2 ? WARMS : PINKS).clone(), M.flower, false);
+          tuft(ctx, r, x, CURB + 3.36, bz, 0.3, 16, k % 2 ? WARMS : PINKS);
         }
         const g = new THREE.BoxGeometry(0.56, 1.5, 0.03);
         g.translate(x + 0.42, CURB + 2.72, z);

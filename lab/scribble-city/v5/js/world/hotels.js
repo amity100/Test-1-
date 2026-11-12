@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { srgb, hex, addLight } from '../render/materials.js';
-import { nextId } from './kit.js';
+import { nextId, seeded } from './kit.js';
+import { blossom, flowerMat } from './petals.js';
 import { fbox, fcol, neonSign, roofStuff, backFront, adQuad, FH, GROUND, FRAME, frontMatrix } from './deco.js';
 import { CURB } from './layout.js';
 import { STYLE } from '../core/util.js';
@@ -21,6 +22,7 @@ import { Parts, FB, COL, SHUTTERS, diceAt, dialectOf, shopHardware, bladeSign, d
 const WHITE = srgb(0.98, 0.97, 0.95);
 // (the look's balcony flowers: pinks, an orange, a white - and the leaves under them)
 const LOOK_FLOWERS = [srgb(0.84, 0.08, 0.46), srgb(0.95, 0.16, 0.56), srgb(1.0, 0.5, 0.16), srgb(0.7, 0.05, 0.4), srgb(0.22, 0.5, 0.26)];
+const LOOK_GREENS = [srgb(0.22, 0.5, 0.26), srgb(0.16, 0.38, 0.26)];
 const LOOK_AC = srgb(0.8, 0.8, 0.82);
 const LOOK_AC_GRILLE = srgb(0.3, 0.3, 0.36);
 const GLASS_BLOCK = srgb(0.72, 0.9, 0.92);
@@ -602,9 +604,19 @@ export function oceanHotel(ctx, spec) {
             const w = (b1 - b0 - 0.8) / n;
             for (let q = 0; q < n; q++) {
               const ua = b0 + 0.4 + w * q + 0.12;
-              const col = LOOK_FLOWERS[(bi + q) % LOOK_FLOWERS.length];
-              fbox(ctx, f, M.leaf, ua, y + 0.96, 1.14, ua + w - 0.24, y + 1.22 + 0.06 * ((bi + q) % 2), 1.44, col, fid);
+              const ci = (bi + q) % LOOK_FLOWERS.length;
+              const col = LOOK_FLOWERS[ci];
+              // (round 11, the owner's word: not blocks of colour - the leaves' box, and the flowers over it in their small bracts)
               fbox(ctx, f, M.leaf, ua + 0.1, y + 0.86, 1.2, ua + w - 0.34, y + 1.0, 1.5, LOOK_FLOWERS[4], fid);
+              if (ci === 4) fbox(ctx, f, M.leaf, ua, y + 0.96, 1.14, ua + w - 0.24, y + 1.2, 1.44, col, fid);
+              else {
+                const rr = seeded(7000 + bi * 31 + q);
+                const nT = Math.max(2, Math.round((w - 0.24) / 0.42));
+                for (let t = 0; t < nT; t++) {
+                  const pp = f.p(ua + ((t + 0.5) / nT) * (w - 0.24), y + 1.1, 1.32);
+                  blossom(ctx, rr, pp[0], pp[1], pp[2], 0.24, 11, { mat: flowerMat(M), leafMat: M.leaf, idF: fid, idG: fid, base: col, greens: LOOK_GREENS, green: 0.25, sq: 0.7 });
+                }
+              }
             }
           }
         }
