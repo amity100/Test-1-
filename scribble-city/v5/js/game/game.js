@@ -971,10 +971,10 @@ export class Game {
       const dryWanted = () => {
         const wet = shared.uWet.value;
         if (!(P.low && STYLE.k > 0 && this.weather && !(this.weather.wet > 0))) return wanted();
-        shared.uWet.value = 0;
-        const w = wanted();
-        shared.uWet.value = wet;
-        return w;
+        // (the owner's phone, 18 frames a second under the look: there the whole street reads the mirror, so all of the city was drawn
+        // a second time for it. On a phone under the look, no rain falling: no mirror at all - the wet street and the bay hold the sky)
+        void wet;
+        return false;
       };
       P.mirrorWanted = () => dryWanted() && !(GFX.hallMirror && !GFX.off && P.sunIndoors && !(shared.uWet.value > 0) && !P.mirrorAlways);
     }
