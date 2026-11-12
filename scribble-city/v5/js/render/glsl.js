@@ -59,6 +59,9 @@ uniform vec4 uLightCol[MAX_LIGHTS];
 uniform float uLightN;
 uniform float uQuality;
 uniform float uPenLite;
+// (ROADMAP 20: how much of the new look there is here, 0..1 - render/look.js)
+uniform float uLook;
+uniform float uLookLow;
 uniform float uMirror;
 uniform sampler2D uObjMask;
 uniform vec4 uWErase[MAX_SPOTS];
@@ -166,7 +169,9 @@ vec3 skyColor(vec3 dir) {
   float az = max(dot(normalize(dir.xz + vec2(1e-5)), normalize(uSunDisc.xz)), 0.0);
   float band = (1.0 - smoothstep(0.0, 0.24, abs(el))) * (0.25 + 0.75 * pow(az, 4.0));
   c = mix(c, uSkySun, band * 0.5);
-  c += uSkySun * (pow(s, 16.0) * 0.55 + pow(s, 260.0) * 1.4);
+  // (the look, round 12 - the owner's word: the sun far too strong)
+  // (round 13, the owner's picture: a warm sun, soft and wide - about a third more than round 12 left of it, not the glare of round 10)
+  c += uSkySun * (pow(s, 16.0) * 0.55 + pow(s, 260.0) * 1.4) * (1.0 - 0.58 * uLook);
   if (el < 0.0) c = mix(c, uSkyHorizon * 0.5, smoothstep(0.0, -0.25, el));
   return c;
 }
@@ -179,6 +184,13 @@ vec3 applyFog(vec3 col, vec3 wp) {
   float k = 1.0 - exp(-dist * uFogDensity);
   k *= mix(1.0, 0.6, smoothstep(15.0, 160.0, wp.y));
   vec3 fc = mix(skyColor(normalize(vec3(dir.x, max(dir.y, 0.0) * 0.3 + 0.05, dir.z))), uSkyTop, 0.62) * 0.85;
+  // (the look, round 13 - the owner's picture: what lies toward the low sun melts into its warm haze, the further the more - the
+  // light is in the air, not only in the sky)
+  if (uLook > 0.0) {
+    float ts = pow(max(dot(normalize(vec3(dir.x, 0.0, dir.z) + vec3(1e-5)), normalize(vec3(uSunDisc.x, 0.0, uSunDisc.z))), 0.0), 5.0) * uLook * smoothstep(-0.05, 0.02, uSunDisc.y);
+    fc = mix(fc, uSkySun * 1.05, ts * 0.75);
+    k += ts * (1.0 - exp(-dist * 0.007)) * 0.3;
+  }
   return mix(col, fc, clamp(k, 0.0, 1.0));
 }
 
@@ -263,6 +275,9 @@ vec3 ambientLight(vec3 n) {
   vec3 c = a + uSkyHorizon * 0.45 * toSun + uSkyMid * 0.16 * (1.0 - abs(n.y));
   // a flash of lightning lights everything for a moment, most of all what faces the sky
   if (uFlash > 0.0) c += vec3(0.62, 0.68, 0.9) * uFlash * (0.4 + 0.4 * max(n.y, 0.0));
+  // (the look, round 10 - the owner's pictures are lit from behind: what the low sun and the lamps do not reach is deep violet, and
+  // the light is in the windows, the lamps, the sky and the wet street. The shade was as bright as the light)
+  c = mix(c, c * vec3(0.8, 0.7, 0.95), uLook);
   return c;
 }
 
@@ -414,7 +429,8 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
   vec3 mid = mix(shade, lit, light);
   float far = gFar;
   // the paper shows between the strokes only where the drawing is light; the shade is built up dark
-  float paperK = (1.0 - wash) * 0.55 * smoothstep(0.08, 0.9, lum(mid)) * (1.0 - 0.55 * far);
+  // (ROADMAP 20, the look: the colour laid full under the strokes - little of the paper between them)
+  float paperK = (1.0 - wash) * 0.55 * smoothstep(0.08, 0.9, lum(mid)) * (1.0 - 0.55 * far) * (1.0 - 0.72 * uLook);
   vec3 col = mix(mid, uPaper * 0.97, paperK);
   float wpx = 1.9;
   // on the ground the layers stay close to one direction: strokes turned towards the eye would
@@ -422,6 +438,8 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
   float spread = mix(1.0, 0.32, onGround);
   // (D's and E's say in where they go)
   float dk = smoothstep(0.3, 0.035, lum(mid)) * mix(1.0, 0.35, onGround) * (1.0 - 0.75 * far);
+  // (the look: the dark ink hatched into whatever is in the shade, not only into what is dark itself)
+  dk = max(dk, uLook * (1.0 - uLookLow) * (1.0 - light) * 0.3 * (1.0 - 0.8 * far) * mix(1.0, 0.4, onGround));
   float hiAll = max(hi, smoothstep(0.55, 1.0, light) * 0.12 * (1.0 - onGround)) * (1.0 - 0.6 * far);
   int pensN = uQuality > -1.0 ? 5 : 0;
   // (ROADMAP 19.7, phones only - uPenLite, render/pipeline.js) far down a street fewer pens, as an artist draws the far end of it:
@@ -466,19 +484,23 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
       seed = 67.0;
       lenK = 0.9;
     }
+    // (ROADMAP 20, the look: the cross-strokes and the dark ink scribbled - the pen going back and forth a little along each, a hand's)
+    gZig = (i == 1 || i == 3) ? 0.16 * uLook * (1.0 - uLookLow) : 0.0;
     vec2 L = penLayer(p, dpx, dpy, a, gap, w, seed, lenK);
+    gZig = 0.0;
     vec3 pc;
     float k;
     if (i == 0) {
       // A: the local colour; each stroke is a pen of the light or a pen of the shade (far away the
       // pens are closer to each other in colour and in strength)
       pc = fract(L.y * 3.77) < light ? lit : shade;
-      pc = hueShift(saturateC(pc, 1.15), (fract(L.y * 5.31) - 0.5) * mix(0.8, 0.3, far)) * mix(0.66 + 0.7 * fract(L.y * 9.71), 1.0, far * 0.65);
+      // (the look: the strokes nearer the colour itself - fuller, less of a scatter of hues and of light and dark)
+      pc = hueShift(saturateC(pc, 1.15 + 0.3 * uLook), (fract(L.y * 5.31) - 0.5) * mix(0.8, 0.3, far) * (1.0 - 0.45 * uLook)) * mix(mix(0.66 + 0.7 * fract(L.y * 9.71), 1.0, far * 0.65), 0.86 + 0.28 * fract(L.y * 9.71), uLook);
       k = L.x * step(fract(L.y * 7.13), 0.95 * dens) * (1.0 - 0.5 * far);
     } else if (i == 1) {
       // B: cross-strokes deepening the shade, in a cooler pen
-      pc = hueShift(shade * 0.7, -0.38 + (fract(L.y * 5.31) - 0.5) * 0.45);
-      k = L.x * step(fract(L.y * 7.13), ((1.0 - light) * 0.78 + 0.06) * dens) * (1.0 - 0.7 * far);
+      pc = hueShift(shade * mix(0.7, 0.62, uLook), -0.38 + (fract(L.y * 5.31) - 0.5) * 0.45);
+      k = L.x * step(fract(L.y * 7.13), ((1.0 - light) * 0.78 + 0.06) * dens * (1.0 + 0.3 * uLook)) * (1.0 - 0.7 * far);
     } else if (i == 2) {
       // C: a neighbouring colour now and then
       pc = hueShift(mid, fract(L.y * 5.31) > 0.5 ? 0.85 : -0.85) * 1.08;
@@ -1393,7 +1415,18 @@ void main() {
   // under a grey sky the light comes from all of it: soft, a little more on what faces up
   if (uOvercast > 0.0) light = mix(light, 0.32 + 0.3 * max(N.y, 0.0), uOvercast * 0.85);
   // in the rain what is flat and outdoors gets darker and deeper in colour
-  if (uWet > 0.0 && !inside && N.y > 0.6 && kind < 8.5) alb *= 1.0 - 0.26 * uWet * smoothstep(0.6, 0.95, N.y);
+  // (the look: the wet stone and asphalt darker and cooler under the lights in them)
+  if (uWet > 0.0 && !inside && N.y > 0.6 && kind < 8.5) alb *= mix(vec3(1.0), vec3(1.5, 1.32, 1.8), uLook) * (1.0 - 0.26 * uWet * smoothstep(0.6, 0.95, N.y));
+  if (uLook > 0.0 && !inside) {
+    // (the look, round 9: the fronts' own colour fuller and a little deeper - lit, they went to the page's white)
+    if (kind < 0.5) alb = mix(alb, saturateC(alb, 1.45) * 0.84, uLook);
+    // (and cracks in the asphalt, drawn: thin dark lines along the noise's own contours, here and there, near the eye)
+    if (kind > 1.5 && kind < 2.5 && uLookLow < 0.5) {
+      float cdist = length(cameraPosition - vWP);
+      float crack = (1.0 - smoothstep(0.0, 0.011, abs(vnoise(vWP.xz * 0.42 + 31.0) - 0.5))) * step(0.5, vnoise(vWP.xz * 0.09 + 3.0)) * (1.0 - smoothstep(22.0, 55.0, cdist));
+      alb *= 1.0 - 0.6 * crack * uLook;
+    }
+  }
   vec3 amb = ambientLight(N);
   vec3 pts = (probe & 4) != 0 ? vec3(0.0) : pointLights(vWP, N);
   vec3 key = uSunCol;
@@ -1438,23 +1471,34 @@ void main() {
     // the colours richer than outside, the way a lit shop window looks from the street
     float up = N.y * 0.5 + 0.5;
     float hgt = clamp((vWP.y - 0.15) / 3.3, 0.0, 1.0);
-    alb = saturateC(alb, 1.3);
+    alb = saturateC(alb, 1.3) * mix(vec3(1.0), vec3(0.94, 0.78, 0.6), uLook);
     amb = mix(vec3(0.62, 0.3, 0.3), vec3(1.0, 0.66, 0.4), up * 0.6 + hgt * 0.4) * 1.0;
     key = vec3(1.0, 0.68, 0.38) * 1.35;
+    // (the look, round 8: the rooms amber from the street, as in the owner's pictures - not a cream page)
+    amb = mix(amb, amb * vec3(1.0, 0.74, 0.46), uLook);
+    key = mix(key, vec3(1.0, 0.52, 0.2) * 1.35, uLook);
     light = clamp(0.25 + 0.45 * up + 0.3 * hgt, 0.0, 1.0);
   }
   vec3 shade = alb * (amb + pts);
   vec3 lit = alb * (amb + pts + key);
+  // (the look, round 10: a room seen from the street is amber - its own white light and its white walls were a blank page)
+  if (uLook > 0.0 && (inside || store) && !hall) {
+    vec3 roomT = mix(vec3(1.0), vec3(0.96, 0.66, 0.36), uLook);
+    shade *= roomT * mix(1.0, 0.78, uLook);
+    lit *= roomT * mix(1.0, 0.86, uLook);
+  }
   float back = clamp(dot(-V, uSunDir) * 1.3, 0.0, 1.0);
   // the rim the low sun draws on edges turned towards it
   float hi = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0) * back * sh * smoothstep(-0.15, 0.35, ndl) * 0.9;
   if (N.y > 0.7) hi *= 0.25;
+  // (the look: the gold edge the sun behind everything draws round it, bolder)
+  hi *= 1.0 + (N.y > 0.7 ? 0.0 : 0.5) * uLook;
   if (uOvercast > 0.0) hi *= 1.0 - uOvercast;
   // pictures (shop windows, signs, murals) and glass keep their own light
   if ((kind > 4.5 && kind < 6.5) || inside) hi = 0.0;
   vec3 em = uEmissive * (uUseEmMap > 0.5 ? texture(uEmMap, vUv + uScroll * uTime, uMipBias).rgb : vec3(1.0));
   // a room glows a little out into the evening
-  if (inside) em += alb * (hall || store ? vec3(0.07) : casino ? vec3(0.06, 0.04, 0.02) : club ? vec3(0.03, 0.02, 0.05) : vec3(0.32, 0.2, 0.1));
+  if (inside) em += alb * (hall || store ? vec3(0.07) : casino ? vec3(0.06, 0.04, 0.02) : club ? vec3(0.03, 0.02, 0.05) : mix(vec3(0.32, 0.2, 0.1), vec3(0.44, 0.22, 0.07), uLook));
   if (uNeonMask > 0.5) em = uEmissive * tex.rgb;
   else if (uEmVColor > 0.5) em *= vCol;
 #ifdef USE_DENTS
@@ -1541,7 +1585,9 @@ void main() {
     // windows: dark glass, the sky in it, some lit from inside
     float on = step(h11(vId * 17.31 + uObj * 91.0), uLit * uLitK);
     vec3 warm = mix(vec3(1.0, 0.62, 0.3), vec3(1.0, 0.82, 0.5), h11(vId * 7.7 + 3.0));
-    em += warm * on * 1.25;
+    // (the look: the lit windows amber, and brighter against the darker fronts)
+    warm = mix(warm, warm * vec3(1.0, 0.84, 0.6), uLook);
+    em += warm * on * (1.25 + 0.15 * uLook);
     lit = mix(lit, warm * 1.4, on * 0.8);
     shade = mix(shade, warm * 1.1, on * 0.8);
   }
@@ -1588,31 +1634,49 @@ void main() {
     vec2 ruv = vRefl.xy / vRefl.w;
     float rip = street ? 0.004 : 0.012;
     vec2 wob = (vec2(vnoise(vWP.xz * vec2(0.9, 0.25) + uTime * vec2(0.0, 0.3)), vnoise(vWP.xz * 0.6 + 7.0)) - 0.5) * rip;
+    // (a wet street: puddles, wider the wetter, and between them a thin film)
+    float pud = street ? smoothstep(0.3 - 0.3 * uWet, 0.72 - 0.34 * uWet, vnoise(vWP.xz * vec2(0.21, 0.09))) : 1.0;
+    // (the look, round 14 - the owner's picture of a street in a light rain: water lies in patches, long ones along the street, and
+    // between them the asphalt is only damp)
+    if (street && uLook > 0.0) pud = mix(pud, smoothstep(0.4, 0.57, vnoise(vWP.xz * vec2(0.21, 0.09)) + (vnoise(vWP.xz * 0.9 + 4.0) - 0.5) * 0.14), uLook);
+    // (ROADMAP 20, the look: between the puddles the damp stone is rough - what it holds of the lights is scattered, not a mirror's picture)
+    if (street && uLook > 0.0 && uLookLow < 0.5) wob += (vec2(vnoise(vWP.xz * 7.0), vnoise(vWP.xz * 7.0 + 5.0)) - 0.5) * 0.03 * uLook * (1.0 - pud);
     if (uRain > 0.0) {
       // the rain falling into it: rings that push the mirror image about
       rings = rainRings(vWP.xz, length(cameraPosition - vWP), ringPx);
+      // (the look: the drops' rings where the water lies)
+      if (street) rings *= mix(1.0, smoothstep(0.3, 0.8, pud), uLook);
       wob += rings.xy * 0.006;
     }
     vec3 r = vec3(0.0);
-    if (uReflOn > 0.5) {
+    // (vRefl.w: a point behind the mirror's eye has no place in its picture - never so with the mirror drawn, and so close under
+    // a phone's eye looking down, whose mirror is the frame before: render/pipeline.js fakeMirror)
+    if (uReflOn > 0.5 && vRefl.w > 0.0) {
       // (textureLod: the mirror's picture has one size only, so it is the very same colour; but a
       // loop that asks for the plain texture() is one that the browser's translation into Direct3D,
       // on Windows, has to work out for every pixel of every surface, mirror or not - its branches
       // all flattened)
-      for (int i = 0; i < 5; i++) {
-        float o = (float(i) - 2.0) * (street ? 0.012 : 0.006);
+      // (the look on a phone: two readings of the mirror, wider apart, for the five)
+      int taps = uLookLow > 0.5 ? 2 : 5;
+      for (int i = 0; i < taps; i++) {
+        // (the look: the lights drawn down into longer streaks)
+        float o = (uLookLow > 0.5 ? (float(i) - 0.5) * 2.4 : float(i) - 2.0) * (street ? (0.012 + 0.012 * uLook) : 0.006);
         r += textureLod(uRefl, clamp(ruv + wob + vec2(0.0, o), uReflLo, 1.0 - uReflLo) * uReflK, 0.0).rgb;
       }
-      r *= 0.2;
+      r /= float(taps);
     } else r = skyColor(reflect(-V, N)) * 0.9;
-    float fr = mix(0.05, street ? 0.72 : 0.92, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0));
-    // (a wet street: puddles, wider the wetter, and between them a thin film)
-    float wetK = street ? uWetK * uWet * (0.25 + 0.75 * smoothstep(0.3 - 0.3 * uWet, 0.72 - 0.34 * uWet, vnoise(vWP.xz * vec2(0.21, 0.09)))) : uWetK;
+    // (the look: as wet asphalt holds the light - almost nothing looking down at it, more the lower you look across it, never a sheet of ice)
+    // (as water on a road holds the light: next to nothing looking down at it, much of it far down the street - and the puddles hold
+    // it, the damp asphalt between them only a sheen)
+    float fr = mix(0.05 - 0.01 * uLook, street ? 0.72 - 0.1 * uLook : 0.92, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0 + 1.0 * uLook));
+    float wetK = street ? uWetK * mix(uWet * (0.25 + 0.75 * pud), 0.22 + 0.76 * pud, uLook) : uWetK;
     // under the pens, the street holds the mirror image; the pens take their colours from it
     float k = fr * wetK;
     lit = mix(lit, r, k * 0.8);
     shade = mix(shade, r * 0.8, k * 0.8);
     light = mix(light, 0.5, k * 0.6);
+    // (the look: where the street holds the mirror image the pens are fewer - the picture in it reads)
+    dens *= 1.0 - (0.4 * k + 0.3 * pud * step(0.5, float(street))) * uLook;
   }
   if (kind > 7.5 && kind < 8.5) {
     // neon tubes: almost no pen, just light
@@ -1652,7 +1716,7 @@ void main() {
   vec3 col = (probe & 1) != 0 ? mix(shade, lit, light) : drawPens(p, dpx, dpy, lit, shade, light, hi, dens, ang, wash, step(0.7, N.y));
 #endif
   // the rings on the puddles: a pale pen, the sky caught in their slopes
-  if (rings.z > 0.0) col = mix(col, mix(uPaper, skyColor(vec3(0.0, 1.0, 0.0)), 0.5) * 0.9, rings.z * 0.42);
+  if (rings.z > 0.0) col = mix(col, mix(uPaper, skyColor(vec3(0.0, 1.0, 0.0)), 0.5) * 0.9, rings.z * mix(0.42, 0.2, uLook));
   col += em;
   if ((probe & 8) == 0) col = applyFog(col, vWP);
   gColor = vec4(col, clamp(lum(em) * 0.3 - 0.15, 0.0, 1.0));
@@ -1705,6 +1769,35 @@ vec3 skyPen(float el, float r, float toSun) {
   return mix(mix(lin(uSkyPen[i]), lin(uSkyPen[4 + i]), a), lin(uSkyPen[8 + i]), b);
 }
 
+// the sky's strokes over col, for one way of laying the sky out flat (p: where on that page, dpx, dpy: a pixel's step on it)
+vec3 skyStrokes(vec3 col, vec2 p, vec2 dpx, vec2 dpy, float el, float toSun, float cl, vec3 cloudCol, float cl2, float clEdge, float boost) {
+  // A: the main scribble, diagonal, every stroke its own pen
+  gZig = 0.26;
+  vec2 A = penLayer(p, dpx, dpy, 0.38, 3.6, 2.5, 5.0, 1.8);
+  vec3 pa = skyPen(el + (fract(A.y * 3.77) - 0.5) * 0.08, fract(A.y * 5.31), toSun);
+  pa = mix(pa, lin(uCloudC[0]), cl * step(0.5, fract(A.y * 2.3)) * (1.0 - toSun * 0.6) * 0.8);
+  pa *= (0.78 + 0.44 * fract(A.y * 9.71)) * boost;
+  // (the look's clouds: the strokes over them in their own colours)
+  pa = mix(pa, cloudCol * (0.8 + 0.4 * fract(A.y * 9.71)), cl2 * 0.85);
+  col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.9 * uPenDens));
+  // B: across it, looser
+  gZig = 0.38;
+  vec2 B = penLayer(p, dpx, dpy, -0.22, 4.4, 2.1, 9.0, 1.4);
+  vec3 pb = skyPen(el + (fract(B.y * 3.77) - 0.5) * 0.12, fract(B.y * 5.31), toSun) * (0.8 + 0.4 * fract(B.y * 9.71)) * boost;
+  pb = mix(pb, lin(uCloudC[1]) * 1.3, cl * toSun * step(0.5, fract(B.y * 2.9)));
+  col = mix(col, pb, B.x * step(fract(B.y * 7.13), (0.62 + 0.3 * cl) * uPenDens));
+  if (uQuality > 0.5) {
+    // C: a few steep accents in a darker pen
+    gZig = 0.18;
+    vec2 C = penLayer(p, dpx, dpy, 1.05, 5.0, 1.6, 13.0, 1.0);
+    vec3 pc = skyPen(el + 0.12, fract(C.y * 5.31), toSun) * 0.7;
+    col = mix(col, pc, C.x * step(fract(C.y * 7.13), (0.22 + 0.3 * cl) * uPenDens));
+    // (the look's clouds: their edges scribbled in a dark pen)
+    col = mix(col, lin(uCloudC[0]) * 0.3, min(1.0, C.x * 1.6) * clEdge);
+  }
+  return col;
+}
+
 void main() {
   if (uDepthOnly > 0.5) discard;
 #ifdef DEFERRED
@@ -1719,42 +1812,57 @@ void main() {
   vec2 dpy = dFdy(p) * uPxK;
   if (abs(dpx.x) > 100.0) dpx.x = 0.0;
   if (abs(dpy.x) > 100.0) dpy.x = 0.0;
+  vec2 p2 = vec2(atan(-dir.x, dir.z) + 9.0, el) * 220.0;
+  vec2 dpx2 = dFdx(p2) * uPxK;
+  vec2 dpy2 = dFdy(p2) * uPxK;
+  if (abs(dpx2.x) > 100.0) dpx2.x = 0.0;
+  if (abs(dpy2.x) > 100.0) dpy2.x = 0.0;
+  float seamK = smoothstep(2.9, 3.1, abs(az));
   vec3 sky = skyColor(dir);
   float toSun = pow(max(dot(normalize(dir.xz + vec2(1e-5)), normalize(uSunDisc.xz)), 0.0), 2.0);
   // clouds: long bands over the horizon, dark bellies, bright where they face the sun
   float cn = fbm(vec2(az * 2.4 + uTime * 0.004, el * 13.0)) * 0.7 + fbm(vec2(az * 7.0, el * 34.0) + 3.0) * 0.3;
   float cl = smoothstep(0.5, 0.66, cn) * smoothstep(0.03, 0.08, el) * (1.0 - smoothstep(0.22, 0.45, el));
+  // (the look: the old bands, laid along the sky's page, end before the line where it meets itself)
+  cl *= 1.0 - seamK * step(0.001, uLook);
   if (uOvercast > 0.0) {
     // a grey sky (game/weather.js): the clouds close over all of it, lumpy, drifting
     float cv = fbm(vec2(az * 1.3 + uTime * 0.01, el * 4.2) + 11.0) * 0.6 + cn * 0.4;
     cl = max(cl, smoothstep(0.62 - 0.4 * uOvercast, 0.8 - 0.36 * uOvercast, cv) * smoothstep(0.0, 0.05, el) * uOvercast);
   }
+  // (ROADMAP 20, the look: heaped clouds up the evening sky - their bellies in the shade's colour, their undersides and the side to the
+  // sun in its light, a scribbled dark line where each ends)
+  float cl2 = 0.0;
+  float clEdge = 0.0;
+  float clLit = 0.0;
+  if (uLook > 0.0) {
+    // (on a flat layer over the city, seen from under it: the same all the way round, no line where the sky's page meets itself)
+    vec2 cq = dir.xz / (max(dir.y, 0.0) + 0.3);
+    // (on a phone, uLookLow: each from one reading of the noise, not three)
+    float n1 = uLookLow > 0.5 ? vnoise(cq * 1.1 + vec2(uTime * 0.003, 21.0)) : fbm(cq * 0.85 + vec2(uTime * 0.003, 21.0));
+    float n2 = uLookLow > 0.5 ? vnoise(cq * 3.4 + 7.0) : fbm(cq * 2.9 + 7.0);
+    float cm = n1 * 0.72 + n2 * 0.28;
+    float band = smoothstep(0.06, 0.16, el) * (1.0 - smoothstep(0.55, 0.95, el));
+    cl2 = smoothstep(0.455, 0.52, cm) * band * uLook;
+    clEdge = smoothstep(0.425, 0.455, cm) * (1.0 - smoothstep(0.455, 0.5, cm)) * band * uLook;
+    // (lit from below and from the sun's side: the lower part of each heap, more toward the sun)
+    float under = (uLookLow > 0.5 ? vnoise(cq * 1.07 * 1.1 + vec2(uTime * 0.003, 21.0)) : fbm(cq * 1.07 * 0.85 + vec2(uTime * 0.003, 21.0))) * 0.72 + n2 * 0.28;
+    clLit = clamp((cm - under) * 14.0 + 0.3 + 0.45 * toSun, 0.0, 1.0);
+  }
   // the page shows between the strokes, tinted by the sky
   // (the pens fewer - uPenDens: the sky itself, laid on, less of the page between)
   vec3 col = mix(uPaper * 0.97, sky, mix(0.97, 0.62, clamp(uPenDens, 0.0, 1.0)));
+  vec3 cloudCol = mix(lin(uCloudC[0]), lin(uCloudC[1]) * 1.2, clLit);
+  col = mix(col, cloudCol, cl2 * 0.92);
   float boost = 1.0 + 0.5 * exp(-acos(clamp(dot(dir, uSunDisc), -1.0, 1.0)) * 6.0);
   // (the graphics card's own test: the sky's pens left out, game/perf.js)
   if ((int(uProbe + 0.5) & 1) == 0) {
-    // A: the main scribble, diagonal, every stroke its own pen
-    gZig = 0.26;
-    vec2 A = penLayer(p, dpx, dpy, 0.38, 3.6, 2.5, 5.0, 1.8);
-    vec3 pa = skyPen(el + (fract(A.y * 3.77) - 0.5) * 0.08, fract(A.y * 5.31), toSun);
-    pa = mix(pa, lin(uCloudC[0]), cl * step(0.5, fract(A.y * 2.3)) * (1.0 - toSun * 0.6) * 0.8);
-    pa *= (0.78 + 0.44 * fract(A.y * 9.71)) * boost;
-    col = mix(col, pa, A.x * step(fract(A.y * 7.13), 0.9 * uPenDens));
-    // B: across it, looser
-    gZig = 0.38;
-    vec2 B = penLayer(p, dpx, dpy, -0.22, 4.4, 2.1, 9.0, 1.4);
-    vec3 pb = skyPen(el + (fract(B.y * 3.77) - 0.5) * 0.12, fract(B.y * 5.31), toSun) * (0.8 + 0.4 * fract(B.y * 9.71)) * boost;
-    pb = mix(pb, lin(uCloudC[1]) * 1.3, cl * toSun * step(0.5, fract(B.y * 2.9)));
-    col = mix(col, pb, B.x * step(fract(B.y * 7.13), (0.62 + 0.3 * cl) * uPenDens));
-    if (uQuality > 0.5) {
-      // C: a few steep accents in a darker pen
-      gZig = 0.18;
-      vec2 C = penLayer(p, dpx, dpy, 1.05, 5.0, 1.6, 13.0, 1.0);
-      vec3 pc = skyPen(el + 0.12, fract(C.y * 5.31), toSun) * 0.7;
-      col = mix(col, pc, C.x * step(fract(C.y * 7.13), (0.22 + 0.3 * cl) * uPenDens));
-    }
+    vec3 base = col;
+    col = skyStrokes(base, p, dpx, dpy, el, toSun, cl, cloudCol, cl2, clEdge, boost);
+    // (ROADMAP 20, the owner's word: "the sky looks cut, as if two sides of a page were joined") the page the sky is laid out on
+    // meets itself due south, and the strokes of its two ends did not: towards that line the strokes of a second page, joined on
+    // the other side of the sky, come in over the first's - across the line itself they are all the second's, unbroken
+    if (uLook > 0.0 && seamK > 0.0) col = mix(col, skyStrokes(base, p2, dpx2, dpy2, el, toSun, cl, cloudCol, cl2, clEdge, boost), seamK);
   }
   gZig = 0.0;
   if (uStars > 0.01 && el > 0.03) {
@@ -1798,12 +1906,15 @@ void main() {
   float sd = acos(clamp(dot(dir, uSunDisc), -1.0, 1.0));
   vec2 sv = vec2(dot(dir - uSunDisc, normalize(vec3(-uSunDisc.z, 0.0, uSunDisc.x))), dir.y - uSunDisc.y);
   float ringN = (vnoise(vec2(atan(sv.y, sv.x) * 7.0, 3.0)) - 0.5) * 0.006;
-  float R = 0.03;
-  float disc = (1.0 - smoothstep(R + ringN, R + 0.004 + ringN, sd)) * uSunDiscK;
+  // (the look: a bigger sun, and its gold wide over the end of the street)
+  float R = 0.03 + 0.008 * uLook;
+  // (the look: its edge soft, as a sun through warm air)
+  float disc = (1.0 - smoothstep(R + ringN * (1.0 - uLook), R + 0.004 + 0.014 * uLook + ringN * (1.0 - uLook), sd)) * uSunDiscK;
   vec3 sunC = mix(lin(uSunRing), lin(uSunCore), 1.0 - smoothstep(R * 0.3, R, sd));
-  col = mix(col, sunC * 2.6, disc);
-  col += lin(uSunGlow) * exp(-sd * 20.0) * 0.45 * uSunDiscK;
-  float glow = disc * 0.6 + exp(-sd * 40.0) * 0.25 * uSunDiscK;
+  col = mix(col, sunC * mix(2.6, 2.0, uLook), disc);
+  // (a tight glow round the disc, and a wide soft one - warm air round the sun, no hard edge to it)
+  col += lin(uSunGlow) * (exp(-sd * 20.0) * 0.45 * (1.0 - 0.6 * uLook) + uLook * (exp(-sd * 5.0) * 0.27 + exp(-sd * 1.7) * 0.1)) * uSunDiscK;
+  float glow = (disc * 0.6 + exp(-sd * 40.0) * 0.25 * uSunDiscK) * (1.0 - 0.66 * uLook);
   // a flash of lightning: the clouds light up from inside
   if (uFlash > 0.0) col += vec3(0.62, 0.68, 0.95) * uFlash * (0.25 + 0.5 * cl);
   gColor = vec4(col, clamp(glow, 0.0, 1.0));

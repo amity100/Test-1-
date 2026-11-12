@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { STYLE } from '../core/util.js';
 import { srgb, hex, addLight, mergeMoving } from '../render/materials.js';
 import { nextId, Facade, Batch } from './kit.js';
 import { fbox, neonSign, adQuad, frontMatrix } from './deco.js';
@@ -315,7 +316,9 @@ function terrace(ctx, f, info, spec) {
         const u = a + (b - a) * t;
         const v = 2.62 - Math.sin(t * Math.PI) * 0.28;
         const p = f.p(u, v, TW - 0.12);
-        ctx.B.box(M.bulb, p[0] - 0.05, p[1] - 0.05, p[2] - 0.05, p[0] + 0.05, p[1] + 0.05, p[2] + 0.05, nextId(), { color: bulbCol });
+        // (ROADMAP 20, the look: the bulbs bigger)
+        const bs = STYLE.on ? 0.085 : 0.05;
+        ctx.B.box(M.bulb, p[0] - bs, p[1] - bs, p[2] - bs, p[0] + bs, p[1] + bs, p[2] + bs, nextId(), { color: bulbCol });
       }
     }
     for (const u of [u0, u1]) fbox(ctx, f, M.frame, u - 0.035, CURB + 0.8, TW - 0.15, u + 0.035, 2.66, TW - 0.08, srgb(0.2, 0.18, 0.24));

@@ -35,7 +35,8 @@ import { CarRenderer, KINDS } from '../render/cars.js';
 import { buildWeaponModel } from './items.js';
 import { openWall } from '../world/rooms.js';
 import { BLACK_INK } from '../render/LineBatch.js';
-import { clamp, smoothstep, dampAngle, GFX } from '../core/util.js';
+import { clamp, smoothstep, dampAngle, GFX, STYLE } from '../core/util.js';
+import { lookFrame } from '../render/look.js';
 import { groundHeight } from '../world/layout.js';
 import { DayNight } from './daynight.js';
 import { Weather } from './weather.js';
@@ -939,15 +940,34 @@ export class Game {
       document.body.appendChild(F.el);
     }
     F.el.textContent = `${Math.round((F.n * 1000) / (now - F.t0))} פריימים בשנייה`;
+    // (?fps=2: and under it what the pace has chosen and why, and the processor's and the card's share of a frame - one picture of the
+    // screen tells where the time goes)
+    if (this.params.get('fps') === '2' && this.pace) {
+      const c = this.pace.ctl;
+      let extra = '';
+      try {
+        extra = `${this.pace.line()}\nמעבד ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · פריים ${c && c.ema ? c.ema.toFixed(1) : '?'}ms · אנשים ${this.civilians ? this.civilians.list.length : '?'}`;
+      } catch (e) {
+        extra = String(e && e.message);
+      }
+      F.el.style.whiteSpace = 'pre-line';
+      F.el.style.font = '600 11px system-ui,sans-serif';
+      F.el.style.maxWidth = '70vw';
+      F.el.textContent += '\n' + extra;
+    }
     F.n = 0;
     F.t0 = now;
   }
 
   renderFrame() {
     this.fpsTick();
+    // (ROADMAP 20: the look by where the camera is - render/look.js)
+    lookFrame(this);
     // (ROADMAP 19.7, phones: far down a street fewer pens - render/glsl.js drawPens; 'as before' without, game/perf.js)
     // (ROADMAP 19.13: the light version's - 2 - from the middle distance)
     shared.uPenLite.value = GFX.penLite && !GFX.off ? (GFX.lite ? 2 : 1) : 0;
+    this.pipe.liteShadowEvery = GFX.lite && !GFX.off ? 2 : 1;
+    this.pipe.liteMirror = GFX.lite && !GFX.off;
     // the sun's box follows a point ahead of the camera
     const c = this.camera.position;
     const f = this.camera.getWorldDirection(this._fwd || (this._fwd = new THREE.Vector3()));
@@ -963,7 +983,17 @@ export class Game {
       const P = this.pipe;
       const wanted = P.mirrorWanted.bind(P);
       P._hallMirror = true;
-      P.mirrorWanted = () => wanted() && !(GFX.hallMirror && !GFX.off && P.sunIndoors && !(shared.uWet.value > 0) && !P.mirrorAlways);
+      // (ROADMAP 20: a phone under the look - the street is wet with no rain: the city is not drawn a second time for it, the wet street
+      // holds the sky; with rain, or water in sight, as it always was)
+      const dryWanted = () => {
+        const wet = shared.uWet.value;
+        if (!(P.low && STYLE.k > 0 && this.weather && !(this.weather.wet > 0))) return wanted();
+        shared.uWet.value = 0;
+        const w = wanted();
+        shared.uWet.value = wet;
+        return w;
+      };
+      P.mirrorWanted = () => dryWanted() && !(GFX.hallMirror && !GFX.off && P.sunIndoors && !(shared.uWet.value > 0) && !P.mirrorAlways);
     }
     // (under the water you see a few metres: ROADMAP 5.2)
     const fog = shared.uFogDensity.value;

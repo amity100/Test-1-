@@ -428,7 +428,7 @@ export class Traffic {
       // its avenues look empty)
       const main = !game.classic && p.x < -330;
       // (ROADMAP 19.13, the phone's light version: 14 and 11)
-      const max = Math.round((game.touch ? (GFX.lite ? (main ? 14 : 11) : main ? 20 : 16) : main ? 44 : 32) * (game.rhythm ? game.rhythm.cars : 1));
+      const max = Math.round((game.touch ? (GFX.lite ? (main ? 10 : 8) : main ? 20 : 16) : main ? 44 : 32) * (game.rhythm ? game.rhythm.cars : 1));
       let n = 0;
       let buses = 0;
       for (const c of this.list) {

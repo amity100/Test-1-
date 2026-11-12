@@ -1856,7 +1856,8 @@ export class PersonRenderer {
     fig._fullHands = false;
     // (ROADMAP 19.9, GFX.peopleLite - the phone version: the simple shapes from 22 m instead of 32; a person there is some
     // twenty pixels high. A person who has a distance of their own - the film's - keeps it)
-    if (camDist > (fig.lodFar || (GFX.peopleLite && !GFX.off ? Math.min(GFX.lite ? 15 : 22, this.lodFar) : this.lodFar))) {
+    // (ROADMAP 21, the light version: liteCap - the four nearest in full, never the simple shapes nearer than 6 m: game/civilians.js draw)
+    if (camDist > (fig.lodFar || (GFX.peopleLite && !GFX.off ? Math.min(GFX.lite ? this.liteCap || 15 : 22, this.lodFar) : this.lodFar))) {
       this.drawLow(fig, false);
       return;
     }

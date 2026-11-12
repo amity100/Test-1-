@@ -231,6 +231,9 @@ in vec2 vUv;
 layout(location = 0) out vec4 fragColor;
 uniform sampler2D tSrc;
 uniform vec2 uTexel;
+// (ROADMAP 19.4, GFX.glowLite: how far from the pixel the four taps are, in texels of the picture - 0.5, each a
+// pixel of the half-size glow; 1 for a glow made at a quarter, the four taps then cover its 4 x 4)
+uniform float uBrightO;
 // (the steady pace, DYN: the picture in the corner of the drawing's, as in the ink)
 #ifdef DYN
 uniform vec2 uUvK;
@@ -252,7 +255,7 @@ vec3 pick(vec2 uv) {
   return c.rgb * clamp(smoothstep(1.1, 2.6, l) + c.a * 0.7, 0.0, 2.0);
 }
 void main() {
-  vec2 o = uTexel * 0.5;
+  vec2 o = uTexel * uBrightO;
   vec3 c = pick(vUv + vec2(-o.x, -o.y)) + pick(vUv + vec2(o.x, -o.y)) + pick(vUv + vec2(-o.x, o.y)) + pick(vUv + vec2(o.x, o.y));
   fragColor = vec4(c * 0.25, 1.0);
 }`;
@@ -418,6 +421,8 @@ uniform vec4 uRimCol;
 uniform vec3 uShadowT;
 uniform vec3 uLightT;
 uniform float uGradeK;
+// (ROADMAP 20, the look: more colour - render/look.js)
+uniform float uVib;
 uniform float uGrainK;
 uniform float uGrainT;
 // (ROADMAP 18.9, round 8) the film as a comic book is printed (uComic, 0..1): its tones laid on in a
@@ -614,6 +619,12 @@ void main() {
     float l = lumc(c);
     vec3 tint = mix(uShadowT, uLightT, smoothstep(0.04, 0.55, l));
     c = mix(c, c * tint, uGradeK);
+  }
+  if (uVib > 0.001) {
+    // (the less a colour has, the more it is given: what is already full stays as it is)
+    float l = lumc(c);
+    float sat = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+    c = max(mix(vec3(l), c, 1.0 + uVib * (1.0 - 0.6 * clamp(sat, 0.0, 1.0))), 0.0);
   }
   c = toSRGB(clamp(c, 0.0, 1.0));
   if (uComic > 0.001) c = comicPrint(c, vUv);
@@ -1056,10 +1067,10 @@ export class Pipeline {
       // (v5: the edge of the page, render/pagedge.js)
       ...pageUniforms, uFogDensity: shared.uFogDensity,
     });
-    this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uUvK: uvK, uUvLo: uvLo });
+    this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uBrightO: { value: 0.5 }, uUvK: uvK, uUvLo: uvLo });
     this.mDown = mk(DOWN_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.mUp = mk(UP_FRAG, { tSrc: { value: null }, tAdd: { value: null }, uTexel: { value: new THREE.Vector2() } });
-    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo, tPaint: { value: BLANK }, tAux: { value: BLANK }, uPaint: { value: 0 }, uAuxTexel: { value: new THREE.Vector2(1, 1) }, uAuxK: { value: new THREE.Vector2(1, 1) }, uRimDir: { value: new THREE.Vector2(1, 0) }, uRimCol: { value: new THREE.Vector4(0, 0, 0, 0) }, uShadowT: { value: new THREE.Vector3(1, 1, 1) }, uLightT: { value: new THREE.Vector3(1, 1, 1) }, uGradeK: { value: 0 }, uGrainK: { value: 0 }, uGrainT: { value: 0 }, uComic: { value: 0 }, uSmear: { value: new THREE.Vector2() }, uEmote: { value: 0 }, uEmoteCol: { value: new THREE.Vector3(0.6, 0.1, 0.12) }, uFill: { value: 0 }, uFillCol: { value: new THREE.Vector3(1, 0.82, 0.62) }, uDotPx: { value: 4 }, uMis: { value: 0 }, uDotInk: { value: new THREE.Vector3(0.3, 0.22, 0.5) } });
+    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo, tPaint: { value: BLANK }, tAux: { value: BLANK }, uPaint: { value: 0 }, uAuxTexel: { value: new THREE.Vector2(1, 1) }, uAuxK: { value: new THREE.Vector2(1, 1) }, uRimDir: { value: new THREE.Vector2(1, 0) }, uRimCol: { value: new THREE.Vector4(0, 0, 0, 0) }, uShadowT: { value: new THREE.Vector3(1, 1, 1) }, uLightT: { value: new THREE.Vector3(1, 1, 1) }, uGradeK: { value: 0 }, uVib: { value: 0 }, uGrainK: { value: 0 }, uGrainT: { value: 0 }, uComic: { value: 0 }, uSmear: { value: new THREE.Vector2() }, uEmote: { value: 0 }, uEmoteCol: { value: new THREE.Vector3(0.6, 0.1, 0.12) }, uFill: { value: 0 }, uFillCol: { value: new THREE.Vector3(1, 0.82, 0.62) }, uDotPx: { value: 4 }, uMis: { value: 0 }, uDotInk: { value: new THREE.Vector3(0.3, 0.22, 0.5) } });
     // (ROADMAP 18.9) the film's painted look (PAINT_FRAG): how much of it (paint, 0 none - eased to
     // paintWant), the brush near and far (in pixels of the picture at 720 lines), where the film
     // looks (paintFocus, metres from the camera), the brush's streaks
@@ -1300,6 +1311,8 @@ export class Pipeline {
     this._outTaa = taa;
     (this.mips || []).forEach(dispose);
     (this.ups || []).forEach(dispose);
+    (this.mipsQ || []).forEach(dispose);
+    (this.upsQ || []).forEach(dispose);
     (this.hist || []).forEach(dispose);
     dispose(this.rainRT);
     dispose(this.paintRT);
@@ -1316,6 +1329,14 @@ export class Pipeline {
       this.ups.push(new THREE.WebGLRenderTarget(mw, mh, opt));
       mw = Math.max(1, mw >> 1);
       mh = Math.max(1, mh >> 1);
+    }
+    // (ROADMAP 19.4, a phone's, GFX.glowLite: the glow made at a quarter of the picture, one level fewer - its two
+    // half-size passes were three quarters of its pixels; the same sizes as the lower levels of the one above)
+    this.mipsQ = null;
+    this.upsQ = null;
+    if (GFX.glowLite && this.low) {
+      this.mipsQ = this.mips.slice(1).map((m) => new THREE.WebGLRenderTarget(m.width, m.height, opt));
+      this.upsQ = this.mips.slice(1).map((m) => new THREE.WebGLRenderTarget(m.width, m.height, opt));
     }
     if (taa) {
       // what was gathered (its colour; how much is gathered and how far away it is), the last
@@ -2444,6 +2465,34 @@ export class Pipeline {
     return m.p.distanceToSquared(this.camera.position) > 4 || m.d.dot(_md) < 0.985;
   }
 
+  // (ROADMAP 21, the phone's light version) The street's mirror without drawing the city a second time: the frame before, as the
+  // ink left it, read upside down. A point of the road looks up that picture where the eye saw what lies as far over the eye's
+  // height as the point lies under it - the mirror image of all that is far: the sky, the lit fronts across the street, the
+  // palms, the lamps. It is not a mirror's picture: what stands near loses its foot in it (twice the eye's height of it), and
+  // what is over the picture's top edge is not there (its top row instead, where a street seen from above holds almost nothing
+  // anyway). But it is every frame's, so nothing in it slides, and it costs no triangle and no draw: the second drawing was a
+  // quarter again of the frame it fell in, on the owner's phone the frame that came late
+  fakeMirror(want) {
+    const rt = this.inkRT;
+    this.reflDone = false;
+    this._mirrorRect = null;
+    this.reflSmall = false;
+    if (!want || !this.reflections || this._fakeTex !== rt.texture || this._fakeN !== this.frameN - 1 || this.camera.position.y <= this.mirrorY) {
+      shared.uReflOn.value = 0;
+      return;
+    }
+    const tm = shared.uReflMatrix.value;
+    tm.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
+    tm.multiply(this._fakeVP);
+    _m.makeScale(1, -1, 1);
+    _m.elements[13] = 2 * this._fakeY;
+    tm.multiply(_m);
+    shared.uRefl.value = rt.texture;
+    shared.uReflK.value.set(this._fakeW / rt.width, this._fakeH / rt.height);
+    shared.uReflLo.value.set(0.5 / this._fakeW, 0.5 / this._fakeH);
+    shared.uReflOn.value = 1;
+  }
+
   // the mirror camera under the street (three.js Reflector, by hand)
   renderReflection() {
     const camera = this.camera;
@@ -2651,7 +2700,11 @@ export class Pipeline {
     // other one). In between the street reads the last one through the matrix it was drawn with;
     // but a reflection depends on where you stand, so what is near in it slides a little until
     // the next. A jump of the camera (a cut, a teleport) draws it at once.
-    const re = Math.max(this.reflEvery || 1, this.detailReflEvery || 1);
+    // (ROADMAP 20: under the look on a phone every third - lookReflEvery, render/look.js)
+    // (ROADMAP 21, the phone's light version - liteMirror, game/game.js: no second drawing of the city at all, fakeMirror)
+    const lm = !!this.liteMirror && this.floorY === null;
+    const re = Math.max(this.reflEvery || 1, this.detailReflEvery || 1, this.lookReflEvery || 1);
+    const lse = this.liteShadowEvery || 1;
     this.trackCamera();
     // (v5: the test route's moments without the people and the cars, or without the sun's view of
     // what moves, game/perf.js: what they cost on this device)
@@ -2669,7 +2722,9 @@ export class Pipeline {
         r.setRenderTarget(was);
       }
     }
-    if ((every === 1 || this.staticRoot || phase === 0 || !this.shadowDone) && !(this.noSunPass && this.shadowDone) && !(indoors && this.shadowDone)) {
+    // (ROADMAP 21, the phone's light version: what moves casts its shadow anew every other frame - liteShadowEvery, game/game.js)
+    const liteSkip = lse > 1 && this.frameN % lse !== 0 && this.shadowDone;
+    if ((every === 1 || this.staticRoot || phase === 0 || !this.shadowDone) && !(this.noSunPass && this.shadowDone) && !(indoors && this.shadowDone) && !liteSkip) {
       if (T) T.begin('shadow');
       this.renderShadows(center);
       if (T) T.end();
@@ -2679,8 +2734,11 @@ export class Pipeline {
     // reflects the sky until the mirror is there, a frame or two later - mirrorWanted)
     this.floorMirror();
     const want = this.mirrorWanted();
-    shared.uReflOn.value = want && !this.reflSmall ? 1 : 0;
-    if (!want) this.reflDone = false;
+    if (lm) this.fakeMirror(want);
+    else shared.uReflOn.value = want && !this.reflSmall ? 1 : 0;
+    if (lm) {
+      // (nothing drawn for it)
+    } else if (!want) this.reflDone = false;
     else if (re === 1 || this.frameN % re === 1 || !this.reflDone || this.mirrorStale() || !this.mirrorCovers()) {
       if (T) T.begin('reflection');
       this.renderReflection();
@@ -2733,6 +2791,15 @@ export class Pipeline {
       r.autoClear = true;
       if (T) T.end();
     }
+    // (fakeMirror: this frame's picture, where it was drawn from and how big)
+    if (lm) {
+      (this._fakeVP || (this._fakeVP = new THREE.Matrix4())).multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+      this._fakeY = this.camera.matrixWorld.elements[13];
+      this._fakeW = this.size.x;
+      this._fakeH = this.size.y;
+      this._fakeTex = this.inkRT.texture;
+      this._fakeN = this.frameN;
+    }
     // (the smart drawing: this frame put together with the ones before, at the picture's size; then
     // the rain over it, at that size, from the camera unshifted)
     let src = this.inkRT.texture;
@@ -2781,7 +2848,7 @@ export class Pipeline {
     const f = this.mFinal.uniforms;
     f.tSrc.value = src;
     f.tBloom.value = cur.texture;
-    f.uBloom.value = this.bloom;
+    f.uBloom.value = this.bloom * (this._glowK || 1);
     f.uExposure.value = this.exposure;
     f.uSrcTexel.value.set(1 / sw.x, 1 / sw.y);
     let sharp = taa || this.scale < 0.99 ? 0.85 : 0.5;
@@ -3012,6 +3079,7 @@ export class Pipeline {
     const f = this.mFinal.uniforms;
     this.mInk.uniforms.uPersonW.value = L.personW;
     f.uGradeK.value = L.grade;
+    f.uVib.value = L.vib || 0;
     f.uShadowT.value.set(L.shadowT[0], L.shadowT[1], L.shadowT[2]);
     f.uLightT.value.set(L.lightT[0], L.lightT[1], L.lightT[2]);
     f.uGrainK.value = L.grain;
@@ -3057,23 +3125,31 @@ export class Pipeline {
   }
 
   drawGlow(src, sw) {
+    // (ROADMAP 19.4, GFX.glowLite: from the bright parts straight to a quarter, one level fewer - five passes, not
+    // seven. The sum of the levels is the glow, so with one fewer its strength is made up in the last pass:
+    // glowK, uBloom)
+    const lite = !!(this.mipsQ && GFX.glowLite && !GFX.off);
+    this._glowK = lite ? this.levels / this.mipsQ.length : 1;
+    const mips = lite ? this.mipsQ : this.mips;
+    const ups = lite ? this.upsQ : this.ups;
     const b = this.mBright.uniforms;
     b.tSrc.value = src;
     b.uTexel.value.set(1 / sw.x, 1 / sw.y);
-    this.pass(this._corner ? this.mBrightD : this.mBright, this.mips[0]);
-    for (let i = 1; i < this.mips.length; i++) {
-      const m = this.mips[i - 1];
+    b.uBrightO.value = lite ? 1 : 0.5;
+    this.pass(this._corner ? this.mBrightD : this.mBright, mips[0]);
+    for (let i = 1; i < mips.length; i++) {
+      const m = mips[i - 1];
       this.mDown.uniforms.tSrc.value = m.texture;
       this.mDown.uniforms.uTexel.value.set(1 / m.width, 1 / m.height);
-      this.pass(this.mDown, this.mips[i]);
+      this.pass(this.mDown, mips[i]);
     }
-    let cur = this.mips[this.mips.length - 1];
-    for (let i = this.mips.length - 2; i >= 0; i--) {
+    let cur = mips[mips.length - 1];
+    for (let i = mips.length - 2; i >= 0; i--) {
       this.mUp.uniforms.tSrc.value = cur.texture;
-      this.mUp.uniforms.tAdd.value = this.mips[i].texture;
+      this.mUp.uniforms.tAdd.value = mips[i].texture;
       this.mUp.uniforms.uTexel.value.set(0.5 / cur.width, 0.5 / cur.height);
-      this.pass(this.mUp, this.ups[i]);
-      cur = this.ups[i];
+      this.pass(this.mUp, ups[i]);
+      cur = ups[i];
     }
     return cur;
   }

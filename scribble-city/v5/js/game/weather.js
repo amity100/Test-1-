@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { shared } from '../render/materials.js';
+import { STYLE, GFX } from '../core/util.js';
 import { RainRenderer } from '../render/rain.js';
 
 // The city's weather (ROADMAP 1.2): clear, cloudy, drizzle, rain, a storm with lightning and
@@ -234,7 +235,8 @@ export class Weather {
     }
     // (a strong wind: what it does to the palms and the rain)
     this.windK = smoothstep(0.42, 1.0, this.windNow);
-    this.rain.update(c.rain, this.indoors);
+    // (and a drizzle seen falling - not on a phone's light version)
+    this.rain.update(Math.max(c.rain, GFX.lite ? 0 : STYLE.k * 0.06), this.indoors);
   }
 
   // how much of the morning fog is left at hour h: it thins out between nine and half past ten
@@ -354,8 +356,10 @@ export class Weather {
     const m = c.mist;
     const f = this.flash;
     shared.uOvercast.value = o;
-    shared.uRain.value = r;
-    shared.uWet.value = this.wet;
+    // (the look: a light rain's drops in the street's puddles, so the water in them reads as water - render/glsl.js rainRings)
+    shared.uRain.value = Math.max(r, STYLE.k * 0.22);
+    // (ROADMAP 20: the look's street, wet after the rain - no rain falling, render/look.js)
+    shared.uWet.value = Math.max(this.wet, STYLE.k * 0.5);
     shared.uMist.value = m;
     shared.uFlash.value = f;
     shared.uWind.value.set(this.windDir.x, this.windDir.y, this.windK);

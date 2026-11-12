@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { srgb, hex, addLight } from '../render/materials.js';
-import { nextId } from './kit.js';
+import { nextId, seeded } from './kit.js';
+import { blossom, flowerMat } from './petals.js';
 import { fbox, fcol, neonSign, roofStuff, backFront, adQuad, FH, GROUND, FRAME, frontMatrix } from './deco.js';
 import { CURB } from './layout.js';
+import { STYLE } from '../core/util.js';
 import { Parts, FB, COL, SHUTTERS, diceAt, dialectOf, shopHardware, bladeSign, downpipe, wallLamp, darker, lighter, plateSpans, doorSill, SILL, DETAIL_LOW } from './facades.js';
 
 // (v5) The hotels of the beach street, the way the real ones stand along the ocean in Miami:
@@ -18,6 +20,11 @@ import { Parts, FB, COL, SHUTTERS, diceAt, dialectOf, shopHardware, bladeSign, d
 // oceanHotel); the street (world/ocean.js) cuts its blocks into lots and gives each a spec.
 
 const WHITE = srgb(0.98, 0.97, 0.95);
+// (the look's balcony flowers: pinks, an orange, a white - and the leaves under them)
+const LOOK_FLOWERS = [srgb(0.84, 0.08, 0.46), srgb(0.95, 0.16, 0.56), srgb(1.0, 0.5, 0.16), srgb(0.7, 0.05, 0.4), srgb(0.22, 0.5, 0.26)];
+const LOOK_GREENS = [srgb(0.22, 0.5, 0.26), srgb(0.16, 0.38, 0.26)];
+const LOOK_AC = srgb(0.8, 0.8, 0.82);
+const LOOK_AC_GRILLE = srgb(0.3, 0.3, 0.36);
 const GLASS_BLOCK = srgb(0.72, 0.9, 0.92);
 const TILE_RED = srgb(0.78, 0.36, 0.26);
 const IRON = srgb(0.16, 0.14, 0.2);
@@ -403,6 +410,19 @@ export function oceanHotel(ctx, spec) {
       fbox(ctx, sf, M.frame, u - 0.03, v0, out, u + 0.03, v1, out + 0.05, frameCol, fid);
     }
     if (v1 - v0 > 1.4) fbox(ctx, sf, M.frame, u0, v0 + (v1 - v0) * 0.68 - 0.025, out, u1, v0 + (v1 - v0) * 0.68 + 0.025, out + 0.05, frameCol, fid);
+    // (ROADMAP 20, the look: the life of the rooms on the opening street's fronts - an air conditioner under a window here, a little
+    // canopy in the building's accent over one there. No dice thrown: by where the window is)
+    if (STYLE.on && spec.shop && spec.shop.first && v0 > 4 && u1 - u0 > 0.9) {
+      const hsh = Math.abs(Math.round(u0 * 7 + v0 * 13)) % 10;
+      const uc = (u0 + u1) / 2;
+      if (hsh === 1 || hsh === 6) {
+        const aid = nextId();
+        fbox(ctx, sf, M.prop, uc - 0.34, v0 - 0.4, out + 0.02, uc + 0.34, v0 - 0.05, out + 0.44, LOOK_AC, aid);
+        fbox(ctx, sf, M.frame, uc - 0.28, v0 - 0.34, out + 0.44, uc + 0.28, v0 - 0.11, out + 0.46, LOOK_AC_GRILLE, aid);
+      } else if (hsh === 3 || hsh === 8) {
+        fbox(ctx, sf, M.awning, u0 - 0.12, v1 + 0.08, out, u1 + 0.12, v1 + 0.18, out + 0.6, hsh === 3 ? acc : LOOK_FLOWERS[2], nextId());
+      }
+    }
     // (v5, GTA IV) the rooms behind: curtains drawn, a blind down, by the building's own dice
     if (hr() < 0.42) {
       const cw = out + 0.034;
@@ -557,9 +577,12 @@ export function oceanHotel(ctx, spec) {
     }
   }
   // balconies on the floors above (the bigger hotels): a slab, its pipe rails, the doors behind
-  const balc = !!spec.balcony && style !== 'med';
+  // (ROADMAP 20, the look: the opening street's own fronts of four floors and more get them too - no dice thrown for it, the city's
+  // stay where they were)
+  const lookBalc = STYLE.on && !spec.balcony && !!(spec.shop && spec.shop.first) && floors >= 4 && style !== 'med';
+  const balc = (!!spec.balcony && style !== 'med') || lookBalc;
   if (balc) {
-    const railCol = r() < 0.6 ? WHITE : acc;
+    const railCol = lookBalc ? WHITE : r() < 0.6 ? WHITE : acc;
     for (let fl = 1; fl < floors; fl++) {
       const [v0] = rowV(fl);
       const y = v0 - 0.75;
@@ -572,6 +595,31 @@ export function oceanHotel(ctx, spec) {
         for (let u = b0 + 0.25; u <= b1 - 0.2; u += Math.max(1.0, (b1 - b0 - 0.4) / Math.round((b1 - b0) / 1.6))) fbox(ctx, f, M.frame, u - 0.03, y, 1.16, u + 0.03, y + 1.0, 1.24, railCol, rid);
         // the sides of the balcony
         for (const u of [b0 + 0.2, b1 - 0.2]) fbox(ctx, f, M.frame, u - 0.03, y + 0.95, 0, u + 0.03, y + 1.01, 1.24, railCol, rid);
+        // (ROADMAP 20, the look: boxes of flowers on the rails of the opening street's balconies - no dice thrown: by the floor and the bay)
+        if (STYLE.on && STYLE.flowers && spec.shop && spec.shop.first) {
+          const bi = Math.round(b0 * 3) + fl;
+          if (bi % 3 !== 0) {
+            const fid = nextId();
+            const n = Math.max(1, Math.floor((b1 - b0 - 0.8) / 1.5));
+            const w = (b1 - b0 - 0.8) / n;
+            for (let q = 0; q < n; q++) {
+              const ua = b0 + 0.4 + w * q + 0.12;
+              const ci = (bi + q) % LOOK_FLOWERS.length;
+              const col = LOOK_FLOWERS[ci];
+              // (round 11, the owner's word: not blocks of colour - the leaves' box, and the flowers over it in their small bracts)
+              fbox(ctx, f, M.leaf, ua + 0.1, y + 0.86, 1.2, ua + w - 0.34, y + 1.0, 1.5, LOOK_FLOWERS[4], fid);
+              if (ci === 4) fbox(ctx, f, M.leaf, ua, y + 0.96, 1.14, ua + w - 0.24, y + 1.2, 1.44, col, fid);
+              else {
+                const rr = seeded(7000 + bi * 31 + q);
+                const nT = Math.max(2, Math.round((w - 0.24) / 0.42));
+                for (let t = 0; t < nT; t++) {
+                  const pp = f.p(ua + ((t + 0.5) / nT) * (w - 0.24), y + 1.1, 1.32);
+                  blossom(ctx, rr, pp[0], pp[1], pp[2], 0.24, 11, { mat: flowerMat(M), leafMat: M.leaf, idF: fid, idG: fid, base: col, greens: LOOK_GREENS, green: 0.25, sq: 0.7 });
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

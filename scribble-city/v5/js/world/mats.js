@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+// (the sidewalks hold the mirror image on a computer only: on a phone, wet and darker, without it - the owner's phone was slow under the look)
+import { STYLE, GFX } from '../core/util.js';
 import { makeSurface, srgb, hex, canvasTexture } from '../render/materials.js';
 import { streetTexture, paverTexture, frondTexture, aveTexture, crossTexture, asphaltTexture, crosswalkTexture, tileTexture, glintTexture, floorTexture, goodsTexture, GOODS_CELLS, sandTexture, woodDeckTexture } from './paint.js';
 import { canvas } from './kit.js';
@@ -33,8 +35,9 @@ export function cityMaterials() {
     cross: B({ kind: 'street', map: crossTexture(), refl: true, wet: 0.7, ang: 1.45, line: 0.6, wash: 0.6 }),
     asphalt: B({ kind: 'street', map: asphaltTexture(), refl: true, wet: 0.65, ang: 0.12, line: 0.6, wash: 0.6, erasable: false }),
     crosswalk: B({ kind: 'street', map: crosswalkTexture(), alphaTest: 0.5, refl: true, wet: 0.5, ang: 0.12, line: 0.0, wash: 0.7, noShadow: true }),
-    walk: B({ kind: 'ground', map: paverTexture('#dcc6b6', 'rgba(110, 80, 90, 0.5)'), ang: -0.25, line: 0.6 }),
-    prom: B({ kind: 'ground', map: paverTexture('#efd7c2', 'rgba(130, 90, 80, 0.45)'), ang: -0.25, line: 0.6 }),
+    // (ROADMAP 20, the look: the sidewalks wet too, the lights in them - render/look.js)
+    walk: B({ kind: 'ground', map: paverTexture('#dcc6b6', 'rgba(110, 80, 90, 0.5)'), ang: -0.25, line: 0.6, ...(STYLE.on && !GFX.phone ? { refl: true, wet: 0.3 } : {}) }),
+    prom: B({ kind: 'ground', map: paverTexture('#efd7c2', 'rgba(130, 90, 80, 0.45)'), ang: -0.25, line: 0.6, ...(STYLE.on && !GFX.phone ? { refl: true, wet: 0.3 } : {}) }),
     plaza: B({ kind: 'ground', map: tileTexture('#e9c9b0', '#d7a98f'), ang: -0.25, line: 0.6 }),
     court: B({ kind: 'ground', vcolor: true, color: new THREE.Color(1, 1, 1), ang: 0.4, line: 0.7 }),
     grass: B({ kind: 'ground', vcolor: true, color: srgb(0.5, 0.78, 0.45), ang: 1.2, line: 0.4, density: 1.1 }),

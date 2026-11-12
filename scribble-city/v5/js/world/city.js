@@ -9,6 +9,8 @@ import { buildGround } from './ground.js';
 import { buildFirstBoulevard } from './first.js';
 import { buildBlocks } from './blocks.js';
 import { buildOceanDrive, rollSurf } from './ocean.js';
+import { lookDress } from './lookdress.js';
+import { STYLE, GFX } from '../core/util.js';
 import { buildRoom } from './rooms.js';
 // (v5, ROADMAP 11.18: the shops laid out to the small things - their plans replace the old rooms')
 import './shops2.js';
@@ -126,6 +128,8 @@ export async function buildCity(scene, o = {}) {
   buildOceanDrive(ctx);
   await breathe('ocean');
   if (o.streets !== false) buildStreets(ctx);
+  // (ROADMAP 20: the opening street dressed for the look - world/lookdress.js)
+  if (STYLE.on && o.streets !== false) lookDress(ctx);
   await breathe('streets');
   if (o.extra) o.extra(ctx);
   await breathe('extra');
@@ -225,7 +229,10 @@ export async function buildCity(scene, o = {}) {
   for (const m of rooms) m.renderOrder = 1;
   const special = new Set(['big', 'blvd', 'skyline', 'bridge', 'farN', 'beach', 'whole', 'hills', 'shore']);
   const cull = [];
-  for (const m of rooms) cull.push({ m, r: o.low ? 45 : 55 });
+  // (ROADMAP 21, the phone's light version: the little things and the rooms left out from nearer - the owner's phone, hot, draws the
+  // boulevard at 18 frames a second, and the city's own triangles are most of it)
+  const LK = GFX.lite ? 0.55 : 1;
+  for (const m of rooms) cull.push({ m, r: (o.low ? 45 : 55) * LK });
   for (const m of meshes) {
     if (special.has(m.name.split('#')[0]) || m.name.startsWith('lm_')) continue;
     // (a shared draw's pens are all of one kind here)
@@ -233,8 +240,8 @@ export async function buildCity(scene, o = {}) {
     // (the little things are not worth a mirror image in the wet street)
     if (small.has(pen) && pen !== M.lampGlass) m.userData.noReflect = true;
     if (o.low && (pen === M.frame || pen === M.awning || pen === M.steel)) m.userData.noReflect = true;
-    if (small.has(pen)) cull.push({ m, r: o.low ? 85 : 150 });
-    else if (far.has(pen)) cull.push({ m, r: o.low ? 170 : 260 });
+    if (small.has(pen)) cull.push({ m, r: (o.low ? 85 : 150) * LK });
+    else if (far.has(pen)) cull.push({ m, r: (o.low ? 170 : 260) * LK });
   }
   penGroups = sharedPens.size;
   const stats = { ms: Math.round(performance.now() - t0), meshes: meshes.length, pens: penGroups, rooms: rooms.length, verts: ctx.B.vcount, roomVerts: ctx.R.vcount, boxes: ctx.col.boxes.length, shops: ctx.shops.length, lights: lightList().length, signs: neon.n, signsMissed: neon.missed || 0, parked: (ctx.parked || []).length, billboards: ctx.billboards.length, signals: (ctx.signals || []).length, north: ctx.northVerts || 0, northParts: ctx.northParts || null, pageVerts: ctx.pageVerts || 0, skylineDropped: ctx.skylineDropped || 0 };

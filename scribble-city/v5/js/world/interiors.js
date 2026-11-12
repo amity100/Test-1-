@@ -56,8 +56,10 @@ export class Interiors {
       const cell = {
         id,
         rect: { x0: rec.x - r, x1: rec.x + r, z0: rec.z - r, z1: rec.z + r },
-        near: this.low ? NEAR - 8 : NEAR,
-        far: FAR,
+        // (ROADMAP 21, the phone's light version: the shelves filled from 10 m - the shop you stand at - and let go of at 22:
+        // 126 thousand triangles of goods in the opening street's frame, most of them in shops down the block)
+        near: GFX.lite ? NEAR - 30 : this.low ? NEAR - 8 : NEAR,
+        far: GFX.lite ? FAR - 43 : FAR,
         // (its floor: a store up in a mall is further off by the floors between)
         y: rec.y,
         rec,
@@ -157,7 +159,7 @@ export class Interiors {
     // (where the shops crowd together - a mall - the ring they are filled in narrows, so the
     // corners on the shelves stay within what the graphics card is given: about a million on a
     // computer, less than half that on a phone)
-    const most = this.low ? 450000 : 1200000;
+    const most = GFX.lite ? 110000 : this.low ? 450000 : 1200000;
     const st = this.stream;
     if (this.verts > most) st.scale = Math.max(0.55, st.scale * 0.985);
     else if (this.verts < most * 0.8) st.scale = Math.min(1, st.scale * 1.01);

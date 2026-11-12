@@ -71,6 +71,17 @@ export class PaceControl {
     this.liteBack = 0;
     this.liteRetryAt = 0;
     this.liteBackAt = -1e9;
+    // (a phone: its processor and its card slow themselves down to fill the time they are given -
+    // frames that take 65 ms on a beat of 50, every one of them on time, say nothing of what the
+    // faster beat would take, and the faster beat was never gone back to: the owner's phone, 20 a
+    // second in a street it draws 40 times a second when left to run. So there a beat that has
+    // held for a while, no frame late, is left for the faster one on trial: frames late there
+    // bring the slower one back, and the next trial waits longer each time)
+    this.governed = false;
+    this.held = 0;
+    this.onTrial = false;
+    this.trials = 0;
+    this.trialHeld = 0;
   }
 
   reset() {
@@ -257,10 +268,13 @@ export class PaceControl {
     else this.strain = Math.max(0, this.strain - 2);
     if (this.strain >= 40 && this.level < c.length - 1) {
       // (a faster beat tried a moment ago that did not hold: not again for a while, longer each time)
-      if (now - this.upAt < 8000) {
+      if (now - this.upAt < (this.onTrial ? 25000 : 8000)) {
         const b = (this.backoff[this.level] = Math.min(300000, (this.backoff[this.level] || 10000) * 2));
         this.retryAt[this.level] = now + b;
       }
+      if (this.onTrial) this.trialHeld = now - this.upAt;
+      this.onTrial = false;
+      this.held = 0;
       this.level++;
       this.N = c[this.level];
       this.strain = 0;
@@ -276,7 +290,13 @@ export class PaceControl {
       const d = Math.max(this.floorLo, 0.8);
       const pred = this.cpuE + card * (d / this.dyn) ** 2;
       this.ease = pred < MID * Bf ? this.ease + 1 : 0;
-      if (this.ease >= 150) {
+      // (the trial: ten seconds of frames on their beat, none late)
+      this.held = this.governed && this.lateHeat < 0.3 ? this.held + 1 : 0;
+      const trial = this.ease < 150 && this.held >= 200;
+      if (this.ease >= 150 || trial) {
+        this.onTrial = trial;
+        if (trial) this.trials++;
+        this.held = 0;
         this.level--;
         this.N = c[this.level];
         // (the drawing as big as the faster beat leaves room for, and no bigger than it was)
@@ -288,7 +308,16 @@ export class PaceControl {
         this.upAt = now;
         return true;
       }
-    } else this.ease = 0;
+    } else {
+      this.ease = 0;
+      this.held = 0;
+    }
+    // (a trial that has held two minutes is the beat: the next one after a fall waits no longer)
+    if (this.onTrial && now - this.upAt > 120000) {
+      this.onTrial = false;
+      this.trialHeld = 0;
+      this.backoff[this.level] = 0;
+    }
     return false;
   }
 
@@ -301,7 +330,8 @@ export class PaceControl {
       this.want = Math.max(this.floorLo, this.want * 0.97);
       if (this.apply()) this.changedAt = this.frame + 1;
     }
-    if ((this.want <= this.floorLo + 1e-3 && this.lite >= this.liteMost) || this.cpuBound) this.strain += 4 * Math.min(k, 3);
+    // (on trial, a phone: late frames one after another end it within half a second)
+    if ((this.want <= this.floorLo + 1e-3 && this.lite >= this.liteMost) || this.cpuBound || this.onTrial) this.strain += 4 * Math.min(k, 3);
   }
 }
 
@@ -312,6 +342,7 @@ export class Pace {
     const gl = (this.gl = game.renderer.getContext());
     this.fenceOk = typeof gl.fenceSync === 'function';
     this.ctl = new PaceControl();
+    this.ctl.governed = !!game.touch;
     this.mode = 'free';
     // the pipeline in the steady pace (not during the test route: game.js loop)
     this.engaged = false;
@@ -673,6 +704,8 @@ export class Pace {
     const floor = !c.cpuBound && c.level >= c.choices.length - 1 && c.want <= c.floorLo + 1e-3 && c.lite >= c.liteMost && c.ema > HI * c.N * c.R && ot < 90;
     const why = c.cpuBound ? ' · המעבד מגביל' : floor ? ` · כרטיס המסך לא מספיק ל-${Math.round(fps)} גם ברזולוציה הנמוכה ביותר` : '';
     const lite = c.lite >= 2 ? ' · השתקפות ברזולוציה נמוכה מאוד' : c.lite >= 1 ? ' · השתקפות ברזולוציה נמוכה' : '';
-    return `קצב: ${name} · ${f1(fps)} בשנייה${held}${real} · מסך ${hz}Hz · בזמן ${ot}% · רזולוציה ${Math.round(this.pipe.dyn * 100)}%${lite} · פריים עד סוף הציור ${c.ema.toFixed(1)}ms (מעבד ${c.cpuE.toFixed(1)})${why}${this.calib > 0 ? ' · מודד את המסך' : ''}`;
+    // (the trials of the faster beat, a phone: how many, and how the last one went)
+    const tr = c.trials ? ` · ניסיונות לקצב מהיר: ${c.trials}${c.onTrial ? ' (בניסיון עכשיו)' : c.trialHeld > 0 ? ` (האחרון החזיק ${(c.trialHeld / 1000).toFixed(0)} שנ׳)` : ' (מחזיק)'}` : '';
+    return `קצב: ${name} · ${f1(fps)} בשנייה${held}${real} · מסך ${hz}Hz · בזמן ${ot}% · רזולוציה ${Math.round(this.pipe.dyn * 100)}%${lite} · פריים עד סוף הציור ${c.ema.toFixed(1)}ms (מעבד ${c.cpuE.toFixed(1)})${why}${tr}${this.calib > 0 ? ' · מודד את המסך' : ''}`;
   }
 }

@@ -107,7 +107,9 @@ export const GFX = (() => {
   // round of it on the way to being tried on the phone: every part that changes no picture, and those of this round that do)
   // (ROADMAP 19.13, the owner's word: "build it" - ?lite: the phone's light version, a visible step down: fewer pixels, fewer pens from
   // the middle distance, fewer people and cars, people's simple shapes nearer. It brings every ?fast part with it)
-  const lite = phone && !q.has('oldgfx') && q.has('lite');
+  // (ROADMAP 20: the new look on a phone brings the light version with it - 14 to 17 frames a second on the owner's phone without)
+  // (ROADMAP 20.15, the owner's word: the look into the game itself - it is on unless the address says ?look=0 or ?nolook)
+  const lite = phone && !q.has('oldgfx') && (q.has('lite') || (q.get('look') !== '0' && !q.has('nolook') && !q.has('nolite')));
   const fast = q.has('fast') || lite;
   const part = (name) => on && !q.has('no' + name) && (APPROVED[name] || q.has(name) || ((q.has('newgfx') || fast) && !LOOK.has(name)) || (fast && (name === 'penlite' || name === 'peoplelite')));
   return {
@@ -128,6 +130,16 @@ export const GFX = (() => {
     lite,
     peopleLite: part('peoplelite'), // ROADMAP 19.9: people in their simple shapes from 22 m (32 before)
   };
+})();
+
+// (GRAPHICS_PLAN.md, ROADMAP 20) The new look, on the opening street: on only when the address asks for it (?look; ?look=0 or ?nolook:
+// off). k: how much of it there is where the camera stands now (render/look.js lookFrame, 0..1); off: switched off for a moment while the
+// game runs (the tools' before and after)
+export const STYLE = (() => {
+  const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
+  // (hourK: how much of the look's own evening the clock gives now, 0..1 - game/daynight.js)
+  // (flowers: the look's bougainvillea, pots and baskets - off for now, the owner's word; ?flowers brings them back)
+  return { on: q.get('look') !== '0' && !q.has('nolook'), k: 0, off: false, hourK: 1, flowers: q.has('flowers') };
 })();
 
 // A tiny pool helper for objects that are recycled often.
