@@ -967,6 +967,7 @@ export class Game {
     // (ROADMAP 19.13: the light version's - 2 - from the middle distance)
     shared.uPenLite.value = GFX.penLite && !GFX.off ? (GFX.lite ? 2 : 1) : 0;
     this.pipe.liteShadowEvery = GFX.lite && !GFX.off ? 2 : 1;
+    this.pipe.liteMirror = GFX.lite && !GFX.off;
     // the sun's box follows a point ahead of the camera
     const c = this.camera.position;
     const f = this.camera.getWorldDirection(this._fwd || (this._fwd = new THREE.Vector3()));

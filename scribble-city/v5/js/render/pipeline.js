@@ -2540,7 +2540,19 @@ export class Pipeline {
     if (floor) {
       if (!this.low) rc.layers.enable(MIRRORLESS);
     }
-    else this.hideFromMirror(this.scene, hidden);
+    else {
+      this.hideFromMirror(this.scene, hidden);
+      // (the phone's light version: the street's mirror holds the city and the sky - not the people and the cars, a quarter of
+      // its triangles for a smear under them in a picture drawn at half its size and read twice)
+      if (this.liteMirror) {
+        for (const o of this.scene.children) {
+          if (o.visible && o.userData.dynamic) {
+            o.visible = false;
+            hidden.push(o);
+          }
+        }
+      }
+    }
     const keep = shared.uRefl.value;
     shared.uRefl.value = BLANK;
     shared.uMirror.value = 1;
@@ -2673,7 +2685,13 @@ export class Pipeline {
     // but a reflection depends on where you stand, so what is near in it slides a little until
     // the next. A jump of the camera (a cut, a teleport) draws it at once.
     // (ROADMAP 20: under the look on a phone every third - lookReflEvery, render/look.js)
-    const re = Math.max(this.reflEvery || 1, this.detailReflEvery || 1, this.lookReflEvery || 1);
+    // (ROADMAP 21, the phone's light version - liteMirror, game/game.js: every fourth, and never in a frame that draws the shadows of
+    // what moves. Every third beside shadows every second, the two fell in the same frame one time in six: 375 draws and 1.5
+    // million triangles in it against 227 and 0.97 in the frame after - the owner's phone, 40 frames a second on the average in
+    // this street, and not a steady 30: it is the heaviest frame that comes late)
+    const lm = !!this.liteMirror && this.floorY === null;
+    const re = Math.max(this.reflEvery || 1, this.detailReflEvery || 1, this.lookReflEvery || 1, lm ? 4 : 1);
+    const lse = this.liteShadowEvery || 1;
     this.trackCamera();
     // (v5: the test route's moments without the people and the cars, or without the sun's view of
     // what moves, game/perf.js: what they cost on this device)
@@ -2692,7 +2710,7 @@ export class Pipeline {
       }
     }
     // (ROADMAP 21, the phone's light version: what moves casts its shadow anew every other frame - liteShadowEvery, game/game.js)
-    const liteSkip = (this.liteShadowEvery || 1) > 1 && this.frameN % this.liteShadowEvery !== 0 && this.shadowDone;
+    const liteSkip = lse > 1 && this.frameN % lse !== 0 && this.shadowDone;
     if ((every === 1 || this.staticRoot || phase === 0 || !this.shadowDone) && !(this.noSunPass && this.shadowDone) && !(indoors && this.shadowDone) && !liteSkip) {
       if (T) T.begin('shadow');
       this.renderShadows(center);
@@ -2705,7 +2723,9 @@ export class Pipeline {
     const want = this.mirrorWanted();
     shared.uReflOn.value = want && !this.reflSmall ? 1 : 0;
     if (!want) this.reflDone = false;
-    else if (re === 1 || this.frameN % re === 1 || !this.reflDone || this.mirrorStale() || !this.mirrorCovers()) {
+    else if (lm && lse > 1 && this.frameN % lse === 0 && this.reflDone) {
+      // (the shadows' frame: a mirror gone stale - a turn of the camera - waits for the next one)
+    } else if (re === 1 || this.frameN % re === 1 || !this.reflDone || this.mirrorStale() || !this.mirrorCovers()) {
       if (T) T.begin('reflection');
       this.renderReflection();
       if (T) T.end();

@@ -1593,6 +1593,8 @@ class Civilian {
 // along it and a second row behind: [along the curb, back from it] (m)
 const CURB_SLOTS = [[0, 0], [0.8, 0], [-0.8, 0], [1.6, 0], [-1.6, 0], [0.4, 0.75], [-0.4, 0.75], [1.2, 0.75], [-1.2, 0.75], [0, 1.5]];
 
+const _near6 = new Float64Array(6);
+
 export class Civilians {
   constructor(game) {
     this.game = game;
@@ -2707,9 +2709,31 @@ export class Civilians {
     // (and whoever is seen in the mirror: the water's, a mall's polished floor - someone up on a
     // gallery over the picture's top edge, there in the floor)
     const pipe = this.game.pipe;
-    const mirror = pipe && pipe.reflections && shared.uReflOn.value > 0.5;
-    const my = mirror ? (pipe.floorY !== null && pipe.floorY !== undefined ? pipe.floorY : pipe.mirrorY) : 0;
+    const floorM = pipe && pipe.floorY !== null && pipe.floorY !== undefined;
+    // (the phone's light version: nobody is in the street's mirror, render/pipeline.js liteMirror - a mall's floor still holds them)
+    const mirror = pipe && pipe.reflections && shared.uReflOn.value > 0.5 && (floorM || !pipe.liteMirror);
+    const my = mirror ? (floorM ? pipe.floorY : pipe.mirrorY) : 0;
     const list = this.list;
+    // (ROADMAP 21, the phone's light version: the six nearest people in full, the rest in the simple shapes - from 15 m at the
+    // most, as it was, and never nearer than 7. A terrace of ten at their tables beside you was ten people in full, every frame)
+    if (GFX.lite && !GFX.off) {
+      const near = _near6;
+      near.fill(1e9);
+      for (let i = 0; i < list.length; i++) {
+        const c = list[i];
+        if (c.inside) continue;
+        let d = Math.hypot(c.pos.x - camPos.x, c.pos.z - camPos.z);
+        if (d >= near[5]) continue;
+        for (let k = 0; k < 6; k++) {
+          if (d < near[k]) {
+            const t = near[k];
+            near[k] = d;
+            d = t;
+          }
+        }
+      }
+      bodies.liteCap = Math.min(15, Math.max(7, near[5] + 0.5));
+    } else bodies.liteCap = 0;
     for (let i = 0; i < list.length; i++) {
       const c = list[i];
       if (c.inside) continue;
