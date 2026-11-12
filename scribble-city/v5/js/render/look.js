@@ -28,7 +28,8 @@ export const LOOK_SUN = new THREE.Vector3(0.13, 0.06, -1).normalize();
 // (round 8) where its disc is drawn: half set at the very end of the boulevard, under the road sign - the owner's pictures. The
 // light and the shadows keep the sun above: a sun that low would lay every shadow the length of the street
 // (round 13, the owner's picture: the sun seen - a little up the sky over the road sign, not behind it)
-export const LOOK_DISC = new THREE.Vector3(0.03, 0.135, -1).normalize();
+// (round 14, the owner's word: where a setting sun is - low over the horizon, and where the light and the shadows come from)
+export const LOOK_DISC = new THREE.Vector3(0.13, 0.068, -1).normalize();
 // the last pass: the shadows to violet, the lights to gold, a fuller curve, more colour
 // (round 11, the owner's word - the sky exactly as it was before the clouds were touched: the grade and the exposure are the whole
 // picture's, the sky's too, so they are round 8's again)

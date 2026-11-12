@@ -1636,11 +1636,16 @@ void main() {
     vec2 wob = (vec2(vnoise(vWP.xz * vec2(0.9, 0.25) + uTime * vec2(0.0, 0.3)), vnoise(vWP.xz * 0.6 + 7.0)) - 0.5) * rip;
     // (a wet street: puddles, wider the wetter, and between them a thin film)
     float pud = street ? smoothstep(0.3 - 0.3 * uWet, 0.72 - 0.34 * uWet, vnoise(vWP.xz * vec2(0.21, 0.09))) : 1.0;
+    // (the look, round 14 - the owner's picture of a street in a light rain: water lies in patches, long ones along the street, and
+    // between them the asphalt is only damp)
+    if (street && uLook > 0.0) pud = mix(pud, smoothstep(0.4, 0.57, vnoise(vWP.xz * vec2(0.21, 0.09)) + (vnoise(vWP.xz * 0.9 + 4.0) - 0.5) * 0.14), uLook);
     // (ROADMAP 20, the look: between the puddles the damp stone is rough - what it holds of the lights is scattered, not a mirror's picture)
     if (street && uLook > 0.0 && uLookLow < 0.5) wob += (vec2(vnoise(vWP.xz * 7.0), vnoise(vWP.xz * 7.0 + 5.0)) - 0.5) * 0.03 * uLook * (1.0 - pud);
     if (uRain > 0.0) {
       // the rain falling into it: rings that push the mirror image about
       rings = rainRings(vWP.xz, length(cameraPosition - vWP), ringPx);
+      // (the look: the drops' rings where the water lies)
+      if (street) rings *= mix(1.0, smoothstep(0.3, 0.8, pud), uLook);
       wob += rings.xy * 0.006;
     }
     vec3 r = vec3(0.0);
@@ -1661,15 +1666,17 @@ void main() {
       r /= float(taps);
     } else r = skyColor(reflect(-V, N)) * 0.9;
     // (the look: as wet asphalt holds the light - almost nothing looking down at it, more the lower you look across it, never a sheet of ice)
-    float fr = mix(0.05 - 0.03 * uLook, street ? 0.72 - 0.42 * uLook : 0.92, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0 + 2.0 * uLook));
-    float wetK = street ? uWetK * uWet * (mix(0.25, 0.05, uLook) + mix(0.75, 0.6, uLook) * pud) : uWetK;
+    // (as water on a road holds the light: next to nothing looking down at it, much of it far down the street - and the puddles hold
+    // it, the damp asphalt between them only a sheen)
+    float fr = mix(0.05 - 0.01 * uLook, street ? 0.72 - 0.1 * uLook : 0.92, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0 + 1.0 * uLook));
+    float wetK = street ? uWetK * mix(uWet * (0.25 + 0.75 * pud), 0.22 + 0.76 * pud, uLook) : uWetK;
     // under the pens, the street holds the mirror image; the pens take their colours from it
     float k = fr * wetK;
     lit = mix(lit, r, k * 0.8);
     shade = mix(shade, r * 0.8, k * 0.8);
     light = mix(light, 0.5, k * 0.6);
     // (the look: where the street holds the mirror image the pens are fewer - the picture in it reads)
-    dens *= 1.0 - 0.4 * k * uLook;
+    dens *= 1.0 - (0.4 * k + 0.3 * pud * step(0.5, float(street))) * uLook;
   }
   if (kind > 7.5 && kind < 8.5) {
     // neon tubes: almost no pen, just light
@@ -1709,7 +1716,7 @@ void main() {
   vec3 col = (probe & 1) != 0 ? mix(shade, lit, light) : drawPens(p, dpx, dpy, lit, shade, light, hi, dens, ang, wash, step(0.7, N.y));
 #endif
   // the rings on the puddles: a pale pen, the sky caught in their slopes
-  if (rings.z > 0.0) col = mix(col, mix(uPaper, skyColor(vec3(0.0, 1.0, 0.0)), 0.5) * 0.9, rings.z * 0.42);
+  if (rings.z > 0.0) col = mix(col, mix(uPaper, skyColor(vec3(0.0, 1.0, 0.0)), 0.5) * 0.9, rings.z * mix(0.42, 0.2, uLook));
   col += em;
   if ((probe & 8) == 0) col = applyFog(col, vWP);
   gColor = vec4(col, clamp(lum(em) * 0.3 - 0.15, 0.0, 1.0));

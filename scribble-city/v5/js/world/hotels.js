@@ -596,7 +596,7 @@ export function oceanHotel(ctx, spec) {
         // the sides of the balcony
         for (const u of [b0 + 0.2, b1 - 0.2]) fbox(ctx, f, M.frame, u - 0.03, y + 0.95, 0, u + 0.03, y + 1.01, 1.24, railCol, rid);
         // (ROADMAP 20, the look: boxes of flowers on the rails of the opening street's balconies - no dice thrown: by the floor and the bay)
-        if (STYLE.on && spec.shop && spec.shop.first) {
+        if (STYLE.on && STYLE.flowers && spec.shop && spec.shop.first) {
           const bi = Math.round(b0 * 3) + fl;
           if (bi % 3 !== 0) {
             const fid = nextId();

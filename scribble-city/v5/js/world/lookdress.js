@@ -7,7 +7,7 @@ import { srgb, addLight, makeSurface } from '../render/materials.js';
 import { nextId, seeded } from './kit.js';
 import { CURB, STREETS, STREET_X0, STREET_X1, PROM_X1 } from './layout.js';
 import { ZONE } from '../render/look.js';
-import { GFX } from '../core/util.js';
+import { GFX, STYLE } from '../core/util.js';
 import { clump, globeLamp, planter } from './streetscape.js';
 import { bench } from './blocks.js';
 import { free, trashCan } from './streets.js';
@@ -23,6 +23,8 @@ const GLOW = srgb(1.0, 0.82, 0.5);
 const TW = 3.2;
 // (the phone's light version: the flowers from fewer bracts)
 const DENS = GFX.lite ? 0.55 : 1;
+// (round 14, the owner's word: "take the flowers down for now" - the vines, the pots, the baskets, the terraces' flowers)
+const FLOWERS = STYLE.flowers;
 
 const _d = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -79,6 +81,7 @@ function puff(ctx, r, cx, cy, cz, rad, squash, color, mat, id) {
 // bougainvillea on a front (round 11, the owner's pictures): a mass of it at the first balcony, wide over the awnings and spilling
 // out from the wall, strands of it hanging down from the mass, and a thin climb of it up the wall above
 function cascade(ctx, r, f, u, v0, v1, w, side) {
+  if (!FLOWERS) return;
   const o = { mat: ctx.M.flower, leafMat: ctx.M.leaf, idF: nextId(), idG: nextId(), base: null, greens: GREENS, green: 0.24 };
   const base = r.pick(PINKS);
   const vM = Math.min(v1 - 0.4, v0 + 1.5);
@@ -117,11 +120,13 @@ function cascade(ctx, r, f, u, v0, v1, w, side) {
 
 // a tuft of flowers (a basket, a pot, a wall's top): leaves under, the flower's bracts over them
 function tuft(ctx, r, x, y, z, rad, n, pal) {
+  if (!FLOWERS) return;
   blossom(ctx, r, x, y, z, rad, Math.round(n * 1.5 * DENS), { mat: ctx.M.flower, leafMat: ctx.M.leaf, idF: nextId(), idG: nextId(), base: r.pick(pal), greens: GREENS, green: 0.3, sq: 0.7 });
 }
 
 // a pot of flowers at the curb: the planter's leaves, and flowers over them
 function flowerPot(ctx, r, x, z) {
+  if (!FLOWERS) return;
   planter(ctx, r, x, z, { r: 0.52, color: srgb(0.74, 0.42, 0.3), trim: srgb(0.56, 0.3, 0.22) });
   for (let k = 0; k < 5; k++) {
     const a = (k / 5) * Math.PI * 2 + r.range(-0.4, 0.4);
@@ -146,7 +151,7 @@ export function lookDress(ctx) {
     }
     if (L > 24) cascade(ctx, r, f, L * r.range(0.38, 0.62), 4.6, top, 0.3, r() < 0.5 ? 1 : -1);
     // flowers along the terrace's low wall (not across the way in)
-    if (h.spec.terrace) {
+    if (h.spec.terrace && FLOWERS) {
       const uD = h.uDoor !== undefined ? h.uDoor : L / 2;
       for (let u = 1.4; u < L - 1.2; u += r.range(0.75, 1.05)) {
         if (Math.abs(u - uD) < 2.0) continue;
@@ -184,7 +189,7 @@ export function lookDress(ctx) {
       festoon(ctx, a, [l.x, CURB + 4.2, l.z], 0.95, 16);
       addLight((a[0] + l.x) / 2, 3.4, l.z, 9, GLOW, 0.4);
     }
-    for (const s of [-1, 1]) {
+    for (const s of FLOWERS ? [-1, 1] : []) {
       const bx = l.x - 0.02;
       const bz = l.z + s * 0.5;
       wire(ctx, [l.x, CURB + 3.75, l.z], [bx, CURB + 3.6, bz], 0.014);
@@ -219,7 +224,7 @@ export function lookDress(ctx) {
       if (slot === 0 || slot === 2) {
         if (!free(ctx, x, z, 0.8)) continue;
         globeLamp(ctx, x, z, { alongZ: true, light: slot === 0 });
-        for (const sg of [-1, 1]) {
+        for (const sg of FLOWERS ? [-1, 1] : []) {
           const bz = z + sg * 0.5;
           wire(ctx, [x, CURB + 3.75, z], [x, CURB + 3.6, bz], 0.014);
           wire(ctx, [x, CURB + 3.6, bz], [x, CURB + 3.28, bz], 0.008);
