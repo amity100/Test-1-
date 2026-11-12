@@ -5,11 +5,14 @@
 import * as THREE from 'three';
 import { srgb, addLight, makeSurface } from '../render/materials.js';
 import { nextId, seeded } from './kit.js';
-import { CURB, STREETS, STREET_X0 } from './layout.js';
+import { CURB, STREETS, STREET_X0, STREET_X1, PROM_X1 } from './layout.js';
 import { ZONE } from '../render/look.js';
-import { clump, globeLamp } from './streetscape.js';
+import { clump, globeLamp, planter } from './streetscape.js';
+import { bench } from './blocks.js';
+import { free, trashCan } from './streets.js';
 
-const PINKS = [srgb(0.86, 0.14, 0.5), srgb(0.96, 0.3, 0.62), srgb(0.72, 0.1, 0.44), srgb(1.0, 0.42, 0.7), srgb(0.9, 0.2, 0.36)];
+// (round 8: the bougainvillea of the owner's pictures - deep magenta, not a pale pink the light washes out)
+const PINKS = [srgb(0.78, 0.06, 0.42), srgb(0.9, 0.1, 0.5), srgb(0.62, 0.04, 0.4), srgb(0.95, 0.16, 0.56), srgb(0.84, 0.08, 0.3)];
 const WARMS = [srgb(1.0, 0.5, 0.2), srgb(1.0, 0.74, 0.26), srgb(0.98, 0.94, 0.9), srgb(0.96, 0.3, 0.62)];
 const GREENS = [srgb(0.2, 0.46, 0.24), srgb(0.28, 0.56, 0.26), srgb(0.16, 0.38, 0.26)];
 const BANNERS = [srgb(0.46, 0.16, 0.6), srgb(0.86, 0.2, 0.5), srgb(1.0, 0.5, 0.2), srgb(0.2, 0.5, 0.62)];
@@ -80,7 +83,22 @@ function cascade(ctx, r, f, u, v0, v1, w, side) {
     const uu = u + side * t * r.range(0.1, 1.3) + r.range(-0.4, 0.4);
     const p = f.p(uu, v, w + r.range(-0.05, 0.22));
     const green = r() < 0.3;
-    puff(ctx, r, p[0], p[1], p[2], r.range(0.15, 0.34), r.range(0.5, 0.9), (green ? r.pick(GREENS) : r.pick(PINKS)).clone().multiplyScalar(r.range(0.9, 1.2)), green ? ctx.M.leaf : ctx.M.flower, green ? idG : idF);
+    puff(ctx, r, p[0], p[1], p[2], r.range(0.15, 0.34), r.range(0.5, 0.9), (green ? r.pick(GREENS) : r.pick(PINKS)).clone().multiplyScalar(green ? r.range(0.9, 1.2) : r.range(0.75, 1.0)), green ? ctx.M.leaf : ctx.M.flower, green ? idG : idF);
+  }
+  // (round 8: a mass of it where it comes over the top, spilling to both sides - the owner's pictures)
+  for (let i = 0; i < 16; i++) {
+    const p = f.p(u + r.range(-1.5, 1.5), v1 + r.range(-0.55, 0.35), w + r.range(0, 0.4));
+    const green = r() < 0.22;
+    puff(ctx, r, p[0], p[1], p[2], r.range(0.24, 0.46), r.range(0.55, 0.9), (green ? r.pick(GREENS) : r.pick(PINKS)).clone().multiplyScalar(green ? r.range(0.9, 1.2) : r.range(0.75, 1.0)), green ? ctx.M.leaf : ctx.M.flower, green ? idG : idF);
+  }
+}
+
+// a pot of flowers at the curb: the planter's leaves, and flowers over them
+function flowerPot(ctx, r, x, z) {
+  planter(ctx, r, x, z, { r: 0.52, color: srgb(0.74, 0.42, 0.3), trim: srgb(0.56, 0.3, 0.22) });
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2 + r.range(-0.4, 0.4);
+    clump(ctx, r, x + Math.cos(a) * 0.3, CURB + 0.86 + r.range(0, 0.22), z + Math.sin(a) * 0.3, r.range(0.2, 0.3), 0.85, r.pick(k % 3 === 2 ? WARMS : PINKS).clone(), ctx.M.flower, false);
   }
 }
 
@@ -88,8 +106,9 @@ export function lookDress(ctx) {
   const dice = ctx.rng;
   const r = (ctx.rng = seeded(20261111));
   const M = ctx.M;
-  // the flowers' pen: the leaves', holding a little of its colour in the shade
-  if (!M.flower) M.flower = makeSurface({ kind: 'leaf', vcolor: true, emVColor: true, emissive: new THREE.Color(0.3, 0.3, 0.3), ang: 0.6, line: 0.22, objMask: true });
+  // the flowers' pen: the leaves', fuller (round 8: no light of its own - the hour's own lit windows' strength went into it, and
+  // every flower was white)
+  if (!M.flower) M.flower = makeSurface({ kind: 'leaf', vcolor: true, ang: 0.6, line: 0.3, objMask: true, wash: 0.9, density: 1.2 });
   const hotels = ((ctx.ocean && ctx.ocean.hotels) || []).filter((h) => h.spec && h.spec.f && h.z1 > ZONE.z0 + 4 && h.z0 < ZONE.z1 - 4);
   for (const h of hotels) {
     const f = h.spec.f;
@@ -153,6 +172,47 @@ export function lookDress(ctx) {
     ctx.B.add(M.awning, g, null, nextId(), { color: BANNERS[k % BANNERS.length] });
     wire(ctx, [l.x, CURB + 3.47, l.z], [l.x - 0.72, CURB + 3.47, l.z], 0.014);
     k++;
+  }
+  // (round 8, the owner's pictures) pots of flowers between the lamps; and the sea's side of the boulevard dressed as the hotels'
+  // is: lamps with their baskets and banners, a bench, a bin, pots of flowers - each only where nothing stands yet
+  for (let i = 0; i + 1 < lamps.length; i++) {
+    const a = lamps[i];
+    const b = lamps[i + 1];
+    if (b.z - a.z > 10.5) continue;
+    const z = (a.z + b.z) / 2;
+    if (free(ctx, a.x, z, 0.75)) flowerPot(ctx, r, a.x, z);
+  }
+  {
+    // (at the curb's edge and at the promenade's far side: the strollers' lines are at 15.2 and 17.6, game/civilians.js PROM_LINES)
+    const x = STREET_X1 + 0.8;
+    const xb = PROM_X1 - 0.75;
+    let n = 0;
+    for (let z = ZONE.z0 + 13.5; z < ZONE.z1 - 6; z += 9.5) {
+      if (STREETS.some((s) => Math.abs(z - s.z) < s.half + s.walk + 3)) continue;
+      const slot = n++ % 4;
+      if (slot === 0 || slot === 2) {
+        if (!free(ctx, x, z, 0.8)) continue;
+        globeLamp(ctx, x, z, { alongZ: true, light: slot === 0 });
+        for (const sg of [-1, 1]) {
+          const bz = z + sg * 0.5;
+          wire(ctx, [x, CURB + 3.75, z], [x, CURB + 3.6, bz], 0.014);
+          wire(ctx, [x, CURB + 3.6, bz], [x, CURB + 3.28, bz], 0.008);
+          clump(ctx, r, x, CURB + 3.2, bz, 0.3, 0.75, r.pick(GREENS).clone());
+          clump(ctx, r, x + r.range(-0.08, 0.08), CURB + 3.34, bz + r.range(-0.08, 0.08), 0.26, 0.8, r.pick(k % 2 ? WARMS : PINKS).clone(), M.flower, false);
+        }
+        const g = new THREE.BoxGeometry(0.56, 1.5, 0.03);
+        g.translate(x + 0.42, CURB + 2.72, z);
+        ctx.B.add(M.awning, g, null, nextId(), { color: BANNERS[k % BANNERS.length] });
+        wire(ctx, [x, CURB + 3.47, z], [x + 0.72, CURB + 3.47, z], 0.014);
+        k++;
+      } else if (slot === 1) {
+        if (free(ctx, x, z, 0.75)) flowerPot(ctx, r, x, z);
+      } else {
+        if (free(ctx, xb, z, 1.2)) bench(ctx, xb, z, -Math.PI / 2);
+        if (free(ctx, xb, z + 1.9, 0.5)) trashCan(ctx, xb, z + 1.9);
+        if (free(ctx, x, z, 0.75)) flowerPot(ctx, r, x, z);
+      }
+    }
   }
   ctx.rng = dice;
 }
