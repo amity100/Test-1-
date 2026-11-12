@@ -12,9 +12,9 @@ export const ZONE = { x0: -72, x1: 118, z0: -118, z1: 44, pad: 45 };
 
 // the hour as the look paints it (game/daynight.js KEYS: the same fields)
 export const LOOK_KEY = {
-  sun: [1.0, 0.6, 0.34], sunK: 1.6,
+  sun: [1.0, 0.6, 0.34], sunK: 1.35,
   top: [0.3, 0.2, 0.58], mid: [0.94, 0.44, 0.46], hz: [1.0, 0.62, 0.24], glow: [1.0, 0.82, 0.4], bounce: [0.96, 0.7, 0.7], paper: [0.95, 0.88, 0.84],
-  fog: 0.00055, bloom: 1.0, exp: 1.3, lamp: 1.1, lit: 1.4, stars: 0.08,
+  fog: 0.00055, bloom: 0.5, exp: 1.3, lamp: 0.6, lit: 1.15, stars: 0.08,
   pens: [
     [1.0, 0.74, 0.26], [1.0, 0.56, 0.22], [1.0, 0.46, 0.36], [1.0, 0.86, 0.48],
     [0.98, 0.4, 0.42], [0.82, 0.3, 0.58], [1.0, 0.52, 0.36], [0.62, 0.26, 0.66],

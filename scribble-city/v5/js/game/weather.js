@@ -357,7 +357,7 @@ export class Weather {
     shared.uOvercast.value = o;
     shared.uRain.value = r;
     // (ROADMAP 20: the look's street, wet after the rain - no rain falling, render/look.js)
-    shared.uWet.value = Math.max(this.wet, STYLE.k * 0.62);
+    shared.uWet.value = Math.max(this.wet, STYLE.k * 0.36);
     shared.uMist.value = m;
     shared.uFlash.value = f;
     shared.uWind.value.set(this.windDir.x, this.windDir.y, this.windK);
