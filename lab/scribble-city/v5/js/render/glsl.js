@@ -1848,25 +1848,6 @@ void main() {
     // the other side of the sky, come in over the first's - across the line itself they are all the second's, unbroken
     if (uLook > 0.0 && seamK > 0.0) col = mix(col, skyStrokes(base, p2, dpx2, dpy2, el, toSun, cl, cloudCol, cl2, clEdge, boost), seamK);
   }
-  // (the look, round 9: towers far beyond the end of the boulevard, on the land's side of the low sun - painted on the sky, the way
-  // a backdrop is: no walls there to bump into, nothing for the card to draw)
-  if (uLook > 0.0 && el > 0.0 && el < 0.22 && az < -0.03 && az > -0.78) {
-    float tx = az * 44.0;
-    float ti = floor(tx);
-    float tf = fract(tx);
-    float hh = h11(ti * 1.37 + 5.0);
-    float fall = smoothstep(-0.78, -0.34, az) * (1.0 - 0.4 * smoothstep(-0.16, -0.03, az));
-    float hgt = (0.04 + 0.17 * hh * hh) * fall * step(0.3, h11(ti * 3.1 + 1.0));
-    if (el < hgt && tf > 0.07 && tf < 0.93) {
-      vec3 tc = mix(vec3(0.62, 0.3, 0.42), vec3(0.19, 0.09, 0.34), smoothstep(0.0, 0.07, el));
-      vec2 wc = vec2(tf * 4.0, el * 250.0);
-      float won = step(0.6, h11(floor(wc.x) * 7.3 + floor(wc.y) * 13.7 + ti * 0.61)) * step(0.22, fract(wc.x)) * step(fract(wc.x), 0.78) * step(0.3, fract(wc.y)) * step(fract(wc.y), 0.8);
-      tc = mix(tc, vec3(1.0, 0.7, 0.28) * 1.5, won * 0.9);
-      float edge = max(step(hgt - 0.0022, el), max(step(tf, 0.095), step(0.905, tf)));
-      tc = mix(tc, vec3(0.05, 0.02, 0.1), edge * 0.85);
-      col = mix(col, tc, uLook * 0.92);
-    }
-  }
   gZig = 0.0;
   if (uStars > 0.01 && el > 0.03) {
     // the stars: little pen crosses scattered over the night, none in the clouds, few low down
@@ -1910,11 +1891,11 @@ void main() {
   vec2 sv = vec2(dot(dir - uSunDisc, normalize(vec3(-uSunDisc.z, 0.0, uSunDisc.x))), dir.y - uSunDisc.y);
   float ringN = (vnoise(vec2(atan(sv.y, sv.x) * 7.0, 3.0)) - 0.5) * 0.006;
   // (the look: a bigger sun, and its gold wide over the end of the street)
-  float R = 0.03 + 0.008 * uLook;
+  float R = 0.03 + 0.014 * uLook;
   float disc = (1.0 - smoothstep(R + ringN, R + 0.004 + ringN, sd)) * uSunDiscK;
   vec3 sunC = mix(lin(uSunRing), lin(uSunCore), 1.0 - smoothstep(R * 0.3, R, sd));
   col = mix(col, sunC * 2.6, disc);
-  col += lin(uSunGlow) * (exp(-sd * 20.0) * 0.45 + uLook * (exp(-sd * 7.0) * 0.1 + exp(-sd * 2.4) * 0.12)) * uSunDiscK;
+  col += lin(uSunGlow) * (exp(-sd * 20.0) * 0.45 + uLook * (exp(-sd * 6.0) * 0.34 + exp(-sd * 2.4) * 0.12)) * uSunDiscK;
   float glow = disc * 0.6 + exp(-sd * 40.0) * 0.25 * uSunDiscK;
   // a flash of lightning: the clouds light up from inside
   if (uFlash > 0.0) col += vec3(0.62, 0.68, 0.95) * uFlash * (0.25 + 0.5 * cl);
