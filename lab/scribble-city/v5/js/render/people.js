@@ -2836,7 +2836,8 @@ const HERO_SET = ['face', 'hair', 'jacket', 'pants', 'boots'];
 const PAPER_W = [1, 1, 1];
 const HERO_LEATHER = [0.2, 0.15, 0.13];
 const HERO_JEANS = [0.14, 0.14, 0.16];
-const HERO_SOLE = [0.62, 0.6, 0.58];
+// (cast round 2, his sheet: dark leather boots on dark soles - the pale sole under them read as a skate's blade)
+const HERO_SOLE = [0.13, 0.11, 0.1];
 const CHAIN = [0.78, 0.78, 0.8];
 const WATCH = [0.1, 0.09, 0.09];
 const DIAL = [0.72, 0.72, 0.75];

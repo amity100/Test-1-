@@ -1475,10 +1475,15 @@ function makeFolkBody(k) {
   const facePt = facePtOf(H.pos, parts.head.attributes.normal.array, H.eyes);
   // their body: a belly, a chest, their limbs thicker or slighter
   const B = { belly: 0, chest: 0, thick: 0, ...(spec.body || {}) };
+  // (cast round 2: a top worn loose - a child's hoodie, soft and a size too big: the body of it fuller below the chest, its sleeves
+  // wider; trousers worn baggy: the thigh fuller, the shin wide to its hem - spec.top.loose, spec.bottom.baggy)
+  const loose = spec.top.loose || 0;
+  const baggy = spec.bottom.baggy || 0;
   const trunk = (rows) => rows.map(([y, w, df, db, z = 0, n = 2]) => {
     const b = B.belly * Math.exp(-(((y - 0.12) / 0.12) ** 2));
     const c = B.chest * Math.exp(-(((y - 0.32) / 0.08) ** 2));
-    return [y, w * (1 + 0.14 * b + 0.05 * c), df * (1 + 0.55 * b + 0.12 * c), db * (1 + 0.06 * b), z, n];
+    const lo = loose * (y < 0.4 ? 1 : Math.max(0, 1 - (y - 0.4) / 0.08));
+    return [y, w * (1 + 0.14 * b + 0.05 * c + 0.45 * lo), df * (1 + 0.55 * b + 0.12 * c + 0.6 * lo), db * (1 + 0.06 * b + 0.5 * lo), z, n];
   });
   const limb = (rows) => (B.thick ? slim(rows, 1 + B.thick) : rows);
   // (characters round 3) the jacket's back up to the back of the neck: their neck stands a little
@@ -1510,7 +1515,9 @@ function makeFolkBody(k) {
   } else {
     // (ROADMAP 18: open: worn open wider than that by so much - a child's hoodie hanging open)
     const o = spec.top.open || 0;
-    const edge = (sd) => region(patch(T, -0.086, 0.455, () => sd * ((fem ? 0.039 : 0.043) + o), (y) => sd * ((fem ? 0.052 : 0.058) + o + Math.max(0, y - 0.33) * 0.42), 0.0062, 2, 18), JK.edge, true);
+    // (a hoodie has no lapels: its front edges a plain band, a zip's, all the way up)
+    const lap = spec.top.hood ? 0.06 : 0.42;
+    const edge = (sd) => region(patch(T, -0.086, 0.455, () => sd * ((fem ? 0.039 : 0.043) + o), (y) => sd * ((fem ? 0.052 : 0.058) + o + Math.max(0, y - 0.33) * lap), 0.0062, 2, 18), JK.edge, true);
     parts.zip = merge([edge(1), edge(-1)]);
     parts.tee = region(frontPatch(T, () => (fem ? 0.042 : 0.047) + o), PT.front, true);
   }
@@ -1519,14 +1526,14 @@ function makeFolkBody(k) {
     parts.welt = merge([flap(1), flap(-1)]);
   }
   const PEL = trunk(fem ? FEM_PELVIS : PELVIS_ROWS);
-  const UP = limb(fem ? FEM_UPPER : UPPER_ROWS);
-  const FO = limb(fem ? FEM_FORE : FORE_ROWS);
-  const TH = limb(fem ? FEM_THIGH : THIGH_ROWS);
+  const UP = slim(limb(fem ? FEM_UPPER : UPPER_ROWS), 1 + loose * 1.6);
+  const FO = slim(limb(fem ? FEM_FORE : FORE_ROWS), 1 + loose * 2.0);
+  const TH = slim(limb(fem ? FEM_THIGH : THIGH_ROWS), 1 + baggy * 0.6);
   parts.pelvis = region(loft(PEL, 24, false, true), PT.pelvis);
   parts.upper = region(loft(UP, 18, false, true), JK.upper);
   parts.fore = region(loft(FO, 18, false, true), JK.fore);
   const dress = spec.bottom.kind === 'dress';
-  const shin = limb(spec.bottom.kind === 'wide' ? wideShin(fem ? FEM_SHIN : SHIN_ROWS) : fem ? FEM_SHIN : SHIN_ROWS);
+  const shin = slim(limb(spec.bottom.kind === 'wide' ? wideShin(fem ? FEM_SHIN : SHIN_ROWS) : fem ? FEM_SHIN : SHIN_ROWS), 1 + baggy);
   parts.thigh = region(loft(TH, 20, false, true), PT.thigh);
   // (ROADMAP 18: cargo trousers - a pocket on each side of the thigh, as the hero's have)
   if (spec.bottom.cargo) parts.thigh = merge([parts.thigh, cargoPocket(1, TH), cargoPocket(-1, TH)]);

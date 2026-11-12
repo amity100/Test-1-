@@ -268,16 +268,18 @@ export function headSdf(x, y, z) {
   const ax = Math.abs(x);
   // (the eyes half way down the head; brow, nose and chin a hand's third of the face each)
   let f = sdEll(x, y, z, 0, 0.026, -0.012, 0.076, 0.094, 0.101); // the skull, full at the temples
-  f = smin(f, sdEll(x, y, z, 0, -0.034, 0.028, 0.061, 0.06, 0.07), 0.03); // the face, narrower below
+  // (cast round 2, his sheet: a broad face on a strong jaw - it was long and narrow: the face and the jaw wider, the jaw's angles
+  // out under the ears, the chin broader and a little shorter)
+  f = smin(f, sdEll(x, y, z, 0, -0.034, 0.028, 0.066, 0.06, 0.07), 0.03); // the face, narrower below
   // (ROADMAP 13.5) the jaw as a man's: its body under the ears narrower than the cheekbones, its
   // angles under the ears, the jawline from them down to a square chin a little forward - not a
   // round jowl as wide as the cheeks
-  f = smin(f, sdEll(x, y, z, 0, -0.062, -0.006, 0.053, 0.042, 0.06), 0.03);
-  f = smin(f, sdEll(ax, y, z, 0.043, -0.075, -0.006, 0.012, 0.014, 0.016), 0.03);
-  f = smin(f, sdCap(ax, y, z, 0.043, -0.079, -0.004, 0.02, -0.099, 0.06, 0.0105), 0.026);
+  f = smin(f, sdEll(x, y, z, 0, -0.06, -0.006, 0.06, 0.042, 0.06), 0.03);
+  f = smin(f, sdEll(ax, y, z, 0.051, -0.072, -0.006, 0.012, 0.014, 0.016), 0.03);
+  f = smin(f, sdCap(ax, y, z, 0.051, -0.076, -0.004, 0.024, -0.095, 0.06, 0.0115), 0.026);
   f = smin(f, sdEll(x, y, z, 0, 0.038, 0.07, 0.058, 0.014, 0.022), 0.015); // the brow
   f = smin(f, sdEll(ax, y, z, 0.05, 0.006, 0.048, 0.026, 0.016, 0.029), 0.015); // cheekbones, high
-  f = smin(f, sdEll(x, y, z, 0, -0.094, 0.067, 0.03, 0.017, 0.019), 0.026); // the chin, square
+  f = smin(f, sdEll(x, y, z, 0, -0.09, 0.067, 0.035, 0.017, 0.019), 0.026); // the chin, square
   // the nose: its bridge, its tip, its wings
   let n = sdCap(x, y, z, 0, 0.028, 0.087, 0, -0.02, 0.111, 0.0085);
   n = smin(n, sdBall(x, y, z, 0, -0.023, 0.107, 0.0145), 0.006);
@@ -356,7 +358,7 @@ export function heroHeadGeo() {
 function hairline(phi) {
   // (by the angle round the head, 0 ahead: the forehead, the temples a little receded, the
   // sideburns down in front of the ears, over the ears, down to the nape)
-  const K = [[0, 0.62], [0.55, 0.56], [1.1, 0.93], [1.33, 1.38], [1.5, 1.36], [1.72, 1.1], [2.2, 1.5], [Math.PI, 1.92]];
+  const K = [[0, 0.56], [0.55, 0.52], [1.1, 0.9], [1.33, 1.3], [1.5, 1.3], [1.72, 1.08], [2.2, 1.5], [Math.PI, 1.92]];
   const a = Math.abs(Math.atan2(Math.sin(phi), Math.cos(phi)));
   let i = 0;
   while (i < K.length - 2 && K[i + 1][0] < a) i++;
@@ -372,7 +374,7 @@ const wav = (a, b) => Math.sin(a * 3.1 + b * 1.7) * 0.5 + Math.sin(a * 5.3 - b *
 export function hairEdge(phi) {
   // (the hairline, the front a little lower over the forehead, broken into clumps)
   // (cast round 1, his sheet: swept up off the forehead - not a fringe cut straight across it, a bowl - its edge more broken)
-  return hairline(phi) + 0.025 * Math.max(0, Math.cos(phi)) ** 2 + 0.065 * wav(phi * 2.2, 0.3);
+  return hairline(phi) + 0.01 * Math.max(0, Math.cos(phi)) ** 2 + 0.045 * wav(phi * 2.2, 0.3);
 }
 export function hairThick(th, phi) {
   const top = Math.max(0, Math.cos(th));
@@ -436,10 +438,14 @@ export function heroLocksGeo() {
     const side = (R() - 0.5) * 2;
     if (kind === 'fringe') {
       // (a few strands over the forehead, swept to one side - the brow and the forehead clear)
-      d = tTh.clone().addScaledVector(tPh, 0.55 + side * 0.5);
-      L = 0.034 + 0.028 * R();
+      // (cast round 2, his sheet: swept up off the forehead and over to one side, in waves - a strand or two falling onto it. It hung
+      // down to his brows all round, a bowl)
+      const fall = R() < 0.18;
+      d = fall ? tTh.clone().addScaledVector(tPh, 0.7) : tTh.clone().multiplyScalar(-0.75).addScaledVector(tPh, 0.75 + side * 0.35);
+      L = fall ? 0.022 + 0.012 * R() : 0.045 + 0.03 * R();
       w = 0.013 + 0.006 * R();
-      rise = 0.009;
+      rise = fall ? 0.004 : 0.013 + 0.006 * R();
+      kind = fall ? 'fringe' : 'quiff';
     } else if (kind === 'top') {
       // (over the front of it, combed to the side and back rather than down onto the face)
       const front = Math.max(0, Math.cos(phi));
@@ -449,15 +455,15 @@ export function heroLocksGeo() {
       rise = 0.008 + 0.006 * R();
     } else {
       d = tTh.clone().addScaledVector(tPh, side * 0.4);
-      L = kind === 'side' ? 0.034 + 0.022 * R() : 0.03 + 0.018 * R();
+      L = kind === 'side' ? 0.022 + 0.014 * R() : 0.03 + 0.018 * R();
       w = 0.012;
-      rise = 0.006;
+      rise = 0.004;
     }
     d.normalize();
     // (over and down: the fringe and the sides fall)
     const p1 = p0.clone().addScaledVector(d, L * 0.5);
     const p2 = p0.clone().addScaledVector(d, L);
-    if (kind === 'fringe' || kind === 'side') p2.y -= L * 0.3;
+    if (kind === 'fringe' || kind === 'side') p2.y -= L * (kind === 'side' ? 0.12 : 0.3);
     const mid = [];
     const edge = [];
     const base = pos.length / 3;
@@ -486,7 +492,7 @@ export function heroLocksGeo() {
         edge.push(C.clone().addScaledVector(B, rw * 0.55).addScaledVector(N, rw * 0.2 + 0.0012).toArray());
       }
     }
-    LOCKS.push({ mid, edge, n: n.toArray(), w, kind });
+    LOCKS.push({ mid, edge, n: n.toArray(), w, kind: kind === 'quiff' ? 'top' : kind });
     for (let r = 0; r < RINGS - 1; r++) {
       for (let j = 0; j < AROUND; j++) {
         const a = base + r * AROUND + j;
@@ -498,7 +504,7 @@ export function heroLocksGeo() {
       }
     }
   };
-  for (let i = 0; i < 11; i++) lock(-0.85 + (i / 10) * 1.7 + (R() - 0.5) * 0.12, 0.5 + R() * 0.18, 'fringe');
+  for (let i = 0; i < 14; i++) lock(-0.9 + (i / 13) * 1.8 + (R() - 0.5) * 0.12, 0.42 + R() * 0.16, 'fringe');
   for (let i = 0; i < 30; i++) lock(R() * Math.PI * 2, 0.06 + R() * 0.55, 'top');
   for (const sd of [-1, 1]) for (let i = 0; i < 8; i++) lock(sd * (1.0 + R() * 1.1), 0.8 + R() * 0.38, 'side');
   for (let i = 0; i < 10; i++) lock(Math.PI + (R() - 0.5) * 1.3, 1.2 + R() * 0.45, 'back');
