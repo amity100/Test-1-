@@ -107,7 +107,8 @@ export const GFX = (() => {
   // round of it on the way to being tried on the phone: every part that changes no picture, and those of this round that do)
   // (ROADMAP 19.13, the owner's word: "build it" - ?lite: the phone's light version, a visible step down: fewer pixels, fewer pens from
   // the middle distance, fewer people and cars, people's simple shapes nearer. It brings every ?fast part with it)
-  const lite = phone && !q.has('oldgfx') && q.has('lite');
+  // (ROADMAP 20: the new look on a phone brings the light version with it - 14 to 17 frames a second on the owner's phone without)
+  const lite = phone && !q.has('oldgfx') && (q.has('lite') || (q.has('look') && q.get('look') !== '0' && !q.has('nolite')));
   const fast = q.has('fast') || lite;
   const part = (name) => on && !q.has('no' + name) && (APPROVED[name] || q.has(name) || ((q.has('newgfx') || fast) && !LOOK.has(name)) || (fast && (name === 'penlite' || name === 'peoplelite')));
   return {

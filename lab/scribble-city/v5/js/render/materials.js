@@ -152,6 +152,8 @@ export const shared = {
   uPenLite: { value: 0 },
   // (ROADMAP 20: how much of the new look there is here, 0..1 - render/look.js)
   uLook: { value: 0 },
+  // (1: the look on a phone - its lighter way: render/look.js)
+  uLookLow: { value: 0 },
   uMirror: { value: 0 },
   uRefl: { value: blank },
   // (0: no mirror drawn this frame - no water in sight, the streets dry: the water reflects the

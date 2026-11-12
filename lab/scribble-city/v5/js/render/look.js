@@ -50,6 +50,11 @@ export function lookFrame(game) {
   if (k === STYLE.k && k === 0) return;
   STYLE.k = k;
   shared.uLook.value = k;
+  // (the owner's phone: 14 to 17 frames a second under the look - on a phone its lighter way, render/glsl.js uLookLow: no dark ink
+  // hatched into every shade, no scribbled strokes, the street's mirror read twice and not five times, the clouds from less noise)
+  shared.uLookLow.value = pipe.low && k > 0 ? 1 : 0;
+  // (and the mirror under the street drawn every third frame there, not every other: the wet stone it is read through is rough)
+  pipe.lookReflEvery = pipe.low && k > 0.5 ? 3 : 1;
   // the ink's line, bolder
   pipe.lineW = 1.25 + 0.55 * k;
   if (film) return;
