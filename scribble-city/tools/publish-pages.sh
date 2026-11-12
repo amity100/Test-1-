@@ -13,7 +13,10 @@ trap 'cd "$root"; git worktree remove --force "$tmp" >/dev/null 2>&1 || true' EX
 git fetch -q origin gh-pages
 git worktree add -q --detach "$tmp" origin/gh-pages
 git -C "$tmp" rm -r -q --ignore-unmatch scribble-city >/dev/null
-git archive HEAD scribble-city | tar -x -C "$tmp"
+# (the review pictures are the repository's, not the game's: 155 MB of them by now. The site keeps the ones it has and gets no
+# new ones - a site that big has failed to deploy before)
+if git -C "$tmp" cat-file -e HEAD:scribble-city/review 2>/dev/null; then git -C "$tmp" checkout -q HEAD -- scribble-city/review; fi
+git archive HEAD scribble-city | tar -x -C "$tmp" --exclude='scribble-city/review'
 # (the game's code in one file, made small - one download instead of hundreds, and less for a phone
 # to read before it can start; the files one by one stay too, for its helper thread. Without
 # esbuild: published as it is)
