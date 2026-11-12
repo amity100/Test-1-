@@ -289,7 +289,9 @@ export class DayNight {
     const raw = (v, a, b) => v.set(lerp(a[0], b[0], kk), lerp(a[1], b[1], kk), lerp(a[2], b[2], kk));
     // the sun, the moon (full, across the sky from the sun) and which of them gives the light
     let el = sunAt(h, this.sun);
-    if (lk > 0.001) {
+    // (not while the opening story runs: its light comes from where its own evening has it, in the film and in the player's own
+    // time between its scenes alike - the shadows do not swing round at every cut)
+    if (lk > 0.001 && !(this.game.prologue && this.game.prologue.active)) {
       this.sun.lerp(LOOK_SUN, lk).normalize();
       el = Math.asin(this.sun.y);
     }
@@ -305,7 +307,7 @@ export class DayNight {
       shared.uSunCol.value.setRGB(MOON[0], MOON[1], MOON[2], THREE.SRGBColorSpace).multiplyScalar(MOON_K * moonUp);
     }
     shared.uSunDisc.value.copy(this.sun);
-    if (lk > 0.001 && sunUp > 0) shared.uSunDisc.value.lerp(LOOK_DISC, lk).normalize();
+    if (lk > 0.001 && sunUp > 0 && !(this.game.prologue && this.game.prologue.active)) shared.uSunDisc.value.lerp(LOOK_DISC, lk).normalize();
     shared.uSunDiscK.value = smoothstep(-3 * RAD, -0.5 * RAD, el);
     // the sky, the light thrown back by the street, the page, the haze
     col(shared.uSkyTop, KA.top, KB.top);

@@ -108,7 +108,8 @@ export const GFX = (() => {
   // (ROADMAP 19.13, the owner's word: "build it" - ?lite: the phone's light version, a visible step down: fewer pixels, fewer pens from
   // the middle distance, fewer people and cars, people's simple shapes nearer. It brings every ?fast part with it)
   // (ROADMAP 20: the new look on a phone brings the light version with it - 14 to 17 frames a second on the owner's phone without)
-  const lite = phone && !q.has('oldgfx') && (q.has('lite') || (q.has('look') && q.get('look') !== '0' && !q.has('nolite')));
+  // (ROADMAP 20.15, the owner's word: the look into the game itself - it is on unless the address says ?look=0 or ?nolook)
+  const lite = phone && !q.has('oldgfx') && (q.has('lite') || (q.get('look') !== '0' && !q.has('nolook') && !q.has('nolite')));
   const fast = q.has('fast') || lite;
   const part = (name) => on && !q.has('no' + name) && (APPROVED[name] || q.has(name) || ((q.has('newgfx') || fast) && !LOOK.has(name)) || (fast && (name === 'penlite' || name === 'peoplelite')));
   return {
@@ -138,7 +139,7 @@ export const STYLE = (() => {
   const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
   // (hourK: how much of the look's own evening the clock gives now, 0..1 - game/daynight.js)
   // (flowers: the look's bougainvillea, pots and baskets - off for now, the owner's word; ?flowers brings them back)
-  return { on: q.has('look') && q.get('look') !== '0' && !q.has('nolook'), k: 0, off: false, hourK: 1, flowers: q.has('flowers') };
+  return { on: q.get('look') !== '0' && !q.has('nolook'), k: 0, off: false, hourK: 1, flowers: q.has('flowers') };
 })();
 
 // A tiny pool helper for objects that are recycled often.

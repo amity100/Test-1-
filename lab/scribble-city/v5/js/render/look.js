@@ -51,9 +51,15 @@ export function lookFrame(game) {
   if (!STYLE.on) return;
   const pipe = game.pipe;
   const c = game.camera.position;
-  // (the opening film keeps its own light and colour: game/prologue/director.js)
-  const film = !!(game.prologue && game.prologue.active);
-  const k = STYLE.off || film ? 0 : lookAt(c.x, c.z);
+  // (the opening film keeps its own light and colour: game/prologue/director.js - while it is filmed, holdCam. The player's own
+  // walks and drives between its scenes look as the game does, ROADMAP 18.9 - and the game's look is this one now, 20.15: it comes
+  // back over a second after a shot, and is gone at once when one begins, so a moment between two shots does not flash it)
+  const film = !!(game.prologue && game.prologue.active && game.prologue.holdCam);
+  const now = performance.now();
+  const dtF = Math.min(0.1, (now - (lookFrame.at || now)) / 1000);
+  lookFrame.at = now;
+  lookFrame.back = film ? 0 : Math.min(1, (lookFrame.back === undefined ? 1 : lookFrame.back) + dtF / 1.0);
+  const k = STYLE.off || film ? 0 : lookAt(c.x, c.z) * smooth(lookFrame.back);
   if (k === STYLE.k && k === 0) return;
   STYLE.k = k;
   shared.uLook.value = k;
@@ -64,8 +70,23 @@ export function lookFrame(game) {
   pipe.lookReflEvery = pipe.low && k > 0.5 ? 3 : 1;
   // the ink's line, bolder
   pipe.lineW = 1.25 + 0.55 * k;
-  if (film) return;
   const L = pipe.look;
+  // (the film's own grade is the director's, eased from shot to shot - game/prologue/director.js tickLook: what it had when the
+  // player's own time began is kept, and given back the moment the next shot begins)
+  const keep = lookFrame.keep;
+  if (film) {
+    if (keep) {
+      for (let i = 0; i < 3; i++) {
+        L.shadowT[i] = keep.s[i];
+        L.lightT[i] = keep.l[i];
+      }
+      L.vib = 0;
+      lookFrame.keep = null;
+    }
+    return;
+  }
+  if (!keep && k > 0 && game.prologue && game.prologue.active) lookFrame.keep = { s: [...L.shadowT], l: [...L.lightT] };
+  if (keep && !(game.prologue && game.prologue.active)) lookFrame.keep = null;
   // (the grade's violet and gold are the evening's: by day and by night a part of it)
   L.grade = GRADE.grade * k * (0.4 + 0.6 * STYLE.hourK);
   for (let i = 0; i < 3; i++) {

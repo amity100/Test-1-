@@ -371,13 +371,15 @@ function hairline(phi) {
 const wav = (a, b) => Math.sin(a * 3.1 + b * 1.7) * 0.5 + Math.sin(a * 5.3 - b * 2.9 + 1.3) * 0.3 + Math.sin(a * 9.7 + b * 4.1 + 2.1) * 0.2;
 export function hairEdge(phi) {
   // (the hairline, the front a little lower over the forehead, broken into clumps)
-  return hairline(phi) + 0.07 * Math.max(0, Math.cos(phi)) ** 2 + 0.045 * wav(phi * 2.2, 0.3);
+  // (cast round 1, his sheet: swept up off the forehead - not a fringe cut straight across it, a bowl - its edge more broken)
+  return hairline(phi) + 0.025 * Math.max(0, Math.cos(phi)) ** 2 + 0.065 * wav(phi * 2.2, 0.3);
 }
 export function hairThick(th, phi) {
   const top = Math.max(0, Math.cos(th));
   const t = th / hairEdge(phi);
-  const base = 0.007 + 0.026 * top ** 1.2 + 0.008 * Math.max(0, Math.cos(phi)) * top;
-  return (base * (1 + 0.32 * wav(phi * 3.3, th * 5.1)) * (1 - 0.8 * t ** 4)) + 0.001;
+  // (fuller: three to four centimetres of it on top and over the front, two at the sides, in waves)
+  const base = 0.014 + 0.026 * top ** 1.1 + 0.014 * Math.max(0, Math.cos(phi)) * Math.sin(Math.min(1.5, th * 1.6));
+  return (base * (1 + 0.42 * wav(phi * 3.3, th * 5.1)) * (1 - 0.8 * t ** 4)) + 0.001;
 }
 export function heroHairGeo() {
   const rings = 16;
@@ -435,21 +437,21 @@ export function heroLocksGeo() {
     if (kind === 'fringe') {
       // (a few strands over the forehead, swept to one side - the brow and the forehead clear)
       d = tTh.clone().addScaledVector(tPh, 0.55 + side * 0.5);
-      L = 0.022 + 0.02 * R();
-      w = 0.012 + 0.005 * R();
-      rise = 0.004;
+      L = 0.034 + 0.028 * R();
+      w = 0.013 + 0.006 * R();
+      rise = 0.009;
     } else if (kind === 'top') {
       // (over the front of it, combed to the side and back rather than down onto the face)
       const front = Math.max(0, Math.cos(phi));
       d = tTh.clone().multiplyScalar((0.8 + 0.3 * R()) * (1 - 0.75 * front)).addScaledVector(tPh, side * 0.9 + 0.6 * front);
-      L = 0.04 + 0.03 * R();
-      w = 0.014 + 0.006 * R();
-      rise = 0.0035 + 0.002 * R();
+      L = 0.05 + 0.035 * R();
+      w = 0.015 + 0.007 * R();
+      rise = 0.008 + 0.006 * R();
     } else {
       d = tTh.clone().addScaledVector(tPh, side * 0.4);
-      L = kind === 'side' ? 0.026 + 0.018 * R() : 0.024 + 0.014 * R();
-      w = 0.011;
-      rise = 0.0025;
+      L = kind === 'side' ? 0.034 + 0.022 * R() : 0.03 + 0.018 * R();
+      w = 0.012;
+      rise = 0.006;
     }
     d.normalize();
     // (over and down: the fringe and the sides fall)
@@ -512,11 +514,12 @@ export function heroLocksGeo() {
 export const NECK_ROWS = [
   [0.02, 0.03, 0.028, 0.034],
   [0.01, 0.046, 0.044, 0.052],
-  [0.0, 0.048, 0.046, 0.055],
-  [-0.05, 0.049, 0.047, 0.057],
-  [-0.1, 0.053, 0.049, 0.06],
-  [-0.14, 0.064, 0.054, 0.066],
-  [-0.17, 0.078, 0.058, 0.072],
+  // (cast round 1: a man's neck narrower than his jaw - it was as wide, a post under his head)
+  [0.0, 0.045, 0.045, 0.055],
+  [-0.05, 0.045, 0.046, 0.057],
+  [-0.1, 0.048, 0.048, 0.06],
+  [-0.14, 0.058, 0.053, 0.066],
+  [-0.17, 0.074, 0.058, 0.072],
   [-0.185, 0.064, 0.05, 0.06],
   [-0.192, 0.02, 0.02, 0.02],
 ];
@@ -736,13 +739,16 @@ export const TORSO = [
   [0.23, 0.182, 0.13, 0.117, 0, 2.4],
   [0.3, 0.19, 0.134, 0.121, 0, 2.5],
   [0.36, 0.197, 0.127, 0.12, -0.002, 2.6],
-  [0.405, 0.196, 0.112, 0.112, -0.006, 2.6],
-  [0.437, 0.178, 0.096, 0.1, -0.008, 2.4],
-  [0.462, 0.135, 0.08, 0.088, -0.01, 2.2],
+  // (cast round 1: the shoulders 1.5 cm higher - game/doodle.js shY - and the slope from the neck down to them fuller, a trapezius;
+  // the neck met the shoulders at a right angle)
+  [0.405, 0.197, 0.114, 0.113, -0.006, 2.6],
+  [0.437, 0.196, 0.104, 0.105, -0.008, 2.5],
+  [0.456, 0.178, 0.092, 0.097, -0.01, 2.3],
+  [0.474, 0.134, 0.08, 0.087, -0.01, 2.1],
   // (characters round 3: its back up to the back of his neck - the neck's foot a centimetre behind
   // it showed bare over the leather)
-  [0.482, 0.092, 0.07, 0.078, -0.008, 2],
-  [0.497, 0.07, 0.061, 0.078, -0.006, 2],
+  [0.488, 0.096, 0.07, 0.079, -0.008, 2],
+  [0.499, 0.072, 0.061, 0.078, -0.006, 2],
   [0.503, 0.045, 0.04, 0.044, -0.006, 2],
 ];
 export function heroTorsoGeo() {
@@ -822,9 +828,10 @@ export function heroUpperGeo() {
   return region(heroUpperLoft(), JK.upper);
 }
 export const UPPER_ROWS = [
-  [0.04, 0.014, 0.014, 0.014],
-  [0.032, 0.042, 0.044, 0.044],
-  [0.017, 0.058, 0.06, 0.06],
+  // (cast round 1: the cap of the shoulder flatter - it stood up over the shoulder's line, a point at each end)
+  [0.034, 0.014, 0.014, 0.014],
+  [0.028, 0.038, 0.04, 0.04],
+  [0.016, 0.055, 0.057, 0.057],
   [0.0, 0.064, 0.063, 0.063],
   [-0.06, 0.062, 0.06, 0.058],
   [-0.15, 0.058, 0.055, 0.055],

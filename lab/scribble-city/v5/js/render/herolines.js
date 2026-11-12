@@ -253,10 +253,11 @@ function head() {
   };
   for (const sd of [1, -1]) {
     // the eye: the upper lid heavy, the lower light, the iris, the crease over it
-    line(K.feature, [[sd * 0.019, 0.0181], [sd * 0.027, 0.0226], [sd * 0.036, 0.0236], [sd * 0.0451, 0.0197]], { w: 2.7, a: 0.92 });
-    line(K.feature, [[sd * 0.0195, 0.0178], [sd * 0.031, 0.0153], [sd * 0.045, 0.0192]], { w: 1.3, a: 0.6, near: true });
-    line(K.feature, [[sd * 0.0325, 0.0207], [sd * 0.0329, 0.0168]], { w: 3.6, a: 0.95, col: [0.09, 0.055, 0.03], eye: sd });
-    if (!KIT.mono) line(K.feature, [[sd * 0.021, 0.0262], [sd * 0.033, 0.0288], [sd * 0.0445, 0.0258]], { w: 1.4, a: 0.55, near: true, col: SEPIA_D });
+    // (cast round 1: round the eye as it is open now - render/heroink.js)
+    line(K.feature, [[sd * 0.019, 0.0182], [sd * 0.027, 0.0233], [sd * 0.036, 0.0244], [sd * 0.0451, 0.02]], { w: 2.7, a: 0.92 });
+    line(K.feature, [[sd * 0.0195, 0.0177], [sd * 0.031, 0.0146], [sd * 0.045, 0.0192]], { w: 1.3, a: 0.6, near: true });
+    line(K.feature, [[sd * 0.0325, 0.0204], [sd * 0.0329, 0.0172]], { w: 3.2, a: 0.9, col: [0.09, 0.055, 0.03], eye: sd });
+    if (!KIT.mono) line(K.feature, [[sd * 0.021, 0.0276], [sd * 0.033, 0.0302], [sd * 0.0445, 0.0268]], { w: 1.4, a: 0.55, near: true, col: SEPIA_D });
     // the brow: its mass, then its hairs
     const bz = (t) => {
       const a = (1 - t) * (1 - t);
