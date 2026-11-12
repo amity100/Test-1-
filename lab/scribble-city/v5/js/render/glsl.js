@@ -169,7 +169,8 @@ vec3 skyColor(vec3 dir) {
   float az = max(dot(normalize(dir.xz + vec2(1e-5)), normalize(uSunDisc.xz)), 0.0);
   float band = (1.0 - smoothstep(0.0, 0.24, abs(el))) * (0.25 + 0.75 * pow(az, 4.0));
   c = mix(c, uSkySun, band * 0.5);
-  c += uSkySun * (pow(s, 16.0) * 0.55 + pow(s, 260.0) * 1.4);
+  // (the look, round 12 - the owner's word: the sun far too strong)
+  c += uSkySun * (pow(s, 16.0) * 0.55 + pow(s, 260.0) * 1.4) * (1.0 - 0.7 * uLook);
   if (el < 0.0) c = mix(c, uSkyHorizon * 0.5, smoothstep(0.0, -0.25, el));
   return c;
 }
@@ -268,7 +269,7 @@ vec3 ambientLight(vec3 n) {
   if (uFlash > 0.0) c += vec3(0.62, 0.68, 0.9) * uFlash * (0.4 + 0.4 * max(n.y, 0.0));
   // (the look, round 10 - the owner's pictures are lit from behind: what the low sun and the lamps do not reach is deep violet, and
   // the light is in the windows, the lamps, the sky and the wet street. The shade was as bright as the light)
-  c = mix(c, c * vec3(0.68, 0.58, 0.88), uLook);
+  c = mix(c, c * vec3(0.8, 0.7, 0.95), uLook);
   return c;
 }
 
@@ -1407,7 +1408,7 @@ void main() {
   if (uOvercast > 0.0) light = mix(light, 0.32 + 0.3 * max(N.y, 0.0), uOvercast * 0.85);
   // in the rain what is flat and outdoors gets darker and deeper in colour
   // (the look: the wet stone and asphalt darker and cooler under the lights in them)
-  if (uWet > 0.0 && !inside && N.y > 0.6 && kind < 8.5) alb *= mix(vec3(1.0), vec3(1.0, 0.92, 1.16), uLook) * (1.0 - 0.26 * uWet * smoothstep(0.6, 0.95, N.y));
+  if (uWet > 0.0 && !inside && N.y > 0.6 && kind < 8.5) alb *= mix(vec3(1.0), vec3(1.5, 1.32, 1.8), uLook) * (1.0 - 0.26 * uWet * smoothstep(0.6, 0.95, N.y));
   if (uLook > 0.0 && !inside) {
     // (the look, round 9: the fronts' own colour fuller and a little deeper - lit, they went to the page's white)
     if (kind < 0.5) alb = mix(alb, saturateC(alb, 1.45) * 0.84, uLook);
@@ -1483,7 +1484,7 @@ void main() {
   float hi = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0) * back * sh * smoothstep(-0.15, 0.35, ndl) * 0.9;
   if (N.y > 0.7) hi *= 0.25;
   // (the look: the gold edge the sun behind everything draws round it, bolder)
-  hi *= 1.0 + (N.y > 0.7 ? 0.0 : 0.7) * uLook;
+  hi *= 1.0 + (N.y > 0.7 ? 0.0 : 0.2) * uLook;
   if (uOvercast > 0.0) hi *= 1.0 - uOvercast;
   // pictures (shop windows, signs, murals) and glass keep their own light
   if ((kind > 4.5 && kind < 6.5) || inside) hi = 0.0;
@@ -1652,8 +1653,8 @@ void main() {
       r /= float(taps);
     } else r = skyColor(reflect(-V, N)) * 0.9;
     // (the look: as wet asphalt holds the light - almost nothing looking down at it, more the lower you look across it, never a sheet of ice)
-    float fr = mix(0.05 + 0.02 * uLook, street ? 0.72 - 0.2 * uLook : 0.92, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0 + 1.8 * uLook));
-    float wetK = street ? uWetK * uWet * (mix(0.25, 0.1, uLook) + mix(0.75, 0.82, uLook) * pud) : uWetK;
+    float fr = mix(0.05 - 0.03 * uLook, street ? 0.72 - 0.42 * uLook : 0.92, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0 + 2.0 * uLook));
+    float wetK = street ? uWetK * uWet * (mix(0.25, 0.05, uLook) + mix(0.75, 0.6, uLook) * pud) : uWetK;
     // under the pens, the street holds the mirror image; the pens take their colours from it
     float k = fr * wetK;
     lit = mix(lit, r, k * 0.8);
@@ -1891,12 +1892,12 @@ void main() {
   vec2 sv = vec2(dot(dir - uSunDisc, normalize(vec3(-uSunDisc.z, 0.0, uSunDisc.x))), dir.y - uSunDisc.y);
   float ringN = (vnoise(vec2(atan(sv.y, sv.x) * 7.0, 3.0)) - 0.5) * 0.006;
   // (the look: a bigger sun, and its gold wide over the end of the street)
-  float R = 0.03 + 0.014 * uLook;
+  float R = 0.03 - 0.004 * uLook;
   float disc = (1.0 - smoothstep(R + ringN, R + 0.004 + ringN, sd)) * uSunDiscK;
   vec3 sunC = mix(lin(uSunRing), lin(uSunCore), 1.0 - smoothstep(R * 0.3, R, sd));
-  col = mix(col, sunC * 2.6, disc);
-  col += lin(uSunGlow) * (exp(-sd * 20.0) * 0.45 + uLook * (exp(-sd * 6.0) * 0.34 + exp(-sd * 2.4) * 0.12)) * uSunDiscK;
-  float glow = disc * 0.6 + exp(-sd * 40.0) * 0.25 * uSunDiscK;
+  col = mix(col, sunC * mix(2.6, 1.25, uLook), disc);
+  col += lin(uSunGlow) * exp(-sd * 20.0) * 0.45 * (1.0 - 0.7 * uLook) * uSunDiscK;
+  float glow = (disc * 0.6 + exp(-sd * 40.0) * 0.25 * uSunDiscK) * (1.0 - 0.8 * uLook);
   // a flash of lightning: the clouds light up from inside
   if (uFlash > 0.0) col += vec3(0.62, 0.68, 0.95) * uFlash * (0.25 + 0.5 * cl);
   gColor = vec4(col, clamp(glow, 0.0, 1.0));
