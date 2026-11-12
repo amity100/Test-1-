@@ -9,19 +9,20 @@ root="$(git rev-parse --show-toplevel)"
 cd "$root"
 src="$(git rev-parse --short HEAD)"
 tmp="$(mktemp -d)"
-trap 'cd "$root"; git worktree remove --force "$tmp" >/dev/null 2>&1 || true; rm -rf "${tmp:?}"' EXIT
+trap 'cd "$root"; git worktree remove --force "$tmp" >/dev/null 2>&1 || true' EXIT
 git fetch -q origin gh-pages
 git worktree add -q --detach "$tmp" origin/gh-pages
-rm -rf "${tmp:?}/scribble-city"
+git -C "$tmp" rm -r -q --ignore-unmatch scribble-city >/dev/null
 git archive HEAD scribble-city | tar -x -C "$tmp"
 # (the game's code in one file, made small - one download instead of hundreds, and less for a phone
 # to read before it can start; the files one by one stay too, for its helper thread. Without
 # esbuild: published as it is)
 ESBUILD="${ESBUILD:-npx --yes esbuild@0.24.0}"
 v5="$tmp/scribble-city/v5"
-if (cd "$tmp/scribble-city" && $ESBUILD v5/js/main.js --bundle --format=esm --minify --target=es2020 --alias:three=./js/vendor/three.module.min.js --outfile=v5/js/main.bundle.js --log-level=error); then
-  sed -i 's#src="js/main.js"#src="js/main.bundle.js"#' "$v5/index.html"
-  echo "bundled: $(du -h "$v5/js/main.bundle.js" | cut -f1)"
+if (cd "$tmp/scribble-city" && $ESBUILD v5/js/main.js --bundle --format=esm --minify --target=es2020 --alias:three=./js/vendor/three.module.min.js --outfile="v5/js/main.bundle.$src.js" --log-level=error); then
+  # (the file named by the commit it was made from: a phone that kept the last one asks for this one)
+  sed -i "s#src=\"js/main.js\"#src=\"js/main.bundle.$src.js\"#" "$v5/index.html"
+  echo "bundled: $(du -h "$v5/js/main.bundle.$src.js" | cut -f1)"
 else
   # (no bundle: every module the game reaches named up front in the page, so the browser asks for
   # all of them at once - not a level of imports at a time, each level a round trip)
