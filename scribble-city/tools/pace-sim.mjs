@@ -48,6 +48,15 @@ const CASES = {
   panel30: { hz: 60, cpu: 15, gpu: 189, pix: 0.72, mir: 0.26, mode: '30', lo: 0.5, queue: true, from: 0.7 },
   panelAuto: { hz: 60, cpu: 15, gpu: 189, pix: 0.72, mir: 0.26, mode: 'auto', lo: 0.5, queue: true, from: 0.7 },
   panelFixed30: { hz: 60, cpu: 15, gpu: 189, pix: 0.54, mir: 0.26, mode: '30', lo: 0.5, queue: true, from: 0.7 },
+  // (a phone, gov: its processor and card slow down to fill 62% and 68% of the beat's time, and
+  // are no faster than cpu and gpu at their fastest; level: the beat it begins on - the slower
+  // one, as after a heavy moment. govOld: without the trials, as it was - 20 a second for good.
+  // govWeak: a phone that does not hold 30 - how often the trials come, and what they cost.
+  // govCrowd: holds 30 but for a crowd from second 25 to 45)
+  govOld: { hz: 60, cpu: 15, gpu: 14, pix: 0.7, mode: '30', gov: true, level: 1, noTrial: true, secs: 120 },
+  govPhone: { hz: 60, cpu: 15, gpu: 14, pix: 0.7, mode: '30', gov: true, level: 1, secs: 120 },
+  govWeak: { hz: 60, cpu: 24, gpu: 44, pix: 0.7, mode: '30', gov: true, level: 1, secs: 600 },
+  govCrowd: { hz: 60, cpu: 15, gpu: 14, pix: 0.7, mode: '30', gov: true, level: 1, secs: 120, load: (t) => (t > 25 && t < 45 ? 2.2 : 1), cpuLoad: true },
 };
 
 function run(name, verbose) {
@@ -59,6 +68,11 @@ function run(name, verbose) {
   // (from: the resolution the free pace had come to, where the steady one begins - game/pace.js)
   if (k.from) c.want = k.from;
   c.setLimits(k.lo || 0.714, k.hi || 1.143, !!k.taa);
+  c.governed = !!k.gov && !k.noTrial;
+  if (k.level) {
+    c.level = k.level;
+    c.N = c.choices[c.level];
+  }
   const R = 1000 / k.hz;
   let t = 0;
   let frames = 0;
@@ -66,7 +80,7 @@ function run(name, verbose) {
   let dynSum = 0;
   let changes = 0;
   const pending = [];
-  const secs = 60;
+  const secs = k.secs || 60;
   let nextSec = 1;
   const beats = {};
   let lastDyn = c.dyn;
@@ -80,8 +94,16 @@ function run(name, verbose) {
     const mir = k.mir || 0;
     const mk = c.lite >= 2 ? 0.25 : c.lite >= 1 ? 0.45 : 1;
     const mirror = k.old ? 0.39 : mir * d * d * mk;
-    const gpu = k.gpu * load * (k.pix * d * d + mirror + (1 - k.pix - (k.old ? 0.39 : mir)));
-    let cpu = k.cpu * (0.9 + rnd() * 0.2);
+    let gpu = k.gpu * load * (k.pix * d * d + mirror + (1 - k.pix - (k.old ? 0.39 : mir)));
+    let cpu = k.cpu * (k.cpuLoad ? 1 + (load - 1) * 0.6 : 1) * (0.9 + rnd() * 0.2);
+    // (gov: what is measured is the slowed-down frame; a frame is late only if it would be at the
+    // phone's fastest - a frame running long, and the processor and the card speed up for it)
+    let cap = 0;
+    if (k.gov) {
+      cap = Math.max(cpu, cpu * 0.33 + gpu) * (0.95 + rnd() * 0.1) + (rnd() < 0.01 ? 6 : 0);
+      cpu = Math.max(cpu, 0.62 * c.N * (1000 / k.hz));
+      gpu = Math.max(gpu, 0.68 * c.N * (1000 / k.hz));
+    }
     // (the card's work starting a third of the way into the processor's, the time measured to its
     // end, a little noise and now and then a frame much longer)
     let L = Math.max(cpu, cpu * 0.33 + gpu) * (0.95 + rnd() * 0.1) + (rnd() < 0.01 ? 6 : 0);
@@ -110,7 +132,9 @@ function run(name, verbose) {
     dynSum += d;
     beats[c.N] = (beats[c.N] || 0) + 1;
     // late: the next frame's refresh is missed
-    const lateBy = L > B ? Math.ceil((L - B) / R) : 0;
+    const Ll = k.gov ? cap : L;
+    if (k.gov) L = Math.max(L, cap);
+    const lateBy = Ll > B ? Math.ceil((Ll - B) / R) : 0;
     pending.push({ n: c.frame, L, cpu, at: t + L + 2 });
     t += (c.N + lateBy) * R;
     if (lateBy) {
