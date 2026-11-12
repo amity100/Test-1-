@@ -137,7 +137,8 @@ export const GFX = (() => {
 export const STYLE = (() => {
   const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
   // (hourK: how much of the look's own evening the clock gives now, 0..1 - game/daynight.js)
-  return { on: q.has('look') && q.get('look') !== '0' && !q.has('nolook'), k: 0, off: false, hourK: 1 };
+  // (flowers: the look's bougainvillea, pots and baskets - off for now, the owner's word; ?flowers brings them back)
+  return { on: q.has('look') && q.get('look') !== '0' && !q.has('nolook'), k: 0, off: false, hourK: 1, flowers: q.has('flowers') };
 })();
 
 // A tiny pool helper for objects that are recycled often.
