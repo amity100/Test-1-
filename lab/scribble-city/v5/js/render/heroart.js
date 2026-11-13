@@ -215,7 +215,10 @@ export class FolkAtlas {
 export const EXPRS = {
   talk1: { jaw: 0.35 },
   talk2: { jaw: 0.75 },
-  smile: { smile: 0.85 },
+  // (cast round 8: soft - a small closed smile, for what is tender or wry; smile - a glad one, closed too: the owner's word, with
+  // a white line of teeth in a barely open mouth "his mouth in joy looks less natural" - his teeth are for a laugh)
+  soft: { smile: 0.5 },
+  smile: { smile: 0.9 },
   smileTalk: { smile: 0.6, jaw: 0.4 },
   laugh: { smile: 1, jaw: 0.7, teeth: true },
   angry: { brow: 'down', smile: -0.45 },

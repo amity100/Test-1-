@@ -59,6 +59,10 @@ export const PARTS = ['head', 'torso', 'armL', 'armR', 'legL', 'legR'];
 // hair styles drawn over a cap of hair
 const CAPPED = new Set(['buzz', 'short', 'slick', 'cornrows', 'messy', 'long', 'bob', 'ponytail', 'bun', 'curly', 'spiky', 'pompadour', 'pigtails', 'spacebuns', 'braids', 'beehive']);
 
+const ease01 = (x) => {
+  x = x < 0 ? 0 : x > 1 ? 1 : x;
+  return x * x * (3 - 2 * x);
+};
 function ik(root, target, l1, l2, pole, out) {
   const dx = target.x - root.x;
   const dy = target.y - root.y;
@@ -345,7 +349,15 @@ export class Doodle {
 
     // (cast round 1: a child's legs are shorter for their height - build.legs, the hips down with them, so the feet stay on the ground)
     const legsK = this.look.build.legs || 1;
-    let hipY = 0.93 - 0.94 * (1 - legsK) - Math.abs(Math.sin(ph)) * 0.05 * A + Math.sin(ph * 2) * 0.01;
+    // (cast round 8: a walk as people walk - each foot down at its heel ahead of the body, on the ground under it as the body goes
+    // over, off at its toes behind, then lifted and swung through; the hips lowest as the heel comes down and highest over the
+    // standing leg. duty: how much of a stride a foot is down - three fifths at a walk, a third running (both feet off the ground
+    // between); gaitR: how far ahead and behind the hip the ankle goes. It was two sticks swung on a sine, the feet flat in the
+    // air behind him and sliding)
+    const runK = clamp((sp - 2.6) / 1.9, 0, 1);
+    const duty = 0.62 - 0.26 * runK;
+    const gaitR = Math.min(0.38 * legsK, ((sp * duty) / cyc / 2) * 0.86);
+    let hipY = 0.93 - 0.94 * (1 - legsK) - wa * (0.008 + (0.024 + 0.03 * A) * Math.sin(ph) ** 2);
     // (cast round 1, the owner's word: they stand like shop dummies) how much they are simply standing - then the weight on one leg,
     // the other knee eased, the feet a little apart and turned out, the arms hanging a little off the body
     const stand = (1 - wa) * (1 - sit) * (1 - crawl) * (1 - crouch) * (1 - this.sneak) * (1 - Math.min(1, this.ride)) * (this.air || this.dance > 0 || this.kick >= 0 || this.punch >= 0 || this.dead > 0 ? 0 : 1);
@@ -389,11 +401,12 @@ export class Doodle {
     }
     // (a fist fight) into the punch, the shoulders turning with it; back off the kick; the head
     // snapped back by a blow
-    let twist = 0;
+    // (and the shoulders turned against the legs: the right one back as the right leg comes forward)
+    let twist = -Math.sin(ph) * (0.03 + 0.03 * A) * wa * (1 - sit) * (1 - crawl);
     if (this.punch >= 0) {
       const out = punchOut(this.punch);
       lean += out * 0.14;
-      twist = out * this.punchSide * 0.1;
+      twist += out * this.punchSide * 0.1;
     } else if (this.kick >= 0) lean -= kickUp(this.kick) * 0.22;
     let leanSide = this.stagger * Math.sin(ph * 1.3) * 0.15 + this.dance * Math.sin(ph * 0.5) * 0.12;
     // (characters round) the head held up against the body's lean, so that the eyes stay on the world
@@ -403,7 +416,8 @@ export class Doodle {
       lean -= this.recoil * this.recoil * 0.42;
       leanSide += this.recoil * this.recoilSide * 0.12;
     }
-    const hipX = wSide * 0.02 * stand;
+    // (walking, the hips over the leg that carries him - the right one about ph = pi)
+    const hipX = wSide * 0.02 * stand - Math.cos(ph) * 0.012 * wa * (1 - sit) * (1 - crawl);
     this.toWorld(this.dance * Math.sin(ph * 0.5) * 0.05 + hipX, hipY, 0, j.hip);
     const spine = 0.5;
     // (standing, a breath: the chest and the shoulders rise and fall a little - and in the prologue's
@@ -442,10 +456,33 @@ export class Doodle {
       const toe = legs[li][2];
       const off = legs[li][3];
       const side = off === 0 ? 1 : -1;
-      let th = Math.sin(ph + off) * (0.18 + 0.62 * A) * wa;
-      // (the knee folds as the leg swings through - the foot lifted clear of the ground - and is
-      // straight while the foot is down: not the other way round)
-      let kb = Math.max(0, Math.cos(ph + off + 0.3)) * (0.95 + 0.8 * A) * Math.min(1, 0.45 + sp * 0.45) * wa + 0.05;
+      // (where the ankle is now, from the hip: az ahead, ay off the ground; pitch: the foot's own turn, toes up +)
+      const gu = ((((ph + off - Math.PI / 2) / (Math.PI * 2)) % 1) + 1) % 1;
+      let az;
+      let ay;
+      let pitch;
+      if (gu < duty) {
+        const s = gu / duty;
+        const offK = ease01((s - 0.66) / 0.34);
+        az = gaitR * (1 - 2 * s);
+        ay = 0.075 * offK;
+        pitch = 0.32 * Math.max(0, 1 - s / 0.16) - 0.75 * offK;
+      } else {
+        const s = (gu - duty) / (1 - duty);
+        az = -gaitR + 2 * gaitR * (s - Math.sin(2 * Math.PI * s) / (2 * Math.PI));
+        ay = 0.075 * (1 - s) ** 2 + (0.05 + 0.22 * runK) * Math.sin(Math.PI * s) ** 1.3;
+        pitch = -0.75 + 1.07 * ease01((s - 0.12) / 0.7);
+      }
+      az *= wa;
+      ay *= wa;
+      pitch *= wa * (this.air ? 0 : 1) * (1 - sit) * (1 - crawl);
+      // (the leg's two angles for that ankle: the knee bent by what the leg is too long for it)
+      // (the rig's leg is 5 cm longer than the hip is high over the ankle: aimed that much under the ground - the foot is kept on
+      // it below - or he would walk with both knees bent, sitting)
+      const gh = Math.max(0.2, hipY + 0.012 - ay);
+      const gd = Math.min(Math.hypot(az, gh), legL * 1.998);
+      let kb = 2 * Math.acos(gd / (2 * legL)) + 0.02;
+      let th = Math.atan2(az, gh) + kb / 2;
       if (this.dance > 0) {
         th = lerp(th, Math.sin(ph + off) * 0.25, this.dance);
         kb = lerp(kb, 0.25 + Math.max(0, Math.sin(ph + off)) * 0.5, this.dance);
@@ -505,14 +542,15 @@ export class Doodle {
       fy = Math.max(fy, 0.04);
       const fxS = sx + side * 0.036 * stand - hipX;
       this.toWorld(fxS, fy, fz, foot);
-      this.toWorld(fxS + side * 0.04 * stand, Math.max(0.03, fy - 0.01), fz + 0.13, toe);
+      this.toWorld(fxS + side * 0.04 * stand, Math.max(0.03, fy - 0.01 + Math.sin(pitch) * 0.13), fz + Math.cos(pitch) * 0.13, toe);
     }
     if (this.ride > 0) this.pedal(hw, legL);
 
     // arms
     const armU = 0.31 * (this.look.build.arms || 1);
     const armF = 0.29 * (this.look.build.arms || 1);
-    const swing = (0.15 + 0.7 * A) * (1 - sit) * wa;
+    // (cast round 8: a fuller swing from the shoulder, the elbow bending as the arm comes forward - at a run bent nearly square)
+    const swing = (0.26 + 0.6 * A) * (1 - sit) * wa;
     const arms = this._arms || (this._arms = [[j.shoulderR, j.elbowR, j.handR, 1, 0], [j.shoulderL, j.elbowL, j.handL, -1, Math.PI]]);
     const aimP = this.aimPitch;
     const ay = this.yaw + this.aimYaw;
@@ -598,7 +636,7 @@ export class Doodle {
         const ez = Math.sin(a) * armU;
         // (hanging from the shoulder as the chest is turned)
         this.toWorld(nx + sxl * chc - ez * chs, ey, nz + sxl * chs + ez * chc, elbow);
-        const b = a + 0.35 + A * 0.5;
+        const b = a + 0.2 + Math.min(1.4, A * 2.0) + 0.3 * Math.max(0, a) * (1 - A);
         const hx = sxl + side * 0.02;
         const hz = ez + Math.sin(b) * armF;
         this.toWorld(nx + hx * chc - hz * chs, ey - Math.cos(b) * armF, nz + hx * chs + hz * chc, hand);
