@@ -137,7 +137,9 @@ export function paintFolkFace(c, o = {}) {
   // ---- the shadows: the warm dark first, then the cool across it, deepest where it is deepest
   const tone = (px, py) => folkTone(xm(px), ym(py), fem, P.shape);
   const neckK = (py) => smooth(-0.112, -0.132, ym(py));
-  const soft = fem ? 0.8 : 1;
+  // (cast round 6: a child's face smooth - half the shading of a grown woman's; hatched as deep, Lily's cheeks and mouth were
+  // an old woman's)
+  const soft = (fem ? 0.8 : 1) * (P.age && P.age < 13 ? 0.5 : 1);
   if (!flat) {
   h.hatch(0, 0, W, H, N(7600), (px, py) => tone(px, py) * 1.15 * soft * (1 - neckK(py)), 1.0, 28, 1.8, S.sh1, 0.55);
   h.hatch(0, 0, W, H, N(6200), (px, py) => (tone(px, py) - 0.2) * 1.5 * soft * (1 - neckK(py)), -0.65, 24, 1.7, S.sh2, 0.5);
