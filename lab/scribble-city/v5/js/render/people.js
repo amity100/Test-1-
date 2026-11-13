@@ -720,7 +720,15 @@ const _gaze = [0, 0, 0, 0];
 // the words he says, at the voice's pace (the same syllables as anybody's: mouthTrack), and what he
 // feels - or null, his face as it is drawn
 function heroFace(fig, t) {
-  const mood = fig.mood || (fig.feel && fig.feel.until > t ? fig.feel.mood : null);
+  let mood = fig.mood || (fig.feel && fig.feel.until > t ? fig.feel.mood : null);
+  // (cast round 5: his face lives with what he does, as the city's people's do - set in a fight or along a gun's sights, pained by a
+  // blow, startled as he falls or is thrown, glad dancing. Outside the story's scenes it never changed)
+  if (!mood && !(fig.dead > 0)) {
+    if (fig.flail > 0 || fig.surrender > 0) mood = 'scared';
+    else if (fig.recoil > 0.2 || fig.stagger > 0) mood = 'hurt';
+    else if (fig.punch >= 0 || fig.kick >= 0 || fig.guard > 0.3 || fig.melee >= 0 || fig.aim) mood = 'angry';
+    else if (fig.dance > 0.3) mood = 'joy';
+  }
   const say = fig.say;
   let jaw = -1;
   if (say && !say.done && !say.wait) {
