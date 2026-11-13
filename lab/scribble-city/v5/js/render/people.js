@@ -2267,7 +2267,13 @@ export class PersonRenderer {
         _gw.copy(_c).addScaledVector(grip, -_c.dot(grip));
         if (_gw.lengthSq() > 1e-6) _d.copy(hd).addScaledVector(_gw.normalize(), 0.19 * S);
       }
-      (ai === 0 ? (grip ? p.heroGripR : p.heroHandR) : p.heroHandL).push(along(hd, _d, 0.19, k, grip || fwd), skin, own, id(), ind);
+      // (cast round 4: in his pocket - turned down into it as it goes in, and not drawn once it is in)
+      const pkA = (ai === 0 ? fig.pocketR : fig.pocketL) || 0;
+      if (pkA > 0.01) {
+        _gw.copy(_c).multiplyScalar(1 - pkA).addScaledVector(UP, -pkA).normalize();
+        _d.copy(hd).addScaledVector(_gw, 0.19 * S);
+      }
+      if (pkA < 0.7) (ai === 0 ? (grip ? p.heroGripR : p.heroHandR) : p.heroHandL).push(along(hd, _d, 0.19, k, grip || fwd), skin, own, id(), ind);
       if (ai === 1) {
         // (a steel watch on a leather strap, just out of the cuff: its face on the back of the wrist)
         _a.copy(hd).addScaledVector(_c, -0.025 * S);

@@ -1088,16 +1088,19 @@ export function heroHandGeo(left = false, grip = 0) {
     parts.push(capsule(tp[0], tp[1], 0.0115, 0.0098, 8));
     parts.push(capsule(tp[1], tp[2], 0.0098, 0.0085, 8));
   } else {
+    // (cast round 4: a hand that hangs is half closed - three joints to a finger, each bent a little more than the one before, the
+    // little finger the most; they were two nearly straight sticks, a paddle)
+    let fi = 0;
     for (const [x, len, r] of fingers) {
+      const more = fi++ * 0.09;
       const a = V(x, -0.094, -0.002);
-      const l1 = len * 0.55;
-      const l2 = len * 0.45;
-      const d1 = V(0, -Math.cos(0.22), -Math.sin(0.22));
-      const b = a.clone().addScaledVector(d1, l1);
-      const d2 = V(0, -Math.cos(0.62), -Math.sin(0.62));
-      const c = b.clone().addScaledVector(d2, l2);
-      parts.push(capsule(a, b, r, r * 0.95, 8));
-      parts.push(capsule(b, c, r * 0.95, r * 0.82, 8));
+      const dir = (an) => V(0, -Math.cos(an), -Math.sin(an));
+      const b = a.clone().addScaledVector(dir(0.34 + more), len * 0.42);
+      const c = b.clone().addScaledVector(dir(0.92 + more * 1.5), len * 0.33);
+      const d = c.clone().addScaledVector(dir(1.42 + more * 2), len * 0.25);
+      parts.push(capsule(a, b, r, r * 0.96, 8));
+      parts.push(capsule(b, c, r * 0.96, r * 0.9, 8));
+      parts.push(capsule(c, d, r * 0.9, r * 0.8, 8));
     }
     // the thumb, from the heel of the hand, along the fingers and in front of them
     const t0 = V(0.03, -0.028, -0.008);
