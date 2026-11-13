@@ -1346,6 +1346,32 @@ export class Doodle {
       _b.addScaledVector(ax, -0.05 * S).addScaledVector(fwd, -0.11 * bk).addScaledVector(rgt, -0.06 * S);
       this.ellipsoid('torso', 'chest', _b, rgt, ax, fwd, 0.045 * S, 0.1 * S, 0.13 * S, bagC);
     }
+    if (L.acc.includes('sling')) {
+      // (cast round 11, his sheet looked at again: Danny's strap runs from his LEFT shoulder down across his chest to his RIGHT hip
+      // and on round his back - and there is no bag to be seen on it. Round 2 had it the other way round, with a bag made of an
+      // ellipsoid standing out at his hip: the owner's "strange ellipse at the bottom". The strap alone, lying on the jacket: over
+      // the shoulder, down the chest to the hip's side, and up across the back)
+      const bk = this.bulk * S;
+      const r = 0.012 * S;
+      _a.lerpVectors(j.neck, j.shoulderL, 0.5).addScaledVector(ax, 0.006 * S).addScaledVector(fwd, 0.03 * S);
+      _e.lerpVectors(j.neck, j.shoulderL, 0.42).addScaledVector(ax, -0.075 * S).addScaledVector(fwd, 0.125 * bk);
+      _c.lerpVectors(j.hip, j.neck, 0.6).addScaledVector(fwd, 0.146 * bk).addScaledVector(rgt, 0.015 * S);
+      _b.copy(j.hipR).addScaledVector(ax, 0.085 * S).addScaledVector(fwd, 0.074 * bk).addScaledVector(rgt, 0.068 * bk);
+      this.capsule('torso', 'chest', _a, _e, r, bagC);
+      this.capsule('torso', 'chest', _e, _c, r, bagC);
+      this.capsule('torso', 'chest', _c, _b, r, bagC);
+      // (round the side of the hip, on the jacket)
+      _d.copy(j.hipR).addScaledVector(ax, 0.07 * S).addScaledVector(rgt, 0.1 * bk);
+      this.capsule('torso', 'chest', _b, _d, r, bagC);
+      _b.copy(j.hipR).addScaledVector(ax, 0.085 * S).addScaledVector(fwd, -0.07 * bk).addScaledVector(rgt, 0.068 * bk);
+      this.capsule('torso', 'chest', _d, _b, r, bagC);
+      // (and up across his back to the shoulder)
+      _c.lerpVectors(j.hip, j.neck, 0.6).addScaledVector(fwd, -0.128 * bk).addScaledVector(rgt, 0.015 * S);
+      this.capsule('torso', 'chest', _b, _c, r, bagC);
+      _e.lerpVectors(j.neck, j.shoulderL, 0.45).addScaledVector(ax, -0.06 * S).addScaledVector(fwd, -0.105 * bk);
+      this.capsule('torso', 'chest', _c, _e, r, bagC);
+      this.capsule('torso', 'chest', _e, _a, r, bagC);
+    }
     if (L.acc.includes('handbag')) {
       // a handbag on the crook of the left arm
       _a.lerpVectors(j.elbowL, j.handL, 0.25).addScaledVector(ax, -0.1 * S).addScaledVector(rgt, -0.05 * S);

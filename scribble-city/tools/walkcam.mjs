@@ -1,6 +1,7 @@
 // How the leads move, seen: Danny and Lily walking or running along the opening street's promenade, eight moments of a stride side
 // by side in one picture (from the side, or from three quarters ahead) - for judging a walk without a video.
 //   node tools/walkcam.mjs <outDir>     QUERY="look=1"   WHO=danny|lily   SPEED=1.6 (m/s; 5 is a run)   VIEW=side|front|back   NAME=walk
+//   PHONE=1: the phone's version of the game
 //   N=16 KEEP=1: that many moments of the stride, each kept as its own picture (<name>_00.png ...) - for a moving picture of it
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,7 +14,9 @@ const server = await startServer();
 const browser = await launch();
 const W = 420;
 const H = 620;
-const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
+// (PHONE=1: as the game is on a phone - its light version, its smaller pictures; each moment the middle of a wide screen)
+const phone = !!process.env.PHONE;
+const ctx = await browser.newContext(phone ? { viewport: { width: 882, height: 411 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: W, height: H }, deviceScaleFactor: 1 });
 const pg = await ctx.newPage();
 await seed(pg, 7);
 const errors = [];
@@ -85,14 +88,16 @@ for (let i = 0; i < N; i++) {
     window.__frame(1, 1e-4);
   }, [view, tall, step]);
   const f = path.join(out, `${name}_${String(i).padStart(2, '0')}.png`);
-  await pg.screenshot({ path: f, timeout: 180000 });
+  await pg.screenshot({ path: f, timeout: 180000, ...(phone ? { clip: { x: 441 - 130, y: 0, width: 260, height: 411 } } : {}) });
   shots.push(f);
 }
 // (the eight side by side: put together in the page itself)
 const data = shots.slice(0, 8).map((f) => 'data:image/png;base64,' + fs.readFileSync(f).toString('base64'));
 const pg2 = await ctx.newPage();
-await pg2.setViewportSize({ width: W * 4, height: H * 2 });
-await pg2.setContent(`<body style="margin:0;background:#111;display:grid;grid-template-columns:repeat(4,${W}px)">${data.map((d) => `<img src="${d}" width="${W}" height="${H}">`).join('')}</body>`);
+const cw = phone ? 390 : W;
+const ch = phone ? 616 : H;
+await pg2.setViewportSize({ width: cw * 4, height: ch * 2 });
+await pg2.setContent(`<body style="margin:0;background:#111;display:grid;grid-template-columns:repeat(4,${cw}px)">${data.map((d) => `<img src="${d}" width="${cw}" height="${ch}">`).join('')}</body>`);
 await pg2.screenshot({ path: path.join(out, `${name}.png`) });
 if (!process.env.KEEP) for (const f of shots) fs.unlinkSync(f);
 else console.log(`step ${step} frames of 1/30 s between pictures`);

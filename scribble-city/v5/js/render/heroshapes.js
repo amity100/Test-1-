@@ -775,8 +775,29 @@ export const TORSO = [
   [0.499, 0.072, 0.061, 0.078, -0.006, 2],
   [0.503, 0.045, 0.04, 0.044, -0.006, 2],
 ];
+// (cast round 11, the owner's word: "make his shirt normal... material goes into material, and how you build things" - worked out,
+// part against part, as they are drawn (the jacket at 0.96 of its rows, the legs at 1.04): the tops of his thighs stood 9 mm out
+// of the jacket's sides; his seat was as deep as the jacket's back at its hem, 110 mm against 112; and a leg swung back at a walk
+// came two centimetres through the jacket's back, at every step - the patches under his jacket that moved. His own rows: a jacket
+// that hangs straight from the chest, as an open one does, its hem as wide as his hips. And what makes it sure is not the room
+// left but a rule: nothing of his trousers is drawn above the jacket's hem - render/people.js _hem. The same heights as TORSO:
+// his pictures are laid by them)
+export const HERO_TORSO = TORSO.map((r) => r.slice());
+[
+  [0.178, 0.124, 0.12],
+  [0.181, 0.127, 0.123],
+  [0.18, 0.126, 0.122],
+  [0.178, 0.123, 0.119],
+  [0.177, 0.122, 0.117],
+  [0.177, 0.122, 0.116],
+  [0.178, 0.124, 0.116],
+].forEach(([w, df, db], i) => {
+  HERO_TORSO[i][1] = w;
+  HERO_TORSO[i][2] = df;
+  HERO_TORSO[i][3] = db;
+});
 export function heroTorsoGeo() {
-  return region(loft(TORSO, 32, false, true), JK.torso);
+  return region(loft(HERO_TORSO, 32, false, true), JK.torso);
 }
 // (v5, ROADMAP 13.1) the jacket worn open: its two front edges standing a little proud of the body,
 // widening into the lapels under the collar; the shirt and the belt between them; the chest
@@ -787,7 +808,7 @@ export const heroOpen = (y) => 0.064 + 0.012 * Math.max(0, Math.min(1, y / 0.3))
 export function heroZipGeo() {
   const one = (sd) => {
     const g = patch(
-      TORSO,
+      HERO_TORSO,
       -0.086,
       0.462,
       (y) => sd * (heroOpen(y) - 0.005),
@@ -801,7 +822,7 @@ export function heroZipGeo() {
   return merge([one(1), one(-1)]);
 }
 export function heroTeeGeo() {
-  return region(frontPatch(TORSO, heroOpen), PT.front, true);
+  return region(frontPatch(HERO_TORSO, heroOpen), PT.front, true);
 }
 
 // (characters round 3) what is worn under an open jacket, seen in its opening: from the jacket's hem
@@ -823,7 +844,7 @@ export function frontPatch(rows, half) {
   return g;
 }
 export function heroWeltGeo() {
-  const one = (sd) => region(patch(TORSO, 0.268, 0.308, () => sd * 0.096, () => sd * 0.156, 0.0058, 4, 3), JK.flap);
+  const one = (sd) => region(patch(HERO_TORSO, 0.268, 0.308, () => sd * 0.096, () => sd * 0.156, 0.0058, 4, 3), JK.flap);
   return merge([one(1), one(-1)]);
 }
 
@@ -842,22 +863,20 @@ export const PELVIS_ROWS = [
   [-0.13, 0.062, 0.05, 0.06],
   [-0.137, 0.012, 0.012, 0.012],
 ].reverse();
-// (cast round 10, the owner's word and his pictures: "a strange ellipse at the bottom... and his legs go on up into his seat" -
-// the seat turned under sharply a hand below the jacket's hem, its underside facing the ground and shaded dark, an oval; and it was
-// narrower in front than the jacket and the thighs, which stood out of it as two posts up to his belt. His own rows: full under the
-// jacket's hem, its front ahead of the thighs' tops, and down round them to the top of the legs before it turns in - inside them)
+// (cast round 11) his seat. The tops of his legs are balls about the hip joints (THIGH_ROWS: as far behind the joint as beside
+// it), so a leg swung any way keeps the same outline there; the seat only fills between them. It stood two and a half centimetres
+// proud of them at the back - a lump under the jacket's hem with a dark underside, uncovered and covered again by each leg as he
+// walked (the owner's "dark patch that moves", then his "strange ellipse"; round 10's longer one hung lower still). His own rows:
+// inside the two balls everywhere - level with them between the legs, never behind them - and small under the jacket
 export const HERO_PELVIS_ROWS = [
-  [0.08, 0.1, 0.07, 0.07],
-  [0.074, 0.152, 0.098, 0.1, 0, 2.3],
-  [0.04, 0.162, 0.106, 0.108, 0, 2.3],
-  [0.0, 0.17, 0.113, 0.115, 0, 2.3],
-  [-0.05, 0.169, 0.113, 0.119, 0, 2.3],
-  [-0.09, 0.168, 0.109, 0.116, 0, 2.3],
-  [-0.13, 0.165, 0.103, 0.108, 0, 2.3],
-  [-0.165, 0.158, 0.094, 0.097, 0, 2.3],
-  [-0.19, 0.12, 0.074, 0.076, 0, 2.2],
-  [-0.2, 0.05, 0.04, 0.04],
-  [-0.204, 0.012, 0.012, 0.012],
+  [0.06, 0.08, 0.06, 0.06],
+  [0.04, 0.125, 0.082, 0.082, 0, 2.3],
+  [0.0, 0.14, 0.09, 0.09, 0, 2.3],
+  [-0.05, 0.14, 0.09, 0.09, 0, 2.3],
+  [-0.09, 0.132, 0.088, 0.088, 0, 2.3],
+  [-0.115, 0.105, 0.078, 0.08, 0, 2.1],
+  [-0.13, 0.062, 0.05, 0.056],
+  [-0.137, 0.012, 0.012, 0.012],
 ].reverse();
 function heroPelvisLoft() {
   return loft(
@@ -1178,7 +1197,7 @@ export function heroChainPts() {
     const a = -Math.PI + (i / N) * Math.PI * 2;
     const front = Math.max(0, Math.cos(a));
     const y = 0.47 - 0.085 * front ** 2.2;
-    const [w, df, db, z] = rowAt(TORSO, y);
+    const [w, df, db, z] = rowAt(HERO_TORSO, y);
     // (out over the body's surface at that height, the shirt's thickness and a little more)
     const ex = Math.sin(a);
     const ez = Math.cos(a);
