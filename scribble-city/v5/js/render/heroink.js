@@ -195,7 +195,8 @@ export function faceTone(x, y) {
   return Math.min(1, t);
 }
 // (cast round 3) the jawline seen from the front: from under the chin out and up to the jaw's angles (render/heroshapes.js headSdf)
-export const jawY = (ax) => -0.103 + (Math.max(0.014, ax) - 0.014) * 1.1;
+// (round 7: as the outline measures now)
+export const jawY = (ax) => -0.105 + (Math.max(0.016, ax) - 0.016) * 0.9;
 // where the stubble grows: the jaw, the chin, over the lip, the sideburns, down the neck; its upper
 // edge from the sideburn down across the cheek to the corner of the mouth
 export function stubble(x, y) {

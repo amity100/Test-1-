@@ -278,13 +278,14 @@ export function headSdf(x, y, z) {
   // round jowl as wide as the cheeks
   // (round 3, second pass: the angles higher, under the ears, and the jawline a slant from them in to the chin - it ran straight
   // down and turned a corner at the bottom, a box; the chin a centimetre shorter)
-  // (third pass, measured on his sheet: at the mouth his face is 0.86 of its width at the cheekbones - it had gone to 0.73, a wedge)
-  f = smin(f, sdEll(x, y, z, 0, -0.056, -0.006, 0.053, 0.04, 0.06), 0.03);
-  f = smin(f, sdEll(ax, y, z, 0.049, -0.06, -0.01, 0.01, 0.012, 0.015), 0.026);
-  f = smin(f, sdCap(ax, y, z, 0.046, -0.067, -0.004, 0.014, -0.092, 0.06, 0.0092), 0.022);
+  // (cast round 7, the owner's word and his picture: "a chin smeared out to both sides, two bumps at the bottom of his face". The
+  // outline measured from the front (half its width, mm, down from the cheekbones): 72, 67, 62, 62, 64.5, 64.5, 63, 58, 47 - it
+  // narrowed under the cheekbones and swelled out again at the jaw's angles, then fell away square. The angles in, inside the
+  // line down from the cheekbones, and nothing cut into the cheeks' sides: now it only ever narrows, to the chin)
+  f = smin(f, sdEll(x, y, z, 0, -0.054, -0.004, 0.049, 0.04, 0.06), 0.03);
+  f = smin(f, sdCap(ax, y, z, 0.037, -0.058, -0.004, 0.012, -0.09, 0.06, 0.0095), 0.026);
   f = smin(f, sdEll(x, y, z, 0, 0.038, 0.07, 0.058, 0.014, 0.022), 0.015); // the brow
   f = smin(f, sdEll(ax, y, z, 0.051, 0.006, 0.046, 0.026, 0.016, 0.03), 0.018); // cheekbones, high
-  f = smax(f, -sdEll(ax, y, z, 0.074, -0.036, 0.034, 0.014, 0.026, 0.028), 0.04); // the cheeks' hollows under them
   f = smin(f, sdEll(x, y, z, 0, -0.087, 0.068, 0.024, 0.016, 0.02), 0.024); // the chin, firm
   // the nose: its bridge, its tip, its wings
   let n = sdCap(x, y, z, 0, 0.028, 0.087, 0, -0.02, 0.111, 0.0085);
