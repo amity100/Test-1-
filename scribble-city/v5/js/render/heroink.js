@@ -37,6 +37,8 @@ export const PT = {
 };
 // the torso's height from its hem to the neck (render/heroshapes.js TORSO), in metres
 export const TORSO_Y = [-0.088, 0.503];
+// (cast round 3: where his rolled sleeve ends, of the way from the elbow to the wrist - render/heroshapes.js FORE_ROWS)
+export const FORE_ROLL = 0.448;
 
 function rng(seed) {
   let s = seed >>> 0 || 1;
@@ -163,14 +165,14 @@ export function faceTone(x, y) {
   const ax = Math.abs(x);
   let t = 0;
   t += 0.55 * blob(ax, y, 0.032, 0.024, 0.021, 0.011); // the sockets
-  t += 0.4 * blob(ax, y, 0.031, 0.031, 0.02, 0.0055); // under the brow
+  t += 0.6 * blob(ax, y, 0.031, 0.0275, 0.021, 0.006); // under the brow
   t += 0.42 * blob(ax, y, 0.0115, 0.002, 0.0045, 0.022); // the sides of the nose
   t += 0.5 * blob(x, y, 0, -0.032, 0.014, 0.0045); // under the nose
-  t += 0.4 * blob(ax, y, 0.05, -0.034, 0.013, 0.026); // the hollows of the cheeks
+  t += 0.55 * blob(ax, y, 0.052, -0.036, 0.013, 0.028); // the hollows of the cheeks
   t += 0.42 * blob(ax, y, 0.066, 0.032, 0.012, 0.03); // the temples
   t += 0.45 * blob(x, y, 0, -0.066, 0.016, 0.0055); // under the lower lip
   t += 0.55 * smooth(0.052, 0.078, ax) * (1 - smooth(-0.11, -0.13, y)); // round the sides
-  t += 0.75 * smooth(-0.088, -0.112, y) * (1 - 0.55 * smooth(-0.135, -0.16, y)); // under the jaw
+  t += 0.95 * smooth(-0.092, -0.108, y) * (1 - 0.5 * smooth(-0.135, -0.16, y)); // under the jaw
   // the neck: its sides turning away, the muscles from behind the ears down to the collarbones, the
   // Adam's apple, the collar's shadow at its foot
   if (y < -0.12) {
@@ -184,28 +186,35 @@ export function faceTone(x, y) {
     t += 0.6 * smooth(-0.2, -0.235, y);
   }
   t += 0.35 * smooth(0.066, 0.09, y); // the hair's shadow on the forehead
-  t += 0.3 * blob(ax, y, 0.047, -0.079, 0.012, 0.016); // the jaw's corners
+  t += 0.3 * blob(ax, y, 0.043, -0.068, 0.012, 0.016); // the jaw's corners
   // (ROADMAP 13.5) under the jawline, from its angles down to the chin: the neck in its shade
   if (ax < 0.052) {
-    const yj = -0.108 + (Math.max(0.02, ax) - 0.02) * 1.0;
+    const yj = jawY(ax);
     t += 0.8 * smooth(yj + 0.003, yj - 0.016, y) * (1 - smooth(-0.14, -0.16, y));
   }
   return Math.min(1, t);
 }
+// (cast round 3) the jawline seen from the front: from under the chin out and up to the jaw's angles (render/heroshapes.js headSdf)
+export const jawY = (ax) => -0.103 + (Math.max(0.014, ax) - 0.014) * 1.1;
 // where the stubble grows: the jaw, the chin, over the lip, the sideburns, down the neck; its upper
 // edge from the sideburn down across the cheek to the corner of the mouth
 export function stubble(x, y) {
   const ax = Math.abs(x);
   // (the edge's height at this distance from the middle)
   const edge = ax > 0.066 ? 0.026 : ax > 0.052 ? -0.022 + ((ax - 0.052) / 0.014) * 0.048 : ax > 0.03 ? -0.04 + ((ax - 0.03) / 0.022) * 0.018 : -0.041;
-  let s = smooth(edge + 0.004, edge - 0.008, y);
-  // (the moustache under the nose)
-  if (ax < 0.027 && y < -0.033 && y > -0.045) s = Math.max(s, 0.95 * smooth(0.027, 0.019, ax) * smooth(-0.033, -0.036, y));
+  let s = smooth(edge + 0.012, edge - 0.006, y);
+  // (the moustache under the nose, out past the corners of the mouth and down into the beard)
+  if (ax < 0.032 && y < -0.032 && y > -0.047) s = Math.max(s, smooth(0.032, 0.022, ax) * smooth(-0.032, -0.035, y));
   // (the lips bare)
-  if (ax < 0.025 && y < -0.045 && y > -0.062) s *= 0.05 + 0.95 * smooth(0.019, 0.025, ax);
+  if (ax < 0.022 && y < -0.046 && y > -0.06) s *= 0.05 + 0.95 * smooth(0.016, 0.022, ax);
   // (the sides fall away, the stubble with them; down the neck it stops at the beard's line)
   s *= 1 - smooth(0.074, 0.086, ax);
-  s *= smooth(-0.168, -0.14, y);
+  // (a beard, trimmed: under the jaw and no further down the neck)
+  // (round 3, second pass: it ends at the jawline, along its slant - painted straight across under it, it squared the jaw off again)
+  {
+    const yj = jawY(ax);
+    s *= smooth(yj - 0.013, yj + 0.003, y);
+  }
   return Math.max(0, Math.min(1, s));
 }
 
@@ -233,9 +242,9 @@ export function paintFace(c, o = {}) {
   const R = h.R;
   // ---- the skin, warm; its pencil grain
   g.globalAlpha = 1;
-  g.fillStyle = '#bd8664';
+  g.fillStyle = '#b57c58';
   g.fillRect(0, 0, W, H);
-  const grain = ['#c8946e', '#a8704e', '#bc8664', '#9a6448', '#c48a70'];
+  const grain = ['#c08a62', '#a06a48', '#b47c5a', '#925e42', '#bc8266'];
   h.hatch(0, 0, W, H, 4200, () => 0.8, 1.05, 30, 1.6, grain, 0.32, 0.5);
   h.hatch(0, 0, W, H, 2000, () => 0.6, -0.55, 24, 1.4, grain, 0.22, 0.5);
   // the warmth: the cheeks, the nose, the ears' side
@@ -281,9 +290,17 @@ export function paintFace(c, o = {}) {
   // ---- the stubble: thousands of short dark hairs, growing down and out along the jaw
   const stub = (px, py) => stubble(xm(px), ym(py));
   const growth = (px, py) => Math.PI / 2 + xm(px) * 9 * (ym(py) > -0.07 ? 1 : 0.4);
+  // (cast round 3, his sheet: a short full beard - its mass first, dark and warm, deepest in the moustache and on the chin; then
+  // its hairs, longer and many more of them. It was a day's stubble: a few dots on a bare jaw)
+  const dense = (px, py) => {
+    const x = xm(px);
+    const y = ym(py);
+    return stub(px, py) * (0.46 + 0.54 * Math.max(blob(x, y, 0, -0.039, 0.03, 0.007), blob(x, y, 0, -0.08, 0.028, 0.02)));
+  };
+  h.hatch(0, 0, W, H, 16000, (px, py) => dense(px, py) * 0.95, 1.3, 16, 2.2, ['#2c1c12', '#362416', '#22160e'], 0.62, 0.6);
   h.hatch(0, 0, W, H, 2200, (px, py) => stub(px, py) * 0.85, 1.25, 20, 1.6, ['#6a5a6a', '#5a4a58', '#7a6a70'], 0.3);
-  h.ticks(0, 0, W, H, 26000, (px, py) => stub(px, py) * 0.62, growth, 4.2, 1.25, ['#22160f', '#2c1e16', '#1a120c', '#3a2a24'], 0.8, 0.7);
-  h.ticks(0, 0, W, H, 9000, (px, py) => stub(px, py) * 0.5, growth, 1.6, 1.5, ['#2a1c14', '#3e3038'], 0.65, 1.5);
+  h.ticks(0, 0, W, H, 52000, (px, py) => dense(px, py) * 0.8, growth, 8.5, 1.5, ['#22160f', '#2c1e16', '#1a120c', '#3a2a24', '#4a3020'], 0.85, 0.7);
+  h.ticks(0, 0, W, H, 14000, (px, py) => dense(px, py) * 0.6, growth, 3.2, 1.6, ['#2a1c14', '#3e3038', '#6a4a30'], 0.7, 1.5);
   // ---- the eyes: narrowed a little, heavy-lidded, the iris hazel under the lid
   for (const sd of [1, -1]) {
     const cx = X(sd * 0.032);
@@ -291,7 +308,8 @@ export function paintFace(c, o = {}) {
     const ew = 0.0262 * K;
     // (wide open with the brows up; narrowed by a real smile, the cheeks pushing up under them)
     // (cast round 1, his sheet: his eyes open - they were two slits)
-    const eh = 0.0072 * K * (brow === 'up' ? 1.25 : 1) * (1 - Math.max(0, smile) * 0.16);
+    // (cast round 3: narrowed a little under the low brows - open, not startled)
+    const eh = 0.0064 * K * (brow === 'up' ? 1.3 : 1) * (1 - Math.max(0, smile) * 0.16);
     // (the inner corner by the nose, a touch lower; the outer a touch higher)
     const ix = cx + sd * ew * 0.5;
     const iy = cy + 0.06 * eh;
@@ -407,23 +425,25 @@ export function paintFace(c, o = {}) {
   // inner ends up, the outer down a little)
   const BR = brow === 'up' ? [0.0062, 0.0072, 0.005] : brow === 'down' ? [-0.0058, -0.0022, 0.0014] : brow === 'worried' ? [0.0064, 0.0022, -0.0018] : [0, 0, 0];
   for (const sd of [1, -1]) {
-    const P0 = [sd * (0.012 - (brow === 'down' ? 0.0012 : 0)), 0.0318 + BR[0]];
-    const P1 = [sd * 0.035, 0.0418 + BR[1]];
-    const P2 = [sd * 0.058, 0.0338 + BR[2]];
+    // (cast round 3, his sheet: low over the eyes and nearly straight, the inner ends lowest - he weighs you up; they arched
+    // high over the eyes, a mild surprise)
+    const P0 = [sd * (0.011 - (brow === 'down' ? 0.0012 : 0)), 0.0288 + BR[0]];
+    const P1 = [sd * 0.034, 0.0372 + BR[1]];
+    const P2 = [sd * 0.058, 0.0335 + BR[2]];
     const at = (t) => {
       const a = (1 - t) * (1 - t);
       const b = 2 * t * (1 - t);
       const c2 = t * t;
       return [a * P0[0] + b * P1[0] + c2 * P2[0], a * P0[1] + b * P1[1] + c2 * P2[1]];
     };
-    for (let k = 0; k < 340; k++) {
+    for (let k = 0; k < 460; k++) {
       const t = R();
       // (the scar: a gap in the hairs of the left brow)
       if (sd > 0 && Math.abs(t - 0.6) < 0.05) continue;
       const [bx, by] = at(t);
       const [nx, ny] = at(Math.min(1, t + 0.02));
       const tang = Math.atan2(-(ny - by), -(nx - bx) * -1);
-      const thick = 0.0068 * (1 - t * 0.6);
+      const thick = 0.0076 * (1 - t * 0.55);
       const off = (R() - 0.5) * thick;
       const px = X(bx);
       const py = Y(by + off);
@@ -635,7 +655,8 @@ export function paintHair(c, o = {}) {
   const h = new Hand(g, o.seed || 1, s);
   const R = h.R;
   g.globalAlpha = 1;
-  g.fillStyle = '#271a13';
+  // (cast round 3, his sheet: brown - a dark brown with warm lights through it, not black)
+  g.fillStyle = '#3a2415';
   g.fillRect(0, 0, W, H);
   const strand = (cols, n, w, a, lo, hi, lit = null) => {
     for (let i = 0; i < n; i++) {
@@ -653,9 +674,9 @@ export function paintHair(c, o = {}) {
       h.path(pts, w * (0.7 + 0.6 * R()), h.pick(cols), a * (0.6 + 0.4 * R()), 0.8);
     }
   };
-  strand(['#0e0806', '#160d09', '#1c120c'], 1400, 2.6, 0.75, 0, 0.9);
-  strand(['#3e2a1e', '#4a3324', '#36241a'], 1100, 1.7, 0.7, 0, 0.9);
-  strand(['#7a5a44', '#8e6a50', '#a07a5a', '#6a4a36'], 650, 1.2, 0.65, 0.15, 0.75, (u, v) => 0.4 + 0.6 * Math.exp(-(((v - 0.42) / 0.2) ** 2)));
+  strand(['#1a100a', '#22150c', '#281a10'], 1100, 2.6, 0.7, 0, 0.9);
+  strand(['#523420', '#5e3c24', '#48301e'], 1300, 1.8, 0.75, 0, 0.9);
+  strand(['#8a6038', '#9c7044', '#b08250', '#7a5430'], 900, 1.3, 0.7, 0.1, 0.8, (u, v) => 0.4 + 0.6 * Math.exp(-(((v - 0.42) / 0.2) ** 2)));
   strand(['#3a4460', '#46506e'], 220, 1.2, 0.4, 0, 0.9);
   strand(['#c0609a', '#d07aa8'], 70, 1.1, 0.32, 0.1, 0.8);
   strand(['#4aa8c8', '#5ab8d8'], 70, 1.1, 0.3, 0.1, 0.8);
@@ -690,7 +711,7 @@ function leather(h, x0, y0, x1, y1, area, ang, sheen) {
   const s = h.s;
   const nv = TONE.navy;
   g.globalAlpha = 1;
-  g.fillStyle = nv ? '#171a25' : '#271d18';
+  g.fillStyle = nv ? '#272b3c' : '#271d18';
   g.fillRect(x0, y0, x1 - x0, y1 - y0);
   const n = Math.round(area);
   // (its patina: soft patches lighter and darker)
@@ -699,15 +720,17 @@ function leather(h, x0, y0, x1, y1, area, ang, sheen) {
     const y = y0 + R() * (y1 - y0);
     const r = (24 + 70 * R()) * s;
     const gr = g.createRadialGradient(x, y, 0, x, y, r);
-    gr.addColorStop(0, R() < 0.5 ? (nv ? 'rgba(52,58,82,0.4)' : 'rgba(78,56,44,0.4)') : nv ? 'rgba(5,6,12,0.45)' : 'rgba(8,5,4,0.45)');
+    gr.addColorStop(0, R() < 0.5 ? (nv ? 'rgba(66,72,100,0.4)' : 'rgba(78,56,44,0.4)') : nv ? 'rgba(12,13,22,0.4)' : 'rgba(8,5,4,0.45)');
     gr.addColorStop(1, 'rgba(0,0,0,0)');
     g.globalAlpha = 1;
     g.fillStyle = gr;
     g.fillRect(x - r, y - r, 2 * r, 2 * r);
   }
   const sh = (x, y) => sheen((x - x0) / (x1 - x0), (y - y0) / (y1 - y0));
-  h.hatch(x0, y0, x1, y1, n * 0.26, () => 0.8, ang, 22, 1.7, nv ? ['#0a0b13', '#0e1019', '#141726'] : ['#0c0807', '#120c0a', '#18100d'], 0.42, 0.5);
-  h.hatch(x0, y0, x1, y1, n * 0.14, () => 0.65, ang + 0.75, 18, 1.5, nv ? ['#0c0c15', '#14141f', '#1a1b2a'] : ['#0e0a0c', '#181216', '#20141a'], 0.38, 0.5);
+  h.hatch(x0, y0, x1, y1, n * 0.26, () => 0.8, ang, 22, 1.7, nv ? ['#12141f', '#181b28', '#1e2232'] : ['#0c0807', '#120c0a', '#18100d'], 0.42, 0.5);
+  h.hatch(x0, y0, x1, y1, n * 0.14, () => 0.65, ang + 0.75, 18, 1.5, nv ? ['#141520', '#1c1d2c', '#232538'] : ['#0e0a0c', '#181216', '#20141a'], 0.38, 0.5);
+  // (cast round 3, his sheet: the jacket's cloth drawn in warm strokes over the dark - orange and brown pencil, slanting)
+  if (nv) h.hatch(x0, y0, x1, y1, n * 0.07, () => 0.7, ang + 0.5, 30, 1.5, ['#a8643a', '#c07a40', '#8a5230', '#d08c4a'], 0.5, 0.35);
   // the sheen: broad soft strokes of light where the leather turns towards it, a few bright ones
   h.hatch(x0, y0, x1, y1, n * 0.12, (x, y) => sh(x, y), ang, 44, 5.5, nv ? ['#3a4258', '#464e66', '#333a4e'] : ['#7a5c48', '#8c6a52', '#6a4e3e'], 0.2, 0.2);
   h.hatch(x0, y0, x1, y1, n * 0.1, (x, y) => sh(x, y) * 0.9, ang, 26, 1.4, nv ? ['#5c6680', '#69728c', '#767e96'] : ['#a07c62', '#b48a6a', '#c49a78'], 0.42, 0.25);
@@ -736,6 +759,43 @@ function fold(h, pts, w = 2) {
   const s = h.s;
   h.lines(pts, w, '#0c0808', 0.65, 2, 1.4);
   h.path(pts.map(([x, y]) => [x + 3 * s, y - 3 * s]), w * 0.8, '#6e5a50', 0.4, 1.4);
+}
+
+// (cast round 3, his sheet) the forearm below the rolled sleeve: the shirt's cuff turned back out of the roll, cream; then his bare
+// arm, tanned, its hair, the shade round its sides - r: the forearm's region, v 0 at the elbow, 1 at the wrist
+function foreArm(h, r, P) {
+  const g = h.g;
+  const s = h.s;
+  const va = FORE_ROLL - 0.11;
+  const vb = FORE_ROLL + 0.015;
+  const [x0, ya] = P(0, va);
+  const [x1, yb] = P(1, vb);
+  const [, y1] = P(1, 1);
+  // the cuff
+  g.globalAlpha = 1;
+  g.fillStyle = '#e6dcc8';
+  g.fillRect(x0, ya, x1 - x0, yb - ya);
+  h.hatch(x0, ya, x1, yb, 500, () => 0.8, 0.2, 18, 1.4, ['#b9ab94', '#c9bca6', '#a89a84'], 0.5, 0.4);
+  h.hatch(x0, ya, x1, yb, 260, () => 0.7, 0.2, 16, 1.2, ['#fbf6ec', '#f6efe2'], 0.5, 0.4);
+  h.lines([[x0, ya], [x1, ya]], 2.6, '#0c0c12', 0.9, 2, 0.8);
+  h.lines([[x0, yb], [x1, yb]], 2.4, '#5a4a3c', 0.85, 2, 0.8);
+  h.lines([[x0, (ya + yb) / 2], [x1, (ya + yb) / 2]], 1.2, '#8a7f70', 0.5, 2, 1.2);
+  // the arm
+  g.globalAlpha = 1;
+  g.fillStyle = '#b57c58';
+  g.fillRect(x0, yb, x1 - x0, y1 - yb);
+  const grain = ['#c08a62', '#a06a48', '#b47c5a', '#925e42', '#bc8266'];
+  h.hatch(x0, yb, x1, y1, 1500, () => 0.8, Math.PI / 2 + 0.1, 30, 1.6, grain, 0.34, 0.5);
+  // (u round the arm: 0.75 its front, 0.25 its back - the shade round the sides between them, and under the cuff)
+  const side = (px) => {
+    const u = (px - x0) / (x1 - x0);
+    return Math.abs(Math.cos(u * Math.PI * 2)) ** 1.5;
+  };
+  h.hatch(x0, yb, x1, y1, 800, (px, py) => 0.7 * side(px) + 0.6 * smooth(yb + 22 * s, yb, py), Math.PI / 2, 26, 1.7, ['#8e5c44', '#7e5038', '#744a36'], 0.4, 0.4);
+  h.hatch(x0, yb, x1, y1, 200, (px) => side(px) - 0.5, Math.PI / 2 - 0.5, 20, 1.6, ['#624456', '#5a3a34'], 0.35, 0.4);
+  h.hatch(x0, yb, x1, y1, 300, (px) => 0.7 * (1 - side(px)), Math.PI / 2, 22, 1.5, ['#ecc6a2', '#e2b690'], 0.35, 0.4);
+  // (its hair: short dark ticks along it)
+  h.ticks(x0, yb, x1, y1, 1500, (px) => 0.5 + 0.3 * side(px), () => Math.PI / 2 + 0.35, 6, 1.1, ['#4a3a30', '#5a4436', '#3c2e26'], 0.42, 0.8);
 }
 
 /**
@@ -798,9 +858,9 @@ function paintJacketIn(c, o = {}) {
     }
     // the chest pockets: their bodies below the flaps, stitched round, a shadow under the flap
     for (const sd of [1, -1]) {
-      const uc = 0.5 + sd * 0.062;
-      const [xa, ya] = P(uc - 0.034, 0.315);
-      const [xb, yb] = P(uc + 0.034, 0.215);
+      const uc = 0.5 + sd * 0.09;
+      const [xa, ya] = P(uc - 0.03, 0.282);
+      const [xb, yb] = P(uc + 0.03, 0.19);
       h.hatch(Math.min(xa, xb), ya, Math.max(xa, xb), ya + 14 * s, 140, () => 0.9, 0.2, 14, 1.6, ['#060404', '#0c0807'], 0.6);
       h.lines([[xa, ya], [xa, yb], [xb, yb], [xb, ya]], 2, '#080505', 0.8, 2, 0.8);
       h.stitches([[xa + 5 * s, ya], [xa + 5 * s, yb - 5 * s], [xb - 5 * s, yb - 5 * s], [xb - 5 * s, ya]], 1.2, '#9a8070', 0.5);
@@ -859,13 +919,14 @@ function paintJacketIn(c, o = {}) {
       const u = 0.6 + R() * 0.3;
       fold(h, [P(u - 0.06, vv), P(u, vv + 0.06), P(u + 0.06, vv + 0.02)], 1.4);
     }
+    if (cuff) foreArm(h, r, P);
     if (!cuff) {
       // the shoulder's seam round the top
       const pts = [];
       for (let i = 0; i <= 10; i++) pts.push(P(i / 10, 0.06));
       h.lines(pts, 2, '#0a0706', 0.75, 2, 1);
       h.stitches(pts.map(([x, y]) => [x, y - 5 * s]), 1.2, '#8a7060', 0.5);
-    } else {
+    } else if (false) {
       // the cuff: a band at the wrist, stitched, a snap on it
       const top = [];
       for (let i = 0; i <= 10; i++) top.push(P(i / 10, 0.84));
@@ -953,12 +1014,13 @@ export function paintPants(c, o = {}) {
   const h = new Hand(g, o.seed || 1, s);
   const R = h.R;
   const k = (W * W) / (1024 * 1024);
-  const DARK = ['#0c0c10', '#121218', '#16161c', '#0a0a0c'];
-  const LIGHT = ['#46464e', '#3c3c44', '#52525a', '#3a3640'];
+  // (cast round 3, his sheet: grey-brown trousers on a brown belt - they were black on black)
+  const DARK = ['#2a241e', '#302a24', '#363028', '#241e1a'];
+  const LIGHT = ['#74695a', '#6a6052', '#807462', '#62584c'];
   for (const key of ['thigh', 'shin', 'pelvis']) {
     const r = regionOf(c, PT[key]);
     const area = (r.x1 - r.x0) * (r.y1 - r.y0) / (1024 * 1024 / 1) * 60000 * (1 / 1);
-    cloth(h, r.x0, r.y0, r.x1, r.y1, area / Math.max(1, 1 / k) * k + area * 0, Math.PI / 2 + 0.15, '#23232a', DARK, LIGHT);
+    cloth(h, r.x0, r.y0, r.x1, r.y1, area / Math.max(1, 1 / k) * k + area * 0, Math.PI / 2 + 0.15, '#4c443a', DARK, LIGHT);
     const P = (u, vv) => [r.x(u), r.y(vv)];
     // the side seams (on both sides: u 0.5 and 0)
     for (const u of [0.5, 0.0, 1.0]) {
@@ -994,13 +1056,13 @@ export function paintPants(c, o = {}) {
       const pts = [];
       for (let i = 0; i <= 16; i++) pts.push(P(i / 16, 0.86));
       g.globalAlpha = 0.95;
-      g.fillStyle = '#121010';
+      g.fillStyle = '#4a2c1a';
       g.fillRect(r.x0, r.y(1), r.x1 - r.x0, r.y(0.86) - r.y(1));
       h.lines(pts, 1.6, '#3a3434', 0.6, 2, 0.6);
       for (const u of [0.1, 0.3, 0.7, 0.9]) {
         const [x, y] = P(u, 0.93);
         g.globalAlpha = 0.9;
-        g.fillStyle = '#1c1c22';
+        g.fillStyle = '#2c2620';
         g.fillRect(x - 5 * s, y - 9 * s, 10 * s, 20 * s);
       }
     }
@@ -1045,6 +1107,41 @@ export function paintPants(c, o = {}) {
       g.arc(x, y, 4 * s, 0, Math.PI * 2);
       g.fill();
     }
+    // (cast round 3, his sheet) open at the neck: his chest between the collar's two leaves, lying open
+    {
+      const yv = 0.335;
+      const yt = 0.48;
+      const hu = 0.4;
+      g.globalAlpha = 1;
+      g.fillStyle = '#b07654';
+      g.beginPath();
+      g.moveTo(xAt(yv), yAt(0.5));
+      g.lineTo(xAt(yt), yAt(0.5 - hu));
+      g.lineTo(xAt(yt), yAt(0.5 + hu));
+      g.closePath();
+      g.fill();
+      g.save();
+      g.clip();
+      h.hatch(xAt(yv), r.y0, xAt(yt), r.y1, 500, () => 0.8, 0.1, 16, 1.5, ['#c08a62', '#a06a48', '#925e42'], 0.4, 0.5);
+      // (the shirt's shade on him along its edges, the hollow of the throat, the hair of his chest)
+      h.hatch(xAt(yv), r.y0, xAt(yt), r.y1, 500, (px, py) => {
+        const y = Y0 + ((px - r.x0) / (r.x1 - r.x0)) * (Y1 - Y0);
+        const u = (py - r.y0) / (r.y1 - r.y0);
+        const e = (hu * (y - yv)) / (yt - yv);
+        return 0.9 * smooth(e * 0.45, e, Math.abs(u - 0.5)) + 0.5 * smooth(0.4, 0.35, y);
+      }, 0.6, 14, 1.6, ['#7e4c36', '#6e4230', '#523446'], 0.55, 0.5);
+      h.ticks(xAt(yv), r.y0, xAt(0.43), r.y1, 900, () => 0.6, () => 0.4, 6, 1.1, ['#3a2a20', '#2c1e16', '#4a3426'], 0.55, 1.6);
+      g.restore();
+      for (const sd of [1, -1]) {
+        // (the leaf's inner edge down to the V's point, its outer edge, its point)
+        const a = [xAt(yt), yAt(0.5 + sd * hu)];
+        const b = [xAt(yv), yAt(0.5)];
+        h.lines([a, b], 3.2, '#4a4038', 0.9, 2, 0.6);
+        const tip = [xAt(0.385), yAt(0.5 + sd * 0.47)];
+        h.lines([[xAt(yt), yAt(0.5 + sd * 0.5)], tip, [xAt(0.41), yAt(0.5 + sd * 0.2)]], 2, '#6a5e52', 0.8, 2, 0.6);
+        h.hatch(Math.min(xAt(0.39), xAt(yt)), yAt(0.5 + sd * 0.5), Math.max(xAt(0.39), xAt(yt)), yAt(0.5 + sd * 0.2), 90, () => 0.6, 0.3, 12, 1.3, ['#fbf6ec', '#f6efe2'], 0.6, 0.4);
+      }
+    }
     // the shirt's hem over the belt
     h.lines([[xAt(0.012), yAt(0)], [xAt(0.008), yAt(0.5)], [xAt(0.014), yAt(1)]], 2.2, '#5a5046', 0.75, 2, 1);
     // (under the belt: the trousers' dark cloth, to the fly)
@@ -1052,27 +1149,27 @@ export function paintPants(c, o = {}) {
       const xa = Math.min(r.x0, r.x1, xAt(-0.034));
       const xb = Math.max(xAt(-0.034), Math.min(r.x0, r.x1));
       const lo = xAt(-0.2) < xAt(-0.034);
-      cloth(h, lo ? r.x0 : xAt(-0.034), r.y0, lo ? xAt(-0.034) : r.x1, r.y1, 3000 * k, 0.1, '#1e1e24', ['#14141a', '#1a1a20', '#101014'], ['#3a3a44', '#46464e', '#4a4252']);
+      cloth(h, lo ? r.x0 : xAt(-0.034), r.y0, lo ? xAt(-0.034) : r.x1, r.y1, 3000 * k, 0.1, '#332d26', ['#1a1612', '#201c18', '#161210'], ['#5c5448', '#524a40', '#4c443c']);
       void xa;
       void xb;
     }
-    // the belt, black leather; its buckle, steel
+    // the belt, brown leather; its buckle, brass
     g.globalAlpha = 1;
-    g.fillStyle = '#121010';
+    g.fillStyle = '#4a2c1a';
     g.fillRect(xAt(-0.034), r.y0, xAt(0.0) - xAt(-0.034), r.y1 - r.y0);
-    h.hatch(xAt(-0.034), r.y0, xAt(0.0), r.y1, 300, () => 0.8, Math.PI / 2, 14, 1.4, ['#2a2422', '#3a302c', '#0a0808'], 0.5);
+    h.hatch(xAt(-0.034), r.y0, xAt(0.0), r.y1, 300, () => 0.8, Math.PI / 2, 14, 1.4, ['#6a4028', '#7a4c30', '#2c1a10'], 0.5);
     const bx0 = xAt(-0.03);
     const bx1 = xAt(-0.004);
-    const by0 = yAt(0.82);
-    const by1 = yAt(0.18);
+    const by0 = yAt(0.64);
+    const by1 = yAt(0.36);
     g.globalAlpha = 0.95;
-    g.strokeStyle = '#a8a8b0';
-    g.lineWidth = 5 * s;
+    g.strokeStyle = '#8a7448';
+    g.lineWidth = 4 * s;
     g.strokeRect(bx0, by0, bx1 - bx0, by1 - by0);
-    g.strokeStyle = '#e8e8f0';
+    g.strokeStyle = '#d8c890';
     g.lineWidth = 1.6 * s;
     g.strokeRect(bx0 + 2 * s, by0 + 2 * s, bx1 - bx0 - 4 * s, by1 - by0 - 4 * s);
-    h.line(bx0 + (bx1 - bx0) * 0.5, yAt(0.45), bx0 + (bx1 - bx0) * 0.5, yAt(0.55), 3, '#c8c8d0', 0.9, 0);
+    h.line(bx0 + (bx1 - bx0) * 0.5, yAt(0.45), bx0 + (bx1 - bx0) * 0.5, yAt(0.55), 3, '#c8b888', 0.9, 0);
     // the fly
     h.lines([[xAt(-0.04), yAt(0.5)], [xAt(-0.088), yAt(0.5)]], 1.6, '#08080a', 0.7, 2, 0.8);
     h.stitches([[xAt(-0.04), yAt(0.32)], [xAt(-0.075), yAt(0.32)], [xAt(-0.088), yAt(0.45)]], 1.1, '#6a6a74', 0.45);
@@ -1080,7 +1177,7 @@ export function paintPants(c, o = {}) {
   // ---- the cargo pocket: its face, its flap with a snap, its pleat, stitched round
   {
     const r = regionOf(c, PT.pocket);
-    cloth(h, r.x0, r.y0, r.x1, r.y1, 6000 * k, Math.PI / 2, '#26262c', DARK, LIGHT);
+    cloth(h, r.x0, r.y0, r.x1, r.y1, 6000 * k, Math.PI / 2, '#3a342c', DARK, LIGHT);
     const m = 9 * s;
     const fy = r.y0 + (r.y1 - r.y0) * 0.3;
     g.globalAlpha = 0.6;

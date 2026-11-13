@@ -270,16 +270,22 @@ export function headSdf(x, y, z) {
   let f = sdEll(x, y, z, 0, 0.026, -0.012, 0.076, 0.094, 0.101); // the skull, full at the temples
   // (cast round 2, his sheet: a broad face on a strong jaw - it was long and narrow: the face and the jaw wider, the jaw's angles
   // out under the ears, the chin broader and a little shorter)
-  f = smin(f, sdEll(x, y, z, 0, -0.034, 0.028, 0.066, 0.06, 0.07), 0.03); // the face, narrower below
+  // (cast round 3, the owner's word: "his jaw is wide for no reason" - his sheet's face is lean: the cheekbones the widest of it,
+  // the cheeks in under them, the jawline running in from its angles to a firm chin, not a block)
+  f = smin(f, sdEll(x, y, z, 0, -0.034, 0.028, 0.06, 0.06, 0.07), 0.03); // the face, narrower below
   // (ROADMAP 13.5) the jaw as a man's: its body under the ears narrower than the cheekbones, its
   // angles under the ears, the jawline from them down to a square chin a little forward - not a
   // round jowl as wide as the cheeks
-  f = smin(f, sdEll(x, y, z, 0, -0.06, -0.006, 0.06, 0.042, 0.06), 0.03);
-  f = smin(f, sdEll(ax, y, z, 0.051, -0.072, -0.006, 0.012, 0.014, 0.016), 0.03);
-  f = smin(f, sdCap(ax, y, z, 0.051, -0.076, -0.004, 0.024, -0.095, 0.06, 0.0115), 0.026);
+  // (round 3, second pass: the angles higher, under the ears, and the jawline a slant from them in to the chin - it ran straight
+  // down and turned a corner at the bottom, a box; the chin a centimetre shorter)
+  // (third pass, measured on his sheet: at the mouth his face is 0.86 of its width at the cheekbones - it had gone to 0.73, a wedge)
+  f = smin(f, sdEll(x, y, z, 0, -0.056, -0.006, 0.053, 0.04, 0.06), 0.03);
+  f = smin(f, sdEll(ax, y, z, 0.049, -0.06, -0.01, 0.01, 0.012, 0.015), 0.026);
+  f = smin(f, sdCap(ax, y, z, 0.046, -0.067, -0.004, 0.014, -0.092, 0.06, 0.0092), 0.022);
   f = smin(f, sdEll(x, y, z, 0, 0.038, 0.07, 0.058, 0.014, 0.022), 0.015); // the brow
-  f = smin(f, sdEll(ax, y, z, 0.05, 0.006, 0.048, 0.026, 0.016, 0.029), 0.015); // cheekbones, high
-  f = smin(f, sdEll(x, y, z, 0, -0.09, 0.067, 0.035, 0.017, 0.019), 0.026); // the chin, square
+  f = smin(f, sdEll(ax, y, z, 0.051, 0.006, 0.046, 0.026, 0.016, 0.03), 0.018); // cheekbones, high
+  f = smax(f, -sdEll(ax, y, z, 0.074, -0.036, 0.034, 0.014, 0.026, 0.028), 0.04); // the cheeks' hollows under them
+  f = smin(f, sdEll(x, y, z, 0, -0.087, 0.068, 0.024, 0.016, 0.02), 0.024); // the chin, firm
   // the nose: its bridge, its tip, its wings
   let n = sdCap(x, y, z, 0, 0.028, 0.087, 0, -0.02, 0.111, 0.0085);
   n = smin(n, sdBall(x, y, z, 0, -0.023, 0.107, 0.0145), 0.006);
@@ -358,7 +364,7 @@ export function heroHeadGeo() {
 function hairline(phi) {
   // (by the angle round the head, 0 ahead: the forehead, the temples a little receded, the
   // sideburns down in front of the ears, over the ears, down to the nape)
-  const K = [[0, 0.56], [0.55, 0.52], [1.1, 0.9], [1.33, 1.3], [1.5, 1.3], [1.72, 1.08], [2.2, 1.5], [Math.PI, 1.92]];
+  const K = [[0, 0.63], [0.55, 0.58], [1.1, 0.92], [1.33, 1.32], [1.5, 1.32], [1.72, 1.08], [2.2, 1.5], [Math.PI, 1.92]];
   const a = Math.abs(Math.atan2(Math.sin(phi), Math.cos(phi)));
   let i = 0;
   while (i < K.length - 2 && K[i + 1][0] < a) i++;
@@ -374,7 +380,7 @@ const wav = (a, b) => Math.sin(a * 3.1 + b * 1.7) * 0.5 + Math.sin(a * 5.3 - b *
 export function hairEdge(phi) {
   // (the hairline, the front a little lower over the forehead, broken into clumps)
   // (cast round 1, his sheet: swept up off the forehead - not a fringe cut straight across it, a bowl - its edge more broken)
-  return hairline(phi) + 0.01 * Math.max(0, Math.cos(phi)) ** 2 + 0.045 * wav(phi * 2.2, 0.3);
+  return hairline(phi) + 0.01 * Math.max(0, Math.cos(phi)) ** 2 + 0.022 * wav(phi * 2.2, 0.3);
 }
 export function hairThick(th, phi) {
   const top = Math.max(0, Math.cos(th));
@@ -421,9 +427,11 @@ export function heroLocksGeo() {
   const AROUND = 5;
   // a point of the lock at s along it, on the hair: a little under its outside at both ends, over
   // it in the middle (a clump, not a spike); never into the skin
-  const onHair = (C, s, rise) => {
+  // (cast round 3, his sheet: tousled - tufts of it standing off his head at their tips, the outline of his hair broken by them;
+  // spike: how far a lock's tip stands off the cap. They all lay flat on it, a helmet of slabs)
+  const onHair = (C, s, rise, spike = 0) => {
     const r = C.length();
-    const want = Math.max(capR(C.x, C.y, C.z) - 0.0025 + rise * Math.sin(Math.PI * Math.min(1, s * 1.15)), headR(C.x / r, C.y / r, C.z / r) + 0.0025);
+    const want = Math.max(capR(C.x, C.y, C.z) - 0.0025 + rise * Math.sin(Math.PI * Math.min(1, s * 1.15)) + spike * s * s, headR(C.x / r, C.y / r, C.z / r) + 0.0025);
     return C.multiplyScalar(want / r);
   };
   const lock = (phi, th, kind) => {
@@ -440,9 +448,9 @@ export function heroLocksGeo() {
       // (a few strands over the forehead, swept to one side - the brow and the forehead clear)
       // (cast round 2, his sheet: swept up off the forehead and over to one side, in waves - a strand or two falling onto it. It hung
       // down to his brows all round, a bowl)
-      const fall = R() < 0.18;
+      const fall = R() < 0.42;
       d = fall ? tTh.clone().addScaledVector(tPh, 0.7) : tTh.clone().multiplyScalar(-0.75).addScaledVector(tPh, 0.75 + side * 0.35);
-      L = fall ? 0.022 + 0.012 * R() : 0.045 + 0.03 * R();
+      L = fall ? 0.024 + 0.02 * R() : 0.045 + 0.03 * R();
       w = 0.013 + 0.006 * R();
       rise = fall ? 0.004 : 0.013 + 0.006 * R();
       kind = fall ? 'fringe' : 'quiff';
@@ -460,6 +468,9 @@ export function heroLocksGeo() {
       rise = 0.004;
     }
     d.normalize();
+    // (thinner, and half of those on top and at the back stand off at the tip)
+    w *= 0.7;
+    const spike = kind === 'fringe' ? 0 : kind === 'side' ? (R() < 0.4 ? 0.006 : 0) : R() < 0.6 ? 0.007 + 0.013 * R() : 0;
     // (over and down: the fringe and the sides fall)
     const p1 = p0.clone().addScaledVector(d, L * 0.5);
     const p2 = p0.clone().addScaledVector(d, L);
@@ -475,12 +486,12 @@ export function heroLocksGeo() {
       const b = 2 * s * (1 - s);
       const c = s * s;
       C.set(a * p0.x + b * p1.x + c * p2.x, a * p0.y + b * p1.y + c * p2.y, a * p0.z + b * p1.z + c * p2.z);
-      onHair(C, s, rise);
+      onHair(C, s, rise, spike);
       Tn.set(2 * (1 - s) * (p1.x - p0.x) + 2 * s * (p2.x - p1.x), 2 * (1 - s) * (p1.y - p0.y) + 2 * s * (p2.y - p1.y), 2 * (1 - s) * (p1.z - p0.z) + 2 * s * (p2.z - p1.z)).normalize();
       const nOut = C.clone().normalize();
       const B = new THREE.Vector3().crossVectors(Tn, nOut).normalize();
       const N = new THREE.Vector3().crossVectors(B, Tn).normalize();
-      const rw = w * (1 - s * 0.6) + 0.0005;
+      const rw = w * (1 - s * (spike ? 0.9 : 0.6)) + 0.0005;
       for (let j = 0; j < AROUND; j++) {
         const an = (j / AROUND) * Math.PI * 2;
         pos.push(C.x + B.x * Math.cos(an) * rw + N.x * Math.sin(an) * rw * 0.3, C.y + B.y * Math.cos(an) * rw + N.y * Math.sin(an) * rw * 0.3, C.z + B.z * Math.cos(an) * rw + N.z * Math.sin(an) * rw * 0.3);
@@ -504,10 +515,10 @@ export function heroLocksGeo() {
       }
     }
   };
-  for (let i = 0; i < 14; i++) lock(-0.9 + (i / 13) * 1.8 + (R() - 0.5) * 0.12, 0.42 + R() * 0.16, 'fringe');
-  for (let i = 0; i < 30; i++) lock(R() * Math.PI * 2, 0.06 + R() * 0.55, 'top');
-  for (const sd of [-1, 1]) for (let i = 0; i < 8; i++) lock(sd * (1.0 + R() * 1.1), 0.8 + R() * 0.38, 'side');
-  for (let i = 0; i < 10; i++) lock(Math.PI + (R() - 0.5) * 1.3, 1.2 + R() * 0.45, 'back');
+  for (let i = 0; i < 20; i++) lock(-0.95 + (i / 19) * 1.9 + (R() - 0.5) * 0.12, 0.42 + R() * 0.16, 'fringe');
+  for (let i = 0; i < 52; i++) lock(R() * Math.PI * 2, 0.06 + R() * 0.6, 'top');
+  for (const sd of [-1, 1]) for (let i = 0; i < 11; i++) lock(sd * (1.0 + R() * 1.1), 0.8 + R() * 0.38, 'side');
+  for (let i = 0; i < 16; i++) lock(Math.PI + (R() - 0.5) * 1.5, 1.1 + R() * 0.55, 'back');
   const g = make(pos, uv, idx);
   g.computeVertexNormals();
   return g;
@@ -521,10 +532,10 @@ export const NECK_ROWS = [
   [0.02, 0.03, 0.028, 0.034],
   [0.01, 0.046, 0.044, 0.052],
   // (cast round 1: a man's neck narrower than his jaw - it was as wide, a post under his head)
-  [0.0, 0.045, 0.045, 0.055],
-  [-0.05, 0.045, 0.046, 0.057],
-  [-0.1, 0.048, 0.048, 0.06],
-  [-0.14, 0.058, 0.053, 0.066],
+  [0.0, 0.041, 0.044, 0.054],
+  [-0.05, 0.04, 0.044, 0.055],
+  [-0.1, 0.043, 0.046, 0.058],
+  [-0.14, 0.054, 0.052, 0.065],
   [-0.17, 0.074, 0.058, 0.072],
   [-0.185, 0.064, 0.05, 0.06],
   [-0.192, 0.02, 0.02, 0.02],
@@ -637,7 +648,12 @@ function faceMap(g, dy = 0) {
 // one with it; in the neck's frame (render/neckbend.js: bent and turned with it). surf(y, t, lift,
 // out): a point on the neck at its y and the angle t round it (0 ahead), lifted off it along its
 // normal; ya deep in the jacket; its picture the jacket's own, at the top of its body (JK.torso)
-export function neckbandGeo(surf, ya = -0.096, yb = -0.042, gap = 0.003) {
+// (cast round 3) open: left open in front by this angle either side of the middle - a jacket worn open has no band across the throat
+export function neckbandGeo(surf, ya = -0.096, yb = -0.042, gap = 0.003, open = 0) {
+  const shut = (i, n) => {
+    const t = ((i + 0.5) / n) * Math.PI * 2;
+    return Math.abs(Math.atan2(Math.sin(t + Math.PI), Math.cos(t + Math.PI))) >= open;
+  };
   const COLS = 32;
   const prof = [];
   const N = 8;
@@ -663,6 +679,7 @@ export function neckbandGeo(surf, ya = -0.096, yb = -0.042, gap = 0.003) {
   }
   for (let j = 0; j < R - 1; j++) {
     for (let i = 0; i < COLS; i++) {
+      if (!shut(i, COLS)) continue;
       const a = j * (COLS + 1) + i;
       idx.push(a, a + COLS + 1, a + 1, a + 1, a + COLS + 1, a + COLS + 2);
     }
@@ -729,7 +746,7 @@ export function heroNeckSurf(y, t, lift, out) {
 
 // the hero's: round his neck (his jacket's leather, up round its foot)
 export function heroBandGeo() {
-  return neckbandGeo(heroNeckSurf);
+  return neckbandGeo(heroNeckSurf, -0.096, -0.042, 0.003, 1.25);
 }
 
 // ------------------------------------------------------------------ the jacket and what is under it
@@ -747,9 +764,9 @@ export const TORSO = [
   [0.36, 0.197, 0.127, 0.12, -0.002, 2.6],
   // (cast round 1: the shoulders 1.5 cm higher - game/doodle.js shY - and the slope from the neck down to them fuller, a trapezius;
   // the neck met the shoulders at a right angle)
-  [0.405, 0.197, 0.114, 0.113, -0.006, 2.6],
-  [0.437, 0.196, 0.104, 0.105, -0.008, 2.5],
-  [0.456, 0.178, 0.092, 0.097, -0.01, 2.3],
+  [0.405, 0.196, 0.114, 0.113, -0.006, 2.6],
+  [0.437, 0.19, 0.104, 0.105, -0.008, 2.4],
+  [0.456, 0.168, 0.092, 0.097, -0.01, 2.2],
   [0.474, 0.134, 0.08, 0.087, -0.01, 2.1],
   // (characters round 3: its back up to the back of his neck - the neck's foot a centimetre behind
   // it showed bare over the leather)
@@ -763,14 +780,17 @@ export function heroTorsoGeo() {
 // (v5, ROADMAP 13.1) the jacket worn open: its two front edges standing a little proud of the body,
 // widening into the lapels under the collar; the shirt and the belt between them; the chest
 // pockets' flaps
+// (cast round 3, his sheet: worn wide open - two fifths of his chest is the shirt, the jacket hanging from his shoulders either side
+// of it, its collar's leaves lying open over his collarbones. It was open a hand's width, a strip of shirt down a dark block)
+export const heroOpen = (y) => 0.064 + 0.012 * Math.max(0, Math.min(1, y / 0.3));
 export function heroZipGeo() {
   const one = (sd) => {
     const g = patch(
       TORSO,
       -0.086,
-      0.455,
-      (y) => sd * 0.043,
-      (y) => sd * (0.058 + Math.max(0, y - 0.33) * 0.42),
+      0.462,
+      (y) => sd * (heroOpen(y) - 0.005),
+      (y) => sd * (heroOpen(y) + 0.015 + Math.max(0, y - 0.3) * 0.36),
       0.0062,
       2,
       18,
@@ -780,7 +800,7 @@ export function heroZipGeo() {
   return merge([one(1), one(-1)]);
 }
 export function heroTeeGeo() {
-  return region(frontPatch(TORSO, () => 0.047), PT.front, true);
+  return region(frontPatch(TORSO, heroOpen), PT.front, true);
 }
 
 // (characters round 3) what is worn under an open jacket, seen in its opening: from the jacket's hem
@@ -791,7 +811,8 @@ export function frontPatch(rows, half) {
   const top = 0.502;
   // (over the top of the chest it narrows to the throat: the jacket's cloth stays round the sides of
   // the neck, as an open jacket's does)
-  const hw = (y) => Math.min(half(y), rowAt(rows, y)[0] * (0.9 - 0.28 * Math.max(0, Math.min(1, (y - 0.46) / (top - 0.46)))));
+  // (cast round 3: no more than a tenth of it there - a dark band of the jacket lay across his collarbones, a scarf)
+  const hw = (y) => Math.min(half(y), rowAt(rows, y)[0] * (0.92 - 0.1 * Math.max(0, Math.min(1, (y - 0.46) / (top - 0.46)))));
   // (across it in a dozen steps: wide over the curve of the chest, it would cut into it between them)
   const g = patch(rows, -0.086, top, (y) => -hw(y), hw, 0.0032, 12, 22);
   const p = g.attributes.position;
@@ -801,7 +822,7 @@ export function frontPatch(rows, half) {
   return g;
 }
 export function heroWeltGeo() {
-  const one = (sd) => region(patch(TORSO, 0.302, 0.345, () => sd * 0.052, () => sd * 0.122, 0.0058, 4, 3), JK.flap);
+  const one = (sd) => region(patch(TORSO, 0.268, 0.308, () => sd * 0.096, () => sd * 0.156, 0.0058, 4, 3), JK.flap);
   return merge([one(1), one(-1)]);
 }
 
@@ -835,10 +856,10 @@ export function heroUpperGeo() {
 }
 export const UPPER_ROWS = [
   // (cast round 1: the cap of the shoulder flatter - it stood up over the shoulder's line, a point at each end)
-  [0.034, 0.014, 0.014, 0.014],
-  [0.028, 0.038, 0.04, 0.04],
-  [0.016, 0.055, 0.057, 0.057],
-  [0.0, 0.064, 0.063, 0.063],
+  [0.027, 0.012, 0.012, 0.012],
+  [0.021, 0.034, 0.036, 0.036],
+  [0.011, 0.052, 0.054, 0.054],
+  [0.0, 0.061, 0.06, 0.06],
   [-0.06, 0.062, 0.06, 0.058],
   [-0.15, 0.058, 0.055, 0.055],
   [-0.24, 0.054, 0.05, 0.05],
@@ -859,17 +880,22 @@ function heroUpperLoft() {
 export function heroForeGeo() {
   return region(heroForeLoft(), JK.fore);
 }
+// (cast round 3, his sheet: his sleeves rolled to under the elbow - the roll thick, the shirt's cuff turned back out of it - and
+// his forearms bare down to the wrist; the roll ends 0.448 of the way down: render/heroink.js FORE_ROLL paints by it)
 export const FORE_ROWS = [
   [0.048, 0.01, 0.01, 0.01],
   [0.036, 0.036, 0.036, 0.036],
   [0.014, 0.048, 0.048, 0.048],
-  [0.0, 0.05, 0.05, 0.05],
-  [-0.07, 0.053, 0.051, 0.051],
-  [-0.17, 0.05, 0.048, 0.048],
-  [-0.232, 0.048, 0.046, 0.046],
-  [-0.248, 0.043, 0.042, 0.042],
-  [-0.256, 0.03, 0.03, 0.03],
-  [-0.26, 0.008, 0.008, 0.008],
+  [0.0, 0.052, 0.052, 0.052],
+  [-0.045, 0.055, 0.054, 0.054],
+  [-0.078, 0.055, 0.054, 0.054],
+  [-0.088, 0.052, 0.051, 0.051],
+  [-0.093, 0.047, 0.044, 0.044],
+  [-0.14, 0.046, 0.042, 0.042],
+  [-0.2, 0.04, 0.035, 0.035],
+  [-0.24, 0.034, 0.029, 0.029],
+  [-0.254, 0.031, 0.027, 0.027],
+  [-0.26, 0.012, 0.012, 0.012],
 ];
 function heroForeLoft() {
   return loft(

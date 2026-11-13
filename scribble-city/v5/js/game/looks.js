@@ -101,11 +101,12 @@ export function heroLook() {
   // in a shop tints it); the shops still sell all the rest (game/wardrobe.js)
   const L = baseLook({ pen: 'fineliner' });
   L.pen.width = 3.2;
-  L.build = { height: 1.03, head: 1.02, bulk: 1.0, limbs: 1.04 };
-  L.skin = [0.74, 0.54, 0.42];
-  L.hair = { style: 'messy', color: [0.17, 0.11, 0.08] };
+  L.build = { height: 1.03, head: 1.07, bulk: 1.0, limbs: 1.04, neck: 0.012 };
+  // (cast round 3: his hands and ears the colour of his face's drawing - they were a shade pinker and lighter, another man's)
+  L.skin = [0.64, 0.44, 0.33];
+  L.hair = { style: 'messy', color: [0.26, 0.16, 0.09] };
   L.top = { kind: 'jacket', color: [0.1, 0.11, 0.15], sleeves: 'long', inner: [0.86, 0.81, 0.72] };
-  L.bottom = { kind: 'cargo', color: [0.14, 0.14, 0.16] };
+  L.bottom = { kind: 'cargo', color: [0.22, 0.19, 0.16] };
   L.shoes = [0.12, 0.1, 0.09];
   L.hat = null;
   L.face = { eyes: 'hero', brows: 'stern', mouth: 'line', beard: 'stubble', glasses: null };

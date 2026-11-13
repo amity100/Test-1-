@@ -93,7 +93,7 @@ function surfRows(rows, y, t, lift, out, nrm) {
 let KIT = null;
 function heroKit() {
   return {
-    sdf: headSdf, headR, hairEdge, hairThick, locks: LOCKS, tone: faceTone, beard: stubble, fem: false,
+    hero: true, sdf: headSdf, headR, hairEdge, hairThick, locks: LOCKS, tone: faceTone, beard: stubble, fem: false,
     rows: { torso: TORSO, pelvis: PELVIS_ROWS, upper: UPPER_ROWS, fore: FORE_ROWS, thigh: THIGH_ROWS, shin: SHIN_ROWS, neck: HERO_NECK_ROWS },
     top: { ink: LEATHER, dark: LEATHER_D, hi: LEATHER_HI }, bottom: { ink: CLOTH, dark: CLOTH_D, hi: CLOTH_HI }, hair: HAIR, hairHi: HAIR_HI,
   };
@@ -257,14 +257,16 @@ function head() {
     line(K.feature, [[sd * 0.019, 0.0182], [sd * 0.027, 0.0233], [sd * 0.036, 0.0244], [sd * 0.0451, 0.02]], { w: 2.7, a: 0.92 });
     line(K.feature, [[sd * 0.0195, 0.0177], [sd * 0.031, 0.0146], [sd * 0.045, 0.0192]], { w: 1.3, a: 0.6, near: true });
     line(K.feature, [[sd * 0.0325, 0.0204], [sd * 0.0329, 0.0172]], { w: 3.2, a: 0.9, col: [0.09, 0.055, 0.03], eye: sd });
-    if (!KIT.mono) line(K.feature, [[sd * 0.021, 0.0276], [sd * 0.033, 0.0302], [sd * 0.0445, 0.0268]], { w: 1.4, a: 0.55, near: true, col: SEPIA_D });
+    if (!KIT.mono && !KIT.hero) line(K.feature, [[sd * 0.021, 0.0276], [sd * 0.033, 0.0302], [sd * 0.0445, 0.0268]], { w: 1.4, a: 0.55, near: true, col: SEPIA_D });
     // the brow: its mass, then its hairs
     const bz = (t) => {
       const a = (1 - t) * (1 - t);
       const b = 2 * t * (1 - t);
       const c = t * t;
       const up = fem ? 0.0018 : 0;
-      return [a * sd * 0.012 + b * sd * 0.035 + c * sd * 0.058, a * (0.0318 + up) + b * (0.0418 + up * 1.6) + c * (0.0338 + up)];
+      // (cast round 3: the hero's low and straight - render/heroink.js; the city's people's as they were)
+      const hb = KIT.hero ? [0.011, 0.034, 0.0288, 0.0372, 0.0335] : [0.012, 0.035, 0.0318, 0.0418, 0.0338];
+      return [a * sd * hb[0] + b * sd * hb[1] + c * sd * 0.058, a * (hb[2] + up) + b * (hb[3] + up * 1.6) + c * (hb[4] + up)];
     };
     line(K.feature, [bz(0), bz(0.35), bz(0.7), bz(1)], { w: 3.4, a: 0.9 });
     for (let k = 0; k < 9; k++) {
@@ -388,7 +390,7 @@ export class HeroLines {
       torso: lofted('torso', TORSO, { seed: 11, shine: c(170), hi: LEATHER_HI, ya: -0.085, yb: 0.47, hatch: c(250), cross: c(110), around: 28, bands: 4, rim: c(60), ...jacket, folds: [[0.0, 0.12, 0.6, 2.4, 4], [0.0, 0.12, 3.9, 5.7, 4], [0.32, 0.4, 1.2, 1.9, 4], [0.32, 0.4, 4.4, 5.1, 4], [0.05, 0.3, 2.6, 3.7, 4]] }),
       pelvis: lofted('pelvis', PELVIS_ROWS, { seed: 13, shine: c(30), hi: CLOTH_HI, ya: -0.12, yb: 0.06, hatch: c(50), cross: c(16), around: 16, bands: 2, rim: c(12), ...cloth, folds: [[-0.1, -0.05, 2.6, 3.7, 3]] }),
       upper: lofted('upper', UPPER_ROWS, { seed: 17, shine: c(55), hi: LEATHER_HI, ya: -0.33, yb: 0.02, hatch: c(70), cross: c(24), around: 14, bands: 3, rim: c(18), ...jacket, down: true, folds: [[-0.32, -0.26, -0.7, 0.7, 4], [0.0, 0.02, 0.0, 6.28, 2]] }),
-      fore: lofted('fore', FORE_ROWS, { seed: 19, shine: c(50), hi: LEATHER_HI, ya: -0.25, yb: 0.03, hatch: c(60), cross: c(20), around: 14, bands: 3, rim: c(16), ...jacket, down: true, folds: [[-0.06, 0.0, -0.8, 0.8, 4], [-0.24, -0.19, 0.0, 6.28, 4]] }),
+      fore: lofted('fore', FORE_ROWS, { seed: 19, shine: c(50), hi: LEATHER_HI, ya: KIT.hero ? -0.086 : -0.25, yb: 0.03, hatch: c(KIT.hero ? 26 : 60), cross: c(KIT.hero ? 9 : 20), around: 14, bands: 3, rim: c(16), ...jacket, down: true, folds: KIT.hero ? [[-0.06, 0.0, -0.8, 0.8, 4]] : [[-0.06, 0.0, -0.8, 0.8, 4], [-0.24, -0.19, 0.0, 6.28, 4]] }),
       thigh: lofted('thigh', THIGH_ROWS, { seed: 23, shine: c(55), hi: CLOTH_HI, ya: -0.5, yb: 0.05, hatch: c(70), cross: c(24), around: 14, bands: 4, rim: c(18), ...cloth, down: true, folds: [[-0.12, -0.02, 2.2, 4.1, 4], [-0.48, -0.42, 2.6, 3.7, 4]] }),
       shin: lofted('shin', SHIN_ROWS, { seed: 29, shine: c(50), hi: CLOTH_HI, ya: -0.44, yb: 0.03, hatch: c(60), cross: c(20), around: 14, bands: 4, rim: c(16), ...cloth, down: true, folds: [[-0.02, 0.03, -0.9, 0.9, 3], [-0.44, -0.37, 0.0, 6.28, 6]] }),
     };
