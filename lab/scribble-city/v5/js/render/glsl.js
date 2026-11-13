@@ -1482,8 +1482,12 @@ void main() {
   // (cast round 1 - the look on people: the low sun's orange on them half as coloured - skin went red - and a fill of the sky's
   // light on their shaded side, so that a face and a jacket are read and not a dark shape hatched over)
   if (uLook > 0.0 && vX.x > 0.5 && !inside) {
-    key = mix(key, vec3(lum(key)) * vec3(1.05, 1.0, 0.95), 0.5 * uLook);
-    amb = mix(amb, amb * 1.3 + vec3(0.05, 0.045, 0.06), uLook);
+    // (cast round 3: three quarters of the way to a plain warm light, and a little less of it - his skin was a sunburn's orange)
+    key = mix(key, vec3(lum(key)) * vec3(1.06, 1.0, 0.92) * 0.86, 0.78 * uLook);
+    // (and the sky's fill most of the way to plain: a cream shirt was lilac, a tanned face magenta in the shade)
+    amb = mix(amb, mix(amb, vec3(lum(amb)) * vec3(1.02, 0.98, 1.04), 0.6) * 1.3 + vec3(0.05, 0.045, 0.055), uLook);
+    // (and against the grade's own warmth and richness, laid over the whole picture after this: skin came out of it an orange)
+    alb = mix(alb, saturateC(alb, 0.72) * vec3(0.95, 1.0, 1.1), uLook);
     light = max(light, 0.3 * uLook);
   }
   vec3 shade = alb * (amb + pts);

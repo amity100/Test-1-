@@ -2179,7 +2179,8 @@ export class PersonRenderer {
     const white = PAPER_W;
     fig.headId = (seed * 7.77 + 0.31) % 1;
     // (a leather jacket's bulk over the shoulders and the arms)
-    const bw = k * Math.max(0.92, bulk * 0.96) * 1.07;
+    // (cast round 3: a cloth jacket on him, not a leather one's bulk - with it his head was small on a wide box)
+    const bw = k * Math.max(0.92, bulk * 0.96) * 1.0;
     // his light after dark, as his drawing has him: the city's neon on him - warm pink on the side
     // towards you, its cyan on the other (two small lights of his own, with him); the light his lines
     // are drawn by (the sun by day, that pink after dark), and the edge of colour
@@ -2252,9 +2253,9 @@ export class PersonRenderer {
       const el = arms[ai][1];
       const hd = arms[ai][2];
       const armId = id();
-      p.heroUpper.push(along(sh, el, 0.31, armK * 1.1, fwd), jC, own, armId, ind);
+      p.heroUpper.push(along(sh, el, 0.31, armK * 1.03, fwd), jC, own, armId, ind);
       HL.set(ai ? 'upperL' : 'upperR', 'upper', _m);
-      p.heroFore.push(along(el, hd, 0.29, armK * 1.08, fwd), jC, own, armId, ind);
+      p.heroFore.push(along(el, hd, 0.29, armK * 1.03, fwd), jC, own, armId, ind);
       HL.set(ai ? 'foreL' : 'foreR', 'fore', _m);
       _c.subVectors(hd, el).normalize();
       _d.copy(hd).addScaledVector(_c, 0.19 * S);
@@ -2834,8 +2835,10 @@ const ZIP = lin3(0.62, 0.58, 0.5);
 const HERO_PICS = ['heroFace', 'heroHair', 'heroJacket', 'heroPants', 'heroBoots'];
 const HERO_SET = ['face', 'hair', 'jacket', 'pants', 'boots'];
 const PAPER_W = [1, 1, 1];
-const HERO_LEATHER = [0.2, 0.15, 0.13];
-const HERO_JEANS = [0.14, 0.14, 0.16];
+// (cast round 3: his jacket's own colour is his sheet's navy, game/looks.js heroLook - against the old brown the navy was laid on
+// the picture a second time as a tint, near black, and it would have turned his bare forearms blue)
+const HERO_LEATHER = [0.1, 0.11, 0.15];
+const HERO_JEANS = [0.22, 0.19, 0.16];
 // (cast round 2, his sheet: dark leather boots on dark soles - the pale sole under them read as a skate's blade)
 const HERO_SOLE = [0.13, 0.11, 0.1];
 const CHAIN = [0.78, 0.78, 0.8];
