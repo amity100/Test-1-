@@ -464,8 +464,10 @@ export class Doodle {
       }
       if (crouch > 0) {
         // right knee down, left foot planted forward
-        th = lerp(th, off === 0 ? 0.35 : 1.05, crouch);
-        kb = lerp(kb, off === 0 ? 1.95 : 1.55, crouch);
+        // (ROADMAP 23: crouchFlip - the left knee down, for somebody at his left)
+        const down = this.crouchFlip ? off !== 0 : off === 0;
+        th = lerp(th, down ? 0.35 : 1.05, crouch);
+        kb = lerp(kb, down ? 1.95 : 1.55, crouch);
       }
       if (this.sneak > 0) {
         // bent low: short steps on bent knees

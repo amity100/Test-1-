@@ -38,12 +38,22 @@ const PLAIN = { shadowT: [0.74, 0.9, 1.2], lightT: [1.13, 0.97, 0.8] };
 
 const smooth = (x) => x * x * (3 - 2 * x);
 
-// how much of the look there is at a place (1 inside the zone, 0 PAD metres out of it)
+// (ROADMAP 23, the owner's word: "bring the street's new graphic style there too" - the story's places: the boulevard on south
+// of the opening street, the ice-cream stand, the pier and the giant wheel. Its light, sky, ink and colour; the opening street's
+// own dressing - world/lookdress.js - is that street's)
+export const STORY_ZONES = [
+  { x0: -72, x1: 118, z0: 44, z1: 200, pad: 45 },
+  { x0: -40, x1: 200, z0: 190, z1: 310, pad: 45 },
+];
+// how much of the look there is at a place (1 inside a zone, 0 PAD metres out of it)
 export function lookAt(x, z) {
-  const Z = ZONE;
-  const dx = Math.max(Z.x0 - x, 0, x - Z.x1);
-  const dz = Math.max(Z.z0 - z, 0, z - Z.z1);
-  return smooth(Math.max(0, 1 - Math.hypot(dx, dz) / Z.pad));
+  let k = 0;
+  for (const Z of [ZONE, ...STORY_ZONES]) {
+    const dx = Math.max(Z.x0 - x, 0, x - Z.x1);
+    const dz = Math.max(Z.z0 - z, 0, z - Z.z1);
+    k = Math.max(k, 1 - Math.hypot(dx, dz) / Z.pad);
+  }
+  return smooth(Math.max(0, k));
 }
 
 // each frame, before it is drawn (game/game.js renderFrame): the look by where the camera is
@@ -54,7 +64,8 @@ export function lookFrame(game) {
   // (the opening film keeps its own light and colour: game/prologue/director.js - while it is filmed, holdCam. The player's own
   // walks and drives between its scenes look as the game does, ROADMAP 18.9 - and the game's look is this one now, 20.15: it comes
   // back over a second after a shot, and is gone at once when one begins, so a moment between two shots does not flash it)
-  const film = !!(game.prologue && game.prologue.active && game.prologue.holdCam);
+  // (ROADMAP 23: but a scene filmed again in the game's look - director.js newLook - is in it, its shots too)
+  const film = !!(game.prologue && game.prologue.active && game.prologue.holdCam && !game.prologue.newLook);
   const now = performance.now();
   const dtF = Math.min(0.1, (now - (lookFrame.at || now)) / 1000);
   lookFrame.at = now;

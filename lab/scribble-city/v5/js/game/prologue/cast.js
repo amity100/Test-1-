@@ -1,4 +1,4 @@
-import { FOLK, FOLK_ON, LILY, WHEEL_KIDS, SKINS, hexRGB } from '../../render/folkspec.js';
+import { FOLK, FOLK_ON, LILY, WHEEL_KIDS, VENDOR, SKINS, hexRGB } from '../../render/folkspec.js';
 import { folkLook, civilianLook, modest } from '../looks.js';
 
 // (v5, ROADMAP 18) The prologue's people: how each of them looks, for game/civilians.js
@@ -9,6 +9,16 @@ import { folkLook, civilianLook, modest } from '../looks.js';
 // city never sends them walking its streets by themselves.
 
 const LILY_K = FOLK.indexOf(LILY);
+
+// (ROADMAP 23) Gino at Sunset Scoops: the same man every time, behind his counter in his apron - null where this renderer did not
+// make him (the stand's plain figure stays then: game/prologue/set.js staff)
+export function vendorLook() {
+  const k = FOLK.indexOf(VENDOR);
+  if (k < 0 || k >= FOLK_ON.n) return null;
+  const L = folkLook(k);
+  L.apron = [0.95, 0.56, 0.7];
+  return L;
+}
 
 // (round 25, the player's word: the kids on the wheel drawn as the city's people are, children's faces
 // - render/folkspec.js WHEEL_KIDS: i 0 Theo, 1 Maya; null where this computer's renderer did not make

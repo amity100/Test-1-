@@ -746,8 +746,32 @@ export const WHEEL_KIDS = [
     acc: {},
   },
 ];
-FOLK.splice(PHONE_N, 0, LILY, ...WHEEL_KIDS);
-export const FOLK_PHONE = PHONE_N + 1 + WHEEL_KIDS.length;
+// (ROADMAP 23, the owner's word: the film's people "real fixed characters, not another one every time you play" - the story's own
+// cast, each one person and nobody else: a role of their own, so the city never sends them walking its streets, and a phone makes
+// them too. game/prologue/cast.js gives each their look)
+// Gino, who has sold ice cream at Sunset Scoops for thirty years: Salvatore's long lined face made rounder and kinder - fuller
+// cheeks, a smile at rest, a white moustache under a big nose - a short, stout man in an ice-cream man's white jacket over a pink
+// shirt, white trousers, an apron (the rig's: cast.js)
+const SAL = FOLK.find((f) => f.key === 'sal');
+export const VENDOR = {
+  ...SAL,
+  key: 'gino', name: 'Gino', age: 61, role: 'vendor', how: 'cast',
+  build: { height: 0.97, head: 1.04, bulk: 1.08, limbs: 0.98 },
+  body: { belly: 0.4, chest: 0.05, thick: 0.03 },
+  morph: { ...SAL.morph, 'head-fat-decr': 0, 'head-fat-incr': 0.35, 'cheek-volume-decr': 0, 'cheek-volume-incr': 0.4, 'cheek-inner-decr': 0, 'mouth-angles-up': 0.5, 'head-scale-vert-incr': 0.05 },
+  shape: { ...SAL.shape, cheeks: 0.3, dbl: 0.25 },
+  expr: 'soft',
+  beard: 'mustache', beardCol: ['#d8d6d2', '#eceae6', '#b8b6b2', '#9a9894'], lines: 0.8, blush: 0.5,
+  top: jacket('blazer', 'cotton', '#f4f0e8', { buttons: '#d8a0b4' }),
+  inner: under('shirt', '#f2a6c0'),
+  bottom: legs('chinos', '#efe9dc'),
+  belt: null,
+  shoes: feet('sneaker', '#f0ece4'),
+  acc: {},
+};
+export const STORY_CAST = [VENDOR];
+FOLK.splice(PHONE_N, 0, LILY, ...WHEEL_KIDS, ...STORY_CAST);
+export const FOLK_PHONE = PHONE_N + 1 + WHEEL_KIDS.length + STORY_CAST.length;
 
 // (how many of them the city's renderer made: phones fewer - render/people.js; game/looks.js picks
 // from those)
