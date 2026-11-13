@@ -641,15 +641,17 @@ export const LILY = {
   morph: {
     // (cast round 1, her sheet: a child's face - her eyes big in it, a small short nose, round cheeks, a small chin, the face short
     // under a high forehead. Not the doll of round 10: her own features, a child's measures)
-    'head-age-decr': 1, 'head-round': 0.45, 'cheek-volume-incr': 0.45, 'eye-scale-incr': 0.42, 'nose-scale-vert-decr': 0.5, 'nose-scale-depth-decr': 0.3, 'nose-point-up': 0.45, 'nose-scale-horiz-decr': 0.2,
-    'mouth-scale-horiz-incr': 0.08, 'mouth-angles-up': 0.25, 'ear-scale-incr': 0.8, 'chin-width-decr': 0.3, 'chin-prominent-decr': 0.15, 'chin-height-decr': 0.3, 'eyebrows-angle-up': 0.04, 'forehead-scale-vert-incr': 0.2,
+    // (cast round 6, her sheet beside her picture: her face round and wide, short from brow to chin, full cheeks, her eyes bigger
+    // still, a broad smile - it was a long oval with small eyes, a grown woman's)
+    'head-age-decr': 1, 'head-round': 0.8, 'head-scale-vert-decr': 0.35, 'head-scale-horiz-incr': 0.3, 'cheek-volume-incr': 0.7, 'eye-scale-incr': 0.7, 'nose-scale-vert-decr': 0.55, 'nose-scale-depth-decr': 0.3, 'nose-point-up': 0.45, 'nose-scale-horiz-decr': 0.2,
+    'mouth-scale-horiz-incr': 0.2, 'mouth-angles-up': 0.4, 'ear-scale-incr': 0.8, 'chin-width-decr': 0.3, 'chin-prominent-decr': 0.15, 'chin-height-decr': 0.5, 'eyebrows-angle-up': 0.04, 'forehead-scale-vert-incr': 0.05,
   },
   shape: { cheeks: 0.35, jaw: 0.9, dbl: 0, neck: 0.88 },
   expr: 'smile',
   head: { jaw: 0, chin: 0.9, nose: 0.88, lips: 1.02, brow: 0.58 },
   skin: 'golden', eyes: { iris: 'lilyHazel', open: 1.0, lid: 0.4, lashes: 0.6, liner: 0, irisK: 1.3 },
   // (uneven: the one arched higher than the other - render/folkink.js)
-  brows: { col: ['#4e3020', '#5c3a26', '#3e2618'], thick: 0.8, arch: 0.26, uneven: 0.3 },
+  brows: { col: ['#4e3020', '#5c3a26', '#3e2618'], thick: 1.0, arch: 0.3, uneven: 0.3 },
   mouth: { w: 1.04, full: 1.0, lip: [shade(SKINS.golden.warm[0], 0.85), SKINS.golden.warm[1]], lipstick: null },
   beard: null, lines: 0, freckles: 1, blush: 0.4,
   // (her own marks, where her face has them - x her left, as the head's: render/folkink.js; the gap
