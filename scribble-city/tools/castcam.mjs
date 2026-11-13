@@ -73,6 +73,8 @@ for (let i = 0; i < 6; i++) {
   await pg.waitForTimeout(1500);
   await pg.evaluate(() => window.__frame(4, 1 / 30));
 }
+// (three seconds of standing, so that they have settled into how they stand: his hands in his pockets, hers on her straps)
+await pg.evaluate(() => window.__frame(90, 1 / 30));
 // name, camera position, look-at, field of view
 const D = 1.78;
 const K = 1.26;

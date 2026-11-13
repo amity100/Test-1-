@@ -677,7 +677,8 @@ export const LILY = {
   // (a hoodie: a bomber's cut in soft cotton, its hood down on the back - render/folkshapes.js - and
   // open a little wider than a jacket is worn)
   // (cast round 2, her sheet: soft and a size too big on her, open wide over the tee; khaki-brown cargo trousers, baggy to the shoe)
-  top: jacket('bomber', 'cotton', '#6f4c94', { rib: '#58397a', lining: '#4a3266', buttons: '#cfcac0', hood: true, open: 0.03, loose: 0.16 }),
+  // (cast round 5, her sheet: a plum purple, redder and deeper - it was a violet that the evening turned blue; open wider)
+  top: jacket('bomber', 'cotton', '#743f86', { rib: '#5c2f6c', lining: '#4a2858', buttons: '#cfcac0', hood: true, open: 0.05, loose: 0.16 }),
   inner: under('tee', '#f1e7d2', { print: 'rocket' }),
   bottom: legs('chinos', '#665a40', { cargo: true, baggy: 0.5 }),
   belt: null,

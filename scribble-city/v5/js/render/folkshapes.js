@@ -818,7 +818,7 @@ const STYLES = {
       // (cast round 1, her sheet: a mass of curls - four centimetres of it over her head, three at the sides, in clusters of curls
       // the size of a fist's knuckles; it was a thin cap, and from the front she had hardly any hair)
       const big = 0.009 * (Math.sin(th * 9 + phi * 4 + 1.3) * Math.sin(phi * 7 - th * 5) + 0.8);
-      return 0.015 + 0.013 * top ** 1.2 + 0.008 * Math.sin(th) + big + bump;
+      return 0.016 + 0.013 * top ** 1.2 + 0.015 * Math.sin(th) + big + bump;
     },
     clumps: 0.012,
   },
@@ -1107,7 +1107,15 @@ function ponyGeo(kit, R, out) {
   // nape under the tail - each wound round as it falls, out of the hair's edge
   const H = V(0, 0, 0);
   // (and over her forehead, to both sides of it)
-  for (const [phi, len, turns] of [[1.0, 0.085, 2.6], [1.16, 0.06, 2.0], [-1.02, 0.08, -2.8], [-1.18, 0.055, 2.1], [2.75, 0.05, 1.8], [-2.8, 0.045, -1.9], [0.42, 0.04, 1.6], [-0.36, 0.045, -1.8], [0.7, 0.05, -1.7], [-0.72, 0.05, 1.9]]) {
+  // (cast round 5, her sheet: a mane of loose curls all round her face - down past her jaw at the sides, wisps on her forehead,
+  // more at the nape - thick ones. There were ten thin ones, and her face stood bare in a tight cap)
+  const loose = [[1.0, 0.085, 2.6], [1.16, 0.06, 2.0], [-1.02, 0.08, -2.8], [-1.18, 0.055, 2.1], [2.75, 0.05, 1.8], [-2.8, 0.045, -1.9], [0.42, 0.04, 1.6], [-0.36, 0.045, -1.8], [0.7, 0.05, -1.7], [-0.72, 0.05, 1.9]];
+  for (const sd of [-1, 1]) {
+    for (let i = 0; i < 7; i++) loose.push([sd * (0.8 + 0.11 * i + 0.05 * R()), 0.075 + 0.065 * R() + (i > 1 && i < 5 ? 0.03 : 0), (R() < 0.5 ? -1 : 1) * (1.8 + 1.6 * R()), 1]);
+    for (let i = 0; i < 4; i++) loose.push([sd * (2.1 + 0.25 * i + 0.1 * R()), 0.06 + 0.05 * R(), (R() < 0.5 ? -1 : 1) * (1.6 + 1.2 * R()), 1]);
+    for (let i = 0; i < 3; i++) loose.push([sd * (0.12 + 0.2 * i + 0.08 * R()), 0.026 + 0.022 * R(), (R() < 0.5 ? -1 : 1) * (1.2 + 0.8 * R()), 0]);
+  }
+  for (const [phi, len, turns, fat] of loose) {
     const th = kit.edge(phi) - 0.06;
     const n = V(Math.sin(th) * Math.sin(phi), Math.cos(th), Math.sin(th) * Math.cos(phi));
     const top = n.clone().multiplyScalar(kit.capR(n.x, n.y, n.z) + 0.001);
@@ -1119,7 +1127,7 @@ function ponyGeo(kit, R, out) {
     const p0 = R() * 6.3;
     const along = (s, o) => {
       const a = p0 + turns * Math.PI * 2 * s;
-      const rh = 0.007 * (0.4 + 0.6 * Math.min(1, s * 3));
+      const rh = (fat ? 0.0105 : 0.007) * (0.4 + 0.6 * Math.min(1, s * 3));
       o.copy(top).addScaledVector(D, s * len);
       // (clear of the head below the hair's edge, as the face widens under it)
       const r = o.length() || 1;
@@ -1127,10 +1135,10 @@ function ponyGeo(kit, R, out) {
       if (r < want) o.multiplyScalar(want / r);
       return o.addScaledVector(U, Math.cos(a) * rh).addScaledVector(W, Math.sin(a) * rh);
     };
-    strand(along, 0.0042, D);
+    strand(along, fat ? 0.0066 : 0.0042, D);
     const mid = [];
     for (let i = 0; i <= 10; i++) mid.push(along(i / 10, H).toArray());
-    out.push({ mid, edge: mid.slice(), n: n.toArray(), w: 0.0026 });
+    out.push({ mid, edge: mid.slice(), n: n.toArray(), w: fat ? 0.004 : 0.0026 });
   }
   const g = make(pos, uv, idx);
   g.computeVertexNormals();
