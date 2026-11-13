@@ -38,7 +38,7 @@ export const PT = {
 // the torso's height from its hem to the neck (render/heroshapes.js TORSO), in metres
 export const TORSO_Y = [-0.088, 0.503];
 // (cast round 3: where his rolled sleeve ends, of the way from the elbow to the wrist - render/heroshapes.js FORE_ROWS)
-export const FORE_ROLL = 0.448;
+export const FORE_ROLL = 1;
 
 function rng(seed) {
   let s = seed >>> 0 || 1;
@@ -773,37 +773,17 @@ function fold(h, pts, w = 2) {
 // arm, tanned, its hair, the shade round its sides - r: the forearm's region, v 0 at the elbow, 1 at the wrist
 function foreArm(h, r, P) {
   const g = h.g;
-  const s = h.s;
-  const va = FORE_ROLL - 0.11;
-  const vb = FORE_ROLL + 0.015;
+  // (round 10: the picture is the rolled sleeve alone now - the cuff the last quarter of it; his arm is his skin's own part)
+  const va = FORE_ROLL - 0.26;
   const [x0, ya] = P(0, va);
-  const [x1, yb] = P(1, vb);
-  const [, y1] = P(1, 1);
-  // the cuff
+  const [x1, yb] = P(1, 1);
   g.globalAlpha = 1;
   g.fillStyle = '#e6dcc8';
   g.fillRect(x0, ya, x1 - x0, yb - ya);
   h.hatch(x0, ya, x1, yb, 500, () => 0.8, 0.2, 18, 1.4, ['#b9ab94', '#c9bca6', '#a89a84'], 0.5, 0.4);
   h.hatch(x0, ya, x1, yb, 260, () => 0.7, 0.2, 16, 1.2, ['#fbf6ec', '#f6efe2'], 0.5, 0.4);
   h.lines([[x0, ya], [x1, ya]], 2.6, '#0c0c12', 0.9, 2, 0.8);
-  h.lines([[x0, yb], [x1, yb]], 2.4, '#5a4a3c', 0.85, 2, 0.8);
   h.lines([[x0, (ya + yb) / 2], [x1, (ya + yb) / 2]], 1.2, '#8a7f70', 0.5, 2, 1.2);
-  // the arm
-  g.globalAlpha = 1;
-  g.fillStyle = '#b57c58';
-  g.fillRect(x0, yb, x1 - x0, y1 - yb);
-  const grain = ['#c08a62', '#a06a48', '#b47c5a', '#925e42', '#bc8266'];
-  h.hatch(x0, yb, x1, y1, 1500, () => 0.8, Math.PI / 2 + 0.1, 30, 1.6, grain, 0.34, 0.5);
-  // (u round the arm: 0.75 its front, 0.25 its back - the shade round the sides between them, and under the cuff)
-  const side = (px) => {
-    const u = (px - x0) / (x1 - x0);
-    return Math.abs(Math.cos(u * Math.PI * 2)) ** 1.5;
-  };
-  h.hatch(x0, yb, x1, y1, 800, (px, py) => 0.7 * side(px) + 0.6 * smooth(yb + 22 * s, yb, py), Math.PI / 2, 26, 1.7, ['#8e5c44', '#7e5038', '#744a36'], 0.4, 0.4);
-  h.hatch(x0, yb, x1, y1, 200, (px) => side(px) - 0.5, Math.PI / 2 - 0.5, 20, 1.6, ['#624456', '#5a3a34'], 0.35, 0.4);
-  h.hatch(x0, yb, x1, y1, 300, (px) => 0.7 * (1 - side(px)), Math.PI / 2, 22, 1.5, ['#ecc6a2', '#e2b690'], 0.35, 0.4);
-  // (its hair: short dark ticks along it)
-  h.ticks(x0, yb, x1, y1, 1500, (px) => 0.5 + 0.3 * side(px), () => Math.PI / 2 + 0.35, 6, 1.1, ['#4a3a30', '#5a4436', '#3c2e26'], 0.42, 0.8);
 }
 
 /**

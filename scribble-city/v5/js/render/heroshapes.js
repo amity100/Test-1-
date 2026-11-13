@@ -842,9 +842,26 @@ export const PELVIS_ROWS = [
   [-0.13, 0.062, 0.05, 0.06],
   [-0.137, 0.012, 0.012, 0.012],
 ].reverse();
+// (cast round 10, the owner's word and his pictures: "a strange ellipse at the bottom... and his legs go on up into his seat" -
+// the seat turned under sharply a hand below the jacket's hem, its underside facing the ground and shaded dark, an oval; and it was
+// narrower in front than the jacket and the thighs, which stood out of it as two posts up to his belt. His own rows: full under the
+// jacket's hem, its front ahead of the thighs' tops, and down round them to the top of the legs before it turns in - inside them)
+export const HERO_PELVIS_ROWS = [
+  [0.08, 0.1, 0.07, 0.07],
+  [0.074, 0.152, 0.098, 0.1, 0, 2.3],
+  [0.04, 0.162, 0.106, 0.108, 0, 2.3],
+  [0.0, 0.17, 0.113, 0.115, 0, 2.3],
+  [-0.05, 0.169, 0.113, 0.119, 0, 2.3],
+  [-0.09, 0.168, 0.109, 0.116, 0, 2.3],
+  [-0.13, 0.165, 0.103, 0.108, 0, 2.3],
+  [-0.165, 0.158, 0.094, 0.097, 0, 2.3],
+  [-0.19, 0.12, 0.074, 0.076, 0, 2.2],
+  [-0.2, 0.05, 0.04, 0.04],
+  [-0.204, 0.012, 0.012, 0.012],
+].reverse();
 function heroPelvisLoft() {
   return loft(
-    PELVIS_ROWS,
+    HERO_PELVIS_ROWS,
     24,
     false,
     true,
@@ -881,9 +898,27 @@ function heroUpperLoft() {
 export function heroForeGeo() {
   return region(heroForeLoft(), JK.fore);
 }
-// (cast round 3, his sheet: his sleeves rolled to under the elbow - the roll thick, the shirt's cuff turned back out of it - and
-// his forearms bare down to the wrist; the roll ends 0.448 of the way down: render/heroink.js FORE_ROLL paints by it)
+// (the city's people's sleeves are made of these too - render/folkshapes.js: a long sleeve to its cuff at the wrist)
 export const FORE_ROWS = [
+  [0.048, 0.01, 0.01, 0.01],
+  [0.036, 0.036, 0.036, 0.036],
+  [0.014, 0.048, 0.048, 0.048],
+  [0.0, 0.05, 0.05, 0.05],
+  [-0.07, 0.053, 0.051, 0.051],
+  [-0.17, 0.05, 0.048, 0.048],
+  [-0.232, 0.048, 0.046, 0.046],
+  [-0.248, 0.043, 0.042, 0.042],
+  [-0.256, 0.03, 0.03, 0.03],
+  [-0.26, 0.008, 0.008, 0.008],
+];
+// (cast round 3, his sheet: his sleeves rolled to under the elbow - the roll thick, the shirt's cuff turned back out of it - and
+// his forearms bare down to the wrist)
+// (cast round 10, the owner's word and his pictures: "his hands are another colour from his arms, and cut off from them, as if
+// joined in the air" - the bare arm was painted on the jacket's picture, another stuff from the hand's and lighter on a phone, and
+// it ended three centimetres short of the wrist. His own rows now - the rolled sleeve alone, HERO_FORE_ROWS - and the bare forearm
+// a part of its own in the hand's skin, down to the wrist and into the hand: HERO_ARM_ROWS. The city's people's sleeves had taken
+// his roll too, FORE_ROWS being theirs as well: theirs are as they were)
+export const HERO_FORE_ROWS = [
   [0.048, 0.01, 0.01, 0.01],
   [0.036, 0.036, 0.036, 0.036],
   [0.014, 0.048, 0.048, 0.048],
@@ -892,15 +927,24 @@ export const FORE_ROWS = [
   [-0.078, 0.055, 0.054, 0.054],
   [-0.088, 0.052, 0.051, 0.051],
   [-0.093, 0.047, 0.044, 0.044],
-  [-0.14, 0.046, 0.042, 0.042],
-  [-0.2, 0.04, 0.035, 0.035],
-  [-0.24, 0.034, 0.029, 0.029],
-  [-0.254, 0.031, 0.027, 0.027],
-  [-0.26, 0.012, 0.012, 0.012],
+  [-0.097, 0.02, 0.02, 0.02],
 ];
+export const HERO_ARM_ROWS = [
+  [-0.07, 0.02, 0.02, 0.02],
+  [-0.078, 0.043, 0.04, 0.04],
+  [-0.14, 0.044, 0.04, 0.04],
+  [-0.2, 0.039, 0.034, 0.034],
+  [-0.25, 0.033, 0.027, 0.027],
+  [-0.285, 0.03, 0.023, 0.023],
+  [-0.302, 0.028, 0.021, 0.021],
+  [-0.308, 0.012, 0.012, 0.012],
+];
+export function heroArmGeo() {
+  return loft(HERO_ARM_ROWS, 14, false, true);
+}
 function heroForeLoft() {
   return loft(
-    FORE_ROWS,
+    HERO_FORE_ROWS,
     18,
     false,
     true,
