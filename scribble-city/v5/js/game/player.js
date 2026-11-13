@@ -521,7 +521,8 @@ export class Player {
       this.coverPop = damp(this.coverPop, this.crouched && this.coverBox && aiming ? 1 : 0, 9, dt);
       const low = this.crouched ? 1 - this.coverPop : 0;
       const moving = fig.speed > 0.4;
-      fig.crouch = damp(fig.crouch, low * (moving ? 0 : 1), 10, dt);
+      // (ROADMAP 23: or down on a knee in the story's film - game/prologue/director.js kneel)
+      fig.crouch = damp(fig.crouch, Math.max(low * (moving ? 0 : 1), this.filmCrouch || 0), this.filmCrouch ? 7 : 10, dt);
       fig.sneak = damp(fig.sneak, low * (moving ? 1 : 0), 10, dt);
     }
     fig.stagger = this.game.inkwell ? Math.min(1, Math.max(0, this.game.inkwell.tipsy - 0.4)) : 0;
