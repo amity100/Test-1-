@@ -535,7 +535,6 @@ function atW(out, x, y, z) {
 
 // (round 17: his fist's way on from the wrist, round the pencil - drawHero)
 const _gw = new THREE.Vector3();
-const _fu = new THREE.Vector3();
 const _hRef = new THREE.Vector3();
 
 // (round 20, the player's word: Danny's and Lily's legs stuck out under the car as it flew - seen from
@@ -2250,8 +2249,13 @@ export class PersonRenderer {
         capsuleTo(p, _a, _x, 0.0028 * S, linC(CHAIN), own, cid, ind, rgt);
       }
     }
+    // (cast round 9, the owner's word and his pictures: "a dark patch behind him that moves as he walks... part of his trousers" -
+    // the seat was a part of its own for the outlines, so a line was drawn all round it: a dark pouch under the jacket's hem,
+    // swinging against the legs at every step. His trousers are one thing - the seat and both legs one part for the lines; a leg
+    // in front of the other still has its line, by its depth: render/pipeline.js edgeAt)
+    const trouId = id();
     if (P.pelvis > 0.5) {
-      p.heroPelvis.push(framed(j.hip, fig.prgt, ax, fig.pfwd, bw, k, bw), jeansC, own, id(), ind);
+      p.heroPelvis.push(framed(j.hip, fig.prgt, ax, fig.pfwd, bw, k, bw), jeansC, own, trouId, ind);
       HL.set('pelvis', 'pelvis', _m);
     }
     // ---- arms in their sleeves, the hands; the watch on the left wrist
@@ -2303,21 +2307,19 @@ export class PersonRenderer {
       const kn = legs[li][1];
       const ft = legs[li][2];
       const to = legs[li][3];
-      const legId = id();
+      const legId = trouId;
       p.heroThigh.push(along(hp, kn, 0.47, legK, fwd), jeansC, own, legId, ind);
       HL.set(li ? 'thighL' : 'thighR', 'thigh', _m);
       p.heroShin.push(along(kn, ft, 0.47, legK, fwd), jeansC, own, legId, ind);
       HL.set(li ? 'shinL' : 'shinR', 'shin', _m);
-      // (cast round 8: the foot turned as the rig has it - toes up as the heel comes down, heel up as it pushes off: game/doodle.js;
-      // it was always flat, a skate)
       _z.subVectors(to, ft);
+      _z.y = 0;
       if (_z.lengthSq() < 1e-6) _z.copy(fwd);
       _z.normalize();
       _x.crossVectors(UP, _z).normalize();
-      _fu.crossVectors(_z, _x).normalize();
-      _c.copy(ft).addScaledVector(_z, 0.05 * S).addScaledVector(_fu, -0.02 * S);
-      _c.y = Math.max(_c.y, fig.pos.y + 0.035);
-      framed(_c, _x, _fu, _z, k, k, k, _mH);
+      _c.copy(ft).addScaledVector(_z, 0.05 * S);
+      _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.04);
+      framed(_c, _x, UP, _z, k, k, k, _mH);
       p.heroShoe.push(_mH, white, own, id(), ind);
       p.heroSole.push(_mH, linC(HERO_SOLE), own, id(), ind);
     }
@@ -2533,16 +2535,14 @@ export class PersonRenderer {
       if (!dress) HL.set(li ? 'thighL' : 'thighR', 'thigh', _m);
       lite(q.shin, lvB).push(along(kn, ft, 0.47, legK, fwd), white, own, legId, ind);
       if (!dress) HL.set(li ? 'shinL' : 'shinR', 'shin', _m);
-      // (cast round 8: the foot turned as the rig has it - toes up as the heel comes down, heel up as it pushes off: game/doodle.js;
-      // it was always flat, a skate)
       _z.subVectors(to, ft);
+      _z.y = 0;
       if (_z.lengthSq() < 1e-6) _z.copy(fwd);
       _z.normalize();
       _x.crossVectors(UP, _z).normalize();
-      _fu.crossVectors(_z, _x).normalize();
-      _c.copy(ft).addScaledVector(_z, 0.05 * S).addScaledVector(_fu, -0.02 * S);
-      _c.y = Math.max(_c.y, fig.pos.y + 0.035);
-      framed(_c, _x, _fu, _z, fk, fk, fk, _mH);
+      _c.copy(ft).addScaledVector(_z, 0.05 * S);
+      _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.04);
+      framed(_c, _x, UP, _z, fk, fk, fk, _mH);
       lite(q.shoe, lvB).push(_mH, white, own, id(), ind);
       lite(p.heroSole, lvB).push(_mH, F.sole, own, id(), ind);
     }
