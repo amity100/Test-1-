@@ -353,7 +353,7 @@ const byteOf = (a) => Math.round(Math.max(-1, Math.min(1, a)) * 127) + 128;
 const lite = (sh, lv) => (lv > 0 && sh.lods ? sh.lods[lv < sh.lods.length ? lv : sh.lods.length - 1] : sh);
 // (what of the city's people may have lighter versions: their own parts, and the hands and soles of the hero's
 // kind they wear - drawFolk)
-const LIGHTABLE = /^folk\d+_|^(heroHandR|heroHandL|heroGripR|heroGripL|heroSole)$/;
+const LIGHTABLE = /^folk\d+_|^(heroHandR|heroHandL|heroGripR|heroGripL|heroSole|heroArm)$/;
 
 class DrawClass {
   // index: the shared layout of triangles of the shapes drawn by their corners (or none); aux: the
@@ -1049,6 +1049,7 @@ export class PersonRenderer {
       heroPelvis: P(HERO.heroPelvisGeo(), M.heroPants, 4),
       heroUpper: P(HERO.heroUpperGeo(), M.heroJacket, 8),
       heroFore: P(HERO.heroForeGeo(), M.heroJacket, 8),
+      heroArm: P(HERO.heroArmGeo(), M.skin, 8),
       // (round 16: the city's people's hands are these too - drawFolk - 16 of them were full in a crowd
       // of thirty, and the rest had none)
       heroHandR: P(HERO.heroHandGeo(false), M.skin, 192),
@@ -2271,6 +2272,9 @@ export class PersonRenderer {
       HL.set(ai ? 'upperL' : 'upperR', 'upper', _m);
       p.heroFore.push(along(el, hd, 0.29, armK * 1.03, fwd), jC, own, armId, ind);
       HL.set(ai ? 'foreL' : 'foreR', 'fore', _m);
+      // (cast round 10: his bare forearm, his skin's own stuff and one part with his hand for the lines)
+      const handId = id();
+      p.heroArm.push(_m, skin, own, handId, ind);
       _c.subVectors(hd, el).normalize();
       _d.copy(hd).addScaledVector(_c, 0.19 * S);
       // (round 17: holding the pencil - fig.grip, its way across the fist: game/weapons.js pencilGrip -
@@ -2287,7 +2291,7 @@ export class PersonRenderer {
         _gw.copy(_c).multiplyScalar(1 - pkA).addScaledVector(UP, -pkA).normalize();
         _d.copy(hd).addScaledVector(_gw, 0.19 * S);
       }
-      if (pkA < 0.7) (ai === 0 ? (grip ? p.heroGripR : p.heroHandR) : p.heroHandL).push(along(hd, _d, 0.19, k, grip || fwd), skin, own, id(), ind);
+      if (pkA < 0.7) (ai === 0 ? (grip ? p.heroGripR : p.heroHandR) : p.heroHandL).push(along(hd, _d, 0.19, k, grip || fwd), skin, own, handId, ind);
       if (ai === 1) {
         // (a steel watch on a leather strap, just out of the cuff: its face on the back of the wrist)
         _a.copy(hd).addScaledVector(_c, -0.025 * S);
