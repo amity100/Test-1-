@@ -349,7 +349,30 @@ export class Doodle {
     // (cast round 1, the owner's word: they stand like shop dummies) how much they are simply standing - then the weight on one leg,
     // the other knee eased, the feet a little apart and turned out, the arms hanging a little off the body
     const stand = (1 - wa) * (1 - sit) * (1 - crawl) * (1 - crouch) * (1 - this.sneak) * (1 - Math.min(1, this.ride)) * (this.air || this.dance > 0 || this.kick >= 0 || this.punch >= 0 || this.dead > 0 ? 0 : 1);
-    const wSide = this.seed % 2 < 1 ? 1 : -1;
+    // (cast round 4: nobody stands on one leg for ever - every several seconds the weight goes over to the other, eased; wS from -1
+    // to 1. It was one side for life, by their seed)
+    if (this.wS === undefined) {
+      this.wS = this.wTo = this.seed % 2 < 1 ? 1 : -1;
+      this.wT = 3 + ((this.seed * 7.31) % 7);
+      this.wN = 0;
+    }
+    if (stand > 0.5 && !tw.on) {
+      this.wT -= dt;
+      if (this.wT <= 0) {
+        this.wTo = -this.wTo;
+        this.wT = 5 + ((this.seed * 13.7 + ++this.wN * 3.17) % 8);
+      }
+    }
+    this.wS += clamp(this.wTo - this.wS, -dt * 1.5, dt * 1.5);
+    const wSide = Math.sin((this.wS * Math.PI) / 2);
+    // (his sheet: Danny stands with his hands in his pockets - a second after he has stopped, and out of them the moment he moves;
+    // not in the film, whose shots are their own)
+    const pkOn = this.look.hero && !tw.on && stand > 0.97 && !this.aim && !(this.surrender > 0) && !(this.armsUp > 0) && !(this.guard > 0.01);
+    this.pkT = pkOn ? (this.pkT || 0) + dt : 0;
+    const pkGoal = this.pkT > 1.0 ? 1 : 0;
+    this.pk = (this.pk || 0) + (pkGoal - (this.pk || 0)) * Math.min(1, dt * (pkGoal ? 4.5 : 12));
+    if (this.pk < 0.002) this.pk = 0;
+    this.pocketR = this.pocketL = 0;
     hipY += this.dance * Math.abs(Math.sin(ph)) * 0.05;
     hipY = lerp(hipY, 0.5, sit);
     hipY = lerp(hipY, 0.25, crawl);
@@ -380,7 +403,7 @@ export class Doodle {
       lean -= this.recoil * this.recoil * 0.42;
       leanSide += this.recoil * this.recoilSide * 0.12;
     }
-    const hipX = wSide * 0.014 * stand;
+    const hipX = wSide * 0.02 * stand;
     this.toWorld(this.dance * Math.sin(ph * 0.5) * 0.05 + hipX, hipY, 0, j.hip);
     const spine = 0.5;
     // (standing, a breath: the chest and the shoulders rise and fall a little - and in the prologue's
@@ -402,11 +425,12 @@ export class Doodle {
     // (characters round: the shoulders turned with the chest, for a look far round)
     const chc = Math.cos(this.chestYaw);
     const chs = Math.sin(this.chestYaw);
-    this.toWorld(nx + sw * chc, ny - shY - wSide * 0.006 * stand, nz + twist + sw * chs, j.shoulderR);
-    this.toWorld(nx - sw * chc, ny - shY + wSide * 0.006 * stand, nz - twist - sw * chs, j.shoulderL);
+    this.toWorld(nx + sw * chc, ny - shY - wSide * 0.009 * stand, nz + twist + sw * chs, j.shoulderR);
+    this.toWorld(nx - sw * chc, ny - shY + wSide * 0.009 * stand, nz - twist - sw * chs, j.shoulderL);
     j.shoulder.copy(j.shoulderR);
-    this.toWorld(hw + hipX, hipY, 0, j.hipR);
-    this.toWorld(-hw + hipX, hipY, 0, j.hipL);
+    // (the hip of the leg the weight is on a little higher than the other)
+    this.toWorld(hw + hipX, hipY + wSide * 0.006 * stand, 0, j.hipR);
+    this.toWorld(-hw + hipX, hipY - wSide * 0.006 * stand, 0, j.hipL);
 
     // legs
     const legL = 0.47 * legsK;
@@ -466,9 +490,10 @@ export class Doodle {
         }
       }
       // (standing: the leg the weight is not on eased at the knee, its foot a little ahead)
-      if (stand > 0 && side !== wSide) {
-        th += 0.09 * stand;
-        kb += 0.2 * stand;
+      if (stand > 0) {
+        const rel = stand * Math.max(0, -side * wSide);
+        th += 0.09 * rel;
+        kb += 0.2 * rel;
       }
       const sx = side * hw * (1 + sit * 0.4) + hipX;
       const ky = hipY - Math.cos(th) * legL;
@@ -577,6 +602,18 @@ export class Doodle {
         const hx = sxl + side * 0.02;
         const hz = ez + Math.sin(b) * armF;
         this.toWorld(nx + hx * chc - hz * chs, ey - Math.cos(b) * armF, nz + hx * chs + hz * chc, hand);
+        // (his hand in his pocket: the wrist at its mouth, at the front of his hip, the elbow out and back; the hand itself is
+        // inside it - render/people.js, by pocketR / pocketL)
+        if (this.pk > 0 && !held) {
+          this.toWorld(side * 0.128 + hipX, hipY - 0.012, 0.032, tgt);
+          const pole = _d.set(this.right.x * side * 0.8 - f.x * 0.9, -0.2, this.right.z * side * 0.8 - f.z * 0.9);
+          ik(shoulder, tgt, armU * this.scale, armF * this.scale, pole, _q);
+          const e = this.pk * this.pk * (3 - 2 * this.pk);
+          elbow.lerp(_q, e);
+          hand.lerp(tgt, e);
+          if (side === 1) this.pocketR = e;
+          else this.pocketL = e;
+        }
       }
     }
 
