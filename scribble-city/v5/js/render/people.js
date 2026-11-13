@@ -535,6 +535,7 @@ function atW(out, x, y, z) {
 
 // (round 17: his fist's way on from the wrist, round the pencil - drawHero)
 const _gw = new THREE.Vector3();
+const _fu = new THREE.Vector3();
 const _hRef = new THREE.Vector3();
 
 // (round 20, the player's word: Danny's and Lily's legs stuck out under the car as it flew - seen from
@@ -752,7 +753,7 @@ function heroFace(fig, t) {
     if (jaw > 0.1) return glad ? 'smileTalk' : mad ? 'angryTalk' : low ? 'worriedTalk' : 'talk1';
   }
   if (mood === 'laugh') return 'laugh';
-  if (glad) return 'smile';
+  if (glad) return mood === 'tender' || mood === 'smirk' ? 'soft' : 'smile';
   if (mood === 'shout') return 'shout';
   if (mad) return 'angry';
   if (fear) return 'surprised';
@@ -788,7 +789,8 @@ function faceOf(fig, F, t, cam) {
     // (v5, round 13: a child's face startled or afraid opens its mouth a little - not a grown man's
     // gape, the lips pulled wide over the teeth: spec.moodMouthK, the feeling's jaw and wide mouth; its
     // words still move it as they do)
-    const mk = F.spec.moodMouthK !== undefined ? F.spec.moodMouthK : 1;
+    // (cast round 8: but a laugh and a shout are open mouths - at a quarter they were clenched teeth)
+    const mk = F.spec.moodMouthK !== undefined ? (mood === 'laugh' || mood === 'shout' || mood === 'joy' ? Math.max(0.7, F.spec.moodMouthK) : F.spec.moodMouthK) : 1;
     for (let e = 0; e < 8; e++) _want[e] = Math.max(e === 1 ? 0 : _want[e], e === 0 || e === 7 ? M[e] * mk : M[e]);
     // (no smile at rest under a feeling that has none of its own)
     if (!(M[1] > 0)) _want[1] = 0;
@@ -2306,14 +2308,16 @@ export class PersonRenderer {
       HL.set(li ? 'thighL' : 'thighR', 'thigh', _m);
       p.heroShin.push(along(kn, ft, 0.47, legK, fwd), jeansC, own, legId, ind);
       HL.set(li ? 'shinL' : 'shinR', 'shin', _m);
+      // (cast round 8: the foot turned as the rig has it - toes up as the heel comes down, heel up as it pushes off: game/doodle.js;
+      // it was always flat, a skate)
       _z.subVectors(to, ft);
-      _z.y = 0;
       if (_z.lengthSq() < 1e-6) _z.copy(fwd);
       _z.normalize();
       _x.crossVectors(UP, _z).normalize();
-      _c.copy(ft).addScaledVector(_z, 0.05 * S);
-      _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.04);
-      framed(_c, _x, UP, _z, k, k, k, _mH);
+      _fu.crossVectors(_z, _x).normalize();
+      _c.copy(ft).addScaledVector(_z, 0.05 * S).addScaledVector(_fu, -0.02 * S);
+      _c.y = Math.max(_c.y, fig.pos.y + 0.035);
+      framed(_c, _x, _fu, _z, k, k, k, _mH);
       p.heroShoe.push(_mH, white, own, id(), ind);
       p.heroSole.push(_mH, linC(HERO_SOLE), own, id(), ind);
     }
@@ -2529,14 +2533,16 @@ export class PersonRenderer {
       if (!dress) HL.set(li ? 'thighL' : 'thighR', 'thigh', _m);
       lite(q.shin, lvB).push(along(kn, ft, 0.47, legK, fwd), white, own, legId, ind);
       if (!dress) HL.set(li ? 'shinL' : 'shinR', 'shin', _m);
+      // (cast round 8: the foot turned as the rig has it - toes up as the heel comes down, heel up as it pushes off: game/doodle.js;
+      // it was always flat, a skate)
       _z.subVectors(to, ft);
-      _z.y = 0;
       if (_z.lengthSq() < 1e-6) _z.copy(fwd);
       _z.normalize();
       _x.crossVectors(UP, _z).normalize();
-      _c.copy(ft).addScaledVector(_z, 0.05 * S);
-      _c.y = Math.max(_c.y - 0.02 * S, fig.pos.y + 0.04);
-      framed(_c, _x, UP, _z, fk, fk, fk, _mH);
+      _fu.crossVectors(_z, _x).normalize();
+      _c.copy(ft).addScaledVector(_z, 0.05 * S).addScaledVector(_fu, -0.02 * S);
+      _c.y = Math.max(_c.y, fig.pos.y + 0.035);
+      framed(_c, _x, _fu, _z, fk, fk, fk, _mH);
       lite(q.shoe, lvB).push(_mH, white, own, id(), ind);
       lite(p.heroSole, lvB).push(_mH, F.sole, own, id(), ind);
     }

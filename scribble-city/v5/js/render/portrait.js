@@ -1033,7 +1033,8 @@ export class Portrait {
       // (a smile reaches the eyes)
       if (ew[1] > 0.3) set('au6', ew[1] * 0.6);
       // (ROADMAP 18: and a toothy one shows the teeth - render/folkspec.js grin)
-      if (this.spec.grin && ew[1] > 0.3) set('au10', ew[1] * this.spec.grin);
+      // (cast round 8: grinFrom - only from so big a smile: a child's quiet smile is a closed one)
+      if (this.spec.grin && ew[1] > (this.spec.grinFrom ?? 0.3)) set('au10', ew[1] * this.spec.grin);
     }
     // (v5, ROADMAP 18.9: a gentle face - a child's - opens its mouth less wide and keeps its upper lip
     // over its teeth: spec.jawK, spec.lipK; wide open and lips up, a little girl's face was a monster's)

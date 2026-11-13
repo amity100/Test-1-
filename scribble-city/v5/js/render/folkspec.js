@@ -644,19 +644,22 @@ export const LILY = {
     // (cast round 6, her sheet beside her picture: her face round and wide, short from brow to chin, full cheeks, her eyes bigger
     // still, a broad smile - it was a long oval with small eyes, a grown woman's)
     'head-age-decr': 1, 'head-round': 0.8, 'head-scale-vert-decr': 0.35, 'head-scale-horiz-incr': 0.3, 'cheek-volume-incr': 0.7, 'eye-scale-incr': 0.7, 'nose-scale-vert-decr': 0.55, 'nose-scale-depth-decr': 0.3, 'nose-point-up': 0.45, 'nose-scale-horiz-decr': 0.2,
-    'mouth-scale-horiz-incr': 0.2, 'mouth-angles-up': 0.4, 'ear-scale-incr': 0.8, 'chin-width-decr': 0.3, 'chin-prominent-decr': 0.15, 'chin-height-decr': 0.5, 'eyebrows-angle-up': 0.04, 'forehead-scale-vert-incr': 0.05,
+    'mouth-scale-horiz-incr': 0.06, 'mouth-angles-up': 0.3, 'ear-scale-incr': 0.8, 'chin-width-decr': 0.3, 'chin-prominent-decr': 0.15, 'chin-height-decr': 0.5, 'eyebrows-angle-up': 0.04, 'forehead-scale-vert-incr': 0.05,
   },
   shape: { cheeks: 0.35, jaw: 0.9, dbl: 0, neck: 0.88 },
-  expr: 'smile',
+  expr: 'half',
   head: { jaw: 0, chin: 0.9, nose: 0.88, lips: 1.02, brow: 0.58 },
   skin: 'golden', eyes: { iris: 'lilyHazel', open: 1.0, lid: 0.4, lashes: 0.6, liner: 0, irisK: 1.3 },
   // (uneven: the one arched higher than the other - render/folkink.js)
-  brows: { col: ['#4e3020', '#5c3a26', '#3e2618'], thick: 1.0, arch: 0.3, uneven: 0.3 },
+  brows: { col: ['#4e3020', '#5c3a26', '#3e2618'], thick: 1.2, arch: 0.3, uneven: 0.3 },
   mouth: { w: 1.04, full: 1.0, lip: [shade(SKINS.golden.warm[0], 0.85), SKINS.golden.warm[1]], lipstick: null },
   beard: null, lines: 0, freckles: 1, blush: 0.4,
   // (her own marks, where her face has them - x her left, as the head's: render/folkink.js; the gap
   // between her front teeth, and a smile that shows them: render/portrait.js)
-  mole: [0.02, -0.0605], scratch: [[-0.05, -0.011], [-0.04, -0.019]], gap: 1, grin: 0.32,
+  // (cast round 8, the owner's word: "her mouth in most of her faces looks less natural" - a wide flat mouth with a band of teeth
+  // in it whatever she felt. Her teeth only in a real laugh, grinFrom; her mouth all but shut in what she feels, moodMouthK below;
+  // a quieter smile at rest, expr above)
+  mole: [0.02, -0.0605], scratch: [[-0.05, -0.011], [-0.04, -0.019]], gap: 1, grin: 0.28, grinFrom: 0.8,
   // (round 10, the player's word: this face - the one she had before she was made rounder and became
   // a doll - only her mouth opening a little less wide when she talks or is startled: render/portrait.js)
   jawK: 0.78, lipK: 0.65,
@@ -670,7 +673,8 @@ export const LILY = {
   // at a little over half; the iris a little bigger in a little less open eye - render/portrait.js;
   // startled, her mouth open a little, not gaping - render/people.js moodMouthK; and hardly a line on
   // her forehead as her brows go up - creaseK)
-  wideK: 0.35, browK: 0.6, moodMouthK: 0.45, creaseK: 0.25,
+  // (cast round 8: her brows' share up - worried, startled and cross all looked the same on her)
+  wideK: 0.35, browK: 0.9, moodMouthK: 0.28, creaseK: 0.25,
   // (style 'pony': render/folkshapes.js; bits: what is in it - side -1 her right)
   hair: {
     ...hairOf('espresso', 'pony'), base: '#3c2416', dark: ['#1c100a', '#24140c', '#160c06'], mid: ['#4e3020', '#5a3826', '#462a1a'], light: ['#8a5a34', '#9a6a3e', '#7a4c2a'], wave: 1,

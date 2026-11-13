@@ -310,7 +310,7 @@ export function paintFace(c, o = {}) {
     // (wide open with the brows up; narrowed by a real smile, the cheeks pushing up under them)
     // (cast round 1, his sheet: his eyes open - they were two slits)
     // (cast round 3: narrowed a little under the low brows - open, not startled)
-    const eh = 0.0064 * K * (brow === 'up' ? 1.3 : 1) * (1 - Math.max(0, smile) * 0.16);
+    const eh = 0.0064 * K * (brow === 'up' ? 1.3 : 1) * (1 - Math.max(0, smile) * 0.3);
     // (the inner corner by the nose, a touch lower; the outer a touch higher)
     const ix = cx + sd * ew * 0.5;
     const iy = cy + 0.06 * eh;
@@ -504,12 +504,14 @@ export function paintFace(c, o = {}) {
   // its corners up in a smile, further down when he is grim; open as he speaks (the dark of it, the
   // upper teeth under the lip), the lower lip and the chin dropping with the jaw
   const jo = jaw * 0.0135;
-  const corner = (x) => smile * 0.0058 * (Math.abs(x) / 0.0245) ** 2;
+  // (cast round 8: a smile that is seen - its corners up nearly a centimetre and a fifth wider, the cheeks lifted under the eyes;
+  // through his beard, half a centimetre of it read as no smile at all)
+  const corner = (x) => smile * (smile > 0 ? 0.0092 : 0.0058) * (Math.abs(x) / 0.0245) ** 2;
   // (how open it is across: nothing at the corners, all of it in the middle)
   const gape = (x) => jo * Math.max(0, 1 - (x / 0.0235) ** 2) ** 0.7;
   {
     const cy = Y(-0.0522);
-    const wide = 1 + Math.max(0, smile) * 0.1 + jaw * 0.04;
+    const wide = 1 + Math.max(0, smile) * 0.2 + jaw * 0.04;
     const up = [];
     for (let i = 0; i <= 12; i++) {
       const x = 0.0245 * (i / 6 - 1) * wide;
@@ -591,6 +593,11 @@ export function paintFace(c, o = {}) {
     if (smile > 0.3) for (const sd of [1, -1]) h.path([[X(sd * 0.0265 * wide), Y(-0.049 + corner(0.0245))], [X(sd * 0.0285 * wide), Y(-0.054 + corner(0.0245))]], 1.4, '#6a4034', 0.55 * smile, 0.5);
     if (smile < -0.2) for (const sd of [1, -1]) h.path([[X(sd * 0.025), Y(-0.054 + corner(0.0245))], [X(sd * 0.027), Y(-0.062)]], 1.3, '#6a4034', -smile * 0.6, 0.5);
     void cy;
+  }
+  // (smiling: the cheeks' rounds lit under the eyes, the lines out from the eyes' corners)
+  if (smile > 0.2) {
+    h.hatch(0, Y(0.004), W, Y(-0.03), 520, (px, py) => smile * blob(Math.abs(xm(px)), ym(py), 0.04, -0.012, 0.014, 0.01), 0.3, 18, 1.6, ['#ecc6a2', '#f0cdaa', '#e2b690'], 0.5);
+    for (const sd of [1, -1]) for (let k = 0; k < 3; k++) h.line(X(sd * 0.0475), Y(0.019 + (k - 1) * 0.0035), X(sd * 0.056), Y(0.021 + (k - 1) * 0.007), 1.2, '#6a4034', 0.5 * smile, 0.3);
   }
   // the shade under the lower lip, the cleft of the chin, the folds from the nose to the mouth
   h.hatch(X(0.017), Y(-0.061 - jo), X(-0.017), Y(-0.07 - jo), 140, () => 0.7, 0.15, 14, 1.5, ['#4e2e2a', '#5a3a34'], 0.5);

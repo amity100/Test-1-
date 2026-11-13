@@ -544,6 +544,45 @@ export class Prologue {
     this.hidden.clear();
   }
 
+  // (cast round 8) the two of them together while the player has the game - not in the film's shots, which place every look
+  // themselves: she looks up at her father every few seconds, glad, and he down at her now and then when he has stopped. A look is
+  // only taken while nothing else has their heads (a line, a scene), and given back
+  company(dt) {
+    const L = this.cast && this.cast.lily;
+    const P = this.game.player;
+    const C = this._co || (this._co = { her: 2, him: 5, herOn: 0, himOn: 0 });
+    const lf = L && L.fig;
+    const pf = P && P.fig;
+    if (!lf || !pf || !lf.j || !pf.j) return;
+    const hers = pf.j.headC;
+    const his = lf.j.headC;
+    const near = !this.holdCam && Math.hypot(L.pos.x - P.pos.x, L.pos.z - P.pos.z) < 4.5 && !(pf.ride > 0) && !pf.aim;
+    if (!near) {
+      if (lf.lookAt === hers) lf.lookAt = null;
+      if (pf.lookAt === his) pf.lookAt = null;
+      C.herOn = C.himOn = 0;
+      return;
+    }
+    if (C.herOn > 0) {
+      C.herOn -= dt;
+      if (C.herOn <= 0 && lf.lookAt === hers) lf.lookAt = null;
+    } else if ((C.her -= dt) <= 0 && !lf.lookAt && !(lf.say && !lf.say.done)) {
+      lf.lookAt = hers;
+      C.herOn = 1.4 + Math.random() * 2.2;
+      C.her = 3 + Math.random() * 5;
+      if (!lf.feel || lf.feel.until < this.game.time) lf.feel = { mood: 'tender', until: this.game.time + C.herOn + 0.6 };
+    }
+    if (C.himOn > 0) {
+      C.himOn -= dt;
+      if ((C.himOn <= 0 || pf.speed > 2.5) && pf.lookAt === his) pf.lookAt = null;
+    } else if ((C.him -= dt) <= 0 && !pf.lookAt && pf.speed < 1.2 && !(pf.say && !pf.say.done)) {
+      pf.lookAt = his;
+      C.himOn = 1.2 + Math.random() * 1.6;
+      C.him = 5 + Math.random() * 7;
+      if (!pf.feel || pf.feel.until < this.game.time) pf.feel = { mood: 'tender', until: this.game.time + C.himOn + 0.4 };
+    }
+  }
+
   update(dt) {
     if (!this.active) return;
     this.dtR = dt;
@@ -556,6 +595,7 @@ export class Prologue {
     if (this.voices.update) this.voices.update(dt, this.game.camera);
     if (this.draw && (this.draw.on || this.draw.settle)) this.draw.frame(dt);
     if (this.ramp && !this.ramp.grown) this.ramp.update(dt);
+    this.company(dt);
     // (the cars and their paint on the game's own step - the script and its film on the real time,
     // round 13: game.js rawK)
     const dtG = Math.min(dt, this.game.realDt || dt);
