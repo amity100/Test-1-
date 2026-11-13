@@ -110,8 +110,8 @@ export function heroLook() {
   L.shoes = [0.12, 0.1, 0.09];
   L.hat = null;
   L.face = { eyes: 'hero', brows: 'stern', mouth: 'line', beard: 'stubble', glasses: null };
-  // (cast round 2, his sheet: a brown leather bag on a strap across his chest, from his right shoulder to his left hip)
-  L.acc = ['crossbody'];
+  // (cast round 11, his sheet: a brown leather strap across his chest, from his left shoulder to his right hip - game/doodle.js)
+  L.acc = ['sling'];
   L.bagColor = [0.34, 0.2, 0.12];
   L.hero = true;
   L.heroModel = true;

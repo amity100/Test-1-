@@ -1,4 +1,4 @@
-import { TORSO, PELVIS_ROWS, HERO_PELVIS_ROWS, UPPER_ROWS, FORE_ROWS, HERO_FORE_ROWS, THIGH_ROWS, SHIN_ROWS, HERO_NECK_ROWS, LOCKS, section, headSdf, headR, hairEdge, hairThick } from './heroshapes.js';
+import { TORSO, HERO_TORSO, PELVIS_ROWS, HERO_PELVIS_ROWS, UPPER_ROWS, FORE_ROWS, HERO_FORE_ROWS, THIGH_ROWS, SHIN_ROWS, HERO_NECK_ROWS, LOCKS, section, headSdf, headR, hairEdge, hairThick } from './heroshapes.js';
 import { neckBend } from './neckbend.js';
 import { faceTone, stubble } from './heroink.js';
 
@@ -94,7 +94,7 @@ let KIT = null;
 function heroKit() {
   return {
     hero: true, sdf: headSdf, headR, hairEdge, hairThick, locks: LOCKS, tone: faceTone, beard: stubble, fem: false,
-    rows: { torso: TORSO, pelvis: HERO_PELVIS_ROWS, upper: UPPER_ROWS, fore: HERO_FORE_ROWS, thigh: THIGH_ROWS, shin: SHIN_ROWS, neck: HERO_NECK_ROWS },
+    rows: { torso: HERO_TORSO, pelvis: HERO_PELVIS_ROWS, upper: UPPER_ROWS, fore: HERO_FORE_ROWS, thigh: THIGH_ROWS, shin: SHIN_ROWS, neck: HERO_NECK_ROWS },
     top: { ink: LEATHER, dark: LEATHER_D, hi: LEATHER_HI }, bottom: { ink: CLOTH, dark: CLOTH_D, hi: CLOTH_HI }, hair: HAIR, hairHi: HAIR_HI,
   };
 }

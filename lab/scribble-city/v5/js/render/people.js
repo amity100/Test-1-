@@ -535,6 +535,7 @@ function atW(out, x, y, z) {
 
 // (round 17: his fist's way on from the wrist, round the pencil - drawHero)
 const _gw = new THREE.Vector3();
+const _hem = [0, 0, 0, 0];
 const _hRef = new THREE.Vector3();
 
 // (round 20, the player's word: Danny's and Lily's legs stuck out under the car as it flew - seen from
@@ -1238,6 +1239,9 @@ export class PersonRenderer {
     // (v5, ROADMAP 13.1) the hero's pens, their five pictures in a draw of their own: drawHero turns
     // them over (HERO_PICS: their order)
     const hero = (this.heroMat = mergedSurface(M.heroJacket, { vcolor: false, pictures: penPictures(HERO_PICS.map((k) => M[k])), pull: true }));
+    // (cast round 11: his parts' insides too - where a leg comes out from under the jacket's hem, cut there, its inside is seen
+    // from above and not the street through it)
+    hero.side = THREE.DoubleSide;
     // (ROADMAP 13.6: and the city's people drawn as he is, theirs - ROADMAP 13.7: all of them in one,
     // their pictures atlases, their faces moving)
     const FPn = this.folkPens;
@@ -2212,9 +2216,17 @@ export class PersonRenderer {
     // ---- the jacket open over the shirt; its edges, the flaps of its pockets; its cloth round the neck
     let sy = 1;
     let tid = 0;
+    let hemOn = false;
     if (P.torso > 0.5) {
       sy = Math.max(0.3, _b.subVectors(j.neck, j.hip).length()) / 0.5;
       framed(j.hip, rgt, ax, fwd, bw, sy, bw, _mH);
+      // (cast round 11: the plane of the jacket's hem - nothing of his trousers is drawn above it, heroPelvis and heroThigh below)
+      _c.copy(j.hip).addScaledVector(ax, -0.084 * sy);
+      _hem[0] = ax.x;
+      _hem[1] = ax.y;
+      _hem[2] = ax.z;
+      _hem[3] = _c.dot(ax);
+      hemOn = true;
       // (its part's id kept: the jacket's cloth round his neck is the same part - heroBand below)
       tid = id();
       p.heroTorso.push(_mH, jC, own, tid, ind);
@@ -2256,7 +2268,7 @@ export class PersonRenderer {
     // in front of the other still has its line, by its depth: render/pipeline.js edgeAt)
     const trouId = id();
     if (P.pelvis > 0.5) {
-      p.heroPelvis.push(framed(j.hip, fig.prgt, ax, fig.pfwd, bw, k, bw), jeansC, own, trouId, ind);
+      p.heroPelvis.push(framed(j.hip, fig.prgt, ax, fig.pfwd, bw, k, bw), jeansC, own, trouId, ind, hemOn ? _hem : null);
       HL.set('pelvis', 'pelvis', _m);
     }
     // ---- arms in their sleeves, the hands; the watch on the left wrist
@@ -2312,7 +2324,10 @@ export class PersonRenderer {
       const ft = legs[li][2];
       const to = legs[li][3];
       const legId = trouId;
-      p.heroThigh.push(along(hp, kn, 0.47, legK, fwd), jeansC, own, legId, ind);
+      // (cast round 11: what of a leg is above the jacket's hem is under the jacket - not drawn, so that a leg swung back or
+      // forward never comes through it; a leg lifted high - sitting, a kick, a climb - is in front of him, and whole)
+      const under = hemOn && (kn.x - hp.x) * ax.x + (kn.y - hp.y) * ax.y + (kn.z - hp.z) * ax.z < -0.24 * S;
+      p.heroThigh.push(along(hp, kn, 0.47, legK, fwd), jeansC, own, legId, ind, under ? _hem : null);
       HL.set(li ? 'thighL' : 'thighR', 'thigh', _m);
       p.heroShin.push(along(kn, ft, 0.47, legK, fwd), jeansC, own, legId, ind);
       HL.set(li ? 'shinL' : 'shinR', 'shin', _m);
