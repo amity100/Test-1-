@@ -1,6 +1,6 @@
 // How the leads move, seen: Danny and Lily walking or running along the opening street's promenade, eight moments of a stride side
 // by side in one picture (from the side, or from three quarters ahead) - for judging a walk without a video.
-//   node tools/walkcam.mjs <outDir>     QUERY="look=1"   WHO=danny|lily   SPEED=1.6 (m/s; 5 is a run)   VIEW=side|front   NAME=walk
+//   node tools/walkcam.mjs <outDir>     QUERY="look=1"   WHO=danny|lily   SPEED=1.6 (m/s; 5 is a run)   VIEW=side|front|back   NAME=walk
 //   N=16 KEEP=1: that many moments of the stride, each kept as its own picture (<name>_00.png ...) - for a moving picture of it
 import fs from 'node:fs';
 import path from 'node:path';
@@ -81,7 +81,7 @@ for (let i = 0; i < N; i++) {
     window.__frame(step, 1 / 30);
     const p = window.__walker.pos;
     const y = tall * 0.52;
-    window.__camOverride = view === 'front' ? { pos: [p.x - 2.0, y + 0.15, p.z + 3.4], look: [p.x, y, p.z], fov: 30 } : { pos: [p.x - 4.2, y, p.z], look: [p.x, y, p.z], fov: 30 };
+    window.__camOverride = view === 'back' ? { pos: [p.x + 0.9, y + 0.35, p.z - 3.2], look: [p.x, y, p.z], fov: 30 } : view === 'front' ? { pos: [p.x - 2.0, y + 0.15, p.z + 3.4], look: [p.x, y, p.z], fov: 30 } : { pos: [p.x - 4.2, y, p.z], look: [p.x, y, p.z], fov: 30 };
     window.__frame(1, 1e-4);
   }, [view, tall, step]);
   const f = path.join(out, `${name}_${String(i).padStart(2, '0')}.png`);
