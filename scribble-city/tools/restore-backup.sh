@@ -11,6 +11,9 @@
 #   backup-r25   809b51a   round 25, before the phone speed work (PHONE_SPEED_PLAN.md, ROADMAP 19)
 #   backup-r26   2c582d4   before the new look: no look layer at all in it (source 2d0eb85; the first look commit, 69e86bf, came
 #                           after) - the game as it was before the street's new graphics, its light, the new Danny and Lily, the film work
+#   backup-r27   78562fd   the new look on the opening street, and the story's film as it was first made - before the film's
+#                           scenes are staged anew (ROADMAP 23). The film's own code as it was then:
+#                           git checkout 78562fd -- scribble-city/v5/js/game/prologue
 #
 # The code itself back to such a commit, as a new commit on the working branch (also nothing
 # rewritten):  git checkout <commit> -- scribble-city && git commit -m "Back to <name>"
