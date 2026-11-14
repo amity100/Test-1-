@@ -136,12 +136,13 @@ export class Acting {
 
   // a line begins: fig says it (dur seconds); listeners: the figures it is said to (they take it as it
   // lands - ACTS hear)
-  play(fig, id, dur, listeners = null) {
+  play(fig, id, dur, listeners = null, still = false) {
     const A = ACTS[id];
     if (!fig || !A) return;
     // (one line at a time each: a new one takes over from the last)
     this.stop(fig);
     const p = { fig, A, dur: Math.max(0.4, dur), t: 0, ph: (fig.seed || 0.3) * 5.1, hR: new THREE.Vector3(), hL: new THREE.Vector3(), look: null, lookV: new THREE.Vector3(), listeners, heard: false, mood: A.mood || null };
+    p.still = !!still;
     if (p.mood) this.feel(fig, p.mood, p.dur + 0.6);
     this.on.push(p);
   }
@@ -187,7 +188,9 @@ export class Acting {
       // (hands that something else holds - a page, a car's wheel, a gun - are left to it)
       const freeR = !f.reachR || f.reachR === p.hR;
       const freeL = !f.reachL || f.reachL === p.hL;
-      if (beat && f.toWorld) {
+      // (ROADMAP 23.7: p.still - the line said with the face and the head alone: its hands are what the shot has them at, and a
+      // gesture made for two people standing apart - a wave, a hand on a hip - is not made in an embrace)
+      if (beat && f.toWorld && !p.still) {
         const bt = (k - beat[0]) * p.dur;
         // (in and out of each gesture smoothly: a beat's first and last tenth of a second)
         if (freeR && gestureX(beat[2], 1, bt, p.ph, _o)) {

@@ -11,6 +11,9 @@ const CSS = `
 #pl-root .bar.top { top: 0; }
 #pl-root .bar.bot { bottom: 0; }
 #pl-root.film .bar { height: 11.5vh; }
+/* (ROADMAP 23: a film in the new look - thin bars: on a phone's wide screen the thick ones took a quarter of the picture) */
+#pl-root.film.thin .bar { height: 4.2vh; }
+#pl-root.thin #pl-subs { bottom: 6.5vh; }
 #pl-subs { position: absolute; left: 50%; bottom: 13.5vh; transform: translateX(-50%); width: min(86vw, 980px); text-align: center; opacity: 0; transition: opacity 0.25s; }
 #pl-subs.on { opacity: 1; }
 #pl-subs .who { display: inline-block; font-weight: 800; letter-spacing: 0.04em; margin-inline-end: 0.45em; }
@@ -172,7 +175,8 @@ export class PrologueUI {
     this.vigEl.classList.toggle('on', !!on);
   }
 
-  film(on) {
+  film(on, thin = false) {
+    this.root.classList.toggle('thin', !!(on && thin));
     this.root.classList.toggle('film', on);
     document.body.classList.toggle('prologue-film', on);
   }

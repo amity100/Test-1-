@@ -62,6 +62,7 @@ uniform float uPenLite;
 // (ROADMAP 20: how much of the new look there is here, 0..1 - render/look.js)
 uniform float uLook;
 uniform float uLookLow;
+uniform vec4 uFilmKey;
 uniform float uMirror;
 uniform sampler2D uObjMask;
 uniform vec4 uWErase[MAX_SPOTS];
@@ -1489,6 +1490,14 @@ void main() {
     // (and against the grade's own warmth and richness, laid over the whole picture after this: skin came out of it an orange)
     alb = mix(alb, saturateC(alb, 0.72) * vec3(0.95, 1.0, 1.1), uLook);
     light = max(light, 0.3 * uLook);
+    // (ROADMAP 23: in a shot of the film, the people's key light is the film's own - set for the shot, as a film's is: from
+    // the camera's side and a little above, wrapped round the form, so a face has a lit side and a shaded one whichever way
+    // the sun is. The sun stays the world's, and the gold line round them: render/pipeline.js rim)
+    if (uFilmKey.w > 0.0) {
+      float fk = clamp(dot(N, uFilmKey.xyz) * 0.85 + 0.38, 0.0, 1.0);
+      light = mix(light, fk * fk * (3.0 - 2.0 * fk), uFilmKey.w);
+      key = mix(key, vec3(1.08, 0.94, 0.8) * max(lum(key), 0.75), uFilmKey.w);
+    }
   }
   vec3 shade = alb * (amb + pts);
   vec3 lit = alb * (amb + pts + key);
