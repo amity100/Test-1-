@@ -420,6 +420,8 @@ export class Prologue {
       this.ff = true;
       this.voices.stop();
       this.ui.clearSub();
+      // (what her sketchbook had over the picture: gone with what is skipped)
+      if (this.sketch) this.sketch.clear();
     }
     if (this.locked) {
       input.fire = false;
