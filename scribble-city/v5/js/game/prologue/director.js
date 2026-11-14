@@ -566,8 +566,10 @@ export class Prologue {
     const his = lf.j.headC;
     const near = !this.holdCam && Math.hypot(L.pos.x - P.pos.x, L.pos.z - P.pos.z) < 4.5 && !(pf.ride > 0) && !pf.aim;
     if (!near) {
-      if (lf.lookAt === hers) lf.lookAt = null;
-      if (pf.lookAt === his) pf.lookAt = null;
+      // (only a look this gave is taken back: a shot of the film that turns her eyes to him sets the very same point - and this,
+      // every frame of the shot, took it away again. Found in ROADMAP 23: her eyes were never on him in the film)
+      if (C.herOn > 0 && lf.lookAt === hers) lf.lookAt = null;
+      if (C.himOn > 0 && pf.lookAt === his) pf.lookAt = null;
       C.herOn = C.himOn = 0;
       return;
     }

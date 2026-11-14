@@ -1014,6 +1014,8 @@ export class Portrait {
       set('pucker', Math.max(0, -ew[7]) * 0.9);
       const P = mood && MOOD[mood] ? EXPRESSIONS[MOOD[mood]] : null;
       if (P) for (const [name, v] of Object.entries(P)) if (name !== 'jaw') set(name, v);
+      // (ROADMAP 23: held close - the eyes held shut, beyond the face's own blinking)
+      if (mood === 'bliss') set('blink', 1);
       // (round 16, the player's word: the people talked without their lips moving - the lips with the
       // words, not the jaw alone: the lower lip drops with it, the upper comes a little off the teeth
       // on the open sounds, and on the closed ones (an m, a b, a p) the lips press together)

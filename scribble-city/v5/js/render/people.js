@@ -636,6 +636,8 @@ const MOODS = {
   worried: [0.06, 0, 0.5, 0.85, 0.35, 0, 0, 0.1],
   pleading: [0.18, 0.25, 0.15, 1, 0, 0, 0, 0.15],
   shock: [0.88, 0, 0.25, 1, 0, 0, 0, 0.85],
+  // (ROADMAP 23: held close - eyes shut, a small smile)
+  bliss: [0.0, 0.75, 0, 0.15, 0, 1, 1, 0],
 };
 const REST = { neutral: 0, soft: 0.3, half: 0.4, smile: 0.62, laugh: 0.8 };
 // (ROADMAP 13.11) a line's mouth, worked out once, as people's mouths go and not a shape a letter: the
@@ -744,7 +746,7 @@ function heroFace(fig, t) {
       if (vj >= 0) jaw = vj * 0.62;
     }
   }
-  const glad = mood === 'joy' || mood === 'laugh' || mood === 'smirk' || mood === 'tender' || mood === 'tease';
+  const glad = mood === 'joy' || mood === 'laugh' || mood === 'smirk' || mood === 'tender' || mood === 'tease' || mood === 'bliss';
   const mad = mood === 'angry' || mood === 'shout';
   const fear = mood === 'surprised' || mood === 'scared' || mood === 'shock';
   const low = mood === 'sad' || mood === 'worried' || mood === 'hurt' || mood === 'pleading';
@@ -753,7 +755,7 @@ function heroFace(fig, t) {
     if (jaw > 0.1) return glad ? 'smileTalk' : mad ? 'angryTalk' : low ? 'worriedTalk' : 'talk1';
   }
   if (mood === 'laugh') return 'laugh';
-  if (glad) return mood === 'tender' || mood === 'smirk' ? 'soft' : 'smile';
+  if (glad) return mood === 'tender' || mood === 'smirk' || mood === 'bliss' ? 'soft' : 'smile';
   if (mood === 'shout') return 'shout';
   if (mad) return 'angry';
   if (fear) return 'surprised';
