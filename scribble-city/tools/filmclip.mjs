@@ -6,6 +6,7 @@
 //   nothing that can be recorded, and the pictures are not taken in real time: so the game is given an audio context that renders
 //   into memory (OfflineAudioContext) in place of the live one, and it is run by hand, a fifteenth of a second a picture; at the
 //   end what it rendered is written as a wav and put under the pictures by ffmpeg
+//   BURN=1: a review copy - each shot's number and the scene's own clock in the picture's top corner (in the recording only)
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -51,12 +52,39 @@ await pg.evaluate(() => {
     if (el) el.style.visibility = 'hidden';
   }
 });
+// (BURN=1: a review copy - each shot's number and the scene's own clock in the picture's top corner, so that a note can name
+// the very moment: "shot 7, 0:14". Only in this recording: nothing of it is in the game)
+if (process.env.BURN) {
+  await pg.evaluate(() => {
+    const P = window.__game.prologue;
+    const d = document.createElement('div');
+    d.id = 'review-burn';
+    d.style.cssText = 'position:fixed;right:1.2vw;top:5.4vh;z-index:99999;font:700 3.3vh/1 ui-monospace,Menlo,Consolas,monospace;color:#fffaf0;background:rgba(8,6,14,.72);padding:.7vh 1vw;border-radius:.6vh;letter-spacing:.04em;pointer-events:none;direction:ltr';
+    document.body.appendChild(d);
+    window.__shotN = 0;
+    const cut0 = P.shots.cut.bind(P.shots);
+    let last = -1;
+    P.shots.cut = (s) => {
+      // (a held picture - a name's card, a painted still - is its shot still: no new number)
+      const held = s && s.from && s.from.isVector3 && P.shots.lastPos && s.from.distanceTo(P.shots.lastPos) < 1e-6 && P.kWant < 0.01;
+      if (!held && P.sceneT !== last) window.__shotN++;
+      last = P.sceneT;
+      return cut0(s);
+    };
+    window.__burn = () => {
+      const t = Math.max(0, P.sceneT || 0);
+      d.textContent = `SHOT ${String(window.__shotN).padStart(2, '0')}  ${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+      d.style.display = P.holdCam ? '' : 'none';
+    };
+  });
+}
 const steps = Math.round(30 / FPS);
 let n = 0;
 for (;;) {
   const r = await pg.evaluate(async ([steps, quanta]) => {
     window.__frame(steps, 1 / 30);
     const P = window.__game.prologue;
+    if (window.__burn) window.__burn();
     const c = window.__octx;
     if (c) {
       // (the music's notes written, as its own timer would: game/prologue/score.js pump - and the sound on by the picture's time)

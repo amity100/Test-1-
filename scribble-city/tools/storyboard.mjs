@@ -50,8 +50,6 @@ await pg.evaluate(async () => {
       P.walkTo = null;
       P.auto = null;
       P.dropHolds();
-      // (the scene's own sheets off: her sketchbook's page is on it from its first frame)
-      if (P.book) P.book.clear();
       P.sketching = false;
       P.kneel(0);
       D.fig.crouch = 0;

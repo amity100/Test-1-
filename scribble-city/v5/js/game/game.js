@@ -1012,9 +1012,6 @@ export class Game {
     if (C && C.pg) C.grab(this.renderer.domElement);
     // (round 13: a picture kept for a memory's flash later - the wheel as it was)
     if (C && C.wantKeep) C.keep(this.renderer.domElement);
-    // (ROADMAP 23.6: the film's picture taken to be made a page of her sketchbook - game/prologue/sketch.js freeze)
-    const SK = this.prologue && this.prologue.book;
-    if (SK && SK.wantGrab) SK.grab(this.renderer.domElement);
     if (tele) tele.frameEnd();
     shared.uFogDensity.value = fog;
   }

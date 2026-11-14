@@ -10,6 +10,8 @@ const _v = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _f = new THREE.Vector3();
 const WORD_FONT = '"Permanent Marker", "Rubik", sans-serif';
+// (ROADMAP 23.8: a name card's own letters - a film's title type: heavy, narrow, upright)
+const CARD_FONT = '"Anton", "Rubik", "Arial Narrow", sans-serif';
 
 export class Comic {
   constructor(game, root) {
@@ -25,6 +27,12 @@ export class Comic {
     this.speed = null;
     this.hit = null;
     this.resize();
+    // (the card's letters loaded before the first card: a sheet drawn with a font not yet here is drawn with another)
+    try {
+      if (document.fonts && document.fonts.load) document.fonts.load('40px "Anton"');
+    } catch (e) {
+      // (no font loading here: the next in line is used)
+    }
   }
 
   resize() {
@@ -128,6 +136,18 @@ export class Comic {
     this.speed = { where, t: 0, life, k };
   }
 
+  // (ROADMAP 23.9, the owner's word: comic effects, yes - "but grown-up, as a grown-up anime's") a place and an hour typed into
+  // the picture's lower corner as a scene opens, a crime film's way: lines (the first the place, in the title's type), life (s)
+  stamp(lines, o = {}) {
+    this.stp = { lines: lines.map((x) => String(x).toUpperCase()), t: 0, life: o.life || 3.2, side: o.side || -1, v: o.v !== undefined ? o.v : 0.74 };
+  }
+
+  // an anime's cut-in: the picture closed down to a slanted strip across its middle - a pair of eyes - and opened again.
+  // life (s), o.h (the strip's height, of the picture's), o.slant (radians), o.v (its middle, down the picture)
+  strip(life = 1.4, o = {}) {
+    this.stz = { t: 0, life, h: o.h !== undefined ? o.h : 0.3, slant: o.slant !== undefined ? o.slant : -0.07, v: o.v !== undefined ? o.v : 0.5 };
+  }
+
   // (ROADMAP 18.9) a freeze frame's card - as the animated films bring their people in: the picture
   // held, its colours pushed towards the card's, a comic's print of dots over one side, an ink frame
   // round it, and across it a brush-stroke slab with the name on it, big, in ink, and a line under it
@@ -135,7 +155,7 @@ export class Comic {
   // the world, or a function giving one: whose card), side (-1 the slab on the left, 1 the right),
   // life (s)
   card(o) {
-    this.cd = { name: o.name, tag: o.tag || '', col: o.col || '#ff5a7a', at: o.at || null, side: o.side || -1, life: o.life || 1.8, t: 0, seed: Math.random() * 1000, v: o.v !== undefined ? o.v : 0.66 };
+    this.cd = { name: String(o.name || '').toUpperCase(), tag: String(o.tag || '').toUpperCase(), col: o.col || '#ff5a7a', at: o.at || null, side: o.side || 0, life: o.life || 1.8, t: 0, v: o.v, placed: false, lead: !!o.lead };
   }
 
   // (ROADMAP 18.9) an anime's focus lines: dark strokes rushing in from all round the picture at a
@@ -399,7 +419,7 @@ export class Comic {
     const rubbing = !!(this.rubSrc && !this.pg);
     // (the sheet hidden while it has nothing on it, shown again as soon as it has: a sheet only cleared
     // could still be shown as it last was)
-    const busy = !!(this.pg || this.words.length || this.speed || this.hit || rubbing || this.cd || this.fl || this.fx || this.mem || this.pu);
+    const busy = !!(this.pg || this.words.length || this.speed || this.hit || rubbing || this.cd || this.fl || this.fx || this.mem || this.pu || this.stp || this.stz);
     if (busy !== this.shown) {
       this.shown = busy;
       this.cv.style.visibility = busy ? 'visible' : 'hidden';
@@ -411,7 +431,7 @@ export class Comic {
       this.drawPage(dt);
       if (!this.words.length && !this.speed && !this.hit) return;
     }
-    if (!this.words.length && !this.speed && !this.hit && !rubbing && !this.cd && !this.fl && !this.fx && !this.mem && !this.pu) {
+    if (!this.words.length && !this.speed && !this.hit && !rubbing && !this.cd && !this.fl && !this.fx && !this.mem && !this.pu && !this.stp && !this.stz) {
       // (nothing of its own: the sheet kept clear, whatever was on it)
       g.clearRect(0, 0, this.cv.width, this.cv.height);
       this.dirty = false;
@@ -429,6 +449,20 @@ export class Comic {
       f.t += dt;
       if (f.t > f.life) this.fl = null;
       else this.drawFocus(f, W, H);
+    }
+    // ---- an eye cut-in's strip: the picture above and below it gone to black
+    if (this.stz) {
+      const z = this.stz;
+      z.t += dt;
+      if (z.t > z.life) this.stz = null;
+      else this.drawStrip(z, W, H);
+    }
+    // ---- a place's stamp
+    if (this.stp) {
+      const q = this.stp;
+      q.t += dt;
+      if (q.t > q.life) this.stp = null;
+      else this.drawStamp(q, W, H);
     }
     // ---- a freeze frame's card
     if (this.cd) {
@@ -617,113 +651,248 @@ export class Comic {
     g.restore();
   }
 
+  // (ROADMAP 23.8, the owner's word: the names "cool, as an animated film's - like what was before, only not hiding the people,
+  // and looking good"; and the game a crime story, grown-up. It was a brush-stroke slab across half the picture, the picture
+  // tinted to its colour and framed in ink - across her face, in a close shot.) A freeze frame's name as a crime film gives it:
+  // the picture held; on the side its person is NOT, the edge of the picture darkened, a slanted block of their colour wiped in
+  // from it with the name on it in a title's heavy type, a rule and a line under it (who they are), a thin line from it to them.
+  // Never over a face: its side and its width are taken from where they are in the picture.
   drawCard(c, W, H) {
     const g = this.g;
     const t = c.t;
-    const fade = Math.min(1, (c.life - t) / 0.18);
     const top = H * 0.115;
     const bot = H - top;
-    let s = Math.floor(c.seed);
-    const rnd = () => {
-      s = (s * 16807 + 11) % 2147483647;
-      return (s % 10000) / 10000;
-    };
+    if (!c.placed) {
+      c.placed = true;
+      const p = typeof c.at === 'function' ? c.at() : c.at;
+      const q = p && this.at(p);
+      c.hu = q ? q[0] : null;
+      c.hv = q ? q[1] : null;
+      if (q) c.side = q[0] > 0.5 ? -1 : 1;
+      else if (!c.side) c.side = -1;
+      // (as wide as there is room for, up to a body's width short of them)
+      const room = q ? (c.side < 0 ? q[0] : 1 - q[0]) - 0.15 : 0.5;
+      c.w = Math.max(0.24, Math.min(0.44, room - 0.035));
+      if (c.v === undefined) c.v = 0.58;
+    }
+    const sd = c.side;
+    const out = Math.max(0, Math.min(1, (c.life - t) / 0.16));
+    const ease = (x) => 1 - (1 - x) * (1 - x) * (1 - x);
+    const k1 = ease(Math.min(1, t / 0.16));
+    const k2 = ease(Math.max(0, Math.min(1, (t - 0.14) / 0.2)));
+    const m = W * 0.04;
+    const bw = c.w * W;
+    // the name's size: a sixth of the picture's height, less if the name is long
+    let fs = H * 0.165;
+    g.font = `${Math.round(fs)}px ${CARD_FONT}`;
+    const tw0 = g.measureText(c.name).width;
+    if (tw0 > bw * 0.82) fs *= (bw * 0.82) / tw0;
+    const bh = fs * 1.16;
+    const cy = top + (bot - top) * c.v;
+    const sk = bh * 0.2;
     g.save();
-    g.globalAlpha = fade;
-    // the picture held, pushed toward the card's colour - and a comic's dots over the side it is on
+    // the picture's click: a breath of white as it is held
+    if (t < 0.09) {
+      g.globalAlpha = 0.3 * (1 - t / 0.09);
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, W, H);
+    }
+    // the edge of the picture on its side, darkened: the name read, the person left in the light
+    g.globalAlpha = Math.min(1, t / 0.14) * out;
+    const x0 = sd < 0 ? 0 : W;
+    const sg = g.createLinearGradient(x0, 0, x0 - sd * W * 0.62, 0);
+    sg.addColorStop(0, 'rgba(8,6,14,0.82)');
+    sg.addColorStop(0.5, 'rgba(8,6,14,0.5)');
+    sg.addColorStop(1, 'rgba(8,6,14,0)');
+    g.fillStyle = sg;
+    g.fillRect(sd < 0 ? 0 : W * 0.38, 0, W * 0.62, H);
+    // (it leaves the way it came: back to its edge)
+    g.translate(-sd * (1 - out) * W * 0.12, 0);
+    // the block: from x1 (its outer end, by the edge) to x2 (its inner end, towards them), slanted
+    const xa = sd < 0 ? m : W - m - bw;
+    const xb = xa + bw;
+    const clipX = sd < 0 ? xa - sk : xb + sk - (bw + 2 * sk) * k1;
+    g.save();
+    g.beginPath();
+    g.rect(clipX, cy - bh, (bw + 2 * sk) * k1, bh * 2.4);
+    g.clip();
+    const block = (dx, dy) => {
+      g.beginPath();
+      g.moveTo(xa + sk * 0.5 + dx, cy - bh / 2 + dy);
+      g.lineTo(xb + sk * 0.5 + dx, cy - bh / 2 + dy);
+      g.lineTo(xb - sk * 0.5 + dx, cy + bh / 2 + dy);
+      g.lineTo(xa - sk * 0.5 + dx, cy + bh / 2 + dy);
+      g.closePath();
+    };
+    block(H * 0.012, H * 0.014);
+    g.fillStyle = 'rgba(6,4,10,0.85)';
+    g.fill();
+    block(0, 0);
     g.fillStyle = c.col;
-    g.globalAlpha = 0.18 * fade;
-    g.fillRect(0, top, W, bot - top);
-    g.globalAlpha = 0.5 * fade;
-    const dot = Math.max(5, H * 0.012);
-    g.fillStyle = '#0c0a12';
-    const x0 = c.side < 0 ? 0 : W * 0.5;
-    for (let yy = top + dot; yy < bot; yy += dot * 1.6) {
-      for (let xx = x0 + ((yy / (dot * 1.6)) % 2) * dot * 0.8; xx < x0 + W * 0.5; xx += dot * 1.6) {
-        // (bigger towards the outer edge: the print fading out into the picture)
-        const e = c.side < 0 ? 1 - xx / (W * 0.5) : (xx - W * 0.5) / (W * 0.5);
-        const r = dot * 0.42 * Math.max(0, e - 0.15);
-        if (r < 0.6) continue;
+    g.fill();
+    // (a print's dots along its inner end: the drawn world's own grain, a little of it)
+    g.save();
+    block(0, 0);
+    g.clip();
+    g.fillStyle = 'rgba(8,6,14,0.22)';
+    const dot = Math.max(3, H * 0.011);
+    for (let yy = cy - bh / 2 + dot * 0.6; yy < cy + bh / 2; yy += dot * 1.5) {
+      for (let i = 0; i < 9; i++) {
+        const xx = sd < 0 ? xb - i * dot * 1.5 - ((yy / dot) % 2) * dot * 0.6 : xa + i * dot * 1.5 + ((yy / dot) % 2) * dot * 0.6;
+        const r = dot * 0.46 * (1 - i / 9);
         g.beginPath();
         g.arc(xx, yy, r, 0, Math.PI * 2);
         g.fill();
       }
     }
-    // the ink frame round the held picture
-    g.globalAlpha = fade;
-    g.strokeStyle = '#0c0a12';
-    g.lineWidth = Math.max(4, H * 0.012);
-    g.strokeRect(g.lineWidth / 2, top + g.lineWidth / 2, W - g.lineWidth, bot - top - g.lineWidth);
-    // the slab: a brush stroke across, wiped in from its side
-    const wipe = Math.min(1, t / 0.16);
-    const sw = W * 0.52;
-    const sh = H * 0.2;
-    const cy = top + (bot - top) * c.v;
-    const sx0 = c.side < 0 ? W * 0.03 : W * 0.97 - sw;
-    const sxW = sw * wipe;
-    const sxs = c.side < 0 ? sx0 : sx0 + sw - sxW;
-    g.save();
-    g.translate(0, cy);
-    g.rotate(-0.045 * c.side);
-    g.beginPath();
-    const n = 18;
-    for (let i = 0; i <= n; i++) g.lineTo(sxs + (sxW * i) / n, -sh / 2 + (rnd() - 0.5) * sh * 0.12);
-    for (let i = n; i >= 0; i--) g.lineTo(sxs + (sxW * i) / n, sh / 2 + (rnd() - 0.5) * sh * 0.12);
-    g.closePath();
-    g.fillStyle = c.col;
-    g.fill();
-    g.lineWidth = Math.max(3, H * 0.006);
-    g.strokeStyle = '#0c0a12';
-    g.stroke();
-    // (a dry-brush edge: streaks of paper through it)
-    g.globalAlpha = 0.35 * fade;
-    g.strokeStyle = '#fff6e8';
-    for (let i = 0; i < 9; i++) {
-      const yy = (rnd() - 0.5) * sh * 0.8;
-      g.lineWidth = 1 + rnd() * 2.5;
-      g.beginPath();
-      g.moveTo(sxs + sxW * rnd() * 0.3, yy);
-      g.lineTo(sxs + sxW * (0.6 + rnd() * 0.4), yy + (rnd() - 0.5) * 4);
-      g.stroke();
-    }
-    g.globalAlpha = fade;
-    // the name: big, white, inked, popped in past its size and back
-    if (t > 0.1) {
-      const k = t < 0.18 ? 1.3 - ((t - 0.1) / 0.08) * 0.3 : 1;
-      const fs = sh * 0.62 * k;
-      g.font = `${Math.round(fs)}px ${WORD_FONT}`;
-      g.textBaseline = 'middle';
-      g.textAlign = 'center';
-      const tx = sx0 + sw / 2;
-      g.lineJoin = 'round';
-      g.lineWidth = fs * 0.16;
-      g.strokeStyle = '#0c0a12';
-      g.strokeText(c.name, tx, -sh * 0.08);
+    g.restore();
+    // the name on it: dark on a light block, light on a dark one
+    const rgb = /^#([0-9a-f]{6})$/i.test(c.col) ? [1, 3, 5].map((i) => parseInt(c.col.slice(i, i + 2), 16)) : [200, 60, 60];
+    const lightBlock = rgb[0] * 0.3 + rgb[1] * 0.59 + rgb[2] * 0.11 > 150;
+    g.font = `${Math.round(fs)}px ${CARD_FONT}`;
+    g.textBaseline = 'alphabetic';
+    g.textAlign = 'center';
+    g.direction = 'ltr';
+    g.fillStyle = lightBlock ? '#15101c' : '#fffaf0';
+    g.fillText(c.name, (xa + xb) / 2, cy + fs * 0.37);
+    g.restore();
+    // a bar at its outer end
+    g.fillStyle = '#fffaf0';
+    const bx = sd < 0 ? xa - sk * 0.5 - H * 0.02 : xb + sk * 0.5 + H * 0.008;
+    g.fillRect(bx, cy - bh * 0.62 * k1, H * 0.012, bh * 1.24 * k1);
+    // the line under it: a rule drawn out from its outer end, and who they are
+    if (k2 > 0 && c.tag) {
+      const ty = cy + bh / 2 + H * 0.03;
+      const ts = Math.max(11, H * 0.046);
+      g.globalAlpha = k2 * out;
+      g.fillStyle = 'rgba(255,250,240,0.9)';
+      const rl = bw * 0.96 * k2;
+      g.fillRect(sd < 0 ? xa - sk * 0.5 : xb - sk * 0.5 - rl, ty, rl, Math.max(1.5, H * 0.004));
+      g.font = `600 ${Math.round(ts)}px "Rubik", "Heebo", sans-serif`;
+      try {
+        g.letterSpacing = `${(ts * 0.09).toFixed(1)}px`;
+      } catch (e) {
+        // (no letter spacing on this canvas: as the font sets it)
+      }
+      g.textAlign = sd < 0 ? 'left' : 'right';
+      g.textBaseline = 'top';
+      // (no wider than the block: a long line a little smaller)
+      const tw = g.measureText(c.tag).width;
+      if (tw > bw * 1.04) g.font = `600 ${Math.round((ts * bw * 1.04) / tw)}px "Rubik", "Heebo", sans-serif`;
       g.fillStyle = '#fffaf0';
-      g.fillText(c.name, tx, -sh * 0.08);
-      if (c.tag) {
-        const ts = sh * 0.2;
-        g.font = `${Math.round(ts)}px ${WORD_FONT}`;
-        g.lineWidth = ts * 0.22;
-        g.strokeText(c.tag, tx, sh * 0.33);
-        g.fillStyle = '#ffe9a8';
-        g.fillText(c.tag, tx, sh * 0.33);
+      g.fillText(c.tag, sd < 0 ? xa - sk * 0.5 : xb - sk * 0.5, ty + H * 0.02 + (1 - k2) * H * 0.012);
+      try {
+        g.letterSpacing = '0px';
+      } catch (e) {
+        // (as above)
+      }
+    }
+    // a thin line from its inner end to them: to their shoulder's side, not their face
+    if (c.lead && c.hu !== null && k2 > 0) {
+      const ax = sd < 0 ? xb + sk * 0.5 + H * 0.012 : xa - sk * 0.5 - H * 0.012;
+      const ay = cy - bh * 0.5;
+      const ex = (c.hu + sd * 0.085) * W;
+      const ey = Math.min(bot - H * 0.04, (c.hv + 0.115) * H);
+      if (Math.abs(ex - ax) > W * 0.03) {
+        g.globalAlpha = 0.9 * k2 * out;
+        g.strokeStyle = '#fffaf0';
+        g.fillStyle = '#fffaf0';
+        g.lineWidth = Math.max(1.5, H * 0.0045);
+        g.lineCap = 'round';
+        g.beginPath();
+        g.moveTo(ax, ay);
+        g.lineTo(ax + (ex - ax) * k2, ay + (ey - ay) * k2);
+        g.stroke();
+        if (k2 >= 1) {
+          g.beginPath();
+          g.arc(ex, ey, H * 0.011, 0, Math.PI * 2);
+          g.fill();
+        }
       }
     }
     g.restore();
-    // a stroke from the slab to them
-    const p = typeof c.at === 'function' ? c.at() : c.at;
-    const q = p && this.at(p);
-    if (q && t > 0.14) {
-      const ax = c.side < 0 ? sx0 + sw * 0.85 : sx0 + sw * 0.15;
-      const ay = cy - sh * 0.5;
-      g.strokeStyle = '#0c0a12';
-      g.lineWidth = Math.max(3, H * 0.005);
-      g.lineCap = 'round';
-      g.beginPath();
-      g.moveTo(ax, ay);
-      g.quadraticCurveTo((ax + q[0] * W) / 2, ay - H * 0.06, q[0] * W, q[1] * H + H * 0.05);
-      g.stroke();
+  }
+
+  drawStrip(z, W, H) {
+    const g = this.g;
+    // (shut in a seventh of a second, open again in a fifth)
+    const kin = Math.min(1, z.t / 0.14);
+    const kout = Math.min(1, (z.life - z.t) / 0.2);
+    const e = (x) => 1 - (1 - x) * (1 - x) * (1 - x);
+    const k = Math.min(e(kin), e(kout));
+    // (from wider than the picture down to the strip)
+    const half = (0.75 + (z.h / 2 - 0.75) * k) * H;
+    const cy = z.v * H;
+    const dy = Math.tan(z.slant) * W * 0.5;
+    g.save();
+    g.fillStyle = '#07050c';
+    g.beginPath();
+    g.moveTo(-2, -2);
+    g.lineTo(W + 2, -2);
+    g.lineTo(W + 2, cy - half + dy);
+    g.lineTo(-2, cy - half - dy);
+    g.closePath();
+    g.fill();
+    g.beginPath();
+    g.moveTo(-2, H + 2);
+    g.lineTo(W + 2, H + 2);
+    g.lineTo(W + 2, cy + half + dy);
+    g.lineTo(-2, cy + half - dy);
+    g.closePath();
+    g.fill();
+    // (a thin light line along each edge of it)
+    g.globalAlpha = 0.85 * k;
+    g.strokeStyle = '#fffaf0';
+    g.lineWidth = Math.max(1.5, H * 0.004);
+    g.beginPath();
+    g.moveTo(-2, cy - half - dy);
+    g.lineTo(W + 2, cy - half + dy);
+    g.moveTo(-2, cy + half - dy);
+    g.lineTo(W + 2, cy + half + dy);
+    g.stroke();
+    g.restore();
+  }
+
+  drawStamp(q, W, H) {
+    const g = this.g;
+    const out = Math.max(0, Math.min(1, (q.life - q.t) / 0.4));
+    const x = q.side < 0 ? W * 0.055 : W * 0.945;
+    const y0 = q.v * H;
+    const fs = H * 0.074;
+    g.save();
+    g.globalAlpha = out;
+    g.textAlign = q.side < 0 ? 'left' : 'right';
+    g.textBaseline = 'alphabetic';
+    g.direction = 'ltr';
+    // (typed: so many letters a second, the lines one after the other)
+    let n = Math.floor(q.t * 26);
+    g.fillStyle = '#fffaf0';
+    g.fillRect(q.side < 0 ? x - H * 0.03 : x + H * 0.018, y0 - fs * 0.82, H * 0.012, fs * 0.9 + (q.lines.length - 1) * H * 0.058);
+    g.shadowColor = 'rgba(6,4,10,0.7)';
+    g.shadowBlur = H * 0.012;
+    g.shadowOffsetY = H * 0.004;
+    for (let i = 0; i < q.lines.length && n > 0; i++) {
+      const ln = q.lines[i];
+      const txt = ln.slice(0, Math.min(ln.length, n));
+      n -= ln.length + 4;
+      if (i === 0) {
+        g.font = `${Math.round(fs)}px ${CARD_FONT}`;
+        g.fillText(txt, x, y0);
+      } else {
+        const ts = Math.max(11, H * 0.042);
+        g.font = `600 ${Math.round(ts)}px "Rubik", "Heebo", sans-serif`;
+        try {
+          g.letterSpacing = `${(ts * 0.14).toFixed(1)}px`;
+        } catch (e2) {
+          // (no letter spacing on this canvas)
+        }
+        g.fillText(txt, x, y0 + i * H * 0.058 + H * 0.004);
+        try {
+          g.letterSpacing = '0px';
+        } catch (e2) {
+          // (as above)
+        }
+      }
     }
     g.restore();
   }
@@ -787,6 +956,8 @@ export class Comic {
     this.pg = null;
     this.rubSrc = null;
     this.cd = null;
+    this.stp = null;
+    this.stz = null;
     this.fl = null;
     this.fx = null;
     this.words = [];

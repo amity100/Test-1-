@@ -410,6 +410,8 @@ uniform float uRainOn;
 uniform sampler2D tPaint;
 uniform sampler2D tAux;
 uniform float uPaint;
+// (ROADMAP 23.9: a held picture painted whole - its people under the brush too, this far)
+uniform float uPaintAll;
 uniform vec2 uAuxTexel;
 uniform vec2 uAuxK;
 // (ROADMAP 18.9) the film's light and colour: a rim of the light round the people where what is
@@ -575,7 +577,7 @@ void main() {
 #endif
   // contrast-adaptive sharpening (after AMD's CAS): crisp pen lines even when the drawing was
   // made at a lower resolution than the screen
-  float pk = uPaint > 0.001 ? uPaint * (1.0 - people(vUv)) : 0.0;
+  float pk = uPaint > 0.001 ? uPaint * (1.0 - people(vUv) * (1.0 - uPaintAll)) : 0.0;
   vec3 b = grade(vUv + vec2(0.0, -uSrcTexel.y), pk);
   vec3 d = grade(vUv + vec2(-uSrcTexel.x, 0.0), pk);
   vec3 e = grade(vUv, pk);
@@ -1070,7 +1072,7 @@ export class Pipeline {
     this.mBright = mk(BRIGHT_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uBrightO: { value: 0.5 }, uUvK: uvK, uUvLo: uvLo });
     this.mDown = mk(DOWN_FRAG, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.mUp = mk(UP_FRAG, { tSrc: { value: null }, tAdd: { value: null }, uTexel: { value: new THREE.Vector2() } });
-    this.mFinal = mk(FINAL_FRAG, { tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo, tPaint: { value: BLANK }, tAux: { value: BLANK }, uPaint: { value: 0 }, uAuxTexel: { value: new THREE.Vector2(1, 1) }, uAuxK: { value: new THREE.Vector2(1, 1) }, uRimDir: { value: new THREE.Vector2(1, 0) }, uRimCol: { value: new THREE.Vector4(0, 0, 0, 0) }, uShadowT: { value: new THREE.Vector3(1, 1, 1) }, uLightT: { value: new THREE.Vector3(1, 1, 1) }, uGradeK: { value: 0 }, uVib: { value: 0 }, uGrainK: { value: 0 }, uGrainT: { value: 0 }, uComic: { value: 0 }, uSmear: { value: new THREE.Vector2() }, uEmote: { value: 0 }, uEmoteCol: { value: new THREE.Vector3(0.6, 0.1, 0.12) }, uFill: { value: 0 }, uFillCol: { value: new THREE.Vector3(1, 0.82, 0.62) }, uDotPx: { value: 4 }, uMis: { value: 0 }, uDotInk: { value: new THREE.Vector3(0.3, 0.22, 0.5) } });
+    this.mFinal = mk(FINAL_FRAG, { uPaintAll: { value: 0 }, tSrc: { value: null }, tBloom: { value: null }, uNoise: shared.uNoise, uBloom: { value: 0.9 }, uExposure: { value: 1 }, uPR: shared.uPR, uSrcTexel: { value: new THREE.Vector2() }, uSharp: { value: 0.6 }, tRain: { value: BLANK }, uRainOn: { value: 0 }, uUvK: uvK, uUvLo: uvLo, tPaint: { value: BLANK }, tAux: { value: BLANK }, uPaint: { value: 0 }, uAuxTexel: { value: new THREE.Vector2(1, 1) }, uAuxK: { value: new THREE.Vector2(1, 1) }, uRimDir: { value: new THREE.Vector2(1, 0) }, uRimCol: { value: new THREE.Vector4(0, 0, 0, 0) }, uShadowT: { value: new THREE.Vector3(1, 1, 1) }, uLightT: { value: new THREE.Vector3(1, 1, 1) }, uGradeK: { value: 0 }, uVib: { value: 0 }, uGrainK: { value: 0 }, uGrainT: { value: 0 }, uComic: { value: 0 }, uSmear: { value: new THREE.Vector2() }, uEmote: { value: 0 }, uEmoteCol: { value: new THREE.Vector3(0.6, 0.1, 0.12) }, uFill: { value: 0 }, uFillCol: { value: new THREE.Vector3(1, 0.82, 0.62) }, uDotPx: { value: 4 }, uMis: { value: 0 }, uDotInk: { value: new THREE.Vector3(0.3, 0.22, 0.5) } });
     // (ROADMAP 18.9) the film's painted look (PAINT_FRAG): how much of it (paint, 0 none - eased to
     // paintWant), the brush near and far (in pixels of the picture at 720 lines), where the film
     // looks (paintFocus, metres from the camera), the brush's streaks
@@ -3096,6 +3098,7 @@ export class Pipeline {
     // (round 9: the whip's smear - across the picture, its way on the screen - and the moment's colour)
     f.uSmear.value.set((L.smear || 0) * 0.09, 0);
     f.uEmote.value = L.emote || 0;
+    if (f.uPaintAll) f.uPaintAll.value = L.paintAll || 0;
     f.uEmoteCol.value.set(L.emoteCol[0], L.emoteCol[1], L.emoteCol[2]);
     this.mPaint.uniforms.uGrain.value = 0.1 * (1 - Math.min(1, L.comic || 0));
     const cam = this.camera;
