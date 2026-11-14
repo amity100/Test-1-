@@ -225,8 +225,9 @@ export class Prologue {
     this.acting = new Acting(g);
     // (the action's comic moments: impact frames, speed lines, sound words - game/prologue/comic.js)
     this.comic = new Comic(g, this.ui.root);
-    // (ROADMAP 23.6: Lily's sketchbook as the film's own language - game/prologue/sketch.js)
-    this.sketch = new Sketch(g, this.ui.root);
+    // (ROADMAP 23.6: Lily's sketchbook as the film's own language - game/prologue/sketch.js. Its name here is `book`:
+    // `this.sketch` is her drawing's own canvas, lilyPage below)
+    this.book = new Sketch(g, this.ui.root);
     this.voices.load();
     // its pieces of the city (the wheel among them)
     if (g.prolSet) g.prolSet.build();
@@ -376,7 +377,7 @@ export class Prologue {
     const SPACE = [null, 'open', 'open', 'open', 'open', 'street', 'car', 'car', 'car', 'car'];
     if (this.voices.space) this.voices.space(SPACE[n]);
     this.dropHolds();
-    if (this.sketch) this.sketch.clear();
+    if (this.book) this.book.clear();
     if (this.game.player) this.game.player.filmCrouch = 0;
     this.sceneN = n;
     // (ROADMAP 23: the scenes filmed again in the game's own look - render/look.js lookFrame, tickLook below)
@@ -420,6 +421,8 @@ export class Prologue {
       this.ff = true;
       this.voices.stop();
       this.ui.clearSub();
+      // (what her sketchbook had over the picture: gone with what is skipped)
+      if (this.book) this.book.clear();
     }
     if (this.locked) {
       input.fire = false;
@@ -638,7 +641,7 @@ export class Prologue {
     if (this.page) this.page.update();
     this.acting.update(dt);
     this.comic.update(dt);
-    this.sketch.update(dt);
+    this.book.update(dt);
     this.tickGuns(dt);
     // (Danny walking somewhere in a shot, on his own feet - or running)
     if (this.walkTo && this.walkDanny(this.walkTo.x, this.walkTo.z, this.walkTo.speed, this.walkTo.sprint)) this.walkTo = null;
@@ -1052,7 +1055,7 @@ export class Prologue {
     g.audio.play('whoosh', 0.55);
     if (this.score && this.score.under) this.score.under(life, 0.45);
     // (ROADMAP 23.6: o.scrap - the name on a scrap torn from her sketchbook, in her hand)
-    if (o.scrap && this.sketch) this.sketch.scrap({ ...o, life });
+    if (o.scrap && this.book) this.book.scrap({ ...o, life });
     else this.comic.card({ ...o, life });
     yield life + 0.04;
     this.k = this.kWant = k0 || 1;
@@ -2147,7 +2150,7 @@ export class Prologue {
     const g = this.game;
     const P = g.player;
     const L = this.cast.lily;
-    const SK = this.sketch;
+    const SK = this.book;
     const he = lang() === 'he';
     // (every line said with the face and the head: the hands are where each shot has them)
     this.stillHands = true;
@@ -5506,7 +5509,7 @@ export class Prologue {
     shared.uPenDens.value = 1;
     if (this.acting) this.acting.clear();
     if (this.comic) this.comic.clear();
-    if (this.sketch) this.sketch.clear();
+    if (this.book) this.book.clear();
     if (this.page) {
       this.page.dispose();
       this.page = null;
