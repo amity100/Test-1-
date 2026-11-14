@@ -382,6 +382,7 @@ export class Prologue {
     // (ROADMAP 23: the scenes filmed again in the game's own look - render/look.js lookFrame, tickLook below)
     this.newLook = NEW_LOOK.has(n) && this.lookNew;
     this.sketching = false;
+    this.stillHands = false;
     // (round 18: the cars locked only on the way to his own - s5 sets it)
     this.carOnly = null;
     // (round 23: hellos to passers-by back, whatever a scene left off; and no set kept clear but the
@@ -1070,7 +1071,8 @@ export class Prologue {
     if (fig && ACTS[id]) {
       const all = [g.player.fig, ...Object.values(this.cast).map((q) => q.fig), ...(this.heroes || []).map((q) => q.fig)];
       const listeners = all.filter((f) => f && f !== fig && fig.j && f.lookAt === fig.j.headC);
-      this.acting.play(fig, id, d, listeners);
+      // (this.stillHands: the scene keeps its people's hands where its shots have them - acting.js play's `still`)
+      this.acting.play(fig, id, d, listeners, !!this.stillHands);
     } else {
       // (a line with no acting of its own: one of the city's people talks with their hands as they do)
       const c = fig ? Object.values(this.cast).find((q) => q.fig === fig) : null;
@@ -2147,6 +2149,8 @@ export class Prologue {
     const L = this.cast.lily;
     const SK = this.sketch;
     const he = lang() === 'he';
+    // (every line said with the face and the head: the hands are where each shot has them)
+    this.stillHands = true;
     this.objective(null);
     if (g.gps) g.gps.clear();
     // (round 17, the player's word: the disturbing music only from the moment they look up at the kids in the wheel's gondolas,
@@ -2228,8 +2232,6 @@ export class Prologue {
     yield 0.3;
     const l01 = this.say('L01', L.fig, 0.05);
     const l01w = l01.next().value || 0;
-    // (the line's old acting was a wave from her stool: an arm straight up beside her face here)
-    this.acting.stop(L.fig);
     yield Math.min(0.62, l01w);
 
     // 5. SHE RUNS, HE GOES DOWN ON A KNEE: the two of them in one picture from the west, low, the wheel behind them - cut in two
@@ -2292,8 +2294,8 @@ export class Prologue {
     yield 0.18;
     this.feel(L.fig, 'bliss', 12);
     this.feel(P.fig, 'bliss', 12);
-    if (SK && !this.ff) SK.spill(() => at(0.2, 0.06, 0.62), () => at(0.2, 0.06, 1.34), { life: 2.2 });
-    yield 2.3;
+    if (SK && !this.ff) SK.spill(() => at(0.2, 0.06, 0.62), () => at(0.2, 0.06, 1.34), { life: 2.0 });
+    yield 2.1;
 
     // 7. HER FACE over his shoulder, eyes shut, the sea and the sun behind her - and her name, on a scrap torn from her book
     // (his head turned the other way for it: her face past it)
@@ -2453,7 +2455,8 @@ export class Prologue {
     this.unhold(L.fig, null, 0);
     this.pose(L.fig, { fLean: 0 }, 0.01);
     {
-      const F = { x: 56.5, z: 239.6 };
+      // (at the pier's gate, the walk out along it still ahead of them: the game's own walk to the wheel starts here)
+      const F = { x: 47.6, z: 242.7 };
       const fd = Math.hypot(WHEEL.x - F.x, WHEEL.z - F.z) || 1;
       const ex = (WHEEL.x - F.x) / fd;
       const ez = (WHEEL.z - F.z) / fd;
@@ -2472,20 +2475,20 @@ export class Prologue {
       this.feel(L.fig, 'joy', 6);
       this.feel(P.fig, 'tender', 6);
       const gp = P.pos.y;
-      this.shot({ from: v3(F.x - ex * 3.5 - rx * 0.1, gp + 0.34, F.z - ez * 3.5 - rz * 0.1), to: v3(F.x - ex * 3.2 - rx * 0.1, gp + 0.4, F.z - ez * 3.2 - rz * 0.1), look: v3(F.x + ex * 30, gp + 10.1, F.z + ez * 30), fov: 42, dur: 4, hand: 0.15, key: 0.4, keySide: -1, rim: 1 });
-      yield 2.0;
+      this.shot({ from: v3(F.x - ex * 3.7 - rx * 0.1, gp + 0.34, F.z - ez * 3.7 - rz * 0.1), to: v3(F.x - ex * 3.4 - rx * 0.1, gp + 0.38, F.z - ez * 3.4 - rz * 0.1), look: v3(F.x + ex * 30, gp + 10.1, F.z + ez * 30), fov: 42, dur: 4, hand: 0.15, key: 0.4, keySide: -1, rim: 1 });
+      yield 2.2;
 
       // 17. THE PICTURE HOLDS, AND IS A PAGE OF HER SKETCHBOOK - the drawing she began the scene with, come true. The page turns,
       // and the game goes on
       if (SK && !this.ff) {
-        SK.freeze({ in: 0.6, hold: 1.3, turn: 0.9 });
+        SK.freeze({ in: 0.75, hold: 1.3, turn: 0.9 });
         const t0 = this.clock;
         yield () => SK.frozen || !SK.fz || this.clock - t0 > 0.5;
         if (SK.frozen) {
           const k0 = this.kWant;
           this.k = this.kWant = 0.0002;
           g.audio.play('whoosh', 0.35);
-          yield 1.9;
+          yield 2.2;
           this.k = this.kWant = k0 || 1;
         } else SK.noFreeze();
       }
@@ -2493,6 +2496,7 @@ export class Prologue {
     this.unhold(P.fig, null, 0);
     this.unhold(L.fig, null, 0);
     this.setZone = null;
+    this.stillHands = false;
     L.fig.lookAt = null;
     P.fig.lookAt = null;
     if (this.castMod && this.castMod.giveSketchbook) this.castMod.giveSketchbook(L.fig, true);

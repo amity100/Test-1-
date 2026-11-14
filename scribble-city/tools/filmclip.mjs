@@ -70,6 +70,9 @@ for (;;) {
     return { scene: P.sceneN, t: P.sceneT };
   }, [steps, Math.round(SR / FPS / 128)]);
   if (r.scene !== sc || r.t > T1 || n > 3000) break;
+  // (two of the browser's own frames first: a sheet drawn over the game's picture - the film's comic pages, Lily's sketchbook -
+  // was photographed torn, its top from the frame before, when it moved fast)
+  await pg.evaluate(() => new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res))));
   await pg.screenshot({ path: path.join(dir, `f${String(n).padStart(4, '0')}.jpg`), type: 'jpeg', quality: 88, timeout: 180000 });
   n++;
 }

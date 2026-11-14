@@ -368,7 +368,7 @@ export class Sketch {
     this.pg = { t: 0, draw, out: -1, outDur: 1 };
   }
 
-  // the page falls away under the camera as it comes up off it (dur seconds): the film's own picture behind it
+  // the page turned over the spiral at its top (dur seconds): the film's own picture under it
   pageOut(dur = 1.0) {
     if (this.pg) {
       this.pg.out = 0;
@@ -401,8 +401,7 @@ export class Sketch {
     if (p.out >= 0) {
       p.out += dt;
       const k = Math.min(1, p.out / p.outDur);
-      e = k * k * (3 - 2 * k);
-      e *= e;
+      e = k * k;
       if (k >= 1) {
         this.pg = null;
         return;
@@ -411,14 +410,15 @@ export class Sketch {
     const sc = Math.max(W / PW, H / PH);
     g.save();
     if (e > 0) {
-      // (down and away, a little turned, growing as the camera's eye leaves it: and a shadow under its top edge)
-      g.translate(W / 2, H / 2 + e * H * 1.12);
-      g.rotate(e * 0.07);
-      g.scale(1 + e * 0.16, 1 + e * 0.16);
-      g.translate(-W / 2, -H / 2);
-      g.shadowColor = 'rgba(10,6,20,0.55)';
-      g.shadowBlur = 40 * this.dpr;
-      g.shadowOffsetY = -6 * this.dpr;
+      // (lifted off its foot and over the spiral at its top, as a page is turned: shorter and shorter, its foot's shadow on the
+      // picture under it)
+      const hh = Math.max(1, H * Math.cos(e * Math.PI * 0.5));
+      g.fillStyle = `rgba(10,6,20,${0.4 * (1 - e)})`;
+      g.fillRect(0, hh, W, 22 * this.dpr);
+      g.beginPath();
+      g.rect(0, 0, W, hh);
+      g.clip();
+      g.scale(1, hh / H);
     }
     g.drawImage(this.pageSheet(W, H), 0, 0);
     g.shadowColor = 'transparent';
@@ -426,6 +426,15 @@ export class Sketch {
     g.scale(sc, sc);
     lastTouches(g, Math.min(1, p.t / p.draw));
     g.restore();
+    if (e > 0) {
+      // (darker as it comes up: its own shade)
+      const hh = Math.max(1, H * Math.cos(e * Math.PI * 0.5));
+      const sh = g.createLinearGradient(0, 0, 0, hh);
+      sh.addColorStop(0, 'rgba(20,12,30,0)');
+      sh.addColorStop(1, `rgba(20,12,30,${0.5 * e})`);
+      g.fillStyle = sh;
+      g.fillRect(0, 0, W, hh);
+    }
   }
 
   // ---- one picture in two panels: a gutter of paper between two of its people (a, b: functions giving a point of the world),
@@ -735,47 +744,47 @@ export class Sketch {
       raw.width = W;
       raw.height = H;
       raw.getContext('2d').drawImage(src, 0, 0, W, H);
-      // (flat colour: a small copy, each of its colours brought to one of four steps and made stronger)
-      const sw = Math.min(640, W);
+      // (flat colour, as a felt pen's: a small copy, each of its colours brought to one of five steps, a little stronger)
+      const sw = Math.min(720, W);
       const shh = Math.max(8, Math.round((sw * H) / W));
       const small = document.createElement('canvas');
       small.width = sw;
       small.height = shh;
       const sg = small.getContext('2d');
-      sg.filter = 'blur(1.2px)';
+      sg.filter = 'blur(0.6px)';
       sg.drawImage(raw, 0, 0, sw, shh);
       sg.filter = 'none';
       const im = sg.getImageData(0, 0, sw, shh);
       const d = im.data;
-      const step = (v) => (v < 54 ? 26 : v < 118 ? 107 : v < 186 ? 184 : 255);
+      const step = (v) => (v < 44 ? 22 : v < 100 ? 78 : v < 156 ? 136 : v < 212 ? 196 : 255);
       for (let i = 0; i < d.length; i += 4) {
         const l = d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
-        d[i] = step(Math.max(0, Math.min(255, l + (d[i] - l) * 1.7 + 14)));
-        d[i + 1] = step(Math.max(0, Math.min(255, l + (d[i + 1] - l) * 1.7 + 14)));
-        d[i + 2] = step(Math.max(0, Math.min(255, l + (d[i + 2] - l) * 1.7 + 14)));
+        d[i] = step(Math.max(0, Math.min(255, l + (d[i] - l) * 1.3 + 12)));
+        d[i + 1] = step(Math.max(0, Math.min(255, l + (d[i + 1] - l) * 1.3 + 12)));
+        d[i + 2] = step(Math.max(0, Math.min(255, l + (d[i + 2] - l) * 1.3 + 12)));
       }
       sg.putImageData(im, 0, 0);
-      const page = document.createElement('canvas');
-      page.width = W;
-      page.height = H;
-      const g = page.getContext('2d');
-      const sc = Math.max(W / PW, H / PH);
+      // the picture as she would have drawn it: on the paper's own colour, the paper showing between a pen's bands and through
+      // its strokes
+      const flat = document.createElement('canvas');
+      flat.width = W;
+      flat.height = H;
+      const g = flat.getContext('2d');
       g.fillStyle = PAPER;
       g.fillRect(0, 0, W, H);
       g.globalCompositeOperation = 'multiply';
       g.imageSmoothingEnabled = true;
       g.drawImage(small, 0, 0, W, H);
       g.globalCompositeOperation = 'source-over';
-      // (the paper between a felt pen's bands, and through its strokes)
-      g.fillStyle = 'rgba(251,246,232,0.7)';
+      g.fillStyle = 'rgba(251,246,232,0.55)';
       for (let y = 0.051 * W; y < H; y += 0.0555 * W) {
         g.save();
         g.translate(0, y);
         g.rotate(-0.012);
-        g.fillRect(-10, 0, W + 20, 0.0045 * W);
+        g.fillRect(-10, 0, W + 20, 0.0036 * W);
         g.restore();
       }
-      g.strokeStyle = 'rgba(251,246,232,0.2)';
+      g.strokeStyle = 'rgba(251,246,232,0.16)';
       g.lineWidth = Math.max(1, 0.0025 * W);
       g.beginPath();
       for (let x = -H; x < W; x += 0.0115 * W) {
@@ -783,44 +792,66 @@ export class Sketch {
         g.lineTo(x + H * 0.49, 0);
       }
       g.stroke();
-      g.strokeStyle = 'rgba(80,130,200,0.3)';
-      g.lineWidth = Math.max(1, 1.2 * sc);
-      for (let y = 72 * sc; y < H; y += 24 * sc) {
-        g.beginPath();
-        g.moveTo(0, y);
-        g.lineTo(W, y);
-        g.stroke();
-      }
-      g.fillStyle = '#cfc6b0';
-      for (let x = 26 * sc; x < W; x += 40 * sc) {
-        g.beginPath();
-        g.arc(x, 34 * sc, 6 * sc, 0, Math.PI * 2);
-        g.fill();
-      }
+      // the page it is on
+      const sheet = document.createElement('canvas');
+      sheet.width = W;
+      sheet.height = H;
+      paper(sheet.getContext('2d'), W, H, Math.max(W / PW, H / PH));
+      f.raw = raw;
+      f.flat = flat;
+      f.sheet = sheet;
+      f.page = sheet;
+    } catch (e) {
+      // (the frame could not be taken: no page - the film goes on as it is)
+      this.fz = null;
+    }
+  }
+
+  // the page as it is k of the way from the film's own picture (0) to her drawing of it on a page of her book (1): the picture
+  // drawn smaller on the paper, turning from the film's to a felt pen's, her words coming with it
+  composeFreeze(g, f, W, H, k) {
+    const sc = Math.max(W / PW, H / PH);
+    const s = 1 - 0.22 * k;
+    const x = 0.11 * W * k;
+    const y = 0.165 * H * k;
+    g.drawImage(f.sheet, 0, 0);
+    if (k > 0.02) {
+      // (a pencil's line round it, its shadow of graphite)
+      g.strokeStyle = `rgba(58,48,72,${0.75 * k})`;
+      g.lineWidth = Math.max(1.5, 2.4 * sc);
+      g.lineJoin = 'round';
+      g.strokeRect(x - 1, y - 1, W * s + 2, H * s + 2);
+    }
+    g.drawImage(f.flat, 0, 0, W, H, x, y, W * s, H * s);
+    if (k < 1) {
+      g.globalAlpha = 1 - k;
+      g.drawImage(f.raw, 0, 0, W, H, x, y, W * s, H * s);
+      g.globalAlpha = 1;
+    }
+    if (k > 0.3) {
+      const a = Math.min(1, (k - 0.3) / 0.5);
       const he = lang() === 'he';
+      g.globalAlpha = a;
       g.save();
-      g.translate(W - 60 * sc, 88 * sc);
-      g.rotate(-0.07);
-      g.font = `${Math.round(40 * sc)}px ${he ? HAND : HAND_EN}`;
+      g.translate(W - 0.1 * W, 0.148 * H);
+      g.rotate(-0.035);
+      g.font = `${Math.round(0.078 * H)}px ${he ? HAND : HAND_EN}`;
       g.fillStyle = '#c2385f';
       g.textAlign = 'right';
+      g.textBaseline = 'alphabetic';
       g.direction = he ? 'rtl' : 'ltr';
       g.fillText(he ? 'אני + אבא' : 'me + dad', 0, 0);
       g.restore();
       g.save();
-      g.translate(W - 150 * sc, H - 44 * sc);
-      g.rotate(-0.08);
-      g.font = `${Math.round(34 * sc)}px ${HAND_EN}`;
+      g.translate(0.13 * W, 0.148 * H);
+      g.rotate(-0.05);
+      g.font = `${Math.round(0.07 * H)}px ${HAND_EN}`;
       g.fillStyle = '#7a48d0';
-      g.textAlign = 'right';
+      g.textAlign = 'left';
       g.direction = 'ltr';
       g.fillText('Lily ♥', 0, 0);
       g.restore();
-      f.raw = raw;
-      f.page = page;
-    } catch (e) {
-      // (the frame could not be taken: no page - the film goes on as it is)
-      this.fz = null;
+      g.globalAlpha = 1;
     }
   }
 
@@ -846,12 +877,19 @@ export class Sketch {
     f.t += dt;
     const g = this.g;
     if (f.turning < 0) {
-      const k = smooth(Math.min(1, f.t / f.inDur));
-      g.drawImage(f.raw, 0, 0);
-      g.globalAlpha = k;
-      g.drawImage(f.page, 0, 0);
-      g.globalAlpha = 1;
+      // (it settles onto the page: quick at first)
+      const k0 = Math.min(1, f.t / f.inDur);
+      this.composeFreeze(g, f, W, H, 1 - (1 - k0) * (1 - k0) * (1 - k0));
       return;
+    }
+    if (!f.done) {
+      // (the whole page as it ended, once: what is turned over)
+      const done = document.createElement('canvas');
+      done.width = W;
+      done.height = H;
+      this.composeFreeze(done.getContext('2d'), f, W, H, 1);
+      f.done = done;
+      f.raw = f.flat = null;
     }
     f.turning += dt;
     const k = Math.min(1, f.turning / f.turn);
@@ -861,15 +899,15 @@ export class Sketch {
     }
     // (up over the spiral at its top: its foot lifted, the page shorter and darker as it comes up - and gone over)
     const e = k * k;
-    const hh = H * Math.cos(e * Math.PI * 0.5);
-    g.drawImage(f.page, 0, 0, W, H, 0, 0, W, Math.max(1, hh));
+    const hh = Math.max(1, H * Math.cos(e * Math.PI * 0.5));
+    g.fillStyle = `rgba(10,6,20,${0.35 * (1 - e)})`;
+    g.fillRect(0, hh, W, Math.min(H - hh, 18 * this.dpr));
+    g.drawImage(f.done, 0, 0, W, H, 0, 0, W, hh);
     const sh = g.createLinearGradient(0, 0, 0, hh);
     sh.addColorStop(0, 'rgba(20,12,30,0)');
     sh.addColorStop(1, `rgba(20,12,30,${0.55 * e})`);
     g.fillStyle = sh;
     g.fillRect(0, 0, W, hh);
-    g.fillStyle = `rgba(10,6,20,${0.35 * (1 - e)})`;
-    g.fillRect(0, hh, W, Math.min(H - hh, 18 * this.dpr));
   }
 
   update(dt) {

@@ -50,6 +50,9 @@ await pg.evaluate(async () => {
       P.walkTo = null;
       P.auto = null;
       P.dropHolds();
+      // (the scene's own sheets off: her sketchbook's page is on it from its first frame)
+      if (P.sketch) P.sketch.clear();
+      P.sketching = false;
       P.kneel(0);
       D.fig.crouch = 0;
       for (const f of [D.fig, L.fig]) {
@@ -364,23 +367,16 @@ const SHOTS = [
   }],
   // 17. on, hand in hand, onto the pier: the wheel open ahead of them
   ['17-to-the-wheel', () => {
-    const F = { x: 56.5, z: 239.6 };
-    const fx = WHEEL.x - F.x;
-    const fz = WHEEL.z - F.z;
-    const fd = Math.hypot(fx, fz);
-    const ex = fx / fd;
-    const ez = fz / fd;
-    const rx = -ez;
-    const rz = ex;
-    const yaw = yawTo(ex, ez);
-    P.putDanny(F.x, F.z, yaw);
-    P.put(L, F.x + rx * 0.6, F.z + rz * 0.6, yaw);
-    const hands = () => v3(D.pos.x + rx * 0.34 + ex * 0.03, 0.8, D.pos.z + rz * 0.34 + ez * 0.03);
-    P.hold(D.fig, 'R', hands);
-    P.hold(L.fig, 'L', hands);
+    // (at the pier's gate, the walk out along it still ahead of them: the game's own walk to the wheel starts here)
+    const F = { x: 47.6, z: 242.7 };
+    const fd = Math.hypot(WHEEL.x - F.x, WHEEL.z - F.z);
+    const ex = (WHEEL.x - F.x) / fd;
+    const ez = (WHEEL.z - F.z) / fd;
+    poseWalk(F, ex, ez);
     L.fig.lookAt = v3(WHEEL.x, 30, WHEEL.z);
     D.fig.lookAt = v3(WHEEL.x, 30, WHEEL.z);
-    shot({ from: v3(F.x - ex * 3.4 - rx * 0.1, 0.7, F.z - ez * 3.4 - rz * 0.1), look: v3(F.x + ex * 30, 10.5, F.z + ez * 30), fov: 42, key: 0.4, keySide: -1, rim: 1 });
+    const gp = D.pos.y;
+    shot({ from: v3(F.x - ex * 3.5 + ez * 0.1, gp + 0.34, F.z - ez * 3.5 - ex * 0.1), look: v3(F.x + ex * 30, gp + 10.1, F.z + ez * 30), fov: 42, key: 0.4, keySide: -1, rim: 1 });
   }],
 ];
 // (HANDS=1) every contact of the scene, close up from two sides: is each hand the right way round?
