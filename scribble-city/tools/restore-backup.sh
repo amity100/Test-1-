@@ -9,6 +9,8 @@
 # The backups so far (the site's copy, and the commit its game was published from):
 #   backup-r22b   7f630b9   round 22b, before round 23's film fixes
 #   backup-r25   809b51a   round 25, before the phone speed work (PHONE_SPEED_PLAN.md, ROADMAP 19)
+#   backup-r26   2c582d4   before the new look: no look layer at all in it (source 2d0eb85; the first look commit, 69e86bf, came
+#                           after) - the game as it was before the street's new graphics, its light, the new Danny and Lily, the film work
 #
 # The code itself back to such a commit, as a new commit on the working branch (also nothing
 # rewritten):  git checkout <commit> -- scribble-city && git commit -m "Back to <name>"
