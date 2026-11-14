@@ -154,6 +154,8 @@ export const shared = {
   uLook: { value: 0 },
   // (1: the look on a phone - its lighter way: render/look.js)
   uLookLow: { value: 0 },
+  // (ROADMAP 23: the film's own key light on its people - xyz the way to it, w how much: game/prologue/director.js tickLook)
+  uFilmKey: { value: new THREE.Vector4(0, 1, 0, 0) },
   uMirror: { value: 0 },
   uRefl: { value: blank },
   // (0: no mirror drawn this frame - no water in sight, the streets dry: the water reflects the

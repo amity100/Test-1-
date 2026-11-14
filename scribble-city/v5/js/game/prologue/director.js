@@ -110,6 +110,7 @@ const LOOKOUT = { x: 60, z: 298 };
 const DARK = [0.1, 0.1, 0.12];
 
 const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
+const _fk = new THREE.Vector3();
 
 // (round 17: the rotor drawn in the air - Prologue.rotor) a drawing's lines (screen px) spread from
 // their middle till its longer side is at least px long - at most three times as big
@@ -791,7 +792,25 @@ export class Prologue {
     // (and only while it is the film: the player's own walks and drives between its scenes look as the
     // game does - ROADMAP 18.9, the player's word)
     const story = (this.sceneN || 0) >= 2 && film && !this.newLook;
-    pipe.paintWant = this.paintOn && story ? 1 : 0;
+    // (ROADMAP 23: in the new look the brush is the lens's depth - what is behind the one the shot is on laid in broader, calmer
+    // strokes, the more the closer the shot: wide, the street as the game draws it)
+    const S0 = this.shots;
+    const focus0 = film && S0 && S0.on ? clamp(S0.focus !== null && S0.focus !== undefined ? S0.focus : S0.lastPos.distanceTo(S0.lastLook), 1.2, 90) : 30;
+    const closeK = clamp((7 - focus0) / 4.5, 0, 1);
+    pipe.paintWant = this.paintOn && story ? 1 : this.paintOn && this.newLook && film ? 0.25 + 0.75 * closeK : 0;
+    // (and the film's own key light on its people: from the camera's side - the shot's keySide, +1 its right - and above)
+    {
+      const fk = shared.uFilmKey.value;
+      const Sh0 = film && S0 && S0.on ? S0.shot : null;
+      if (this.newLook && film && Sh0 && Sh0.key !== 0) {
+        const cam = g.camera;
+        const e = cam.matrixWorld.elements;
+        const sd = Sh0.keySide !== undefined ? Sh0.keySide : 1;
+        // (the camera's right, its up, and back towards it)
+        _fk.set(e[0] * 0.75 * sd + e[4] * 0.45 + e[8] * 0.5, e[1] * 0.75 * sd + e[5] * 0.45 + e[9] * 0.5, e[2] * 0.75 * sd + e[6] * 0.45 + e[10] * 0.5).normalize();
+        fk.set(_fk.x, _fk.y, _fk.z, Sh0.key !== undefined ? Sh0.key : 0.85);
+      } else fk.w = 0;
+    }
     // (and its light and colour: the people inked bolder and lit round their edge, the shadows cool
     // and the lights warm, a grain - more of all of it while it is filmed; render/pipeline.js look)
     const LK = pipe.look;
@@ -847,7 +866,7 @@ export class Prologue {
       // (ROADMAP 23: a shot in the game's own look - its light, its colour and its pens are render/look.js's; the film adds only
       // what a camera on people needs: a light on a face against the evening, a line of light round them, a little grain)
       const Sh = this.shots && this.shots.on ? this.shots.shot : null;
-      Object.assign(LK, { rim: 0.55, grain: 0.02, personW: 1.15, comic: 0, mis: 0, fill: Sh && Sh.fill !== undefined ? Sh.fill : 0.7 });
+      Object.assign(LK, { rim: Sh && Sh.rim !== undefined ? Sh.rim : 0.75, grain: 0.02, personW: 1.15, comic: 0, mis: 0, fill: Sh && Sh.fill !== undefined ? Sh.fill : 0.35 });
       shared.uPenDens.value = 1;
     } else if (LK) {
       Object.assign(LK, { rim: 0, grade: 0, grain: 0, personW: 1, comic: 0, mis: 0, fill: 0 });
@@ -877,13 +896,15 @@ export class Prologue {
       const close = film ? clamp((5 - pipe.paintFocus) / 3.5, 0, 1) : 0;
       pipe.paintR[0] = 1.5 - 0.2 * close;
       pipe.paintR[1] = 2.8 + 2.2 * close + 7 * dofK;
+      // (the new look's lens: a broader brush behind a close shot)
+      if (this.newLook && film) pipe.paintR[1] = 3.2 + 4.5 * close + 6 * dofK;
     }
   }
 
   // ------------------------------------------------------------------ the film's tools
   film(on) {
     const was = !!this.holdCam;
-    this.ui.film(on);
+    this.ui.film(on, !!this.newLook);
     // (no how-to card over the film)
     if (on) {
       this.howTok = (this.howTok || 0) + 1;
