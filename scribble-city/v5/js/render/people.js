@@ -211,6 +211,11 @@ const _x = new THREE.Vector3();
 const _y = new THREE.Vector3();
 const _z = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
+// (ROADMAP 23.6) how dark the parts now being laid are: 1, as they are; less for somebody the film keeps in the shade of a shot -
+// whoever's back is to the lens in a shot over their shoulder (fig.filmShade, 0..1 - game/prologue/director.js shot's `shade`):
+// the film's own key light is the same for all its people, and lit the back of a head as brightly as the face beyond it
+let SHADE = 1;
+const shadeOf = (fig) => (fig.filmShade > 0 ? 1 - 0.6 * fig.filmShade : 1);
 // (for the far-off walkers, drawCheap)
 const _cF = new THREE.Vector3();
 const _cR = new THREE.Vector3();
@@ -426,9 +431,10 @@ class DrawClass {
     m.toArray(this.mesh.instanceMatrix.array, i * 16);
     if (motion.on && !this.aux) partWas(this.prev, i, m, owner, sh.row);
     const c = this.mesh.instanceColor.array;
-    c[i * 3] = color[0];
-    c[i * 3 + 1] = color[1];
-    c[i * 3 + 2] = color[2];
+    // (SHADE: somebody kept dark in a shot of the film - fig.filmShade, below)
+    c[i * 3] = color[0] * SHADE;
+    c[i * 3 + 1] = color[1] * SHADE;
+    c[i * 3 + 2] = color[2] * SHADE;
     // (one buffer, the four side by side - a phone; or each its own, o its place in each - a computer)
     const W = this.W;
     const o = W ? i * W : i * 4;
@@ -1916,6 +1922,7 @@ export class PersonRenderer {
 
   // in full, in the picture
   drawFull(fig, camDist) {
+    SHADE = shadeOf(fig);
     if (fig.look.heroModel) {
       this.drawHero(fig);
       return;
@@ -2193,6 +2200,7 @@ export class PersonRenderer {
   // front of you; after dark the city's neon on him. Another colour bought for his jacket or his
   // trousers tints their drawing; a hat, glasses and what he holds come as for anybody.
   drawHero(fig) {
+    SHADE = shadeOf(fig);
     const L = fig.look;
     const j = fig.j;
     const P = fig.parts;
@@ -2455,6 +2463,7 @@ export class PersonRenderer {
   // body (render/folkshapes.js), their pictures turned over as his are, their lines - on the rig any
   // of the city's people walk, sit and turn on, in any pose of theirs
   drawFolk(fig, camDist) {
+    SHADE = shadeOf(fig);
     const L = fig.look;
     const F = this.folk[L.folk];
     const fem = !!F.spec.fem;
@@ -2747,6 +2756,7 @@ export class PersonRenderer {
   // away (aux false); for somebody drawn in full, only in the sun's view and the mirror (aux true:
   // what is drawn everywhere anyway, the shared shapes, is not drawn again)
   drawLow(fig, aux) {
+    SHADE = shadeOf(fig);
     const L = fig.look;
     const j = fig.j;
     const P = fig.parts;
