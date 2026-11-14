@@ -1,0 +1,951 @@
+import * as THREE from 'three';
+
+// Things doodle people carry around: a cane, a coffee, an umbrella, a pizza box, a bouquet...
+// Poses put the hands where the thing needs them; shapes are the solid parts (ray-traced like
+// the bodies), strokes the pen lines drawn over them.
+
+const RAINBOW = [[0.92, 0.3, 0.32], [0.98, 0.62, 0.22], [0.98, 0.86, 0.3], [0.42, 0.75, 0.4], [0.35, 0.58, 0.92], [0.62, 0.42, 0.85]];
+const _a = new THREE.Vector3();
+const _b = new THREE.Vector3();
+const _c = new THREE.Vector3();
+const _d = new THREE.Vector3();
+const _m = new THREE.Vector3();
+const _x = new THREE.Vector3();
+const _y = new THREE.Vector3();
+const _z = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
+
+const INK = [0.08, 0.08, 0.1];
+const WOOD = [0.38, 0.24, 0.13];
+const CARD = [0.78, 0.62, 0.42];
+const STEAM = [0.55, 0.55, 0.6];
+const TRASH = [0.1, 0.1, 0.12];
+
+// held with both hands (the left hand follows the right one's item)
+const TWO_HANDED = new Set(['pizzaBox', 'laundry', 'book', 'newspaper', 'dough', 'guitar', 'broom', 'dumbbell', 'box', 'boxHeld']);
+
+export function heldIn(fig, side) {
+  if (side === 1) return fig.carry;
+  return fig.carryL || (TWO_HANDED.has(fig.carry) ? fig.carry : null);
+}
+
+// where the hand goes for this item (body space: x right, y up, z forward); false = swing freely
+export function carryPose(fig, item, side, hipY, ny, nz, out) {
+  const t = fig.carryT;
+  const R = side === 1;
+  let x;
+  let y;
+  let z;
+  switch (item) {
+    case 'cane':
+      if (!R) return false;
+      [x, y, z] = [0.2, hipY - 0.06, 0.24];
+      break;
+    case 'umbrella':
+      // (the hero's drawn umbrella in the left hand, held up high in a fall: ROADMAP 9.2)
+      if (!R && fig.carryL !== 'umbrella') return false;
+      [x, y, z] = [side * 0.1, ny - 0.12 + (fig.umbrellaUp || 0) * 0.45, 0.22 - (fig.umbrellaUp || 0) * 0.1];
+      break;
+    case 'dshield':
+      // (ROADMAP 11.8: a drawn shield in the left hand, held up in front - game/weapons.js offModel)
+      if (R) return false;
+      [x, y, z] = [side * 0.2, ny - 0.24, 0.3];
+      break;
+    case 'coffee':
+      [x, y, z] = [side * 0.17, hipY + 0.2, 0.24];
+      break;
+    case 'icecream': {
+      // (round 23, the review: down at the chest while its holder talks - held up at the chin, the
+      // scoop was over a mouth that spoke - and up again between the words, eased both ways on the
+      // figure's own clock)
+      const talk = fig.say && !fig.say.done ? 1 : 0;
+      const dtc = Math.min(0.1, Math.max(0, t - (fig._coneT !== undefined ? fig._coneT : t)));
+      fig._coneT = t;
+      const k = (fig._coneK = (fig._coneK || 0) + (talk - (fig._coneK || 0)) * (1 - Math.exp(-dtc * 7)));
+      [x, y, z] = [side * (0.12 + 0.05 * k), ny - 0.1 - 0.24 * k, 0.27 - 0.04 * k];
+      break;
+    }
+    case 'apple':
+      [x, y, z] = [side * 0.12, ny - 0.1, 0.27];
+      break;
+    case 'flower':
+    case 'bouquet':
+      [x, y, z] = [side * 0.13, hipY + 0.24, 0.26];
+      break;
+    case 'balloon':
+      [x, y, z] = [side * 0.22, ny - 0.02, 0.14];
+      break;
+    case 'phone':
+      if (!R) return false;
+      [x, y, z] = [0.15, ny + 0.13, 0.04];
+      break;
+    case 'tray':
+      if (!R) return false;
+      [x, y, z] = [0.26, ny + 0.02, 0.2];
+      break;
+    case 'leash':
+      [x, y, z] = [side * 0.16, hipY + 0.06, 0.32];
+      break;
+    case 'pizzaBox':
+      [x, y, z] = [side * 0.17, hipY + 0.12, 0.3];
+      break;
+    // (v5, ROADMAP 11.17: what the mainland's stores and food counters hand you)
+    case 'burger':
+    case 'hotdog':
+    case 'teddy':
+      [x, y, z] = [side * 0.13, ny - 0.12, 0.27];
+      break;
+    case 'noodleBox':
+    case 'soda':
+      [x, y, z] = [side * 0.16, hipY + 0.22, 0.25];
+      break;
+    case 'shopBag':
+      return false;
+    // (v5, ROADMAP 11.18: shopping - the basket on the arm, a thing off the shelf held up to look at,
+    // a shirt on its hanger held up to the mirror, the stock box the staff carry, the card at the till)
+    case 'basket':
+      [x, y, z] = [side * 0.23, hipY + 0.02, 0.14];
+      break;
+    case 'item':
+      [x, y, z] = [side * 0.09, ny - 0.24, 0.3];
+      break;
+    case 'garment':
+      [x, y, z] = [side * 0.05, ny - 0.04 + (fig.holdUp || 0) * 0.12, 0.33];
+      break;
+    case 'box':
+      [x, y, z] = [side * 0.2, hipY + 0.2, 0.3];
+      break;
+    case 'card':
+      [x, y, z] = [side * 0.12, hipY + 0.4, 0.46];
+      break;
+    // (v5, ROADMAP 14.4: a shop's real things in a hand - game/shoplife.js draws them, the pose is
+    // here: a product held before the body, a basket by its handle at the side, a box held in both
+    // hands; the shop's own small tools - a cloth to wipe the counter, the scanner, the bills)
+    case 'held':
+      [x, y, z] = [side * 0.1, ny - 0.3, 0.28];
+      break;
+    case 'basketHeld':
+      [x, y, z] = [side * 0.24, hipY + 0.04, 0.08];
+      break;
+    case 'boxHeld':
+      [x, y, z] = [side * 0.19, hipY + 0.16, 0.3];
+      break;
+    case 'bagHeld':
+      [x, y, z] = [side * 0.2, hipY - 0.02, 0.06];
+      break;
+    case 'cloth':
+      [x, y, z] = [side * 0.14, hipY + 0.12, 0.3];
+      break;
+    case 'scanner':
+      if (!R) return false;
+      [x, y, z] = [0.12, ny - 0.18, 0.34];
+      break;
+    case 'cash':
+      [x, y, z] = [side * 0.12, hipY + 0.38, 0.42];
+      break;
+    case 'laundry':
+      [x, y, z] = [side * 0.21, hipY + 0.05, 0.27];
+      break;
+    case 'book':
+      [x, y, z] = [side * 0.1, ny - 0.17, 0.3];
+      break;
+    // (v5, ROADMAP 18: a child's sketchbook, held shut by its edge in front of the hip, its cover out)
+    case 'sketchbook':
+      [x, y, z] = [side * 0.15, hipY + 0.12, 0.14];
+      break;
+    case 'newspaper':
+      [x, y, z] = [side * 0.21, ny - 0.1, 0.32];
+      break;
+    case 'letters':
+      [x, y, z] = [side * 0.17, hipY + 0.22, 0.25];
+      break;
+    case 'camera':
+      if (!R) return false;
+      [x, y, z] = [0.1, ny - 0.24, 0.2];
+      break;
+    case 'dough': {
+      // tossing: the hands bounce up as the dough flies
+      const k = Math.max(0, Math.sin(t * 4.2));
+      [x, y, z] = [side * 0.13, ny + 0.12 + k * 0.22, 0.24];
+      break;
+    }
+    case 'guitar': {
+      const strum = Math.sin(t * 9) * 0.04;
+      if (R) [x, y, z] = [0.06, hipY + 0.1 + strum, 0.22];
+      else [x, y, z] = [-0.4, hipY + 0.26, 0.2];
+      break;
+    }
+    case 'broom': {
+      const sw = Math.sin(t * 2.6) * 0.16;
+      if (R) [x, y, z] = [0.06 + sw * 0.5, hipY - 0.12, 0.3 + sw];
+      else [x, y, z] = [-0.02 + sw * 0.3, hipY + 0.28, 0.22 + sw * 0.4];
+      break;
+    }
+    case 'dumbbell': {
+      const k = Math.max(0, Math.sin(t * 3 + (R ? 0 : Math.PI)));
+      [x, y, z] = [side * 0.22, hipY + 0.06 + k * 0.38, 0.16 + k * 0.08];
+      break;
+    }
+    default:
+      return false;
+  }
+  fig.toWorld(x, y, z, out);
+  return true;
+}
+
+// a horizontal frame around the body (keeps umbrellas and trays level when the body leans)
+function hframe(fig) {
+  _x.copy(fig.right);
+  _z.copy(fig.forward);
+  return [_x, UP, _z];
+}
+
+const _gh2 = new THREE.Vector3();
+const _gn2 = new THREE.Vector3();
+const _fh = new THREE.Vector3();
+// (round 25) Lily's marker's point under the hollow of her fist (game/prologue/page.js the same)
+export const MARKER_TIP = 0.055;
+// (round 25) drawn with whole hands this moment - render/people.js drawFolk: the hand closes round what
+// it holds (fig.grip, or an ice cream's cone upright), and the thing is in its fist, not at its wrist
+function fullHands(fig) {
+  return !!fig._fullHands;
+}
+// the hollow of the closed fist (render/heroshapes.js heroHandGeo, grip): 0.07 down the hand from the
+// wrist, 0.062 out from the palm - towards +n on the right hand, -n on the left (the left is the right
+// mirrored front to back); g the way what it holds lies across it; the hand's size fig._handK
+function fistOf(fig, side, g, out) {
+  const h = handOf(fig, side);
+  const el = side === 1 ? fig.j.elbowR : fig.j.elbowL;
+  const hk = (fig.scale || 1) * (fig._handK || 1);
+  out.copy(h);
+  _gh2.subVectors(h, el);
+  _gh2.addScaledVector(g, -_gh2.dot(g));
+  if (_gh2.lengthSq() < 1e-8) return out;
+  _gh2.normalize();
+  _gn2.crossVectors(g, _gh2);
+  return out.addScaledVector(_gh2, 0.07 * hk).addScaledVector(_gn2, side * 0.0607 * hk);
+}
+function handOf(fig, side) {
+  return side === 1 ? fig.j.handR : fig.j.handL;
+}
+
+function armOk(fig, side) {
+  return fig.parts[side === 1 ? 'armR' : 'armL'] > 0.5;
+}
+
+export function carryShapes(fig, ax, rgt, fwd, S) {
+  for (const side of [1, -1]) {
+    const item = side === 1 ? fig.carry : fig.carryL;
+    if (!item || !armOk(fig, side)) continue;
+    shapesFor(fig, item, side, S);
+  }
+}
+
+function shapesFor(fig, item, side, S) {
+  const part = side === 1 ? 'armR' : 'armL';
+  const bone = side === 1 ? 'handR' : 'handL';
+  const h = handOf(fig, side);
+  const [X, Y, Z] = hframe(fig);
+  const e = (c, rx, ry, rz, col) => fig.ellipsoid(part, bone, c, X, Y, Z, rx * S, ry * S, rz * S, col);
+  switch (item) {
+    case 'umbrella': {
+      const col = fig.umbrellaColor || [0.82, 0.22, 0.24];
+      _a.copy(h).addScaledVector(UP, 0.9 * S);
+      const dome = e(_a, 0.62, 0.3, 0.62, col);
+      fig.clip(dome, _b.set(0, -1, 0), _a, 0);
+      break;
+    }
+    case 'coffee':
+      _a.copy(h).addScaledVector(UP, -0.01 * S);
+      _b.copy(h).addScaledVector(UP, 0.09 * S);
+      fig.capsule(part, bone, _a, _b, 0.036 * S, [0.96, 0.95, 0.92]);
+      _a.copy(h).addScaledVector(UP, 0.04 * S);
+      e(_a, 0.041, 0.022, 0.041, [0.62, 0.42, 0.28]);
+      break;
+    case 'icecream':
+      // (round 25: in a whole hand, its cone upright in the fist - the scoop over the fist, not the wrist)
+      if (fullHands(fig)) _a.copy(fistOf(fig, side, UP, _fh)).addScaledVector(UP, 0.1 * S);
+      else _a.copy(h).addScaledVector(UP, 0.15 * S);
+      e(_a, 0.055, 0.05, 0.055, fig.scoopColor || [0.98, 0.66, 0.74]);
+      break;
+    case 'apple':
+      _a.copy(h).addScaledVector(UP, 0.035 * S).addScaledVector(Z, 0.02 * S);
+      e(_a, 0.042, 0.04, 0.042, [0.85, 0.16, 0.16]);
+      break;
+    case 'flower':
+      _a.copy(h).addScaledVector(UP, 0.32 * S);
+      e(_a, 0.05, 0.05, 0.05, fig.flowerColor || [0.9, 0.25, 0.35]);
+      break;
+    case 'bouquet': {
+      _a.copy(h).addScaledVector(UP, 0.09 * S);
+      e(_a, 0.06, 0.12, 0.06, [0.9, 0.86, 0.7]);
+      const cols = [[0.92, 0.25, 0.35], [0.98, 0.8, 0.25], [0.75, 0.4, 0.85], [0.98, 0.55, 0.7], [0.95, 0.95, 0.9]];
+      for (let i = 0; i < 5; i++) {
+        const a = i * 1.26;
+        _a.copy(h).addScaledVector(UP, (0.27 + (i % 2) * 0.05) * S).addScaledVector(X, Math.cos(a) * 0.06 * S).addScaledVector(Z, Math.sin(a) * 0.05 * S);
+        e(_a, 0.042, 0.04, 0.042, cols[i]);
+      }
+      break;
+    }
+    case 'bag':
+      _a.copy(h).addScaledVector(UP, -0.14 * S);
+      e(_a, 0.11, 0.15, 0.07, CARD);
+      break;
+    case 'shopBag': {
+      // a store's paper bag, in its colour, hanging from the rope handles
+      _a.copy(h).addScaledVector(UP, -0.2 * S);
+      const b = e(_a, 0.15, 0.17, 0.065, fig.shopBagColor || [0.95, 0.45, 0.6]);
+      fig.clip(b, _b.set(0, 1, 0), _a, 0.11 * S);
+      break;
+    }
+    case 'balloon': {
+      _a.copy(h).addScaledVector(UP, 0.95 * S + Math.sin(fig.carryT * 1.3) * 0.03 * S).addScaledVector(X, Math.sin(fig.carryT * 0.9) * 0.05 * S);
+      e(_a, 0.15, 0.19, 0.15, fig.balloonColor || [0.88, 0.2, 0.24]);
+      break;
+    }
+    case 'burger':
+      _a.copy(h).addScaledVector(UP, 0.08 * S);
+      e(_a, 0.07, 0.035, 0.07, [0.86, 0.62, 0.32]);
+      _a.copy(h).addScaledVector(UP, 0.035 * S);
+      e(_a, 0.072, 0.02, 0.072, [0.45, 0.26, 0.14]);
+      _a.copy(h).addScaledVector(UP, 0.005 * S);
+      e(_a, 0.066, 0.022, 0.066, [0.86, 0.62, 0.32]);
+      break;
+    // (v5, ROADMAP 11.18: from the cart at the curb - the bun, the sausage longer than it)
+    case 'hotdog':
+      _a.copy(h).addScaledVector(UP, 0.03 * S);
+      e(_a, 0.085, 0.03, 0.04, [0.9, 0.68, 0.38]);
+      _a.copy(h).addScaledVector(UP, 0.052 * S);
+      e(_a, 0.105, 0.018, 0.02, [0.72, 0.3, 0.22]);
+      break;
+    case 'noodleBox': {
+      _a.copy(h).addScaledVector(UP, 0.07 * S);
+      const b = e(_a, 0.06, 0.08, 0.06, [0.97, 0.96, 0.93]);
+      fig.clip(b, _b.set(0, 1, 0), _a, 0.055 * S);
+      break;
+    }
+    case 'soda':
+      _a.copy(h).addScaledVector(UP, -0.01 * S);
+      _b.copy(h).addScaledVector(UP, 0.11 * S);
+      fig.capsule(part, bone, _a, _b, 0.038 * S, fig.sodaColor || [0.86, 0.22, 0.24]);
+      break;
+    case 'teddy':
+      _a.copy(h).addScaledVector(UP, 0.06 * S).addScaledVector(Z, 0.03 * S);
+      e(_a, 0.07, 0.085, 0.06, [0.62, 0.42, 0.26]);
+      _a.copy(h).addScaledVector(UP, 0.18 * S).addScaledVector(Z, 0.03 * S);
+      e(_a, 0.06, 0.055, 0.055, [0.62, 0.42, 0.26]);
+      for (const k of [-1, 1]) {
+        _a.copy(h).addScaledVector(UP, 0.23 * S).addScaledVector(X, k * 0.045 * S).addScaledVector(Z, 0.03 * S);
+        e(_a, 0.022, 0.022, 0.018, [0.62, 0.42, 0.26]);
+      }
+      break;
+    case 'basket': {
+      // a shop's basket in its colour, and what is in it so far
+      _a.copy(h).addScaledVector(UP, -0.17 * S);
+      const b = e(_a, 0.17, 0.1, 0.12, fig.basketColor || [0.86, 0.2, 0.22]);
+      fig.clip(b, _b.set(0, 1, 0), _a, 0.06 * S);
+      const items = fig.basketItems || [];
+      for (let i = 0; i < Math.min(items.length, 4); i++) {
+        _c.copy(_a).addScaledVector(UP, 0.07 * S).addScaledVector(X, (i - 1.5) * 0.07 * S).addScaledVector(Z, ((i % 2) - 0.5) * 0.04 * S);
+        e(_c, 0.034, 0.05, 0.03, items[i]);
+      }
+      break;
+    }
+    case 'item':
+      _a.copy(h).addScaledVector(UP, 0.05 * S).addScaledVector(Z, 0.015 * S);
+      e(_a, 0.045, 0.075, 0.03, fig.itemColor || [0.9, 0.3, 0.3]);
+      break;
+    case 'garment':
+      _a.copy(h).addScaledVector(UP, -0.19 * S).addScaledVector(Z, 0.03 * S);
+      e(_a, 0.19, 0.24, 0.022, fig.itemColor || [0.45, 0.6, 0.95]);
+      break;
+    case 'box': {
+      if (side !== 1) break;
+      _m.addVectors(fig.j.handR, fig.j.handL).multiplyScalar(0.5).addScaledVector(UP, 0.07 * S);
+      e(_m, 0.23, 0.15, 0.17, CARD);
+      break;
+    }
+    case 'card':
+      _a.copy(h).addScaledVector(Z, 0.03 * S);
+      e(_a, 0.045, 0.005, 0.03, fig.cardColor || [0.3, 0.45, 0.85]);
+      break;
+    case 'sketchbook': {
+      // its cover: flat, upright, facing out and a little to the side, the hand at its outer edge -
+      // an oblong with rounded corners: its middle, and a corner's worth towards each corner
+      sketchbookFrame(fig, side, h, S);
+      const col = fig.bookColor || [0.32, 0.3, 0.52];
+      fig.ellipsoid(part, bone, _m, _x, _y, _z, 0.094 * S, 0.13 * S, 0.012 * S, col);
+      for (const [u, v] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
+        _c.copy(_m).addScaledVector(_x, u * 0.04 * S).addScaledVector(_y, v * 0.058 * S);
+        fig.ellipsoid(part, bone, _c, _x, _y, _z, 0.06 * S, 0.08 * S, 0.012 * S, col);
+      }
+      break;
+    }
+    // (ROADMAP 14.4) a cloth bunched in the hand; the shop's scanner gun, its handle and its nose;
+    // a few folded bills
+    case 'cloth':
+      _a.copy(h).addScaledVector(UP, -0.01 * S).addScaledVector(Z, 0.02 * S);
+      e(_a, 0.06, 0.03, 0.05, fig.clothColor || [0.36, 0.62, 0.86]);
+      break;
+    case 'scanner': {
+      _a.copy(h).addScaledVector(UP, 0.05 * S).addScaledVector(Z, 0.03 * S);
+      e(_a, 0.03, 0.035, 0.07, [0.16, 0.16, 0.18]);
+      _b.copy(h).addScaledVector(UP, -0.01 * S);
+      e(_b, 0.022, 0.05, 0.025, [0.96, 0.78, 0.14]);
+      break;
+    }
+    case 'cash':
+      _a.copy(h).addScaledVector(Z, 0.035 * S);
+      e(_a, 0.06, 0.006, 0.032, [0.52, 0.72, 0.46]);
+      break;
+    case 'trashbag':
+      // a black bin bag, tied at the top (the garbage truck's crew: game/fleet.js)
+      _a.copy(h).addScaledVector(UP, -0.22 * S);
+      e(_a, 0.17, 0.22, 0.15, TRASH);
+      _a.copy(h).addScaledVector(UP, -0.03 * S);
+      e(_a, 0.04, 0.05, 0.04, TRASH);
+      break;
+    case 'letters':
+      _a.copy(h).addScaledVector(UP, 0.06 * S).addScaledVector(Z, 0.02 * S);
+      e(_a, 0.105, 0.065, 0.022, [0.97, 0.95, 0.9]);
+      break;
+    case 'laundry': {
+      if (side !== 1) break;
+      _m.addVectors(fig.j.handR, fig.j.handL).multiplyScalar(0.5).addScaledVector(UP, 0.05 * S);
+      const b = e(_m, 0.24, 0.11, 0.17, [0.7, 0.55, 0.36]);
+      fig.clip(b, _b.set(0, 1, 0), _m, 0.06 * S);
+      const cols = [[0.3, 0.5, 0.85], [0.95, 0.95, 0.9], [0.9, 0.4, 0.45]];
+      for (let i = 0; i < 3; i++) {
+        _a.copy(_m).addScaledVector(UP, 0.08 * S).addScaledVector(X, (i - 1) * 0.11 * S);
+        e(_a, 0.08, 0.05, 0.1, cols[i]);
+      }
+      break;
+    }
+    case 'tray': {
+      _a.copy(h).addScaledVector(UP, 0.05 * S);
+      e(_a, 0.19, 0.012, 0.19, [0.72, 0.72, 0.75]);
+      for (const k of [-1, 1]) {
+        _b.copy(_a).addScaledVector(X, k * 0.07 * S).addScaledVector(UP, 0.01 * S);
+        _c.copy(_b).addScaledVector(UP, 0.08 * S);
+        fig.capsule(part, bone, _b, _c, 0.032 * S, [0.96, 0.95, 0.92]);
+      }
+      break;
+    }
+    case 'dough': {
+      if (side !== 1) break;
+      const k = Math.max(0, Math.sin(fig.carryT * 4.2));
+      _m.addVectors(fig.j.handR, fig.j.handL).multiplyScalar(0.5).addScaledVector(UP, (0.08 + k * 0.5) * S);
+      // spinning disc: wobble the axes a little
+      const sp = fig.carryT * 9;
+      _b.copy(X).multiplyScalar(Math.cos(sp)).addScaledVector(Z, Math.sin(sp));
+      _c.copy(Z).multiplyScalar(Math.cos(sp)).addScaledVector(X, -Math.sin(sp));
+      fig.ellipsoid(part, bone, _m, _b, UP, _c, 0.19 * S, 0.016 * S, 0.17 * S, [0.97, 0.9, 0.72]);
+      break;
+    }
+    case 'guitar': {
+      if (side !== 1) break;
+      guitarFrame(fig, S);
+      fig.ellipsoid(part, bone, _m, _x, _y, _z, 0.19 * S, 0.15 * S, 0.06 * S, [0.66, 0.38, 0.18]);
+      _a.copy(_m).addScaledVector(_x, 0.17 * S);
+      fig.ellipsoid(part, bone, _a, _x, _y, _z, 0.12 * S, 0.11 * S, 0.055 * S, [0.66, 0.38, 0.18]);
+      _a.copy(_m).addScaledVector(_x, 0.09 * S).addScaledVector(_z, 0.045 * S);
+      fig.ellipsoid(part, bone, _a, _x, _y, _z, 0.035 * S, 0.035 * S, 0.01 * S, [0.1, 0.08, 0.06]);
+      break;
+    }
+    case 'dumbbell': {
+      for (const k of [-1, 1]) {
+        _a.copy(h).addScaledVector(X, k * 0.09 * S);
+        e(_a, 0.03, 0.05, 0.05, [0.2, 0.2, 0.24]);
+      }
+      break;
+    }
+    case 'phone':
+      _a.copy(h).addScaledVector(Z, 0.01 * S);
+      e(_a, 0.02, 0.055, 0.03, [0.1, 0.1, 0.12]);
+      break;
+    case 'camera':
+      // a black camera, its lens forward
+      _a.copy(h).addScaledVector(Z, 0.02 * S);
+      e(_a, 0.065, 0.042, 0.035, [0.12, 0.12, 0.14]);
+      _b.copy(_a).addScaledVector(Z, 0.04 * S);
+      e(_b, 0.026, 0.026, 0.026, [0.34, 0.34, 0.38]);
+      break;
+    default:
+      break;
+  }
+}
+
+// (ROADMAP 18) a sketchbook held by its edge: its middle (_m) and its frame - _x across it towards
+// the body's middle, _y up it, _z out of its cover (forward, and out to the hand's side a little)
+function sketchbookFrame(fig, side, h, S) {
+  _z.copy(fig.forward).addScaledVector(fig.right, side * 0.25).normalize();
+  _x.copy(fig.right).multiplyScalar(-side).addScaledVector(_z, side * _z.dot(fig.right)).normalize();
+  _y.crossVectors(_z, _x).normalize();
+  if (_y.dot(UP) < 0) _y.negate();
+  _m.copy(h).addScaledVector(_x, 0.09 * S).addScaledVector(_y, -0.04 * S);
+}
+
+// the guitar hangs across the belly, neck up to the left hand
+function guitarFrame(fig, S) {
+  const j = fig.j;
+  _m.copy(j.hip).addScaledVector(fig.forward, 0.17 * S).addScaledVector(fig.right, 0.05 * S).addScaledVector(UP, 0.08 * S);
+  _x.copy(fig.right).multiplyScalar(-0.85).addScaledVector(UP, 0.45).normalize();
+  _z.copy(fig.forward);
+  _y.crossVectors(_z, _x).normalize();
+}
+
+export function carryStrokes(fig, w) {
+  for (const side of [1, -1]) {
+    const item = side === 1 ? fig.carry : fig.carryL;
+    if (!item || !armOk(fig, side)) continue;
+    strokesFor(fig, item, side, w);
+  }
+}
+
+function line(fig, a, b, col, w, seed) {
+  fig.stroke(a, b, col, w, 200 + seed);
+}
+
+function strokesFor(fig, item, side, w) {
+  const S = fig.scale;
+  const h = handOf(fig, side);
+  const [X, , Z] = hframe(fig);
+  const ink = fig.look.pen.ink;
+  const t = fig.carryT;
+  const sd = side === 1 ? 0 : 50;
+  switch (item) {
+    case 'cane': {
+      _a.copy(h).addScaledVector(UP, 0.07 * S);
+      _b.set(h.x + Z.x * 0.06 * S, fig.pos.y + 0.02, h.z + Z.z * 0.06 * S);
+      line(fig, _a, _b, WOOD, w * 2.6, sd + 1);
+      // the crook
+      let px = _a.x;
+      let py = _a.y;
+      let pz = _a.z;
+      for (let i = 1; i <= 4; i++) {
+        const k = (i / 4) * Math.PI;
+        _c.copy(h).addScaledVector(UP, 0.07 * S + Math.sin(k) * 0.06 * S).addScaledVector(Z, (1 - Math.cos(k)) * 0.05 * S);
+        fig.fr.lineXYZ(px, py, pz, _c.x, _c.y, _c.z, WOOD, w * 2.6, fig.seed + 210 + i, 1, 0.01, 0.004);
+        px = _c.x;
+        py = _c.y;
+        pz = _c.z;
+      }
+      break;
+    }
+    case 'umbrella': {
+      const top = _a.copy(h).addScaledVector(UP, 1.2 * S);
+      _b.copy(h).addScaledVector(UP, -0.1 * S);
+      line(fig, _b, top, ink, w * 1.4, sd + 2);
+      // J handle
+      _c.copy(_b).addScaledVector(UP, -0.05 * S).addScaledVector(X, 0.04 * S);
+      line(fig, _b, _c, ink, w * 1.6, sd + 3);
+      _d.copy(_c).addScaledVector(UP, 0.04 * S).addScaledVector(X, 0.04 * S);
+      line(fig, _c, _d, ink, w * 1.6, sd + 4);
+      // ribs and rim
+      const cy = h.y + 0.9 * S;
+      for (let i = 0; i < 8; i++) {
+        const a0 = (i / 8) * Math.PI * 2;
+        const a1 = ((i + 1) / 8) * Math.PI * 2;
+        _c.set(h.x + Math.cos(a0) * 0.62 * S, cy, h.z + Math.sin(a0) * 0.62 * S);
+        _d.set(h.x + Math.cos(a1) * 0.62 * S, cy, h.z + Math.sin(a1) * 0.62 * S);
+        line(fig, _c, _d, ink, w, sd + 5 + i);
+        _b.set(h.x + Math.cos(a0) * 0.3 * S, cy + 0.26 * S, h.z + Math.sin(a0) * 0.3 * S);
+        line(fig, top.set(h.x, cy + 0.3 * S, h.z), _b, ink, w * 0.7, sd + 15 + i);
+        line(fig, _b, _c, ink, w * 0.7, sd + 25 + i);
+      }
+      break;
+    }
+    case 'coffee': {
+      // lid and a curl of steam
+      for (let i = 0; i < 2; i++) {
+        let px = h.x + (i - 0.5) * 0.03 * S;
+        let py = h.y + 0.12 * S;
+        let pz = h.z;
+        for (let k = 1; k <= 4; k++) {
+          const nx = h.x + (i - 0.5) * 0.03 * S + Math.sin(t * 3 + k * 1.3 + i) * 0.02 * S;
+          const ny = h.y + (0.12 + k * 0.045) * S;
+          fig.fr.lineXYZ(px, py, pz, nx, ny, pz, STEAM, w * 0.7, fig.seed + 240 + k + i * 5, 0.7 - k * 0.12, 0.01, 0);
+          px = nx;
+          py = ny;
+        }
+      }
+      break;
+    }
+    case 'icecream': {
+      // the cone: a crisp waffle triangle under the scoop
+      // (round 25, the player's word: her hand through the ice cream - in a whole hand the cone is in
+      // the fist, its point out under it and its rim over it, as a cone is held)
+      const o = fullHands(fig) ? fistOf(fig, side, UP, _fh) : null;
+      const base = o || h;
+      const top = o ? 0.06 : 0.11;
+      const tip = o ? -0.08 : -0.06;
+      _a.copy(base).addScaledVector(UP, top * S).addScaledVector(X, -0.04 * S);
+      _b.copy(base).addScaledVector(UP, top * S).addScaledVector(X, 0.04 * S);
+      _c.copy(base).addScaledVector(UP, tip * S);
+      line(fig, _a, _b, [0.86, 0.66, 0.36], w * 3.4, sd + 41);
+      _d.lerpVectors(_a, _b, 0.5).lerp(_c, 0.45);
+      line(fig, _d, _c, [0.86, 0.66, 0.36], w * 3.2, sd + 42);
+      line(fig, _a, _c, ink, w * 0.9, sd + 43);
+      line(fig, _b, _c, ink, w * 0.9, sd + 44);
+      break;
+    }
+    case 'flower':
+      _a.copy(h).addScaledVector(UP, 0.3 * S);
+      line(fig, h, _a, [0.25, 0.55, 0.25], w * 1.3, sd + 45);
+      break;
+    case 'bouquet':
+      for (let i = 0; i < 3; i++) {
+        _a.copy(h).addScaledVector(UP, 0.26 * S).addScaledVector(X, (i - 1) * 0.05 * S);
+        line(fig, h, _a, [0.25, 0.55, 0.25], w * 1.1, sd + 46 + i);
+      }
+      break;
+    case 'bag':
+      _a.copy(h).addScaledVector(UP, -0.02 * S).addScaledVector(X, -0.05 * S);
+      _b.copy(h).addScaledVector(UP, -0.02 * S).addScaledVector(X, 0.05 * S);
+      line(fig, h, _a, ink, w, sd + 50);
+      line(fig, h, _b, ink, w, sd + 51);
+      if (fig.bagBread) {
+        _a.copy(h).addScaledVector(UP, -0.05 * S).addScaledVector(Z, 0.03 * S);
+        _b.copy(_a).addScaledVector(UP, 0.22 * S).addScaledVector(X, 0.04 * S);
+        line(fig, _a, _b, [0.86, 0.66, 0.36], w * 3.6, sd + 52);
+      }
+      break;
+    case 'shopBag': {
+      // the rope handles up to the hand, the store's mark on its side
+      _a.copy(h).addScaledVector(UP, -0.09 * S).addScaledVector(X, -0.07 * S);
+      _b.copy(h).addScaledVector(UP, -0.09 * S).addScaledVector(X, 0.07 * S);
+      line(fig, h, _a, ink, w, sd + 170);
+      line(fig, h, _b, ink, w, sd + 171);
+      _a.copy(h).addScaledVector(UP, -0.2 * S).addScaledVector(X, -0.05 * S).addScaledVector(Z, 0.068 * S);
+      _b.copy(_a).addScaledVector(X, 0.1 * S);
+      line(fig, _a, _b, fig.shopBagMark || [0.98, 0.98, 0.96], w * 2.6, sd + 172);
+      break;
+    }
+    case 'basket': {
+      // its two handles up to the hand, the weave round its side
+      _a.copy(h).addScaledVector(UP, -0.1 * S).addScaledVector(X, -0.13 * S);
+      _b.copy(h).addScaledVector(UP, -0.1 * S).addScaledVector(X, 0.13 * S);
+      line(fig, h, _a, ink, w * 1.2, sd + 185);
+      line(fig, h, _b, ink, w * 1.2, sd + 186);
+      for (let i = 0; i < 2; i++) {
+        _a.copy(h).addScaledVector(UP, (-0.16 - i * 0.05) * S).addScaledVector(X, -0.15 * S).addScaledVector(Z, 0.11 * S);
+        _b.copy(_a).addScaledVector(X, 0.3 * S);
+        line(fig, _a, _b, ink, w * 0.7, sd + 187 + i);
+      }
+      break;
+    }
+    case 'garment':
+      // the hanger: its hook over the hand, its bar across the shoulders of the shirt
+      _a.copy(h).addScaledVector(UP, 0.04 * S);
+      line(fig, h, _a, [0.5, 0.5, 0.55], w * 0.9, sd + 190);
+      _a.copy(h).addScaledVector(UP, -0.03 * S).addScaledVector(X, -0.16 * S).addScaledVector(Z, 0.03 * S);
+      _b.copy(_a).addScaledVector(X, 0.32 * S);
+      line(fig, _a, _b, [0.5, 0.5, 0.55], w * 1.2, sd + 191);
+      break;
+    case 'box': {
+      if (side !== 1) break;
+      _m.addVectors(fig.j.handR, fig.j.handL).multiplyScalar(0.5).addScaledVector(UP, -0.08 * S);
+      boxStrokes(fig, _m, X, Z, 0.24 * S, 0.18 * S, 0.3 * S, CARD, ink, w);
+      break;
+    }
+    case 'balloon':
+      _a.copy(h).addScaledVector(UP, 0.76 * S + Math.sin(fig.carryT * 1.3) * 0.03 * S).addScaledVector(X, Math.sin(fig.carryT * 0.9) * 0.05 * S);
+      _b.lerpVectors(h, _a, 0.5).addScaledVector(X, 0.03 * S);
+      line(fig, h, _b, ink, w * 0.7, sd + 180);
+      line(fig, _b, _a, ink, w * 0.7, sd + 181);
+      break;
+    case 'hotdog':
+      // the mustard along it
+      _a.copy(h).addScaledVector(UP, 0.07 * S).addScaledVector(X, -0.08 * S);
+      _b.copy(_a).addScaledVector(X, 0.16 * S);
+      line(fig, _a, _b, [0.98, 0.82, 0.15], w * 1.6, sd + 177);
+      break;
+    case 'burger':
+      _a.copy(h).addScaledVector(UP, 0.05 * S).addScaledVector(X, -0.07 * S);
+      _b.copy(_a).addScaledVector(X, 0.14 * S);
+      line(fig, _a, _b, [0.35, 0.65, 0.3], w * 1.8, sd + 175);
+      break;
+    case 'noodleBox':
+      // two chopsticks out of the top
+      for (const k of [-1, 1]) {
+        _a.copy(h).addScaledVector(UP, 0.1 * S).addScaledVector(X, k * 0.012 * S);
+        _b.copy(_a).addScaledVector(UP, 0.14 * S).addScaledVector(X, 0.05 * S);
+        line(fig, _a, _b, WOOD, w * 1.1, sd + 176 + k);
+      }
+      break;
+    case 'soda':
+      _a.copy(h).addScaledVector(UP, 0.12 * S);
+      _b.copy(_a).addScaledVector(UP, 0.09 * S).addScaledVector(X, 0.02 * S);
+      line(fig, _a, _b, [0.3, 0.6, 0.9], w * 1.4, sd + 179);
+      break;
+    case 'pizzaBox': {
+      if (side !== 1) break;
+      _m.addVectors(fig.j.handR, fig.j.handL).multiplyScalar(0.5).addScaledVector(UP, 0.03 * S);
+      boxStrokes(fig, _m, X, Z, 0.24 * S, 0.24 * S, 0.06 * S, CARD, ink, w);
+      // a red logo blob
+      _a.copy(_m).addScaledVector(UP, 0.065 * S).addScaledVector(X, -0.05 * S);
+      _b.copy(_a).addScaledVector(X, 0.08 * S);
+      line(fig, _a, _b, [0.8, 0.2, 0.18], w * 3, 60);
+      break;
+    }
+    case 'book': {
+      if (side !== 1) break;
+      _m.addVectors(fig.j.handR, fig.j.handL).multiplyScalar(0.5).addScaledVector(Z, 0.02 * S);
+      for (const k of [-1, 1]) {
+        // two pages tilted up toward the reader
+        _a.copy(_m).addScaledVector(X, k * 0.15 * S).addScaledVector(UP, 0.05 * S);
+        _b.copy(_m).addScaledVector(UP, -0.02 * S);
+        for (let i = 0; i < 4; i++) {
+          _c.copy(_a).addScaledVector(UP, (i - 1.5) * 0.04 * S);
+          _d.copy(_b).addScaledVector(UP, (i - 1.5) * 0.04 * S);
+          line(fig, _c, _d, i === 0 || i === 3 ? ink : [0.97, 0.96, 0.92], i === 0 || i === 3 ? w : w * 4, 62 + i + (k > 0 ? 5 : 0));
+        }
+      }
+      break;
+    }
+    case 'sketchbook': {
+      // (ROADMAP 18) its edges drawn round, the spiral along its top, stars and a heart stuck on it;
+      // its pages' edges, cream, round its sides and its foot
+      sketchbookFrame(fig, side, h, S);
+      const at = (u, v, o, z = 0.0125) => o.copy(_m).addScaledVector(_x, u * S).addScaledVector(_y, v * S).addScaledVector(_z, z * S);
+      const hw = 0.088;
+      const hh = 0.122;
+      const rc = 0.035;
+      for (const [u0, v0, u1, v1, k] of [[-hw - 0.004, hh - 0.02, -hw - 0.004, -hh + 0.02, 0], [hw + 0.004, hh - 0.02, hw + 0.004, -hh + 0.02, 1], [-hw + 0.02, -hh - 0.004, hw - 0.02, -hh - 0.004, 2]]) {
+        line(fig, at(u0, v0, _a, 0), at(u1, v1, _b, 0), [0.96, 0.93, 0.84], w * 0.6, sd + 181 + k);
+      }
+      const ring = [];
+      for (const [cu, cv, a0] of [[hw - rc, hh - rc, 0], [-hw + rc, hh - rc, Math.PI / 2], [-hw + rc, -hh + rc, Math.PI], [hw - rc, -hh + rc, Math.PI * 1.5]]) {
+        for (let i = 0; i <= 2; i++) {
+          const a = a0 + (i / 2) * (Math.PI / 2);
+          ring.push([cu + Math.cos(a) * rc, cv + Math.sin(a) * rc]);
+        }
+      }
+      for (let i = 0; i < ring.length; i++) {
+        const p = ring[i];
+        const q = ring[(i + 1) % ring.length];
+        line(fig, at(p[0], p[1], _a), at(q[0], q[1], _b), ink, w * 0.9, sd + 150 + i);
+      }
+      for (let i = 0; i < 8; i++) {
+        const u = -0.07 + i * 0.02;
+        line(fig, at(u, hh - 0.016, _a), at(u + 0.004, hh + 0.012, _b), [0.72, 0.72, 0.76], w * 0.7, sd + 165 + i);
+      }
+      for (const [cu, cv, r, col, k] of [[-0.03, 0.04, 0.022, [0.95, 0.76, 0.19], 0], [0.042, 0.062, 0.013, [0.5, 0.72, 0.95], 3]]) {
+        for (let i = 0; i < 3; i++) {
+          const a = (i / 3) * Math.PI + 0.3;
+          line(fig, at(cu + Math.cos(a) * r, cv + Math.sin(a) * r, _a), at(cu - Math.cos(a) * r, cv - Math.sin(a) * r, _b), col, w * 1.4, sd + 174 + k + i);
+        }
+      }
+      line(fig, at(0.03, -0.06, _a), at(0.036, -0.046, _b), [0.91, 0.35, 0.63], w * 2.2, sd + 180);
+      break;
+    }
+    case 'newspaper': {
+      if (side !== 1) break;
+      _m.addVectors(fig.j.handR, fig.j.handL).multiplyScalar(0.5).addScaledVector(UP, 0.08 * S);
+      for (let i = 0; i < 6; i++) {
+        _a.copy(_m).addScaledVector(X, -0.21 * S).addScaledVector(UP, (0.14 - i * 0.055) * S);
+        _b.copy(_a).addScaledVector(X, 0.42 * S);
+        line(fig, _a, _b, [0.93, 0.92, 0.88], w * 5.5, 70 + i);
+      }
+      for (let i = 0; i < 5; i++) {
+        _a.copy(_m).addScaledVector(X, -0.17 * S).addScaledVector(UP, (0.12 - i * 0.06) * S).addScaledVector(Z, -0.01 * S);
+        _b.copy(_a).addScaledVector(X, (i === 0 ? 0.34 : 0.14) * S);
+        line(fig, _a, _b, i === 0 ? ink : [0.5, 0.5, 0.55], i === 0 ? w * 1.6 : w * 0.7, 80 + i);
+      }
+      break;
+    }
+    case 'laundry':
+      break;
+    case 'letters': {
+      // the bundle's edges, the rubber band round it, the top envelope's flap
+      _m.copy(h).addScaledVector(UP, 0.06 * S).addScaledVector(Z, 0.045 * S);
+      const hw = 0.1 * S;
+      const hh = 0.06 * S;
+      for (const [u0, v0, u1, v1] of [[-1, -1, 1, -1], [1, -1, 1, 1], [1, 1, -1, 1], [-1, 1, -1, -1]]) {
+        _a.copy(_m).addScaledVector(X, u0 * hw).addScaledVector(UP, v0 * hh);
+        _b.copy(_m).addScaledVector(X, u1 * hw).addScaledVector(UP, v1 * hh);
+        line(fig, _a, _b, ink, w * 0.8, sd + 140 + u0 + v0 * 2);
+      }
+      _a.copy(_m).addScaledVector(UP, -hh * 1.05);
+      _b.copy(_m).addScaledVector(UP, hh * 1.05);
+      line(fig, _a, _b, [0.85, 0.2, 0.2], w * 1.4, sd + 146);
+      _a.copy(_m).addScaledVector(X, -hw).addScaledVector(UP, hh);
+      _b.copy(_m).addScaledVector(UP, hh * 0.1);
+      line(fig, _a, _b, ink, w * 0.6, sd + 147);
+      _a.copy(_m).addScaledVector(X, hw).addScaledVector(UP, hh);
+      line(fig, _b, _a, ink, w * 0.6, sd + 148);
+      break;
+    }
+    case 'broom': {
+      if (side !== 1) break;
+      const hl = fig.j.handL;
+      _d.subVectors(h, hl).normalize();
+      _b.copy(h).addScaledVector(_d, Math.max(0.1, (h.y - fig.pos.y - 0.18) / Math.max(0.2, -_d.y)));
+      _b.y = Math.max(_b.y, fig.pos.y + 0.18);
+      _a.copy(hl).addScaledVector(_d, -0.1 * S);
+      line(fig, _a, _b, WOOD, w * 1.8, 90);
+      for (let i = 0; i < 5; i++) {
+        _c.copy(_b).addScaledVector(X, (i - 2) * 0.06 * S);
+        _c.y = fig.pos.y + 0.02;
+        line(fig, _b, _c, [0.86, 0.72, 0.3], w * 1.6, 91 + i);
+      }
+      break;
+    }
+    case 'guitar': {
+      if (side !== 1) break;
+      guitarFrame(fig, S);
+      _a.copy(_m).addScaledVector(_x, 0.26 * S);
+      _b.copy(_m).addScaledVector(_x, 0.68 * S);
+      line(fig, _a, _b, [0.3, 0.18, 0.1], w * 2.6, 100);
+      _c.copy(_b).addScaledVector(_x, 0.1 * S);
+      line(fig, _b, _c, [0.2, 0.12, 0.08], w * 3.4, 101);
+      for (let i = -1; i <= 1; i++) {
+        _a.copy(_m).addScaledVector(_y, i * 0.012 * S).addScaledVector(_z, 0.06 * S);
+        _b.copy(_a).addScaledVector(_x, 0.7 * S);
+        line(fig, _a, _b, [0.85, 0.85, 0.8], w * 0.5, 102 + i);
+      }
+      break;
+    }
+    case 'dumbbell':
+      _a.copy(h).addScaledVector(X, -0.09 * S);
+      _b.copy(h).addScaledVector(X, 0.09 * S);
+      line(fig, _a, _b, [0.45, 0.45, 0.5], w * 1.6, sd + 110);
+      break;
+    case 'pencil': {
+      // a big drawing pencil, tip forward along the forearm
+      const el = side === 1 ? fig.j.elbowR : fig.j.elbowL;
+      _d.subVectors(h, el).normalize();
+      // (round 15: Lily's coloured pencil - fig.pencilCol: its body and its point the colour it puts on
+      // the page, the bare wood between them; big enough to be seen, its point 0.17 ahead of her hand -
+      // game/prologue/page.js)
+      // (round 24, the player's word: the pencils part of her hand - held now as a pencil is held,
+      // slanting through her fingers to its point on the page (fig.pencilAx, game/prologue/page.js):
+      // its point under her fingers, its end out over her knuckles; thinner than a finger, as it is.
+      // Her coloured one the colour it puts on; her drawing pencil yellow, its point graphite)
+      if (fig.pencilAx) {
+        const ax = fig.pencilAx;
+        // (through the hollow of her fist - render/people.js closes it round it, fig.grip - its point
+        // MARKER_TIP below it: game/prologue/page.js)
+        _c.copy(fig.grip ? fistOf(fig, 1, fig.grip, _fh) : h).addScaledVector(ax, -MARKER_TIP * S);
+        if (fig.pencilCol) {
+          // (round 25, the player's word: smaller markers, as a child's are - a felt tip the colour it
+          // draws, a grey collar, a white barrel, and its cap at the end in its colour)
+          const pc = fig.pencilCol;
+          _a.copy(_c).addScaledVector(ax, 0.011 * S);
+          line(fig, _c, _a, pc, w * 0.55, sd + 123);
+          _b.copy(_a).addScaledVector(ax, 0.009 * S);
+          line(fig, _a, _b, [0.62, 0.62, 0.66], w * 0.8, sd + 121);
+          _a.copy(_b).addScaledVector(ax, 0.075 * S);
+          line(fig, _b, _a, [0.95, 0.94, 0.9], w * 1.05, sd + 120);
+          _b.copy(_a).addScaledVector(ax, 0.032 * S);
+          line(fig, _a, _b, pc, w * 1.15, sd + 124);
+          break;
+        }
+        _b.copy(_c).addScaledVector(ax, 0.028 * S);
+        _a.copy(_c).addScaledVector(ax, 0.13 * S);
+        line(fig, _b, _a, [0.96, 0.78, 0.22], w * 1.05, sd + 120);
+        line(fig, _c, _b, [0.93, 0.8, 0.62], w * 0.8, sd + 121);
+        _a.copy(_c).addScaledVector(ax, 0.01 * S);
+        line(fig, _c, _a, [0.25, 0.22, 0.2], w * 0.55, sd + 123);
+        break;
+      }
+      if (fig.pencilCol) {
+        const pc = fig.pencilCol;
+        _a.copy(h).addScaledVector(_d, -0.07 * S);
+        _b.copy(h).addScaledVector(_d, 0.13 * S);
+        line(fig, _a, _b, pc, w * 2.6, sd + 120);
+        _c.copy(_b).addScaledVector(_d, 0.04 * S);
+        line(fig, _b, _c, [0.93, 0.8, 0.62], w * 1.7, sd + 121);
+        _a.copy(_c).addScaledVector(_d, -0.016 * S);
+        line(fig, _a, _c, pc, w * 1.0, sd + 123);
+        break;
+      }
+      _a.copy(h).addScaledVector(_d, -0.1 * S);
+      _b.copy(h).addScaledVector(_d, 0.2 * S);
+      line(fig, _a, _b, [0.96, 0.78, 0.22], w * 3.6, sd + 120);
+      _c.copy(_b).addScaledVector(_d, 0.07 * S);
+      line(fig, _b, _c, [0.25, 0.22, 0.2], w * 2, sd + 121);
+      _c.copy(_a).addScaledVector(_d, -0.05 * S);
+      line(fig, _a, _c, [0.95, 0.6, 0.66], w * 3.6, sd + 122);
+      break;
+    }
+    case 'magicPencil': {
+      // a pencil striped in every colour, a twinkle at its tip
+      const el = side === 1 ? fig.j.elbowR : fig.j.elbowL;
+      _d.subVectors(h, el).normalize();
+      for (let i = 0; i < 6; i++) {
+        _a.copy(h).addScaledVector(_d, (-0.1 + i * 0.05) * S);
+        _b.copy(h).addScaledVector(_d, (-0.05 + i * 0.05) * S);
+        line(fig, _a, _b, RAINBOW[i], w * 3.4, sd + 160 + i);
+      }
+      _a.copy(h).addScaledVector(_d, 0.2 * S);
+      _c.copy(_a).addScaledVector(_d, 0.06 * S);
+      line(fig, _a, _c, [0.96, 0.84, 0.66], w * 2.2, sd + 167);
+      const k = 0.5 + 0.5 * Math.sin(t * 9);
+      const s2 = (0.03 + 0.035 * k) * S;
+      _a.copy(_c).addScaledVector(UP, s2);
+      _b.copy(_c).addScaledVector(UP, -s2);
+      line(fig, _a, _b, [1, 0.86, 0.3], w * 1.3, sd + 168);
+      _a.copy(_c).addScaledVector(X, s2);
+      _b.copy(_c).addScaledVector(X, -s2);
+      line(fig, _a, _b, [1, 0.86, 0.3], w * 1.3, sd + 169);
+      break;
+    }
+    case 'eraser': {
+      // a pink-and-blue eraser block, rubbing
+      const el = side === 1 ? fig.j.elbowR : fig.j.elbowL;
+      _d.subVectors(h, el).normalize();
+      _a.copy(h).addScaledVector(_d, -0.02 * S);
+      _b.copy(h).addScaledVector(_d, 0.07 * S);
+      line(fig, _a, _b, [0.95, 0.6, 0.66], w * 6, sd + 125);
+      _c.copy(_b).addScaledVector(_d, 0.06 * S);
+      line(fig, _b, _c, [0.42, 0.55, 0.88], w * 6, sd + 126);
+      break;
+    }
+    case 'leash':
+      if (fig.leashTo) line(fig, h, fig.leashTo, [0.7, 0.2, 0.2], w * 1.1, sd + 130);
+      break;
+    case 'scissors': {
+      const k = Math.abs(Math.sin(t * 10)) * 0.5;
+      for (const s of [-1, 1]) {
+        _a.copy(h).addScaledVector(UP, s * k * 0.03 * S);
+        _b.copy(h).addScaledVector(Z, 0.12 * S).addScaledVector(UP, -s * k * 0.05 * S);
+        line(fig, _a, _b, [0.72, 0.74, 0.78], w * 1.3, sd + 140 + s);
+      }
+      break;
+    }
+    case 'phone':
+      break;
+    case 'camera':
+      // its strap round the neck
+      line(fig, h, fig.j.neck, [0.15, 0.15, 0.18], w * 0.8, sd + 150);
+      break;
+    default:
+      break;
+  }
+}
+
+// a cardboard box: top face hatched in its colour, edges in ink
+function boxStrokes(fig, c, X, Z, hx, hz, hy, col, ink, w) {
+  const P = (u, v, y, out) => out.copy(c).addScaledVector(X, u * hx).addScaledVector(Z, v * hz).addScaledVector(UP, y);
+  for (let i = 0; i < 4; i++) {
+    const v = -0.75 + i * 0.5;
+    P(-0.9, v, hy, _a);
+    P(0.9, v, hy, _b);
+    fig.stroke(_a, _b, col, w * 4.5, 300 + i);
+  }
+  const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+  for (let i = 0; i < 4; i++) {
+    const [u0, v0] = corners[i];
+    const [u1, v1] = corners[(i + 1) % 4];
+    P(u0, v0, hy, _a);
+    P(u1, v1, hy, _b);
+    fig.stroke(_a, _b, ink, w, 310 + i);
+    P(u0, v0, 0, _a);
+    P(u1, v1, 0, _b);
+    fig.stroke(_a, _b, col, w * 2.5, 320 + i);
+    P(u0, v0, 0, _a);
+    P(u0, v0, hy, _b);
+    fig.stroke(_a, _b, ink, w * 0.8, 330 + i);
+  }
+}

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="he">
+<head>
+<meta charset="utf-8">
+<title>engine test</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#f8f4e9}canvas{display:block}</style>
+<script type="importmap">{ "imports": { "three": "../js/vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import { shared, makeLineMaterial, makeSurfaceMaterial, makeSkyMesh } from '../js/render/materials.js';
+import { StrokeList } from '../js/render/LineBatch.js';
+import { MeshBuilder, STYLE } from '../js/render/MeshBuilder.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(1);
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+shared.uResolution.value.set(innerWidth, innerHeight);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.15, 900);
+scene.add(makeSkyMesh());
+const surf = makeSurfaceMaterial({ hatchScale: 2.6 });
+const lineMat = makeLineMaterial();
+const mb = new MeshBuilder();
+const sl = new StrokeList();
+mb.flat(-300, -300, 300, 300, 0, STYLE.GRAPH, [1, 1, 1]);
+mb.flat(-6, -200, 6, 200, 0.02, STYLE.ROAD_AVE, [1, 1, 1], { alongZ: true });
+const P = [0.972, 0.957, 0.914];
+const brick = [0.78, 0.42, 0.33];
+function building(x0, z0, x1, z1, h, style, color, cell) {
+  mb.box([x0, 0, z0], [x1, h, z1], { color, sideStyle: style, cell, groundH: 4.2, seed: x0 * 0.37 + z0 * 0.11, topStyle: STYLE.ROOF });
+  sl.boxEdges([x0, 0, z0], [x1, h, z1], { width: 2.7, vStrokes: 2, noBottom: false });
+}
+building(10, -40, 30, -20, 22, STYLE.WIN_BROWN, brick, [3.2, 3.4]);
+building(10, -15, 26, 5, 60, STYLE.WIN_TOWER, P, [2.6, 3.6]);
+building(10, 10, 34, 30, 95, STYLE.WIN_GLASS, [0.75, 0.85, 0.95], [3.0, 3.8]);
+building(-30, -40, -10, -20, 30, STYLE.WIN_OFFICE, [0.86, 0.8, 0.66], [3.0, 3.6]);
+building(-32, -12, -10, 8, 18, STYLE.WIN_LOFT, P, [3.4, 3.5]);
+const mesh = new THREE.Mesh(mb.build(), surf);
+scene.add(mesh);
+const lines = sl.toBatch(lineMat);
+scene.add(lines.mesh);
+const params = new URLSearchParams(location.search);
+const cp = (params.get('cam') || '0,1.8,40,0,0').split(',').map(Number);
+camera.position.set(cp[0], cp[1], cp[2]);
+camera.rotation.order = 'YXZ';
+camera.rotation.y = cp[3];
+camera.rotation.x = cp[4];
+let t = 0;
+function frame() {
+  t += 1 / 60;
+  shared.uTime.value = t;
+  shared.uBoil.value = Math.floor(t * 7);
+  renderer.render(scene, camera);
+}
+frame();
+window.__dbg = { renderer, scene, lines, lineMat, surf, camera, frame }; window.__ready = true;
+setInterval(frame, 100);
+</script>
+</body>
+</html>
