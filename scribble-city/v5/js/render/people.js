@@ -563,6 +563,39 @@ function along(a, b, len0, k, side, out = _m) {
   return out;
 }
 
+// (ROADMAP 23, the owner's word: 'hands come out the wrong way round, twisted') a hand turned as it is asked - game/doodle.js
+// handF / handN: its fingers along f, its palm facing n - and no further off its forearm (fore: elbow to wrist) than a wrist
+// bends. The hands' own shapes (render/heroshapes.js heroHandGeo): from the wrist down -y to the fingertips, the right one's palm
+// to -z and its thumb to +x, the left one's palm to +z and its thumb to +x too - so for both, a thumb on the side a hand's own
+// thumb is on: looking into the palm with the fingers up, the right hand's thumb to the right, the left hand's to the left
+const _hF = new THREE.Vector3();
+const _hN = new THREE.Vector3();
+const _hP = new THREE.Vector3();
+const WRIST = Math.cos(1.08);
+function handFrame(hd, f, n, fore, left, kx, sy, out = _m) {
+  _hF.copy(f).normalize();
+  const c = _hF.dot(fore);
+  if (c < WRIST) {
+    _hP.copy(_hF).addScaledVector(fore, -c);
+    if (_hP.lengthSq() < 1e-8) _hP.copy(n).addScaledVector(fore, -n.dot(fore));
+    _hP.normalize();
+    _hF.copy(fore).multiplyScalar(WRIST).addScaledVector(_hP, Math.sqrt(1 - WRIST * WRIST));
+  }
+  _hN.copy(n).addScaledVector(_hF, -n.dot(_hF));
+  if (_hN.lengthSq() < 1e-8) _hN.set(0, 1, 0).addScaledVector(_hF, -_hF.y);
+  _hN.normalize();
+  _y.copy(_hF).negate();
+  if (left) {
+    _x.crossVectors(_hN, _hF);
+    _z.copy(_hN);
+  } else {
+    _x.crossVectors(_hF, _hN);
+    _z.copy(_hN).negate();
+  }
+  out.set(_x.x * kx, _y.x * sy, _z.x * kx, hd.x, _x.y * kx, _y.y * sy, _z.y * kx, hd.y, _x.z * kx, _y.z * sy, _z.z * kx, hd.z, 0, 0, 0, 1);
+  return out;
+}
+
 // a part at c in the frame (r, u, f) (unit axes), scaled (sx, sy, sz)
 function framed(c, r, u, f, sx, sy, sz, out = _m) {
   out.set(r.x * sx, u.x * sy, f.x * sz, c.x, r.y * sx, u.y * sy, f.y * sz, c.y, r.z * sx, u.z * sy, f.z * sz, c.z, 0, 0, 0, 1);
@@ -2305,7 +2338,23 @@ export class PersonRenderer {
         _gw.copy(_c).multiplyScalar(1 - pkA).addScaledVector(UP, -pkA).normalize();
         _d.copy(hd).addScaledVector(_gw, 0.19 * S);
       }
-      if (pkA < 0.7) (ai === 0 ? (grip ? p.heroGripR : p.heroHandR) : p.heroHandL).push(along(hd, _d, 0.19, k, grip || fwd), skin, own, handId, ind);
+      // (ROADMAP 23: a hand posed - its own way, as it was asked; closed, round what it holds or cups. Else as it goes on from its
+      // forearm, thumb ahead - and reaching out in front, thumb up: turned by the body's front alone, a hand along it had no way
+      // round to turn and came out any way round)
+      const hF = fig.handF && fig.handF[ai];
+      const shut = grip || (fig.handGrip && fig.handGrip[ai] > 0.5);
+      if (pkA < 0.7) {
+        const hp = ai === 0 ? (shut ? p.heroGripR : p.heroHandR) : shut ? p.heroGripL : p.heroHandL;
+        if (hF && !grip) hp.push(handFrame(hd, hF, fig.handN[ai], _c, ai === 1, k, S), skin, own, handId, ind);
+        else {
+          let hRef = grip || fwd;
+          if (!grip) {
+            const dd = Math.abs(_c.dot(fwd));
+            if (dd > 0.55) hRef = _hRef.copy(fwd).multiplyScalar(1 - Math.min(1, (dd - 0.55) / 0.3)).addScaledVector(UP, Math.min(1, (dd - 0.55) / 0.3)).normalize();
+          }
+          hp.push(along(hd, _d, 0.19, k, hRef), skin, own, handId, ind);
+        }
+      }
       if (ai === 1) {
         // (a steel watch on a leather strap, just out of the cuff: its face on the back of the wrist)
         _a.copy(hd).addScaledVector(_c, -0.025 * S);
@@ -2531,7 +2580,12 @@ export class PersonRenderer {
           hRef = _hRef.copy(fwd).multiplyScalar(1 - b).addScaledVector(UP, b).normalize();
         }
       }
-      lite(ai === 0 ? (grip ? p.heroGripR : p.heroHandR) : grip ? p.heroGripL : p.heroHandL, lvB).push(along(hd, _d, 0.19, k * (fem ? 0.88 : 1), hRef), skin, own, id(), ind);
+      // (ROADMAP 23: a hand posed - its own way, as it was asked)
+      const hF = fig.handF && fig.handF[ai];
+      const shut = grip || (fig.handGrip && fig.handGrip[ai] > 0.5);
+      const hp = lite(ai === 0 ? (shut ? p.heroGripR : p.heroHandR) : shut ? p.heroGripL : p.heroHandL, lvB);
+      if (hF && !grip) hp.push(handFrame(hd, hF, fig.handN[ai], _c, ai === 1, k * (fem ? 0.88 : 1), ((fem ? 0.17 : 0.19) / 0.19) * S), skin, own, id(), ind);
+      else hp.push(along(hd, _d, 0.19, k * (fem ? 0.88 : 1), hRef), skin, own, id(), ind);
       if (ai === 1 && F.watch) {
         _a.copy(hd).addScaledVector(_c, -0.025 * S);
         _x.copy(rgt).multiplyScalar(-1).addScaledVector(_c, rgt.dot(_c)).normalize();

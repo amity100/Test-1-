@@ -49,9 +49,7 @@ await pg.evaluate(async () => {
       for (const c of g.civilians.list) if (!cast.has(c) && Math.hypot(c.pos.x - M.x, c.pos.z - M.z) < 45) c.gone = true;
       P.walkTo = null;
       P.auto = null;
-      P.unhold(D.fig);
-      P.unhold(L.fig);
-      P.holds = [];
+      P.dropHolds();
       P.kneel(0);
       D.fig.crouch = 0;
       for (const f of [D.fig, L.fig]) {
@@ -130,6 +128,87 @@ await pg.evaluate(async () => {
       L.fig.lookAt = v3(L.pos.x + w[0] * 2.2 * ls - u[0] * 1.2, 1.2, L.pos.z + w[1] * 2.2 * ls - u[1] * 1.2);
     },
   };
+  // ---- (ROADMAP 23) the scene's contacts, each hand turned as a hand is: tried here, close up from two sides (HANDS=1), before
+  // the scene itself is written from them
+  const dir = (a, b, y = 0) => v3(u[0] * a + w[0] * b, y, u[1] * a + w[1] * b);
+  const nk = (f) => f.j.neck;
+  Object.assign(sb, {
+    dir,
+    // the embrace: him down on his left knee, bent to her; her arms round his neck, his round her back
+    poseHug() {
+      sb.kneel(0.36, 0.12);
+      P.pose(D.fig, { fLean: 0.22, fHipY: -0.05, fSide: 0.1, headTilt: 0.18 }, 0.01);
+      P.pose(L.fig, { fLean: 0.1, fSide: 0.02, headTilt: 0.14 }, 0.01);
+      D.fig.lookAt = at(2.2, 0.5, 0.75);
+      L.fig.lookAt = v3(L.pos.x + w[0] * 2.2 - u[0] * 1.2, 1.15, L.pos.z + w[1] * 2.2 - u[1] * 1.2);
+      // (his right hand on the back of her head, in her curls - her bag is on her back; his left arm round her under it, at her
+      // waist: the palm on her back, the fingers across it)
+      P.hold(D.fig, 'R', () => { const q = L.fig.j.headC; const hs = (L.fig.headScale || 1) * (L.fig.scale || 1); return v3(q.x + u[0] * 0.105 * hs, q.y + 0.0, q.z + u[1] * 0.105 * hs); }, { on: true, palm: dir(-1, 0), fingers: dir(0.1, 0.55, 0.8), pole: dir(-0.2, -0.9, -0.3), ease: 0.01 });
+      P.hold(D.fig, 'L', () => v3(L.fig.j.hip.x + u[0] * 0.085 - w[0] * 0.03, L.fig.j.hip.y + 0.07, L.fig.j.hip.z + u[1] * 0.085 - w[1] * 0.03), { on: true, palm: dir(-1, 0), fingers: dir(0, -0.95, 0.12), pole: dir(-0.2, 0.8, -0.6), ease: 0.01 });
+      // (her hands behind his neck, one over the other)
+      P.hold(L.fig, 'R', () => v3(nk(D.fig).x - u[0] * 0.1 - w[0] * 0.0, nk(D.fig).y + 0.045, nk(D.fig).z - u[1] * 0.1 - w[1] * 0.0), { on: true, palm: dir(1, 0), fingers: dir(0, -0.9, -0.2), pole: dir(0.2, 0.6, -0.8), ease: 0.01 });
+      P.hold(L.fig, 'L', () => v3(nk(D.fig).x - u[0] * 0.1 + w[0] * 0.0, nk(D.fig).y - 0.02, nk(D.fig).z - u[1] * 0.1 + w[1] * 0.0), { on: true, palm: dir(1, 0), fingers: dir(0, 0.9, -0.1), pole: dir(0.2, -0.6, -0.8), ease: 0.01 });
+    },
+    // at arm's length: his hands round her upper arms, thumbs in front
+    poseArms() {
+      sb.kneel(0.62, 0.06);
+      P.pose(D.fig, { fLean: 0.12, fHipY: -0.03 }, 0.01);
+      const arm = (hers) => () => {
+        const sh = L.fig.j['shoulder' + hers];
+        const el = L.fig.j['elbow' + hers];
+        const sg = hers === 'L' ? -1 : 1;
+        // (the outside of her arm, a third of the way down it)
+        return v3(sh.x * 0.6 + el.x * 0.4 + w[0] * sg * 0.045, sh.y * 0.6 + el.y * 0.4, sh.z * 0.6 + el.z * 0.4 + w[1] * sg * 0.045);
+      };
+      P.hold(D.fig, 'R', arm('L'), { on: true, palm: dir(0, 1), fingers: dir(0.9, 0, 0.35), grip: true, pole: dir(-0.2, -0.7, -0.7), ease: 0.01 });
+      P.hold(D.fig, 'L', arm('R'), { on: true, palm: dir(0, -1), fingers: dir(0.9, 0, 0.35), grip: true, pole: dir(-0.2, 0.7, -0.7), ease: 0.01 });
+      L.fig.lookAt = D.fig.j.headC;
+      D.fig.lookAt = L.fig.j.headC;
+    },
+    // a hand through her hair: his right hand on top of her head, the fingers back over it
+    poseRuffle() {
+      sb.poseArms();
+      P.hold(D.fig, 'R', () => { const q = L.fig.j.headC; const hs = (L.fig.headScale || 1) * (L.fig.scale || 1); return v3(q.x - u[0] * 0.02, q.y + 0.125 * hs, q.z - u[1] * 0.02); }, { on: true, palm: v3(0, -1, 0), fingers: dir(0.95, 0.1, -0.1), pole: dir(-0.3, -0.9, -0.2), ease: 0.01 });
+    },
+    // his arms open for her
+    poseOpen() {
+      P.putDanny(M.x, M.z, yawTo(u[0], u[1]));
+      P.kneel(1, true);
+      P.pose(D.fig, { fLean: 0.1 }, 0.01);
+      const a = at(5);
+      P.put(L, a.x, a.z, yawTo(-u[0], -u[1]));
+      D.fig.lookAt = v3(a.x, 1.0, a.z);
+      P.hold(D.fig, 'R', () => at(0.4, -0.44, 0.98), { palm: dir(0.55, 0.6, 0.45), pole: dir(-0.3, -0.6, -0.7), ease: 0.01 });
+      P.hold(D.fig, 'L', () => at(0.4, 0.44, 0.98), { palm: dir(0.55, -0.6, 0.45), pole: dir(-0.3, 0.6, -0.7), ease: 0.01 });
+    },
+    // hand in hand: her left hand in his right, the two of them the way e looks
+    poseWalk(F, ex, ez) {
+      const rx = -ez;
+      const rz = ex;
+      const yaw = yawTo(ex, ez);
+      P.putDanny(F.x, F.z, yaw);
+      P.put(L, F.x + rx * 0.62, F.z + rz * 0.62, yaw);
+      // (the ground they stand on: the pier's deck is a step above the promenade)
+      const hands = () => v3(D.pos.x + rx * 0.31, D.pos.y + 0.79, D.pos.z + rz * 0.31);
+      // (his hand round hers: his palm to her and a little back, his fingers down; hers up into it, her palm to him)
+      P.hold(D.fig, 'R', () => { const q = hands(); return v3(q.x - rx * 0.015, q.y + 0.065, q.z - rz * 0.015); }, { palm: v3(rx * 0.9 - ex * 0.3, 0, rz * 0.9 - ez * 0.3), fingers: v3(rx * 0.2, -1, rz * 0.2), grip: true, ease: 0.01 });
+      P.hold(L.fig, 'L', () => { const q = hands(); return v3(q.x + rx * 0.035, q.y + 0.0, q.z + rz * 0.035); }, { palm: v3(-rx * 0.9 - ex * 0.2, 0.1, -rz * 0.9 - ez * 0.2), fingers: v3(-rx * 0.75, -0.6, -rz * 0.75), pole: v3(-ex * 0.5 + rx * 0.3, -0.8, -ez * 0.5 + rz * 0.3), ease: 0.01 });
+    },
+    // under the board: she at his left, his left hand on her shoulder; her right arm up at it
+    poseBoard() {
+      const B = sb.B;
+      const p = { x: B.x + B.nx * 8.2, z: B.z + B.nz * 8.2 };
+      P.putDanny(p.x, p.z, B.face);
+      P.put(L, p.x - B.rx * 0.5, p.z - B.rz * 0.5, B.face);
+      L.fig.lookAt = v3(B.x, B.cy, B.z);
+      D.fig.lookAt = v3(B.x, B.cy, B.z);
+      // (his hand laid on her near shoulder from above: the palm down, the fingers over it to its front)
+      P.hold(D.fig, 'L', () => { const sh = L.fig.j.shoulderR; return v3(sh.x + B.rx * 0.01, sh.y + 0.05, sh.z + B.rz * 0.01); }, { on: true, palm: v3(0, -1, 0), fingers: v3(-B.rx * 0.75 - B.nx * 0.6, -0.25, -B.rz * 0.75 - B.nz * 0.6), pole: v3(B.rx * 0.2 + B.nx * 0.5, -0.8, B.rz * 0.2 + B.nz * 0.5), ease: 0.01 });
+      // (her arm up at the board: the hand open, its palm down)
+      P.hold(L.fig, 'L', () => { const sh = L.fig.j.shoulderL; return v3(sh.x - B.nx * 0.3 - B.rx * 0.04, sh.y + 0.26, sh.z - B.nz * 0.3 - B.rz * 0.04); }, { palm: v3(-B.rx * 0.5, -0.85, -B.rz * 0.5), ease: 0.01 });
+      return p;
+    },
+  });
   window.__sb = sb;
   // her own drawing of the wheel, as the game draws it (game/prologue/ui.js lilyDrawing)
   const ui = await import('./js/game/prologue/ui.js');
@@ -304,7 +383,23 @@ const SHOTS = [
     shot({ from: v3(F.x - ex * 3.4 - rx * 0.1, 0.7, F.z - ez * 3.4 - rz * 0.1), look: v3(F.x + ex * 30, 10.5, F.z + ez * 30), fov: 42, key: 0.4, keySide: -1, rim: 1 });
   }],
 ];
-for (const [name, setup, frames] of SHOTS) {
+// (HANDS=1) every contact of the scene, close up from two sides: is each hand the right way round?
+const HANDS = [
+  ['h1-hug-her-back', () => { poseHug(); shot({ from: at(1.5, 0.75, 1.2), look: at(0.42, 0.02, 1.1), fov: 20, key: 0.8, keySide: 1 }); }],
+  ['h2-hug-his-neck', () => { poseHug(); shot({ from: at(-1.0, 0.3, 1.5), look: at(0.1, 0.02, 1.25), fov: 17, key: 0.8, keySide: -1 }); }],
+  ['h3-hug-side', () => { poseHug(); shot({ from: at(0.25, 1.9, 1.05), look: at(0.22, 0, 1.08), fov: 26, key: 0.8, keySide: -1 }); }],
+  ['h4-arms-side', () => { poseArms(); shot({ from: at(0.32, 1.7, 1.02), look: at(0.36, 0, 1.02), fov: 26, key: 0.8, keySide: -1 }); }],
+  ['h5-arms-high', () => { poseArms(); shot({ from: at(1.25, -0.75, 1.75), look: at(0.5, 0, 1.0), fov: 26, key: 0.8, keySide: 1 }); }],
+  ['h6-ruffle-side', () => { poseRuffle(); shot({ from: at(0.5, 1.5, 1.2), look: at(0.5, 0, 1.2), fov: 24, key: 0.8, keySide: -1 }); }],
+  ['h7-ruffle-front', () => { poseRuffle(); shot({ from: at(1.75, -0.5, 1.45), look: at(0.5, 0, 1.2), fov: 22, key: 0.8, keySide: 1 }); }],
+  ['h8-open-front', () => { poseOpen(); shot({ from: at(2.2, 0.35, 0.95), look: at(0.1, 0, 1.0), fov: 26, key: 0.9, keySide: 1 }); }],
+  ['h9-open-side', () => { poseOpen(); shot({ from: at(0.3, 2.0, 1.0), look: at(0.25, 0, 1.0), fov: 26, key: 0.9, keySide: -1 }); }],
+  ['h10-walk-back', () => { const F = { x: 56.5, z: 239.6 }; const fd = Math.hypot(WHEEL.x - F.x, WHEEL.z - F.z); const ex = (WHEEL.x - F.x) / fd; const ez = (WHEEL.z - F.z) / fd; poseWalk(F, ex, ez); shot({ from: v3(F.x - ex * 1.3 - ez * 0.31, 1.2, F.z - ez * 1.3 + ex * 0.31), look: v3(F.x - ez * 0.31, 1.16, F.z + ex * 0.31), fov: 22, key: 0.7, keySide: -1 }); }],
+  ['h11-walk-front', () => { const F = { x: 56.5, z: 239.6 }; const fd = Math.hypot(WHEEL.x - F.x, WHEEL.z - F.z); const ex = (WHEEL.x - F.x) / fd; const ez = (WHEEL.z - F.z) / fd; poseWalk(F, ex, ez); shot({ from: v3(F.x + ex * 1.3 - ez * 0.31, 1.2, F.z + ez * 1.3 + ex * 0.31), look: v3(F.x - ez * 0.31, 1.16, F.z + ex * 0.31), fov: 22, key: 0.9, keySide: 1 }); }],
+  ['h12-board-back', () => { const p = poseBoard(); shot({ from: v3(p.x + B.nx * 1.6 - B.rx * 0.3, 1.25, p.z + B.nz * 1.6 - B.rz * 0.3), look: v3(p.x - B.rx * 0.3, 1.2, p.z - B.rz * 0.3), fov: 30, key: 0.7, keySide: 1 }); }],
+  ['h13-board-front', () => { const p = poseBoard(); shot({ from: v3(p.x - B.nx * 1.7 - B.rx * 0.3, 1.25, p.z - B.nz * 1.7 - B.rz * 0.3), look: v3(p.x - B.rx * 0.3, 1.2, p.z - B.rz * 0.3), fov: 30, key: 0.9, keySide: -1 }); }],
+];
+for (const [name, setup, frames] of process.env.HANDS ? HANDS : SHOTS) {
   if (only && !only.some((o) => name.startsWith(o))) continue;
   const err = await pg.evaluate(([code, n]) => {
     const sb = window.__sb;
@@ -328,7 +423,9 @@ for (const [name, setup, frames] of SHOTS) {
     console.log(await pg.evaluate(() => {
       const { D, L, M, u, w, head } = window.__sb;
       const uw = (p) => [((p.x - M.x) * u[0] + (p.z - M.z) * u[1]).toFixed(2), ((p.x - M.x) * w[0] + (p.z - M.z) * w[1]).toFixed(2), p.y.toFixed(2)].join(' ');
-      return `   heads (along, west, up): his ${uw(head(D))} | hers ${uw(head(L))}`;
+      const f3 = (p) => (p ? [p.x - D.pos.x, p.y, p.z - D.pos.z].map((x) => x.toFixed(2)).join(' ') : 'none');
+      const P = window.__sb.P;
+      return `   heads (along, west, up): his ${uw(head(D))} | hers ${uw(head(L))}\n   from his feet: his R wrist ${f3(D.fig.j.handR)} (asked ${f3(D.fig.reachR)}) | her L wrist ${f3(L.fig.j.handL)} (asked ${f3(L.fig.reachL)}) her L shoulder ${f3(L.fig.j.shoulderL)} | ground: his pos.y ${D.pos.y.toFixed(2)} feet ${D.fig.j.footL.y.toFixed(2)} ${D.fig.j.footR.y.toFixed(2)} hers pos.y ${L.pos.y.toFixed(2)} baseY ${L.baseY} | holds ${(P.holds || []).map((h) => h.side + (h.fig === D.fig ? 'D' : 'L')).join(',')}`;
     }));
   }
 }

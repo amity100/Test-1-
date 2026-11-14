@@ -188,6 +188,21 @@ export class Doodle {
     this.drinkT = -1; // raising a glass to the mouth (0..1)
     this.reachR = null;
     this.reachL = null;
+    // (ROADMAP 23, the film's poses - set and eased by whoever poses them, game/prologue/director.js) a hand's own way: where its
+    // fingers point and where its palm faces (unit, world; [right, left]) - null, the hand goes on from its forearm, thumb ahead;
+    // closed round something (handGrip); the elbow's way (poleR / poleL - null, down and out); the body leant forward from the
+    // hips (fLean, radians) or to a side (fSide, metres at the neck), the shoulders turned (fTwist), the hips up or down (fHipY),
+    // the head tilted to a shoulder (headTilt, radians)
+    this.handF = [null, null];
+    this.handN = [null, null];
+    this.handGrip = [0, 0];
+    this.poleR = null;
+    this.poleL = null;
+    this.fLean = 0;
+    this.fSide = 0;
+    this.fTwist = 0;
+    this.fHipY = 0;
+    this.headTilt = 0;
     this.hunch = 0; // old age: bent forward over the knees
     this.ride = 0; // on a bike (game/workers.js): on the saddle, feet on the pedals
     this.crank = 0; // the pedals' turn (radians)
@@ -378,7 +393,8 @@ export class Doodle {
     hipY = lerp(hipY, 0.25, crawl);
     hipY = lerp(hipY, 0.56, crouch);
     hipY -= this.hunch * 0.05;
-    let lean = A * 0.12 + (this.aim ? 0.04 : 0) + crawl * 1.2 + sit * 0.05 + crouch * 0.22 + this.hunch * 0.42;
+    hipY += this.fHipY;
+    let lean = A * 0.12 + (this.aim ? 0.04 : 0) + crawl * 1.2 + sit * 0.05 + crouch * 0.22 + this.hunch * 0.42 + this.fLean;
     if (this.sneak > 0) {
       hipY = lerp(hipY, 0.66, this.sneak);
       lean += this.sneak * 0.38;
@@ -389,13 +405,13 @@ export class Doodle {
     }
     // (a fist fight) into the punch, the shoulders turning with it; back off the kick; the head
     // snapped back by a blow
-    let twist = 0;
+    let twist = this.fTwist;
     if (this.punch >= 0) {
       const out = punchOut(this.punch);
       lean += out * 0.14;
       twist = out * this.punchSide * 0.1;
     } else if (this.kick >= 0) lean -= kickUp(this.kick) * 0.22;
-    let leanSide = this.stagger * Math.sin(ph * 1.3) * 0.15 + this.dance * Math.sin(ph * 0.5) * 0.12;
+    let leanSide = this.stagger * Math.sin(ph * 1.3) * 0.15 + this.dance * Math.sin(ph * 0.5) * 0.12 + this.fSide;
     // (characters round) the head held up against the body's lean, so that the eyes stay on the world
     // and not on the ground (not a blow's: that snaps the head back, below)
     this.turnHead(dt, this.dead < 0.2 ? Math.min(Math.max(0, lean) * 0.75, crawl > 0.5 ? 0.6 : 0.75) : 0);
@@ -587,7 +603,7 @@ export class Doodle {
         useIK = true;
       }
       if (useIK) {
-        const pole = _d.set(this.right.x * side * 0.6, -1, this.right.z * side * 0.6);
+        const pole = (reach && (side === 1 ? this.poleR : this.poleL)) || _d.set(this.right.x * side * 0.6, -1, this.right.z * side * 0.6);
         ik(shoulder, tgt, armU * this.scale, armF * this.scale, pole, elbow);
         hand.copy(tgt);
         const reachMax = (armU + armF) * this.scale * 0.999;
@@ -724,7 +740,7 @@ export class Doodle {
       yaw = clamp(this.lookYaw - this.chestYaw, -1.2, 1.2);
       pitch = this.lookPitch - 0.03 * Math.min(1, Math.abs(this.lookYawV) / 5);
     }
-    neckMove(yaw, pitch, 0.06 * yaw, yb, this.neckD);
+    neckMove(yaw, pitch, 0.06 * yaw + (this.rag ? 0 : this.headTilt), yb, this.neckD);
     headFrame(O, r0, u0, f0, hs, J, this.neckD, j.headC, this.hr, this.hu, this.hf);
     j.neckTop.copy(j.headC).addScaledVector(this.hu, J.y * hs).addScaledVector(this.hf, J.z * hs);
     this.placed = true;

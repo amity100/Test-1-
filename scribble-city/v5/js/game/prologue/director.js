@@ -66,6 +66,18 @@ const DONE_KEY = 'scribble.prologue.v2';
 
 // the places
 const DANNY0 = { x: 17, z: 6, yaw: Math.PI };
+// (the film's poses - hold, handWay, pose below)
+const _hA = new THREE.Vector3();
+const _hB = new THREE.Vector3();
+const _hC = new THREE.Vector3();
+const _hX = new THREE.Vector3();
+const _hT = new THREE.Vector3();
+const EASES = {
+  inout: (t) => t * t * (3 - 2 * t),
+  out: (t) => 1 - (1 - t) * (1 - t) * (1 - t),
+  in: (t) => t * t,
+  back: (t) => 1 + 2.70158 * (t - 1) * (t - 1) * (t - 1) + 1.70158 * (t - 1) * (t - 1),
+};
 const LILY_SEAT = { x: 40.2, z: 233.0, yaw: Math.PI / 2 };
 // (ROADMAP 23) the scenes filmed again, in the game's new look: ?filmlook=0 the film as it was
 const NEW_LOOK = new Set([2]);
@@ -360,7 +372,7 @@ export class Prologue {
     // (the place's own echo for its voices: the pier and the beach, the street, the car's cabin)
     const SPACE = [null, 'open', 'open', 'open', 'open', 'street', 'car', 'car', 'car', 'car'];
     if (this.voices.space) this.voices.space(SPACE[n]);
-    if (this.holds) for (const h of [...this.holds]) this.unhold(h.fig);
+    this.dropHolds();
     if (this.game.player) this.game.player.filmCrouch = 0;
     this.sceneN = n;
     // (ROADMAP 23: the scenes filmed again in the game's own look - render/look.js lookFrame, tickLook below)
@@ -1165,32 +1177,200 @@ export class Prologue {
 
   // (ROADMAP 23) a hand held somewhere from frame to frame - on a shoulder, round a neck, open for a hug: fn gives the place each
   // frame (the rig's reachR / reachL, game/doodle.js), until unhold
-  hold(fig, side, fn) {
-    this.unhold(fig, side);
-    (this.holds || (this.holds = [])).push({ fig, side, fn, v: v3(0, 0, 0) });
+  // (ROADMAP 23, the film's poses) With o, the hand is posed as a hand is - the owner's word: hands "come out the wrong way round,
+  // twisted". o.palm: where its palm faces; o.fingers: where its fingers point (else on from the forearm, as far as the palm's way
+  // lets them); o.on: fn gives the point the PALM is laid on (the wrist is worked back from it); o.grip: closed, round what it
+  // holds or cups; o.pole: the elbow's way; o.ease: the time it takes to get there from where the hand is (0.32 s) - and let go
+  // (unhold), it goes back down as slowly. Each of them a vector or a function giving one. Without o: the wrist on the point, at
+  // once, the hand as it goes on from the forearm (as the scenes not yet filmed again have it).
+  hold(fig, side, fn, o = null) {
+    const sideK = side === 'R' ? 'R' : 'L';
+    this.unhold(fig, side, 0);
+    const hs = this.holds || (this.holds = []);
+    // (a hand let go and still on its way down: taken from where it is)
+    for (let i = hs.length - 1; i >= 0; i--) if (hs[i].rel && hs[i].fig === fig && hs[i].relSide === sideK) hs.splice(i, 1);
+    const hd = fig.j && fig.j['hand' + sideK];
+    const sh = fig.j && fig.j['shoulder' + sideK];
+    hs.push({ fig, side, fn, o, ai: sideK === 'R' ? 0 : 1, v: v3(0, 0, 0), rel0: o && hd && sh ? hd.clone().sub(sh) : null, t: 0, f: v3(0, 0, 1), n: v3(0, 1, 0), F: v3(0, 0, 1), N: v3(0, 1, 0), pole: v3(0, -1, 0) });
   }
 
-  unhold(fig, side = null) {
+  // let go: at once (ease 0, or a hand held the old way), or the hand going back down to its side over ease seconds
+  unhold(fig, side = null, ease = 0.3) {
     if (!this.holds) return;
+    const out = [];
     this.holds = this.holds.filter((h) => {
       const m = h.fig === fig && !h.tick && (!side || h.side === side);
-      if (m && h.fig['reach' + h.side] === h.v) h.fig['reach' + h.side] = null;
+      if (m) out.push(h);
       return !m;
     });
+    for (const h of out) {
+      const key = 'reach' + h.side;
+      if (!h.o || !(ease > 0) || fig[key] !== h.v) {
+        if (fig[key] === h.v) fig[key] = null;
+        if (h.o) this.handFree(fig, h.side);
+        continue;
+      }
+      // (down to where an arm hangs: under the shoulder, a little out and ahead)
+      const from = h.v.clone();
+      const sg = h.ai === 0 ? 1 : -1;
+      const F0 = h.F.clone();
+      const N0 = h.N.clone();
+      const had = !!h.o.palm;
+      let t = 0;
+      this.holds.push({
+        fig,
+        side: 'rel',
+        rel: true,
+        relSide: h.side,
+        tick: (dt) => {
+          t = Math.min(1, t + dt / ease);
+          const e = t * t * (3 - 2 * t);
+          const sh = fig.j['shoulder' + h.side];
+          const S = fig.scale || 1;
+          const fy = fig.yaw || 0;
+          _hA.set(sh.x + fig.right.x * sg * 0.06 * S + Math.sin(fy) * 0.07 * S, sh.y - 0.55 * S, sh.z + fig.right.z * sg * 0.06 * S + Math.cos(fy) * 0.07 * S);
+          h.v.lerpVectors(from, _hA, e);
+          fig[key] = h.v;
+          if (had) this.handWay(fig, h, F0, N0, 1 - e);
+          if (t >= 1) {
+            fig[key] = null;
+            this.handFree(fig, h.side);
+            return false;
+          }
+          return true;
+        },
+      });
+    }
+  }
+
+  // a hand back to its own way: on from its forearm, open, the elbow down and out
+  handFree(fig, side) {
+    const ai = side === 'R' ? 0 : 1;
+    if (fig.handF) fig.handF[ai] = fig.handN[ai] = null;
+    if (fig.handGrip) fig.handGrip[ai] = 0;
+    fig['pole' + (side === 'R' ? 'R' : 'L')] = null;
+  }
+
+  // the hand's way this frame: k of the way from how a hand goes on from its forearm (thumb ahead) to fingers f, palm n
+  handWay(fig, h, f, n, k) {
+    const el = fig.j['elbow' + h.side];
+    const hd = fig.j['hand' + h.side];
+    _hC.subVectors(hd, el);
+    if (_hC.lengthSq() < 1e-8) _hC.set(0, -1, 0);
+    _hC.normalize();
+    if (k < 1) {
+      const fy = fig.yaw || 0;
+      _hX.set(Math.sin(fy), 0, Math.cos(fy));
+      _hX.addScaledVector(_hC, -_hX.dot(_hC));
+      if (_hX.lengthSq() < 0.04) _hX.set(0, 1, 0).addScaledVector(_hC, -_hC.y);
+      _hX.normalize();
+      // (the hand's own palm as it hangs: the right one's to the left of its thumb, the left one's to the right)
+      if (h.ai === 0) _hB.crossVectors(_hX, _hC);
+      else _hB.crossVectors(_hC, _hX);
+      h.F.copy(_hC).lerp(f, k).normalize();
+      h.N.copy(_hB).lerp(n, k).normalize();
+    } else {
+      h.F.copy(f);
+      h.N.copy(n);
+    }
+    fig.handF[h.ai] = h.F;
+    fig.handN[h.ai] = h.N;
   }
 
   tickHolds() {
     if (!this.holds || !this.holds.length) return;
+    const dt = this.dtR || 0.016;
     for (const h of [...this.holds]) {
       if (h.tick) {
-        if (h.tick(this.dtR || 0.016) === false) this.holds.splice(this.holds.indexOf(h), 1);
+        if (h.tick(dt) === false) {
+          const i = this.holds.indexOf(h);
+          if (i >= 0) this.holds.splice(i, 1);
+        }
         continue;
       }
       const q = h.fn();
-      if (q) {
+      if (!q) continue;
+      const fig = h.fig;
+      const o = h.o;
+      if (!o) {
         h.v.copy(q);
-        h.fig['reach' + h.side] = h.v;
+        fig['reach' + h.side] = h.v;
+        continue;
       }
+      const val = (x) => (typeof x === 'function' ? x() : x);
+      h.t += dt;
+      const dur = o.ease === undefined ? 0.32 : o.ease;
+      const k0 = dur > 0 ? Math.min(1, h.t / dur) : 1;
+      const k = k0 * k0 * (3 - 2 * k0);
+      const S = (fig.scale || 1) * (fig._handK || 1);
+      let n = null;
+      if (o.palm) {
+        n = h.n.copy(val(o.palm)).normalize();
+        if (o.fingers) h.f.copy(val(o.fingers)).normalize();
+        else {
+          const el = fig.j['elbow' + h.side];
+          const hd = fig.j['hand' + h.side];
+          _hC.subVectors(hd, el).normalize();
+          h.f.copy(_hC).addScaledVector(n, -_hC.dot(n));
+          if (h.f.lengthSq() < 0.03) h.f.set(0, 1, 0).addScaledVector(n, -n.y);
+          h.f.normalize();
+        }
+      }
+      // (the wrist: from the point the palm is laid on, back along the fingers and off what it lies on)
+      _hT.copy(q);
+      if (o.on && n) _hT.addScaledVector(h.f, -0.078 * S).addScaledVector(n, -0.016 * S);
+      if (k < 1 && h.rel0) {
+        const sh = fig.j['shoulder' + h.side];
+        _hA.copy(sh).add(h.rel0);
+        h.v.lerpVectors(_hA, _hT, k);
+      } else h.v.copy(_hT);
+      fig['reach' + h.side] = h.v;
+      if (n) this.handWay(fig, h, h.f, n, k);
+      if (fig.handGrip) fig.handGrip[h.ai] = o.grip && k > 0.5 ? 1 : 0;
+      if (o.pole) fig['pole' + h.side] = h.pole.copy(val(o.pole));
+    }
+  }
+
+  // (ROADMAP 23) the body's own pose eased to what is asked - game/doodle.js: fLean (forward from the hips, radians), fSide (to a
+  // side, metres at the neck), fTwist (the shoulders turned), fHipY (the hips up or down), headTilt (the head to a shoulder) - over
+  // dur seconds; ease: 'inout', 'out', 'in', 'back' (a little past it and back - a body settling). A later pose takes over the parts
+  // it names
+  pose(fig, to, dur = 0.5, ease = 'inout') {
+    const hs = this.holds || (this.holds = []);
+    for (const h of hs) if (h.poseOf === fig) for (const key in to) delete h.to[key];
+    const from = {};
+    for (const key in to) from[key] = fig[key] || 0;
+    const E = EASES[ease] || EASES.inout;
+    const mine = { ...to };
+    let t = 0;
+    hs.push({
+      fig,
+      side: 'pose',
+      poseOf: fig,
+      to: mine,
+      tick: (dt) => {
+        t = dur > 0 ? Math.min(1, t + dt / dur) : 1;
+        const e = E(t);
+        for (const key in mine) fig[key] = from[key] + (mine[key] - from[key]) * e;
+        return t < 1;
+      },
+    });
+  }
+
+  // every hold and pose of the film dropped at once, and its people as they stand by themselves
+  dropHolds() {
+    const figs = new Set();
+    for (const h of this.holds || []) figs.add(h.fig);
+    if (this.game.player) figs.add(this.game.player.fig);
+    for (const c of Object.values(this.cast || {})) if (c && c.fig) figs.add(c.fig);
+    for (const h of [...(this.holds || [])]) if (!h.tick) this.unhold(h.fig, null, 0);
+    this.holds = [];
+    for (const fig of figs) {
+      if (!fig || !fig.handF) continue;
+      fig.reachR = fig.reachL = null;
+      this.handFree(fig, 'R');
+      this.handFree(fig, 'L');
+      fig.fLean = fig.fSide = fig.fTwist = fig.fHipY = fig.headTilt = 0;
     }
   }
 
