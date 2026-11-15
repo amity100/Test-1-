@@ -796,7 +796,9 @@ export class Prologue {
   tickLook() {
     const g = this.game;
     const film = !!this.holdCam;
-    Doodle.twos.on = film && this.twosOn;
+    // (ROADMAP 23.10: not in the scenes filmed in the game's own look - their people move at the picture's own rate. On twos a
+    // hand going to a shoulder went there in four jumps, and whoever was put somewhere on a cut stood a frame as they had been)
+    Doodle.twos.on = film && this.twosOn && !this.newLook;
     Doodle.twos.n = Math.floor((this.clock || 0) * 12);
     const P = g.player;
     if (P && P.fig) P.fig.ones = !!P.inVehicle;
@@ -1216,7 +1218,9 @@ export class Prologue {
       c.pl.face = face;
       c.yaw = face;
       c.faceYaw = face;
+      if (c.fig) c.fig.yaw = face;
     }
+    this.repose(c.fig);
   }
 
   faceTo(c, x, z) {
@@ -1733,6 +1737,13 @@ export class Prologue {
     p.vel.set(0, 0, 0);
     p.yaw = yaw;
     p.fig.yaw = yaw;
+    this.repose(p.fig);
+  }
+
+  // (and their body set where they now are, facing as they now face, at once: this very frame's picture is of them there)
+  repose(fig) {
+    if (!this.holdCam || !this.newLook || !fig || !fig.update || fig.rag) return;
+    fig.update(1e-4);
   }
 
   walkDanny(x, z, speed = 0.45, sprint = false) {
