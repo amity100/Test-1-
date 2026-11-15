@@ -1387,7 +1387,8 @@ class Civilian {
     else if (fig.turnTo !== null && fig.turnTo !== undefined && !(this.cowerT > 0 || this.coverT > 0)) this.yaw = dampAngle(this.yaw, fig.turnTo, 3, dt);
     fig.yaw = this.yaw;
     // (a jogger at a red light runs on the spot: the stride goes on where the feet stay)
-    fig.speed = this.jog && this.waitAt && sp < 0.3 ? 2.6 : sp;
+    // (stepSp: moved by a scene a step - back, aside - without turning to it: the legs go as if walked: game/prologue/director.js glide)
+    fig.speed = this.jog && this.waitAt && sp < 0.3 ? 2.6 : Math.max(sp, this.stepSp || 0);
     // (GTA IV pass) the hands with the words, the head to whoever is talking (near the camera)
     if (this.talkUntil > 0 || this.listenTo || this.glanceUntil > 0 || this.waitAt || this._look) this.social(dt);
     // (ROADMAP 13.7) their face: afraid running from danger, in pain on the ground, the words they say

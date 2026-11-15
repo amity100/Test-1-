@@ -10,7 +10,8 @@ import { PaintFight } from './paintfight.js';
 import { HeldPage } from './page.js';
 import { Acting, ACTS } from './acting.js';
 import { Comic } from './comic.js';
-import { civilianLook, kidLook, roleLook, roleNth } from '../looks.js';
+import { civilianLook, kidLook, roleLook, roleNth, folkLook } from '../looks.js';
+import { FOLK } from '../../render/folkspec.js';
 import { Doodle } from '../doodle.js';
 import { Soundscape, airAt } from './soundscape.js';
 import { loadTrack, trackBuf, Looper } from './tracks.js';
@@ -620,6 +621,7 @@ export class Prologue {
     if (this.ramp && !this.ramp.grown) this.ramp.update(dt);
     this.company(dt);
     this.tickHolds();
+    this.tickExtras(dt);
     // (the cars and their paint on the game's own step - the script and its film on the real time,
     // round 13: game.js rawK)
     const dtG = Math.min(dt, this.game.realDt || dt);
@@ -1238,6 +1240,7 @@ export class Prologue {
     for (let i = hs.length - 1; i >= 0; i--) if (hs[i].rel && hs[i].fig === fig && hs[i].relSide === sideK) hs.splice(i, 1);
     const hd = fig.j && fig.j['hand' + sideK];
     const sh = fig.j && fig.j['shoulder' + sideK];
+    if (o && (o.ease === undefined || o.ease > 0.08)) this.cloth(fig, 0.8, 0.2 + (o.ease === undefined ? 0.32 : o.ease) * 0.4);
     hs.push({ fig, side, fn, o, ai: sideK === 'R' ? 0 : 1, v: v3(0, 0, 0), rel0: o && hd && sh ? hd.clone().sub(sh) : null, t: 0, f: v3(0, 0, 1), n: v3(0, 1, 0), F: v3(0, 0, 1), N: v3(0, 1, 0), pole: v3(0, -1, 0) });
   }
 
@@ -1388,6 +1391,7 @@ export class Prologue {
     const from = {};
     for (const key in to) from[key] = fig[key] || 0;
     const E = EASES[ease] || EASES.inout;
+    if (dur > 0.08) this.cloth(fig, 0.6, 0.18 + dur * 0.3);
     const mine = { ...to };
     let t = 0;
     hs.push({
@@ -1425,10 +1429,13 @@ export class Prologue {
 
   // one of the story's people moved a step - back out of a hug - still facing as they were: eased over dur seconds (walking it,
   // they turn to where they walk)
-  glide(c, x, z, dur = 0.5) {
+  // (ROADMAP 23.9: legs - the legs take the step: a pace back or aside on the screen, not a slide)
+  glide(c, x, z, dur = 0.5, legs = false) {
     const x0 = c.pos.x;
     const z0 = c.pos.z;
+    const d = Math.hypot(x - x0, z - z0);
     let t = 0;
+    if (legs) this.cloth(c.fig, 0.5);
     (this.holds || (this.holds = [])).push({
       fig: c.fig,
       side: 'glide',
@@ -1440,9 +1447,22 @@ export class Prologue {
         c.pl.x = c.pos.x;
         c.pl.z = c.pos.z;
         c.pl.speed = 0;
+        if (legs) c.stepSp = t < 1 ? Math.max(0.7, (d / dur) * 1.2) : 0;
         return t < 1;
       },
     });
+  }
+
+  // (ROADMAP 23.9) cloth heard as somebody of the film moves: by how near the lens is (game/prologue/soundscape.js rustle)
+  cloth(fig, k = 1, dur = 0.22) {
+    if (this.ff || !this.holdCam || !this.air || !this.air.rustle || !fig || !fig.j) return;
+    const A = this.game.audio;
+    if (!A || !A.ctx) return;
+    const d = this.game.camera.position.distanceTo(fig.j.neck || fig.j.hip);
+    if (d > 9) return;
+    const kk = k * Math.max(0.12, 1 - d / 9);
+    this.air.rustle(A.ctx.currentTime, dur, kk);
+    if (this.airLog) this.airLog.push([this.clock || 0, 'rustle', dur, kk]);
   }
 
   // Danny down on a knee (game/player.js filmCrouch) - flip: his left knee the one that is down
@@ -2131,6 +2151,100 @@ export class Prologue {
   }
 
   // (ROADMAP 23) Gino behind his counter: one of the story's own people, drawn as they are - in place of the stand's plain figure
+  // (ROADMAP 23.9, the owner's word: the people seen in the film "fixed - not somebody else every time it is played", and the
+  // world round a scene alive.) The evening's own people round the stand and the pier's gate: the same eight every time, each
+  // of the city's drawn people chosen by a rule (the nth woman, the nth man of the list), each with something to do. A couple at
+  // the pier's railing, looking out at the sea and talking; two on the bench by the gate; a man at the far railing with his
+  // phone; a woman buying at Gino's counter; two walking out along the pier to the wheel, slowly, and back.
+  spawnExtras() {
+    if (this.extras) return;
+    this.extras = [];
+    const pickNth = (fem, n) => {
+      let k = -1;
+      for (let i = 6; i < 36 && i < FOLK.length; i++) {
+        const F = FOLK[i];
+        if (!F || F.role || !!F.fem !== fem || F.age < 20) continue;
+        if (++k === n) return i;
+      }
+      return fem ? 3 : 1;
+    };
+    const sea = v3(60, 1.2, 190);
+    const mk = (key, fem, n, x, z, yaw, o = {}) => {
+      const c = this.person(key, x, z, folkLook(pickNth(fem, n)), { face: yaw });
+      c.yaw = yaw;
+      c.fig.yaw = yaw;
+      c.extra = { ...o, t: Math.abs(Math.sin(n * 7.3 + x)) * 4 };
+      if (o.carry) c.fig.carry = o.carry;
+      if (o.look) c.fig.lookAt = o.look;
+      if (o.sit) {
+        c.fig.sit = 1;
+        c.baseY = o.sit;
+        c.noCollide = true;
+      }
+      this.extras.push(c);
+      return c;
+    };
+    // (a couple at the pier's north railing, a little out from the gate: looking out, talking)
+    const a1 = mk('x1', true, 0, 56.0, 236.75, Math.PI, { look: sea, talk: 0 });
+    const a2 = mk('x2', false, 0, 56.85, 236.8, Math.PI, { look: sea, talk: 1 });
+    a1.extra.with = a2;
+    a2.extra.with = a1;
+    // (two on the bench by the gate, north side)
+    const b1 = mk('x3', false, 1, 53.25, 237.3, 0, { sit: 0.12, talk: 0 });
+    const b2 = mk('x4', true, 1, 54.1, 237.3, 0, { sit: 0.12, talk: 1 });
+    b1.extra.with = b2;
+    b2.extra.with = b1;
+    // (a man at the south railing with his phone)
+    mk('x5', false, 2, 66.2, 249.0, 0, { carry: 'phone' });
+    // (a woman at Gino's counter)
+    const V = this.cast.vendor;
+    if (V) {
+      const cx = V.pos.x + Math.sin(V.yaw) * 1.5;
+      const cz = V.pos.z + Math.cos(V.yaw) * 1.5;
+      const b = mk('x6', true, 2, cx, cz, V.yaw + Math.PI, { talk: 0 });
+      b.fig.lookAt = V.fig.j.headC;
+      V.fig.lookAt = b.fig.j.headC;
+      b.extra.with = V;
+      V.extra = { talk: 1, with: b, t: 2 };
+      this.extras.push(V);
+    }
+    // (two out along the pier to the wheel and back, side by side, in no hurry)
+    const w1 = mk('x7', true, 3, 70, 244.2, Math.PI / 2, { walk: [[70, 244.2], [112, 244.6]], speed: 0.85 });
+    const w2 = mk('x8', false, 3, 70, 245.1, Math.PI / 2, { walk: [[70, 245.1], [112, 245.5]], speed: 0.85 });
+    w1.extra.i = w2.extra.i = 1;
+    for (const c of this.extras) if (c.fig) c.fig.lodFar = 70;
+  }
+
+  // their evening, a few times a second: who of a pair is talking now (the other listening, a look between them now and then),
+  // the walkers on to the end of their way and back
+  tickExtras(dt) {
+    if (!this.extras) return;
+    this.extraT = (this.extraT || 0) - dt;
+    if (this.extraT > 0) return;
+    const step = 0.3;
+    this.extraT = step;
+    for (const c of this.extras) {
+      const E = c.extra;
+      if (!E || c.gone || !c.fig) continue;
+      E.t += step;
+      if (E.with && E.talk !== undefined) {
+        // (turns of about four seconds: the one whose turn it is talks, the other's eyes on them)
+        const mine = Math.floor(E.t / 4.2) % 2 === E.talk;
+        c.fig.talk = mine && Math.sin(E.t * 0.9) > -0.6;
+        if (!E.look) c.fig.lookAt = E.with.fig && E.with.fig.j ? E.with.fig.j.headC : null;
+        else c.fig.lookAt = !mine && Math.sin(E.t * 0.5 + E.talk) > 0.2 && E.with.fig && E.with.fig.j ? E.with.fig.j.headC : E.look;
+      }
+      if (E.walk) {
+        const q = E.walk[E.i];
+        if (Math.hypot(c.pos.x - q[0], c.pos.z - q[1]) < 0.8) {
+          E.i = 1 - E.i;
+          const n = E.walk[E.i];
+          this.go(c, n[0], n[1], E.speed || 0.9);
+        } else if (!(c.pl.speed > 0)) this.go(c, q[0], q[1], E.speed || 0.9);
+      }
+    }
+  }
+
   spawnVendor() {
     if (this.cast.vendor || !this.set || !this.set.staff || !this.set.staff.length) return;
     const look = this.castMod && this.castMod.vendorLook ? this.castMod.vendorLook() : null;
@@ -2167,6 +2281,8 @@ export class Prologue {
     L.baseY = 0.32;
     if (this.castMod && this.castMod.giveIceCream) this.castMod.giveIceCream(L.fig, true);
     if (this.castMod && this.castMod.giveSketchbook) this.castMod.giveSketchbook(L.fig, true);
+    // (and the evening's own people round her: the same every time)
+    this.spawnExtras();
   }
 
   // ------------------------------------------------------------------ 2. LILY
@@ -2214,7 +2330,9 @@ export class Prologue {
     const B = this.lilyBoard();
     const W0 = v3(WHEEL.x, 30, WHEEL.z);
     // (nobody but the story's own people on it: a passer-by a step from the lens was a giant's leg across the picture)
-    this.setZone = { x: (S.x + M.x) / 2, z: (S.z + M.z) / 2 + 1.5, r: 12.5 };
+    // (ROADMAP 23.9: and wide - whoever is seen behind them, far off, is one of the evening's own eight: spawnExtras)
+    this.spawnExtras();
+    this.setZone = { x: 50, z: 240, r: 44 };
     // him: still out of the picture, down the promenade. Her: on her stool, turned to the wheel
     {
       const d0 = at(-4.4, 0.7);
@@ -2316,16 +2434,17 @@ export class Prologue {
     }
     yield 0.3;
     yield* this.say('LG1', L.fig, 0.1);
-    yield 0.4;
-
-    // 6b. HER ANSWER: her face, from in front of him at her own height - the sea and the last of the sun behind her. (She has
-    // ducked out from under his hand, a step back from him: on the cut)
-    this.unhold(P.fig, 'R', 0);
-    this.pose(P.fig, { fLean: 0.07 }, 0.01);
+    // (and she ducks out from under his hand, a step back from him - his hand let go, him up straight)
     {
       const q = at(1.1, 0.04);
-      this.put(L, q.x, q.z, yawL);
+      this.glide(L, q.x, q.z, 0.5, true);
     }
+    this.unhold(P.fig, 'R', 0.45);
+    this.pose(P.fig, { fLean: 0.07 }, 0.5, 'inout');
+    yield 0.6;
+
+    // 6b. HER ANSWER: her face, from in front of him at her own height - the sea and the last of the sun behind her
+    this.unhold(P.fig, 'R', 0);
     L.fig.lookAt = P.fig.j.headC;
     this.feel(L.fig, 'tease', 5);
     this.shot({

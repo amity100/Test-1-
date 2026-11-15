@@ -205,6 +205,26 @@ export class Soundscape {
     }
   }
 
+  // (ROADMAP 23.9) cloth: a sleeve, a jacket as an arm goes up or a body bends - a short soft breath of noise, low, dur seconds
+  // (k: how near, how big the move)
+  rustle(t, dur = 0.22, k = 1) {
+    const c = this.c;
+    const s = c.createBufferSource();
+    s.buffer = this.noise;
+    const f = c.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.setValueAtTime(1500 + Math.random() * 500, t);
+    f.frequency.linearRampToValueAtTime(900 + Math.random() * 400, t + dur);
+    f.Q.value = 0.7;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.05 * k, t + dur * 0.35);
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    s.connect(f).connect(g).connect(this.out);
+    s.start(t, Math.random() * 0.8);
+    s.stop(t + dur + 0.05);
+  }
+
   // a pencil stroke on paper: a dry, grainy hiss up in the highs, the lead's grain rattling in it,
   // dur seconds long (k: how near, how hard)
   scratch(t, dur, k = 1) {
