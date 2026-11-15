@@ -4877,12 +4877,12 @@ export class Prologue {
     L.fig.lookAt = null;
     P.fig.lookAt = null;
     this.feel(P.fig, 'worried', 8);
-    g.audio.play('knock', 0.55);
+    g.audio.play('punch', 0.55);
     this.shot({ from: v3(D.x - 9.6, Y + 0.48, D.z + 2.7), to: v3(D.x - 9.1, Y + 0.52, D.z + 2.5), look: () => v3((P.pos.x + L.pos.x) / 2, Y + 0.95, (P.pos.z + L.pos.z) / 2), fov: 30, dur: 3.3, hand: 0.3, key: 0.5 });
     this.walkTo = { x: D.x, z: D.z, speed: 1 };
     this.go(L, D.x + 0.3, D.z - 0.95, 1.3);
     yield 0.35;
-    g.audio.play('knock', 0.45);
+    g.audio.play('punch', 0.45);
     yield 2.0;
     // ---- 2. lamps: a car's, down the far end of the floor, full on the two of them
     this.lamps = [{ car: TC, k: 0, want: 1 }];
@@ -4905,9 +4905,9 @@ export class Prologue {
     );
     yield 0.25;
     // (from behind the two of them, dark against it: the two lamps, and the doors)
-    this.shot({ from: v3(D.x + 3.0, Y + 1.5, D.z + 1.35), to: v3(D.x + 2.6, Y + 1.5, D.z + 1.2), look: v3(TC.pos.x + 2.4, Y + 0.95, TC.pos.z), fov: 30, dur: 3.6, hand: 0.4, key: 0, fill: 0, rim: 1, shade: [P.fig, L.fig] });
+    this.shot({ from: v3(D.x + 3.3, Y + 1.32, D.z - 0.55), to: v3(D.x + 2.9, Y + 1.32, D.z - 0.5), look: v3(TC.pos.x + 2.4, Y + 0.95, TC.pos.z + 0.3), fov: 34, dur: 3.6, hand: 0.4, key: 0, fill: 0, rim: 1, shade: [P.fig, L.fig] });
     yield 0.9;
-    g.audio.play('knock', 0.6);
+    g.audio.play('punch', 0.6);
     for (const [c, sd] of [[t1, 1], [t2, -1]]) {
       this.put(c, TC.pos.x + 0.5, TC.pos.z + sd * 1.3, a + Math.PI);
       c.fig.setVisible(true);
@@ -4918,7 +4918,7 @@ export class Prologue {
       this.feel(c.fig, 'angry', 90);
     }
     yield 0.45;
-    g.audio.play('knock', 0.5);
+    g.audio.play('punch', 0.5);
     // (up the floor at them, heavy: the one who talks, the big one a step behind and out to his side)
     this.go(t1, D.x + ux * 5.2, D.z + 0.1, 1.15);
     this.go(t2, D.x + ux * 6.7, D.z + 1.55, 1.15);
@@ -4939,7 +4939,7 @@ export class Prologue {
     yield 1.1;
     // (ROADMAP 18.9: their card, the two of them held as they come)
     yield* this.freezeCard({ name: 'VINCE & BRUNO', tag: 'they want something back', col: '#d23a32', at: () => this.headJ(t1), lead: true });
-    this.shot({ ...this.single(t1, P, { dist: 2.0, side: -0.5, up: -0.22, drop: 0.25 }), fov: 36, dur: 2.8, hand: 0.5, key: 0.6, rim: 1 });
+    this.shot({ ...this.single(t1, P, { dist: 2.0, side: -0.5, up: -0.22, drop: 0.25 }), fov: 36, dur: 2.8, hand: 0.5, key: 0.95, fill: 0.6, rim: 1 });
     yield 0.1;
     yield* this.say('T01', t1.fig, 0.3);
     // he puts her behind him: his arm back and out before her, she in behind his shoulder
@@ -5080,7 +5080,7 @@ export class Prologue {
     this.carOnly = null;
     g.enterVehicle(v);
     L.pl.ride = v;
-    g.audio.play('knock', 0.6);
+    g.audio.play('punch', 0.6);
     g.audio.play('roar', 1);
     this.lamps = [{ car: TC, k: 1, want: 1 }, { car: v, k: 0, want: 1 }];
     // (the two men up the floor after them, their guns up)
@@ -5127,10 +5127,12 @@ export class Prologue {
       const fz = Math.cos(c.yaw);
       const y = c.pos.y;
       const nose = c.halfLen || 2.3;
-      flashLight(c.pos.x + fx * (nose + 2.8), y + 0.9, c.pos.z + fz * (nose + 2.8), 10, LAMP_LIGHT, 2.1 * q.k);
+      // (down the floor: weak, and from over a head's height - on the concrete, not on a shirt front. At a chest's height and
+      // full strength a white shirt in it burned out to a glowing sheet, and the eyes over it to two white lamps)
+      flashLight(c.pos.x + fx * (nose + 2.6), y + 0.9, c.pos.z + fz * (nose + 2.6), 9, LAMP_LIGHT, 1.5 * q.k);
       if (film) {
-        flashLight(c.pos.x + fx * (nose + 8.5), y + 1.1, c.pos.z + fz * (nose + 8.5), 11, LAMP_LIGHT, 1.5 * q.k);
-        flashLight(c.pos.x + fx * (nose + 15), y + 1.25, c.pos.z + fz * (nose + 15), 10, LAMP_LIGHT, 1.0 * q.k);
+        flashLight(c.pos.x + fx * (nose + 8.5), y + 2.9, c.pos.z + fz * (nose + 8.5), 12, LAMP_LIGHT, 0.6 * q.k);
+        flashLight(c.pos.x + fx * (nose + 15), y + 2.9, c.pos.z + fz * (nose + 15), 11, LAMP_LIGHT, 0.4 * q.k);
       }
       if (g.fx) {
         for (const sd of [-1, 1]) {
@@ -5201,12 +5203,10 @@ export class Prologue {
       const cam = g.camera.position;
       const far = Math.hypot(mx - cam.x, mz - cam.z);
       const loud = Math.max(0.25, Math.min(1, 9 / Math.max(3, far)));
-      g.audio.play('pistol', loud);
-      // (under the car park's concrete a shot comes back off the walls: twice, fainter)
-      if (this.gunsInside) {
-        setTimeout(() => g.audio.play('pistol', loud * 0.3), 150);
-        setTimeout(() => g.audio.play('pistol', loud * 0.13), 340);
-      }
+      // (under the car park's concrete: the recorded shot, a crack and its echo off the walls - the chase's own, game/prologue/
+      // paintfight.js; out on the street the short one)
+      if (this.gunsInside) this.sample(Math.random() < 0.7 ? 'sfx/shot_a.mp3' : 'sfx/shot_b.mp3', 1.15 * loud);
+      else g.audio.play('pistol', loud);
       this.bangs = (this.bangs || 0) + 1;
       if (this.bangs <= 3 && this.comic) this.comic.word(this.bangs === 2 ? 'BLAM!' : 'BANG!', v3(mx, my + 0.3, mz), { fill: '#fff4d6', burst: '#ff3b4f', size: 0.075, life: 0.55 });
       // where it goes: a metre or three wide of them, low
