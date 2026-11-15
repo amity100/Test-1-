@@ -7,6 +7,8 @@
 //   into memory (OfflineAudioContext) in place of the live one, and it is run by hand, a fifteenth of a second a picture; at the
 //   end what it rendered is written as a wav and put under the pictures by ffmpeg
 //   BURN=1: a review copy - each shot's number and the scene's own clock in the picture's top corner (in the recording only)
+//   WATCH="<js>": a line of JS asked after every picture (g: the game, P: the prologue) - its answer printed whenever it changes,
+//   with the scene's time: for finding the moment something goes wrong in the very run that is filmed
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -97,6 +99,11 @@ for (;;) {
     }
     return { scene: P.sceneN, t: P.sceneT };
   }, [steps, Math.round(SR / FPS / 128)]);
+  if (process.env.WATCH) {
+    const w = JSON.stringify(await pg.evaluate((code) => new Function('g', 'P', code)(window.__game, window.__game.prologue), process.env.WATCH));
+    if (w !== globalThis.__watched) console.log(`${r.t.toFixed(2)}  ${w}`);
+    globalThis.__watched = w;
+  }
   if (r.scene !== sc || r.t > T1 || n > 3000) break;
   // (two of the browser's own frames first: a sheet drawn over the game's picture - the film's comic pages, Lily's sketchbook -
   // was photographed torn, its top from the frame before, when it moved fast)

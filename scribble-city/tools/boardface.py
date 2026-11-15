@@ -12,6 +12,8 @@ src = sys.argv[1]
 out = sys.argv[2] if len(sys.argv) > 2 else 'v5/img/prologue'
 # the boards' frame is 450 x 414
 OW, OH = 900, 828
+# (how far a pixel must differ between the two pictures to be his: under it, the glow and the pen lines the look puts round him)
+TH = int(os.environ.get('TH', 30))
 
 
 def cutout(name):
@@ -19,7 +21,7 @@ def cutout(name):
     b = Image.open(f'{src}/{name}_bg.png').convert('RGB')
     d = ImageChops.difference(a, b)
     r, g, bl = d.split()
-    m = ImageChops.lighter(ImageChops.lighter(r, g), bl).point(lambda v: 255 if v > 10 else 0)
+    m = ImageChops.lighter(ImageChops.lighter(r, g), bl).point(lambda v: 255 if v > TH else 0)
     # (small gaps in him closed; then whatever the outside cannot reach is him too)
     m = m.filter(ImageFilter.MaxFilter(7)).filter(ImageFilter.MinFilter(7))
     W, H = m.size
@@ -27,9 +29,10 @@ def cutout(name):
     pad.paste(m, (1, 1))
     ImageDraw.floodfill(pad, (0, 0), 128)
     m = pad.crop((1, 1, W + 1, H + 1)).point(lambda v: 0 if v == 128 else 255)
-    # (specks of the street that changed between the two pictures: opened away)
-    m = m.filter(ImageFilter.MinFilter(5)).filter(ImageFilter.MaxFilter(5))
-    m = m.filter(ImageFilter.GaussianBlur(1.2))
+    # (specks of the street that changed between the two pictures: opened away; and the edge taken in by two pixels - the
+    # glow round him in the first picture is not him, and it carried a rim of the street on to the poster)
+    m = m.filter(ImageFilter.MinFilter(9)).filter(ImageFilter.MaxFilter(5))
+    m = m.filter(ImageFilter.GaussianBlur(1.4))
     return a, m
 
 

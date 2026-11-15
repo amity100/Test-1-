@@ -1741,7 +1741,11 @@ export class Prologue {
   // (round 22) Lily out of the car she rode in, on her feet beside it (or where she is put after)
   lilyOut() {
     const L = this.cast.lily;
-    if (!L || !L.pl || !L.pl.ride) return;
+    if (!L || !L.pl) return;
+    // (ROADMAP 23.18: also when the car she rode in has let her go already - outOfCar takes her ride away with Danny's, and
+    // this then left her as she had been in it: sitting, at a seat's height, wherever she was put next. Found in scene 5:
+    // Lily sat in the air beside him across the car park's floor)
+    if (!L.pl.ride && !L.riding) return;
     const c = L.pl.ride;
     L.pl.ride = null;
     L.riding = false;
@@ -4829,7 +4833,15 @@ export class Prologue {
     TC.yaw = IN_PARK.car.yaw;
     TC.vx = TC.vz = TC.vy = 0;
     TC.speed = 0;
-    for (const c of [t1, t2]) c.fig.setVisible(false);
+    // ("inside": the city's people code shows whoever is in the camera's view again every frame - game/civilians.js - and the
+    // two of them stood by their car in the dark before its doors had opened)
+    for (const c of [t1, t2]) {
+      c.inside = true;
+      c.fig.setVisible(false);
+    }
+    // (the four of them drawn whole from as far as this floor is long: a phone draws people further than a dozen metres as
+    // plain dolls, and Danny at his car was one from across the floor)
+    for (const f of [P.fig, L.fig, t1.fig, t2.fig]) f.lodFar = 85;
     // ---- 0. in from the street: his car through the way in, its lamps down the dark floor - seen from inside
     own.pos.set(E.x, Y, E.z + 4.5);
     own.yaw = Math.PI;
@@ -4878,7 +4890,7 @@ export class Prologue {
     P.fig.lookAt = null;
     this.feel(P.fig, 'worried', 8);
     g.audio.play('punch', 0.55);
-    this.shot({ from: v3(D.x - 9.6, Y + 0.48, D.z + 2.7), to: v3(D.x - 9.1, Y + 0.52, D.z + 2.5), look: () => v3((P.pos.x + L.pos.x) / 2, Y + 0.95, (P.pos.z + L.pos.z) / 2), fov: 30, dur: 3.3, hand: 0.3, key: 0.5 });
+    this.shot({ from: v3(D.x - 4.6, Y + 0.48, D.z + 2.3), to: v3(D.x - 4.2, Y + 0.52, D.z + 2.15), look: () => v3((P.pos.x + L.pos.x) / 2, Y + 0.95, (P.pos.z + L.pos.z) / 2), fov: 30, dur: 3.3, hand: 0.3, key: 0.5 });
     this.walkTo = { x: D.x, z: D.z, speed: 1 };
     this.go(L, D.x + 0.3, D.z - 0.95, 1.3);
     yield 0.35;
@@ -4910,6 +4922,7 @@ export class Prologue {
     g.audio.play('punch', 0.6);
     for (const [c, sd] of [[t1, 1], [t2, -1]]) {
       this.put(c, TC.pos.x + 0.5, TC.pos.z + sd * 1.3, a + Math.PI);
+      c.inside = false;
       c.fig.setVisible(true);
       c.downT = 0;
       c.upT = 0;
@@ -5036,7 +5049,8 @@ export class Prologue {
     lilyGo();
     this.walkTo = { x: door.x, z: door.z, speed: 1, sprint: true };
     // (1: from by his car - the two of them at us across the floor, the flashes behind them)
-    this.shot({ from: v3(v.pos.x - 2.3, Y + 0.95, v.pos.z + 3.6), to: v3(v.pos.x - 2.5, Y + 0.9, v.pos.z + 3.3), look: () => v3((P.pos.x + L.pos.x) / 2, Y + 1.05, (P.pos.z + L.pos.z) / 2), fov: 42, dur: 1.3, hand: 1, shake: 0.1, key: 0.6 });
+    // (from before the car's nose, on its far side from the tower: beside it the lens was inside the tower's wall)
+    this.shot({ from: v3(v.pos.x - 3.9, Y + 0.9, v.pos.z - 1.7), to: v3(v.pos.x - 4.2, Y + 0.86, v.pos.z - 1.5), look: () => v3((P.pos.x + L.pos.x) / 2, Y + 1.05, (P.pos.z + L.pos.z) / 2), fov: 44, dur: 1.3, hand: 1, shake: 0.1, key: 0.6 });
     this.comic.lines(null, 1.2, 0.8);
     {
       let t = 0;
@@ -5101,6 +5115,7 @@ export class Prologue {
     this.cue('chase');
     this.startPursuit();
     this.check = { x: DANNY_CAR.x, y: DANNY_CAR.y + 0.05, z: DANNY_CAR.z, yaw: DANNY_CAR.yaw, back: { x: PARK.entrance.x, z: PARK.entrance.z + 4 } };
+    for (const f of [P.fig, L.fig, t1.fig, t2.fig]) f.lodFar = 0;
     this.film(false);
     g.camRig.yaw = v.yaw;
     this.objective('<b>Lose them</b> - up through the car park', PARK.route[1].x, PARK.route[1].z, 'Up');
@@ -5269,6 +5284,7 @@ export class Prologue {
       if (this.thugsInside) {
         for (const [c, sd] of [[a, 1], [b, -1]]) {
           this.put(c, IN_PARK.car.x + 0.5, IN_PARK.car.z + sd * 1.3, Math.PI / 2);
+          c.inside = true;
           c.fig.setVisible(false);
         }
       }

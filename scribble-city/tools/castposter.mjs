@@ -52,7 +52,11 @@ const top = await pg.evaluate(async ([X, Z, hour, who, withDanny]) => {
   const cast = await import('./js/game/prologue/cast.js');
   const look = cast[`${who}Look`]();
   if (!look) return null;
-  const yaw = -Math.PI / 2;
+  // (his face to the day's light, the sun a little to one side of it: as a candidate is stood for his picture. Facing the
+  // street as the other tools stand him, his face was in its own shade)
+  const sun = g.daynight.sun;
+  const yaw = Math.atan2(sun.x, sun.z) + 0.55;
+  window.__yaw = yaw;
   // (the player out of the picture, up the street - or beside them, WITH=1: Danny, to compare)
   g.player.spawn(X, withDanny ? Z + 1.15 : Z - 40, yaw);
   const C = g.civilians.spawnScripted(X, Z, look, { name: 'castone' });
@@ -75,7 +79,7 @@ const top = await pg.evaluate(async ([X, Z, hour, who, withDanny]) => {
     for (const c of g.civilians.list) if (c !== C) c.gone = true;
   };
   window.__frame(8, 1 / 30);
-  return 1;
+  return 1 + yaw;
 }, [X, Z, process.env.HOUR ? +process.env.HOUR : 11.5, who, !!process.env.WITH]);
 if (!top) {
   console.log(`no look for ${who}`);
@@ -106,14 +110,22 @@ const D = process.env.HEIGHT ? +process.env.HEIGHT : await pg.evaluate(() => {
   return (j.headC ? j.headC.y : 1.7) + 0.12;
 });
 console.log('head top', D.toFixed(3));
-// (his eyes about a third of the way down the picture; the knot of his tie, the pin and the square in it)
+// (his eyes about a third of the way down the picture; the knot of his tie, the pin and the square in it. Each place given from
+// where he stands and faces: [ahead of him, up, to his left])
+const yaw = top - 1;
+const fx = Math.sin(yaw);
+const fz = Math.cos(yaw);
+const at = ([a, u, l]) => [X + fx * a + fz * l, u, Z + fz * a - fx * l];
 const SHOTS = [
-  // (name, the camera, where it looks, its lens, how he is, which side the light is on: +1 the camera's right)
-  ['posterFront', [X - 2.6, D - 0.2, Z + 0.12], [X, D - 0.275, Z], 17, { gaze: [X - 6, D - 0.1, Z + 0.3], mood: 'tender' }, 1],
-  ['posterLook', [X - 2.45, D - 0.2, Z + 0.85], [X, D - 0.275, Z], 17, { gaze: [X - 6, D + 0.25, Z + 3.4] }, -1],
-  ['posterSmile', [X - 2.45, D - 0.2, Z - 0.85], [X, D - 0.275, Z], 17, { gaze: [X - 6, D - 0.1, Z - 1.6], mood: 'tender' }, 1],
+  ['warm', [2.6, D - 0.2, 0.1], [0, D - 0.275, 0], 17, { gaze: [6, D - 0.1, 0.3] }],
+  ['posterLook', [2.45, D - 0.2, 0.85], [0, D - 0.275, 0], 17, { gaze: [6, D + 0.25, 3.4] }],
+  ['posterSmile', [2.45, D - 0.2, -0.85], [0, D - 0.275, 0], 17, { gaze: [6, D - 0.1, -1.6], mood: 'tender' }],
+  ['posterFront', [2.6, D - 0.2, 0.12], [0, D - 0.275, 0], 17, { gaze: [6, D - 0.1, 0.3], mood: 'tender' }],
 ];
-for (const [name, pos, look, fov, how, keySide] of SHOTS) {
+for (const [name, pos0, look0, fov, how0] of SHOTS) {
+  const pos = at(pos0);
+  const look = at(look0);
+  const how = how0 ? { ...how0, gaze: how0.gaze ? at(how0.gaze) : null } : null;
   await pg.evaluate((how) => {
     const C = window.__cast;
     const g = window.__game;
@@ -122,34 +134,33 @@ for (const [name, pos, look, fov, how, keySide] of SHOTS) {
     C.fig.lookAt = how && how.gaze ? new V(how.gaze[0], how.gaze[1], how.gaze[2]) : null;
     C.fig.feel = how && how.mood ? { mood: how.mood, until: g.time + 1e6 } : null;
     window.__frame(50, 1 / 30);
-  }, how || null);
-  // (a photographer's light on him: the film's own key light on its people - render/materials.js uFilmKey - from beside the
-  // camera and above, set after the last step of the game and kept for both pictures. In the day's own light his face was in
-  // its shade)
-  await pg.evaluate(async ([pos, look, fov, sd]) => {
+  }, how);
+  await pg.evaluate(([pos, look, fov]) => {
     window.__camOverride = { pos, look, fov };
     window.__frame(6, 1 / 30);
-    const g = window.__game;
-    const M = await import('./js/render/materials.js');
-    const e = g.camera.matrixWorld.elements;
-    const v = [e[0] * 0.75 * sd + e[4] * 0.45 + e[8] * 0.5, e[1] * 0.75 * sd + e[5] * 0.45 + e[9] * 0.5, e[2] * 0.75 * sd + e[6] * 0.45 + e[10] * 0.5];
-    const n = Math.hypot(v[0], v[1], v[2]) || 1;
-    M.shared.uFilmKey.value.set(v[0] / n, v[1] / n, v[2] / n, +(window.__keyK || 0.95));
-    const LK = g.pipe && g.pipe.look;
-    if (LK) {
-      LK.fill = 0.5;
-      LK.rim = 0.5;
+    window.__frame(1, 0.0001);
+  }, [pos, look, fov]);
+  if (name === 'warm') {
+    // (the first picture of him is before his clothes are painted, however long is waited: one for nothing, and a while more)
+    for (let i = 0; i < 14; i++) {
+      await pg.waitForTimeout(1500);
+      await pg.evaluate(() => window.__frame(4, 1 / 30));
     }
-    window.__frame(0);
-  }, [pos, look, fov, keySide || 1]);
+    continue;
+  }
   await pg.screenshot({ path: path.join(out, `${name}.png`), timeout: 180000 });
-  // (and the same street without him: nothing moved on, only he is not drawn)
+  // (and the same place without him: the game stepped on by a ten-thousandth of a second, only he is not drawn)
+  // ("inside": the city's people code then neither shows nor draws him - game/civilians.js)
   await pg.evaluate(() => {
+    window.__cast.inside = true;
     window.__cast.fig.setVisible(false);
-    window.__frame(0);
+    window.__frame(1, 0.0001);
   });
   await pg.screenshot({ path: path.join(out, `${name}_bg.png`), timeout: 180000 });
-  await pg.evaluate(() => window.__cast.fig.setVisible(true));
+  await pg.evaluate(() => {
+    window.__cast.inside = false;
+    window.__cast.fig.setVisible(true);
+  });
   console.log(`${name}  (${Math.round((Date.now() - t0) / 1000)} s)`);
 }
 if (errors.length) console.log('page errors:\n  ' + [...new Set(errors)].slice(0, 6).join('\n  '));
