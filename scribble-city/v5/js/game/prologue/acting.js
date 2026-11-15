@@ -35,6 +35,16 @@ export const ACTS = {
   L08: { mood: 'shock' },
   L22: { mood: 'shock', beats: [[0.1, 1, 'point']] },
   D29: { mood: 'shock', beats: [[0, 0.35, 'open'], [0.4, 1, 'point']], shake: true },
+  // (ROADMAP 23.12, stage 3: his search through the evening's people - no words heard, only what hands and faces do. Him: at
+  // the sky where it stood; what he has seen, with both hands; back at it over his shoulder. Them: a man's hands up between
+  // them - easy; a mother's no; a shrug)
+  XD1: { mood: 'shout', beats: [[0, 1, 'point']] },
+  XD2: { mood: 'pleading', beats: [[0, 0.5, 'open'], [0.5, 1, 'point']] },
+  XD3: { mood: 'shout', beats: [[0, 0.6, 'point'], [0.6, 1, 'open']] },
+  XD4: { mood: 'scared', beats: [[0, 1, 'open']] },
+  XBACK: { mood: 'worried', beats: [[0, 1, 'surrender']] },
+  XNO: { mood: 'worried', shake: true },
+  XSHRUG: { mood: 'smirk', beats: [[0.1, 0.9, 'shrug']] },
   // ---- 4. nobody remembers
   D06: { mood: 'shout', beats: [[0, 0.45, 'wave'], [0.45, 1, 'point']] },
   G01: { mood: 'surprised', beats: [[0, 1, 'shrug']] },

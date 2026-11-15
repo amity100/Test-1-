@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Kit, linC } from '../items.js';
 import { makeSurface, canvasTexture } from '../../render/materials.js';
 import { MARKER_TIP } from '../carry.js';
+import { PINCH } from '../../render/heroshapes.js';
 
 // (v5, ROADMAP 18) Lily's drawing - the page itself, out of her sketchbook, in her two hands: held
 // up to whoever she shows it to, its picture to them, the back of it to her; or held to her chest.
@@ -23,6 +24,17 @@ const _q2 = new THREE.Quaternion();
 const _h = new THREE.Vector3();
 const _hn = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
+// (ROADMAP 23.11: the writing hand - render/heroshapes.js PINCH - in its own frame: the pen's way, the way from the pen's point
+// to the wrist, and the frame made of the two; the same made in the world, and the hand's axes come out of the pair)
+const P_AX = new THREE.Vector3().fromArray(PINCH.ax).normalize();
+const P_TIP = new THREE.Vector3().fromArray(PINCH.q).addScaledVector(P_AX, -PINCH.tip);
+const P_W = P_TIP.clone().negate().normalize();
+const P_T2 = new THREE.Vector3().crossVectors(P_AX, P_W).normalize();
+const P_T3 = new THREE.Vector3().crossVectors(P_AX, P_T2);
+const _w1 = new THREE.Vector3();
+const _w2 = new THREE.Vector3();
+const _w3 = new THREE.Vector3();
+const _wv = new THREE.Vector3();
 const hexRgb = (h) => {
   const n = parseInt(h.slice(1), 16);
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
@@ -100,6 +112,8 @@ export class HeldPage {
   hold(fig, to, mode = 'show') {
     // (her fist round the pencil let go: it is put away while she holds the page in her two hands)
     if (fig && this.gripV && fig.grip === this.gripV) fig.grip = null;
+    // (and her writing hand her own again: drawing, it is set again each frame - drawPose)
+    if (fig) fig.pinch = null;
     // (and round the edges, till the page is held again this frame - update)
     if (fig && fig.grip && fig.grip === this.gripR) fig.grip = null;
     if (fig && fig.gripL && fig.gripL === this.gripL) fig.gripL = null;
@@ -126,6 +140,7 @@ export class HeldPage {
       f.reachR = null;
       f.reachL = null;
       f.pencilAx = null;
+      f.pinch = null;
       if (f.grip && (f.grip === this.gripV || f.grip === this.gripR)) f.grip = null;
       if (f.gripL && f.gripL === this.gripL) f.gripL = null;
       this.still = false;
@@ -288,20 +303,27 @@ export class HeldPage {
     if (_a.lengthSq() < 1e-6) _a.copy(_l).negate();
     _a.normalize();
     const ax = f.pencilAx || (f.pencilAx = new THREE.Vector3());
-    ax.copy(_n).multiplyScalar(0.9).addScaledVector(_a, 0.34).addScaledVector(_l, -0.1).normalize();
-    // (her fist closed round it - render/people.js, fig.grip towards its point - its hollow on the pencil
-    // a little above the point: render/heroshapes.js heroHandGeo, the hollow 0.07 down the hand from
-    // the wrist and 0.062 out from the palm; her hand 0.86 of a man's)
-    const gp = this.gripV || (this.gripV = new THREE.Vector3());
-    gp.copy(ax).negate();
-    f.grip = gp;
+    // (ROADMAP 23.11, the owner's word: "her hand is distorted - it does not look as if she is holding the marker, it looks stuck
+    // to the hand". Held as a pen is held to write: between her thumb and her first finger, lying on her second, its barrel
+    // leaning back over her hand towards her shoulder; her wrist behind its point and to her right, a little off the page, the
+    // back of her hand up. The hand's whole frame from the pen's way and the way from its point to her wrist - fig.pinch,
+    // render/people.js; the marker itself from its point up, game/carry.js)
+    ax.copy(_n).multiplyScalar(0.8).addScaledVector(_a, 0.55).normalize();
+    if (f.grip && f.grip === this.gripV) f.grip = null;
     const hk = S * (f._handK || 0.862);
-    _h.subVectors(j.handR, j.elbowR);
-    _h.addScaledVector(gp, -_h.dot(gp));
-    if (_h.lengthSq() < 1e-8) _h.copy(_l).negate();
-    _h.normalize();
-    _hn.crossVectors(gp, _h);
-    f.reachR.copy(_t).addScaledVector(ax, MARKER_TIP * S + lift).addScaledVector(_h, -0.07 * hk).addScaledVector(_hn, -0.0607 * hk);
+    _wv.copy(_x).multiplyScalar(0.35).addScaledVector(_y, -0.85).addScaledVector(_n, 0.3).normalize();
+    _w1.copy(ax);
+    _w2.crossVectors(ax, _wv).normalize();
+    _w3.crossVectors(_w1, _w2);
+    const pin = f.pinch || (f.pinch = { x: new THREE.Vector3(), y: new THREE.Vector3(), z: new THREE.Vector3(), tip: new THREE.Vector3() });
+    // (the hand's axis i in the world: the world's frame of the pair, each by that axis's share of the hand's own)
+    const axis = (out, i) => out.copy(_w1).multiplyScalar(P_AX.getComponent(i)).addScaledVector(_w2, P_T2.getComponent(i)).addScaledVector(_w3, P_T3.getComponent(i));
+    axis(pin.x, 0);
+    axis(pin.y, 1);
+    axis(pin.z, 2);
+    pin.tip.copy(_t).addScaledVector(_n, lift);
+    // (her wrist: from the pen's point back through the hand)
+    f.reachR.copy(pin.tip).addScaledVector(pin.x, -P_TIP.x * hk).addScaledVector(pin.y, -P_TIP.y * hk).addScaledVector(pin.z, -P_TIP.z * hk);
     if (f.carry !== 'pencil') f.carry = 'pencil';
   }
 

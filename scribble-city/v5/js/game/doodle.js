@@ -382,7 +382,7 @@ export class Doodle {
     const wSide = Math.sin((this.wS * Math.PI) / 2);
     // (his sheet: Danny stands with his hands in his pockets - a second after he has stopped, and out of them the moment he moves;
     // not in the film, whose shots are their own)
-    const pkOn = this.look.hero && !tw.on && stand > 0.97 && !this.aim && !(this.surrender > 0) && !(this.armsUp > 0) && !(this.guard > 0.01);
+    const pkOn = this.look.hero && !tw.on && !this.noPocket && stand > 0.97 && !this.aim && !(this.surrender > 0) && !(this.armsUp > 0) && !(this.guard > 0.01);
     this.pkT = pkOn ? (this.pkT || 0) + dt : 0;
     const pkGoal = this.pkT > 1.0 ? 1 : 0;
     this.pk = (this.pk || 0) + (pkGoal - (this.pk || 0)) * Math.min(1, dt * (pkGoal ? 4.5 : 12));
