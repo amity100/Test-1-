@@ -3126,7 +3126,7 @@ export class Prologue {
       this.shot({ from: wideFrom, look: [WHEEL.x, 24, WHEEL.z], fov: 46, dur: 1, hand: 0.3 });
       C.panel(0, { u: 0.56, v: 0.42 });
       yield 0.4;
-      this.shot({ ...this.single(L, v3(WHEEL.x, 1.1, WHEEL.z), { dist: 1.0, side: 0.12, up: -0.2, drop: -0.05 }), fov: 38, dur: 1, hand: 0.3 });
+      this.shot({ ...this.single(L, v3(WHEEL.x, 1.1, WHEEL.z), { dist: 1.0, side: 0.12, up: -0.2, drop: -0.05 }), fov: 38, dur: 1, hand: 0.3, shade: [P.fig] });
       C.panel(1, { u: 0.5, v: 0.48 });
       yield 0.4;
       this.shot({ ...this.single(P, v3(WHEEL.x, 1.7, WHEEL.z), { dist: 1.3, side: -0.12, up: -0.22, drop: -0.04 }), fov: 36, dur: 1, hand: 0.3 });
@@ -3196,7 +3196,8 @@ export class Prologue {
     {
       const LA = this.single(L, wv, { dist: 0.8, side: -0.16, up: 0.0, drop: 0.05 });
       const LB = this.single(L, wv, { dist: 0.62, side: -0.12, up: 0.0, drop: 0.05 });
-      this.shot({ from: LA.from, to: LB.from, look: LA.look, fov: 30, dur: 1.8, hand: 0.35, dof: 1 });
+      // (ROADMAP 23.10: him, at her side, kept dark - his bare arm was a lit orange shape at the edge of her close shot)
+      this.shot({ from: LA.from, to: LB.from, look: LA.look, fov: 30, dur: 1.8, hand: 0.35, dof: 1, shade: [P.fig] });
     }
     yield Math.max(0.2, d29w - 3.45 - 0.2);
     const l22 = this.say('L22', L.fig, 0.1);
