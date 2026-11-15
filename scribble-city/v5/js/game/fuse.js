@@ -2798,6 +2798,9 @@ export class Fuse {
           // its blades smeared into a white cloud behind the faces - till the car is off again)
           if (v.rotorStill && (v.air || Math.abs(v.speed || 0) > 1)) v.rotorStill = false;
           if (!v.rotorStill) ud.spin.rotation.y += this.fdt * (v.fzLifting || (v.air && fz.rotor) ? 26 : v.driver ? 6 : 1);
+          // (ROADMAP 23.21: and out of the film's close pictures inside the car - game/prologue/director.js: its still blades,
+          // a hand over their heads, were lines across their faces)
+          ud.spin.visible = !v.rotorHide;
         }
         else if (o.role === 'prop' && ud.spin) ud.spin.rotation.z += this.fdt * (v.fzWet ? 4 + Math.abs(v.speed || 0) * 1.6 : v.driver ? 2 : 0.5);
         else if (o.role === 'jet' && ud.flame) {

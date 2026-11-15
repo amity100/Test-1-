@@ -22,6 +22,9 @@ if (from !== sc) {
     while (P.sceneN !== sc && n < 30 * 400) {
       for (let k = 0; k < 6; k++) g.update(1 / 30);
       n += 6;
+      // (a picture a second all the same: the test pilot draws on the screen - the rotor - and what it draws on is laid out
+      // only when a picture is)
+      if (n % 30 === 0) window.__frame(1, 1 / 30);
     }
     return P.sceneN;
   }, sc);

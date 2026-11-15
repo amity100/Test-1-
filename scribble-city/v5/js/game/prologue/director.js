@@ -92,7 +92,7 @@ const IN_PARK = { car: { x: -175.5, z: 280.7, yaw: Math.PI / 2 }, danny: { x: -1
 // (ROADMAP 23) the scenes filmed again, in the game's new look: ?filmlook=0 the film as it was
 // (ROADMAP 23.12, stage 3: scene 4 too - nobody remembers)
 // (ROADMAP 23.18, stage 4: and scene 5 - the two men, in the car park)
-const NEW_LOOK = new Set([2, 3, 4, 5, 7, 8]);
+const NEW_LOOK = new Set([2, 3, 4, 5, 7, 8, 9]);
 const VIEW = { x: 63.5, z: 238.9 };
 // (ROADMAP 18.9: where the wheel stood - its gate on the pier - and the people there who will not
 // remember it: scene 4 is asked there)
@@ -674,6 +674,11 @@ export class Prologue {
     this.comic.update(dt);
     this.tickGuns(dt);
     this.tickLamps(dt);
+    // (ROADMAP 23.21: the landed car's rotor, stopped - its blades out of the close pictures inside the car: game/fuse.js)
+    if (this.sceneN === 9) {
+      const rc = this.game.player.inVehicle;
+      if (rc) rc.rotorHide = !!this.holdCam && !!rc.rotorStill && this.game.camera.position.distanceTo(rc.pos) < 3.4;
+    }
     // (Danny walking somewhere in a shot, on his own feet - or running)
     if (this.walkTo && this.walkDanny(this.walkTo.x, this.walkTo.z, this.walkTo.speed, this.walkTo.sprint)) this.walkTo = null;
     this.tickMarker();
@@ -5733,7 +5738,8 @@ export class Prologue {
     if (this.newLook && !this.ff) {
       yield 0.5;
       yield* this.overTheEdge(car, prof);
-      // (and back to them, in the air: from under its nose, the sky over it)
+      // (and back to them, in the air: from under its nose, the sky over it - the blast's word left in the street)
+      if (this.comic && this.comic.words) this.comic.words.length = 0;
       this.shot({ from: () => off(car, -5.5, -3.6, -1.1), look: () => v3(car.pos.x, car.pos.y + 0.7, car.pos.z), fov: 46, dur: 1.2, hand: 0.4, shake: 0.1, roll: -0.05 });
       this.comic.lines(null, 0.7, 1);
     }
@@ -6018,7 +6024,7 @@ export class Prologue {
     g.audio.play('roar', 0.8);
     g.audio.play('skid', 1);
     this.shot({ from: wld(S + 6.5, Y + 0.55, rz + 5.8), look: wld(S + 27, Y + 1.0, rz), lookTo: wld(S + 13, Y + 1.0, rz + 0.4), fov: 36, dur: 1.3, ease: 'inout', hand: 0.5, shake: 0.1, roll: 0.04 });
-    if (Pc && this.comic && this.comic.word) this.comic.word('SKREEEE!', wld(S + 19, Y + 2.6, rz - 2.6), { fill: '#f2efe6', burst: '#1b1430', size: 0.085, life: 1.1, tilt: 0.12 });
+    if (Pc && this.comic && this.comic.word) this.comic.word('SKREEEE!', wld(S + 19, Y + 2.6, rz - 2.6), { fill: '#ff9a3c', burst: '#1b1430', size: 0.085, life: 1.1, tilt: 0.12 });
     let t = 0;
     let sk = 0.3;
     yield () => {
@@ -6063,6 +6069,64 @@ export class Prologue {
       Pc.vx = Pc.vz = 0;
       Pc.bodyRoll = 0;
     }
+    car.script = held;
+  }
+
+  // (ROADMAP 23.21, stage 7) down onto the beach: the last of the way to the sand, quickening; its wheels into it - the sand
+  // thrown out from under each, the body down on its springs and up, twice, dying away; the rotor slowing to a stop; and then
+  // nothing: the sea. One picture, from low on the sand ahead of it
+  *touchdown(car) {
+    const g = this.game;
+    const gy = groundHeight(car.pos.x, car.pos.z);
+    const y0 = Math.max(car.pos.y, gy + 0.05);
+    const fx = Math.sin(car.yaw);
+    const fz = Math.cos(car.yaw);
+    car.vx = car.vz = 0;
+    car.vy = 0;
+    car.speed = 0;
+    const held = car.script || null;
+    car.script = () => {};
+    const SAND = [0.95, 0.86, 0.66];
+    this.shot({ from: v3(car.pos.x + fx * 7.2 + fz * 4.4, gy + 0.42, car.pos.z + fz * 7.2 - fx * 4.4), look: () => v3(car.pos.x, car.pos.y + 0.75, car.pos.z), fov: 42, fovTo: 38, dur: 3.4, ease: 'out', hand: 0.3 });
+    if (this.score && this.score.under) this.score.under(0.22, 3);
+    const fall = clamp(0.28 + (y0 - gy) * 0.16, 0.3, 0.75);
+    let t = 0;
+    let hit = false;
+    yield () => {
+      const dt = this.dtR || 1 / 30;
+      t += dt;
+      const k = clamp(t / fall, 0, 1);
+      car.pos.y = y0 + (gy - y0) * k * k;
+      if (k >= 1 && !hit) {
+        hit = true;
+        car.air = false;
+        g.audio.play('crash', 0.3);
+        g.audio.play('poof', 0.9);
+        g.fx.ring(car.pos.x, gy + 0.1, car.pos.z, 1.2, 5.5, 0.55, SAND, 4);
+        g.camRig.addShake(0.22);
+        if (this.shots && this.shots.addShake) this.shots.addShake(0.4);
+        for (const [sx, sz] of [[-0.9, 1.4], [0.9, 1.4], [-0.9, -1.4], [0.9, -1.4]]) {
+          const wx = car.pos.x + fz * sx + fx * sz;
+          const wz = car.pos.z - fx * sx + fz * sz;
+          g.fx.crumbs(wx, gy + 0.15, wz, 9, 3.8, false);
+          // (out from under each wheel, low: over the car itself a cloud of it washed the car out of the picture)
+          for (let i = 1; i <= 4; i++) g.fx.sprite(i % 2 ? 'smoke0' : 'smoke1', wx + fz * sx * 0.75 * i, gy + 0.22, wz - fx * sx * 0.75 * i, { size: 0.7 + Math.random() * 0.6, grow: 2.0, life: 1.1 + Math.random() * 0.5, vy: 0.3, alpha: 0.5, tint: SAND });
+        }
+      }
+      if (hit) {
+        const u = t - fall;
+        // (down on its springs and up)
+        car.fzDipT = 0;
+        car.fzDip = -0.13 * Math.exp(-u * 4.4) * Math.cos(u * 11.5);
+        car.bodyPitch = 0.035 * Math.exp(-u * 3.6) * Math.sin(u * 9);
+        if (u > 0.5) car.rotorStill = true;
+      }
+      return t > fall + 2.3;
+    };
+    car.fzDip = 0;
+    car.bodyPitch = 0;
+    car.pos.y = gy;
+    car.air = false;
     car.script = held;
   }
 
@@ -6540,6 +6604,9 @@ export class Prologue {
     this.film(true);
     this.cue('ending', { fade: 3 });
     this.hour(18.8, 0.01);
+    // (ROADMAP 23.21, stage 7: the landing itself. On its rotor it hung a hand over the sand, and the film cut to the two of
+    // them in it - it never came down)
+    if (this.lookNew && !this.ff) yield* this.touchdown(car);
     // (stopped where it is)
     car.vx = car.vz = 0;
     car.speed = 0;

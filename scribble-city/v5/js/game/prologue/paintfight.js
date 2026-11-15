@@ -560,6 +560,7 @@ export class PaintFight {
       this.root.add(b.mesh);
     }
     b.live = true;
+    b.whizzed = false;
     b.life = 1.7;
     b.p = from;
     b.v = _v.clone();
@@ -608,6 +609,12 @@ export class PaintFight {
         b.mesh.visible = false;
         continue;
       }
+      // (ROADMAP 23.21: past him, close - heard going by, the picture a touch shaken: a miss is felt too)
+      if (me && !b.whizzed && Math.abs(b.p.y - me.pos.y - 0.8) < 2.2 && Math.hypot(b.p.x - me.pos.x, b.p.z - me.pos.z) < 3.4) {
+        b.whizzed = true;
+        this.g.audio.play('swish', 0.55);
+        if (this.g.camRig && this.g.camRig.addShake) this.g.camRig.addShake(0.05);
+      }
       // (round 16, the player's word: into a wall - and the wall melts where it lands)
       if (col) {
         const dx = b.p.x - ox;
@@ -616,6 +623,8 @@ export class PaintFight {
         const L = Math.hypot(dx, dy, dz);
         const h = L > 1e-4 ? col.raycast(ox, oy, oz, dx, dy, dz, L, SKIP) : null;
         if (h && Math.abs(h.ny || 0) < 0.55) {
+          // (into the wall by him: the crack of it)
+          if (me && Math.hypot(b.p.x - me.pos.x, b.p.z - me.pos.z) < 8) this.g.audio.play('ricochet', 0.4);
           this.wallMelt(h, b.color);
           b.live = false;
           b.mesh.visible = false;
@@ -660,7 +669,7 @@ export class PaintFight {
     car.hp = Math.max(car.maxHp * CAUGHT * 0.5, car.hp - car.maxHp * DMG * (this.P.autopilot ? 0.35 : 1));
     if (g.hud && g.hud.hurtFlash) g.hud.hurtFlash();
     g.audio.play('splat', 0.8);
-    if (g.camRig && g.camRig.addShake) g.camRig.addShake(0.12);
+    if (g.camRig && g.camRig.addShake) g.camRig.addShake(0.2);
     // (on the car where it landed: on its side, its end or its roof, whichever it is nearest)
     const H = car.heightM || 1.45;
     const ax = Math.abs(lx) / hw;
