@@ -901,11 +901,16 @@ export class Comic {
     g.restore();
   }
 
+  // (ROADMAP 23.21, the owner's word: the sound words stay - "cool, like a comic's" - and may be made a little better.) As a
+  // comic's letterer draws one: each letter set by hand - a little turned, a little up or down, the word growing louder
+  // towards its end; a hard shadow under it; its burst two stars, one over the other, the under one the shadow's; and for
+  // its first fifth of a second it shakes
   drawWord(w, W, H, k, a) {
     const g = this.g;
     const size = w.size * H * k;
-    const x = w.u * W;
-    const y = w.v * H;
+    const sh = Math.max(0, 1 - w.t / 0.2);
+    const x = w.u * W + Math.sin(w.t * 95 + w.seed) * size * 0.07 * sh;
+    const y = w.v * H + Math.cos(w.t * 78 + w.seed * 2) * size * 0.06 * sh;
     g.save();
     g.translate(x, y);
     g.rotate(w.tilt);
@@ -913,44 +918,92 @@ export class Comic {
     // (the words are English, left to right - the page round the sheet reads right to left, and would
     // put a BANG!'s mark in front of it)
     g.direction = 'ltr';
-    // the burst behind it: a jagged star
     let s = Math.floor(w.seed * 1000) + 7;
     const rnd = () => {
       s = (s * 16807) % 2147483647;
       return (s % 10000) / 10000;
     };
-    g.font = `400 ${size}px ${WORD_FONT}`;
-    const tw = g.measureText(w.text).width;
-    const rx = tw * 0.62 + size * 0.35;
-    const ry = size * 0.95;
+    // ---- the letters: where each stands, how big, how turned
+    const chars = Array.from(w.text);
+    const n = chars.length;
+    const L = [];
+    let tw = 0;
+    for (let i = 0; i < n; i++) {
+      const u = n > 1 ? i / (n - 1) : 0.5;
+      const sz = size * (0.88 + 0.26 * u);
+      g.font = `400 ${sz}px ${WORD_FONT}`;
+      const cw = g.measureText(chars[i]).width * 0.94;
+      L.push({ ch: chars[i], sz, cw, x: tw + cw / 2, dy: (rnd() - 0.5) * size * 0.1 - u * size * 0.05, rot: (rnd() - 0.5) * 0.13 });
+      tw += cw;
+    }
+    for (const l of L) l.x -= tw / 2;
+    // ---- the burst behind it: a jagged star, and its shadow
+    const rx = tw * 0.6 + size * 0.42;
+    const ry = size * 1.02;
+    const N = 22;
+    const star = [];
+    for (let i = 0; i < N; i++) {
+      const t = (i / N) * Math.PI * 2;
+      const r = i % 2 ? 0.74 + rnd() * 0.1 : 1.04 + rnd() * 0.26;
+      star.push([Math.cos(t) * rx * r, Math.sin(t) * ry * r]);
+    }
+    const path = (dx, dy, kk) => {
+      g.beginPath();
+      for (let i = 0; i < N; i++) {
+        const px = star[i][0] * kk + dx;
+        const py = star[i][1] * kk + dy;
+        if (i) g.lineTo(px, py);
+        else g.moveTo(px, py);
+      }
+      g.closePath();
+    };
+    g.lineJoin = 'miter';
+    g.fillStyle = w.ink;
+    path(size * 0.1, size * 0.12, 1);
+    g.fill();
     g.fillStyle = w.burst;
     g.strokeStyle = w.ink;
     g.lineWidth = size * 0.07;
-    g.beginPath();
-    const N = 18;
-    for (let i = 0; i <= N; i++) {
-      const t = (i / N) * Math.PI * 2;
-      const r = i % 2 ? 0.78 + rnd() * 0.08 : 1.05 + rnd() * 0.18;
-      const px = Math.cos(t) * rx * r;
-      const py = Math.sin(t) * ry * r;
-      if (i) g.lineTo(px, py);
-      else g.moveTo(px, py);
-    }
-    g.closePath();
+    path(0, 0, 1);
     g.fill();
     g.stroke();
-    // the word: fat ink outline, its fill, a light edge
+    // (a lighter heart to it)
+    g.globalAlpha = a * 0.28;
+    g.fillStyle = '#fffaf0';
+    path(0, 0, 0.72);
+    g.fill();
+    g.globalAlpha = a;
+    // ---- the word: its shadow, a fat ink outline, its fill, a light edge
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.lineJoin = 'round';
-    g.lineWidth = size * 0.2;
+    const each = (fn) => {
+      for (const l of L) {
+        g.save();
+        g.translate(l.x, l.dy + size * 0.04);
+        g.rotate(l.rot);
+        g.font = `400 ${l.sz}px ${WORD_FONT}`;
+        fn(l);
+        g.restore();
+      }
+    };
+    g.fillStyle = w.ink;
     g.strokeStyle = w.ink;
-    g.strokeText(w.text, 0, size * 0.04);
+    each((l) => {
+      g.lineWidth = l.sz * 0.2;
+      g.strokeText(l.ch, l.sz * 0.075, l.sz * 0.095);
+    });
+    each((l) => {
+      g.lineWidth = l.sz * 0.2;
+      g.strokeText(l.ch, 0, 0);
+    });
     g.fillStyle = w.fill;
-    g.fillText(w.text, 0, size * 0.04);
-    g.lineWidth = size * 0.03;
-    g.strokeStyle = 'rgba(255,255,255,0.6)';
-    g.strokeText(w.text, -size * 0.02, 0);
+    each((l) => g.fillText(l.ch, 0, 0));
+    g.strokeStyle = 'rgba(255,255,255,0.65)';
+    each((l) => {
+      g.lineWidth = l.sz * 0.03;
+      g.strokeText(l.ch, -l.sz * 0.02, -l.sz * 0.035);
+    });
     g.restore();
   }
 

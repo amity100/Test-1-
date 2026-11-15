@@ -158,6 +158,13 @@ export function paintFolkFace(c, o = {}) {
   h.hatch(0, 0, W, H, N(900), (px, py) => 0.5 * smooth(0.04, 0.065, xm(px)) * (1 - smooth(-0.2, -0.235, ym(py))), 1.15, 30, 1.6, ['#e0709a', '#d860a8', '#f0909a'], 0.28);
   h.hatch(0, 0, W, H, N(900), (px, py) => 0.5 * smooth(-0.04, -0.065, xm(px)) * (1 - smooth(-0.2, -0.235, ym(py))), 1.15, 30, 1.6, ['#5a8ad8', '#6aa0e0', '#7a70d0'], 0.28);
   }
+  // (ROADMAP 23.13: a hard, lined face - P.carve: its hollows hatched into the portrait's own picture too, under the light's
+  // shade: the sockets, under the cheekbones, the sides of the nose, the jaw's corners - a man of forty-four, not a boy)
+  if (flat && P.carve) {
+    h.hatch(0, 0, W, H, N(7600), (px, py) => tone(px, py) * 1.1 * P.carve * (1 - neckK(py)), 1.0, 26, 1.6, S.sh1, 0.5);
+    h.hatch(0, 0, W, H, N(6200), (px, py) => (tone(px, py) - 0.22) * 1.4 * P.carve * (1 - neckK(py)), -0.65, 22, 1.5, S.sh2, 0.42);
+    h.hatch(0, 0, W, H, N(2600), (px, py) => (tone(px, py) - 0.5) * 2.0 * P.carve * (1 - neckK(py)), 0.25, 18, 1.6, S.sh3, 0.4);
+  }
   // ---- freckles: across the nose and the tops of the cheeks
   if (P.freckles) {
     for (let i = 0; i < N(520) * P.freckles; i++) {
@@ -196,7 +203,8 @@ export function paintFolkFace(c, o = {}) {
     // (a beard's mass first: its shade under the hairs)
     if (kind !== 'shadow') h.hatch(0, 0, W, H, N(5200), (px, py) => st(px, py) * 0.95, 1.3, 16, 2.0, B, 0.42, 0.6);
     h.hatch(0, 0, W, H, N(2200), (px, py) => st(px, py) * 0.85 * dens, 1.25, 20, 1.6, ['#6a5a6a', '#5a4a58', '#7a6a70'], 0.26);
-    h.ticks(0, 0, W, H, N(kind === 'shadow' ? 16000 : 34000), (px, py) => st(px, py) * 0.62 * dens, growth, kind === 'shadow' ? 3.6 : kind === 'mustache' ? 7.5 : 5.6, kind === 'shadow' ? 1.1 : kind === 'mustache' ? 1.7 : 1.4, B, kind === 'shadow' ? 0.6 : 0.82, 0.7);
+    // (P.beardK: a day's stubble heavier or lighter than the rule's)
+    h.ticks(0, 0, W, H, N((kind === 'shadow' ? 16000 : 34000) * (P.beardK || 1)), (px, py) => st(px, py) * 0.62 * dens, growth, kind === 'shadow' ? 3.6 : kind === 'mustache' ? 7.5 : 5.6, kind === 'shadow' ? 1.1 : kind === 'mustache' ? 1.7 : 1.4, B, kind === 'shadow' ? 0.6 : 0.82, 0.7);
     if (kind !== 'shadow') h.ticks(0, 0, W, H, N(9000), (px, py) => st(px, py) * 0.5, growth, 2.4, 1.5, B.slice(-2), 0.7, 1.5);
   }
   // ---- the eyes
@@ -623,6 +631,60 @@ export function paintFolkHair(c, o = {}) {
   strand(HR.mid, 1200, 1.7, 0.7, 0, 0.95);
   strand(HR.light, 750, 1.2, 0.65, 0.1, 0.85, (u, v) => 0.4 + 0.6 * Math.exp(-(((v - 0.42) / 0.22) ** 2)));
   if (HR.grey > 0 && HR.grey < 1) strand(['#c8c6c2', '#dcdad6', '#b0aeaa'], 900 * HR.grey, 1.3, 0.7, 0.4, 0.95);
+  // (ROADMAP 23.13: grey at the temples - on the cap's picture u runs round the head from the back, 0.25 his right side and 0.75
+  // his left; v from the crown, 0 (the picture's bottom) to the hair's edge, 0.92: grey from over the ear forward to the
+  // sideburn, thinning upwards and back)
+  if (HR.temples) {
+    const GREY = ['#7e7a74', '#96928a', '#6a6660', '#a6a29a'];
+    // (the grey locks' own picture: a strip along the top, above the cap's - their strands lying along it, grey among dark)
+    {
+      const y0 = 0.004 * H;
+      const y1 = 0.058 * H;
+      g.globalAlpha = 1;
+      g.fillStyle = '#6e6860';
+      g.fillRect(0, y0, W, y1 - y0);
+      for (let i = 0; i < 420; i++) {
+        const y = y0 + R() * (y1 - y0);
+        const x = R() * W;
+        const L = (0.12 + 0.3 * R()) * W;
+        h.path([[x, y], [x + L * 0.5, y + (R() - 0.5) * 3 * s], [x + L, y + (R() - 0.5) * 3 * s]], 0.9 + R(), h.pick(R() < 0.12 ? HR.mid : ['#8e8a82', '#a29e96', '#7a766e', '#b2aea6']), 0.5 + 0.3 * R(), 0.6);
+      }
+    }
+    for (const uc of [0.25, 0.75]) {
+      const front = uc < 0.5 ? 1 : -1;
+      const dens = (u, v) => {
+        const du = (u - uc) * front;
+        const a = Math.exp(-(((du - 0.025) / 0.05) ** 2));
+        const b = Math.min(1, Math.max(0, (v - 0.62) / 0.16));
+        return a * b * b * (3 - 2 * b) * HR.temples;
+      };
+      // (a wash of it under the strands: the grey locks lie on grey, not on brown showing between them)
+      for (let yy = 0; yy < H * 0.5; yy += 3 * s) {
+        for (let xx = (uc - 0.17) * W; xx < (uc + 0.17) * W; xx += 3 * s) {
+          const d = dens(xx / W, 1 - yy / H);
+          if (d < 0.03) continue;
+          g.globalAlpha = Math.min(0.8, d * 1.0);
+          g.fillStyle = '#6e6860';
+          g.fillRect(xx, yy, 3 * s + 1, 3 * s + 1);
+        }
+      }
+      for (let i = 0; i < 2600; i++) {
+        const u = uc + (R() - 0.5) * 0.3;
+        const v = 0.5 + R() * 0.45;
+        if (R() > dens(u, v)) continue;
+        const x = u * W;
+        const y0 = (1 - v) * H;
+        const L = (0.05 + 0.09 * R()) * H;
+        const wv = (R() - 0.5) * 16 * s;
+        const pts = [];
+        for (let q = 0; q <= 4; q++) {
+          const t = q / 4;
+          pts.push([x + Math.sin(t * Math.PI) * wv, y0 - t * L]);
+        }
+        h.path(pts, 1.0 + 0.6 * R(), h.pick(GREY), 0.45 + 0.3 * R(), 0.8);
+      }
+    }
+  }
   // (the city's light in it, a little)
   strand(['#c0609a', '#d07aa8'], 60, 1.1, 0.28, 0.1, 0.8);
   strand(['#4aa8c8', '#5ab8d8'], 60, 1.1, 0.26, 0.1, 0.8);
@@ -903,7 +965,7 @@ export function paintFolkTop(c, o = {}) {
         h.hatch(wa, wy - 24 * s, wb, wy, 80, () => 0.8, 0.9, 10, 1.3, ['#b0502a', '#f0a070'], 0.5);
       }
       // (a pinstripe in a fine wool)
-      if (T.stripe) for (let u = 0.02; u < 1; u += 0.018) h.lines([Pt(u, Y0), Pt(u + 0.002, 0.2), Pt(u, 0.44)], 0.9, T.stripe, 0.32, 1, 0.6);
+      if (T.stripe) for (let u = 0.02; u < 1; u += 0.018) h.lines([Pt(u, Y0), Pt(u + 0.002, 0.2), Pt(u, 0.44)], T.stripeA ? 1.1 : 0.9, T.stripe, T.stripeA || 0.32, 1, T.stripeA ? 0.3 : 0.6);
     }
     if (kind === 'bomber') {
       // the ribbed band at the hem; the front's zip lines; the slanted pockets; the puff of it
@@ -946,6 +1008,7 @@ export function paintFolkTop(c, o = {}) {
     const sheen = (u, vv) => 0.2 + 0.5 * Math.exp(-(((u - 0.62) / 0.08) ** 2)) + 0.3 * Math.exp(-(((u - 0.12) / 0.06) ** 2)) * (cuff ? 1 - vv : vv);
     fabric(h, r.x0, r.y0, r.x1, r.y1, 16000 * k, 0.05, T, stuff, sheen);
     for (const u of [0.5, 0.0, 1.0]) seam(h, T, [Pt(u, 0), Pt(u, 0.5), Pt(u, 1)], u > 0.9 ? -5 : 5, 0, stitch, twice);
+    if (kind === 'blazer' && T.stripe) for (let u = 0.04; u < 1; u += 0.07) h.lines([Pt(u, 0), Pt(u + 0.003, 0.5), Pt(u, 1)], T.stripeA ? 1.1 : 0.9, T.stripe, T.stripeA || 0.32, 1, T.stripeA ? 0.3 : 0.6);
     const at = cuff ? 0.06 : 0.92;
     for (let i = 0; i < 9; i++) {
       const vv = at + (cuff ? 1 : -1) * R() * 0.22;
@@ -1018,8 +1081,8 @@ export function paintFolkTop(c, o = {}) {
     h.lines(fold0, 2.4, T.dark[0], 0.8, 2, 1);
   }
   // ---- the front edges (along the picture's x: from the hem up to the collar) and the flaps
-  {
-    const r = regionOf(c, JK.edge);
+  for (const rg of T.pin && kind === 'blazer' ? [JK.edge, JK.edgeL] : [JK.edge]) {
+    const r = regionOf(c, rg);
     fabric(h, r.x0, r.y0, r.x1, r.y1, 5000 * k, 0, T, stuff, (u, vv) => 0.35 + 0.4 * vv);
     if (kind === 'bomber') {
       // the zip: its teeth down the edge, metal; the lining's colour along the inside
@@ -1044,6 +1107,23 @@ export function paintFolkTop(c, o = {}) {
       const a = [];
       for (let i = 0; i <= 12; i++) a.push([r.x(i / 12), r.y(0.7)]);
       h.path(a, 1.1, T.dark[1], 0.45, 0.4);
+      // (ROADMAP 23.13: a small enamel flag pinned on the left lapel, at the chest - the picture's x up the body, its y across
+      // the lapel: a gold rim, a blue corner, red and white bars)
+      if (rg === JK.edgeL && T.pin === 'flag') {
+        const px = r.x(0.852);
+        const py = r.y(0.6);
+        const dx = (r.x(1) - r.x(0)) * 0.0105;
+        const dy = Math.abs(r.y(1) - r.y(0)) * 0.15;
+        g.globalAlpha = 1;
+        g.fillStyle = '#c8a040';
+        g.fillRect(px - dx - 1.2 * s, py - dy - 1.2 * s, dx * 2 + 2.4 * s, dy * 2 + 2.4 * s);
+        g.fillStyle = '#f2ede2';
+        g.fillRect(px - dx, py - dy, dx * 2, dy * 2);
+        g.fillStyle = '#b8283a';
+        for (let i = 0; i < 3; i++) g.fillRect(px - dx + (i * 2 * dx * 2) / 5, py - dy, (dx * 2) / 5, dy * 2);
+        g.fillStyle = '#2a3a7a';
+        g.fillRect(px, py - dy, dx, dy * 0.9);
+      }
     }
   }
   {
@@ -1119,6 +1199,8 @@ export function paintFolkBottom(c, o = {}) {
     if (key === 'thigh' || key === 'shin') {
       // a pressed crease down the front; the knee's and the crotch's folds; a jean's whiskers
       if (B.crease) h.lines([Pt(0.75, 0), Pt(0.75, 0.5), Pt(0.75, 1)], 1.4, B.light[0], 0.5, 2, 0.6);
+      // (ROADMAP 23.13: a suit's pinstripe down the leg, as its jacket's)
+      if (B.stripe) for (let u = 0.03; u < 1; u += 0.05) h.lines([Pt(u, 0), Pt(u + 0.002, 0.5), Pt(u, 1)], B.stripeA ? 1.1 : 0.9, B.stripe, B.stripeA || 0.32, 1, B.stripeA ? 0.3 : 0.6);
       const n = key === 'thigh' ? 10 : 7;
       for (let i = 0; i < n; i++) {
         const u = R();
@@ -1209,7 +1291,98 @@ export function paintFolkBottom(c, o = {}) {
       const y = 0.05 + R() * 0.36;
       crease(h, I, [[xAt(y), yAt(0.1 + R() * 0.2)], [xAt(y + 0.02), yAt(0.5)], [xAt(y + 0.01), yAt(0.75 + R() * 0.2)]], 1.3);
     }
-    if (I.kind === 'shirt') {
+    if (I.kind === 'shirt' && I.tie) {
+      // (ROADMAP 23.13) buttoned to the collar under a tie: the collar's points down either side of the knot, the knot, the blade
+      // down the placket to the belt - widening, its tip a point - a small pattern woven in it, a gold bar across it
+      const K = I.tie;
+      // (the picture is as wide as the jacket's opening at each height - render/folkshapes.js: a blazer's a V)
+      const o = P.top.open || 0;
+      const halfAt = P.top.kind === 'blazer' ? (y) => 0.026 + o + Math.max(0, y - 0.1) * 0.17 + Math.max(0, 0.1 - y) * 0.12 : () => (P.fem ? 0.042 : 0.047) + o;
+      const at = (y, x) => [xAt(y), yAt(0.5 + x / (2 * halfAt(y)))];
+      const poly = (pts, fill, a = 1) => {
+        g.globalAlpha = a;
+        g.fillStyle = fill;
+        g.beginPath();
+        pts.forEach(([y, x], i) => (i ? g.lineTo(...at(y, x)) : g.moveTo(...at(y, x))));
+        g.closePath();
+        g.fill();
+      };
+      h.lines([[xAt(0.0), yAt(0.5)], [xAt(0.42), yAt(0.5)]], 1.2, I.dark[0], 0.4, 2, 0.6);
+      const wAt = (y) => 0.017 + 0.021 * Math.min(1, Math.max(0, (0.415 - y) / 0.34));
+      const tip = 0.012;
+      const blade = [[0.418, -0.014], [0.418, 0.014]];
+      for (let i = 0; i <= 10; i++) {
+        const y = 0.418 - (i / 10) * (0.418 - (tip + 0.03));
+        blade.push([y, wAt(y)]);
+      }
+      blade.push([tip, 0]);
+      for (let i = 10; i >= 0; i--) {
+        const y = 0.418 - (i / 10) * (0.418 - (tip + 0.03));
+        blade.push([y, -wAt(y)]);
+      }
+      poly(blade, K.base);
+      // (its silk: the light down one side, the dark down the other, the weave across)
+      g.save();
+      g.beginPath();
+      blade.forEach(([y, x], i) => (i ? g.lineTo(...at(y, x)) : g.moveTo(...at(y, x))));
+      g.closePath();
+      g.clip();
+      {
+        const [ax] = at(0.42, 0);
+        const [bx] = at(tip, 0);
+        const [, ya] = at(0.2, -0.03);
+        const [, yb] = at(0.2, 0.03);
+        const x0 = Math.min(ax, bx);
+        const x1 = Math.max(ax, bx);
+        const y0 = Math.min(ya, yb);
+        const y1 = Math.max(ya, yb);
+        h.hatch(x0, y0, x1, y1, 700, () => 0.8, 0.9, 12, 1.3, K.dark, 0.5, 0.4);
+        h.hatch(x0, y0, x1, (y0 + y1) / 2, 260, () => 0.7, 0.9, 12, 1.2, K.light, 0.4, 0.4);
+        // (the pattern: small pale figures in rows, set across like a brick wall's)
+        if (K.dot) {
+          g.fillStyle = K.dot;
+          let row = 0;
+          for (let y = 0.4; y > tip; y -= 0.0125) {
+            row++;
+            for (let x = -0.04 + (row % 2) * 0.004; x < 0.041; x += 0.008) {
+              const [dx, dy] = at(y, x);
+              g.globalAlpha = 0.75;
+              g.beginPath();
+              g.arc(dx, dy, 1.25 * s, 0, Math.PI * 2);
+              g.fill();
+            }
+          }
+        }
+      }
+      g.restore();
+      h.lines(blade.map(([y, x]) => at(y, x)).concat([at(0.418, -0.014)]), 1.5, K.dark[0], 0.8, 2, 0.5);
+      // the knot, and the dimple under it
+      const knot = [[0.452, -0.018], [0.452, 0.018], [0.416, 0.0135], [0.416, -0.0135]];
+      poly(knot, K.base);
+      h.lines(knot.map(([y, x]) => at(y, x)).concat([at(0.452, -0.018)]), 1.6, K.dark[0], 0.85, 2, 0.5);
+      h.lines([at(0.45, 0.008), at(0.43, -0.002), at(0.418, -0.008)], 1.2, K.light[0], 0.6, 2, 0.4);
+      h.lines([at(0.412, 0), at(0.385, 0.001)], 1.4, K.dark[1], 0.6, 2, 0.4);
+      // the bar: gold, across the blade a third of the way down, a little past its edge on his left
+      if (K.bar) {
+        const yb = 0.27;
+        const wb = wAt(yb);
+        poly([[yb + 0.0042, -wb - 0.002], [yb + 0.0042, wb + 0.006], [yb - 0.0042, wb + 0.006], [yb - 0.0042, -wb - 0.002]], K.bar);
+        h.lines([at(yb + 0.0042, -wb - 0.002), at(yb + 0.0042, wb + 0.006)], 1.1, '#fff0b8', 0.8, 2, 0.3);
+        h.lines([at(yb - 0.0042, -wb - 0.002), at(yb - 0.0042, wb + 0.006)], 1.1, '#7a5a1c', 0.8, 2, 0.3);
+      }
+      // the collar: its two points down either side of the knot
+      for (const sd of [1, -1]) {
+        const pts = [at(0.48, sd * 0.03), at(0.452, sd * 0.016), at(0.4, sd * 0.038), at(0.455, sd * 0.047), at(0.48, sd * 0.047)];
+        g.globalAlpha = 1;
+        g.fillStyle = I.light[0];
+        g.beginPath();
+        pts.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])));
+        g.closePath();
+        g.fill();
+        h.lines([pts[1], pts[2], pts[3]], 1.8, I.dark[0], 0.85, 2, 0.6);
+        h.hatch(Math.min(pts[2][0], pts[0][0]), Math.min(pts[1][1], pts[3][1]), Math.max(pts[2][0], pts[0][0]), Math.max(pts[1][1], pts[3][1]), 40, () => 0.7, 0.3, 9, 1.1, I.dark, 0.35);
+      }
+    } else if (I.kind === 'shirt') {
       // the placket down the middle, its buttons; the open collar's points at the top
       h.lines([[xAt(0.0), yAt(0.5)], [xAt(0.42), yAt(0.5)]], 1.4, I.dark[0], 0.6, 2, 0.6);
       for (let y = 0.05; y < 0.36; y += 0.075) button(g, xAt(y), yAt(0.5), 3.4 * s, '#f4f2ee', s);

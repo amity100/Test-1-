@@ -78,6 +78,8 @@ const STREET_OF = [['meridian', 'washington'], ['washington', 'collins'], ['coll
 // between Meridian and Washington Avenues, 5th to 7th Street, is 5th Street Garage's
 // (game/prologue/carpark.js). Not with ?classic, nor in the lab (main.js: ctx.vacate)
 export const VACANT = [{ col: 0, row: 4 }];
+// (ROADMAP 23.20: and the row of houses west of Meridian Avenue across from it - the car park's west wing stands there)
+export const VACANT_WEST = [4];
 
 // a block built as ever and then taken out again, every part of it: what it put into the city's
 // batches and onto the scene, its collision, its lights (out, for good), its props (let go of),
@@ -489,8 +491,15 @@ function westRow(ctx, row) {
   const R = westRect(row);
   // the houses face Meridian Ave; their backs are the edge of the city (v5, ROADMAP 11.2ג: their
   // gardens go back to it, the bay's edge beyond, world/yards.js)
-  sobeRow(ctx, { x: R.x1, z0: R.z0, z1: R.z1, side: 1, D: R.x1 - R.x0, street: 'west', type: 'west', col: -1, row, rowSide: 'east', back: true });
-  bayEdge(ctx, WEST_EDGE - 30, R.x0 - 0.2, R.z0 - 4.6, R.z1 + 4.6);
+  // (ROADMAP 23.20: on the car park's row the houses and the bay's edge behind them are left out for its west wing - built and
+  // taken out again, as its own block is, so that the city's dice fall as they did: VACANT_WEST)
+  const wing = ctx.vacate && VACANT_WEST.includes(row);
+  const make = () => {
+    sobeRow(ctx, { x: R.x1, z0: R.z0, z1: R.z1, side: 1, D: R.x1 - R.x0, street: 'west', type: 'west', col: -1, row, rowSide: 'east', back: true });
+    bayEdge(ctx, WEST_EDGE - 30, R.x0 - 0.2, R.z0 - 4.6, R.z1 + 4.6);
+  };
+  if (wing) vacated(ctx, make);
+  else make();
   // (and where the cross street ends at the bay)
   const s = STREETS[row + 1];
   // (v5, ROADMAP 11.17: not where a causeway goes on over the bay, at 15th and 5th)

@@ -1344,15 +1344,25 @@ class Vehicle {
   // was drawn (game/partsum.js gunOf): a machine gun on while the button is held, a cannon again
   // as soon as it can
   drawnGuns(dt, input) {
-    const want = this.game.camRig.yaw - this.yaw;
+    // (ROADMAP 23.19: in the story's chase the gun finds them by itself - game/prologue/director.js gunAim: the nearest of the
+    // cars after him, a little ahead of it. And it runs hot: three seconds of fire and it must cool)
+    const SP = this.game.prologue;
+    const story = !!(SP && SP.chaseGun && SP.gunAim);
+    const tgt = story ? SP.gunAim(this) : null;
+    this._aimAt = tgt;
+    const want = tgt ? Math.atan2(tgt.x - this.pos.x, tgt.z - this.pos.z) - this.yaw : this.game.camRig.yaw - this.yaw;
     const fire = input.fire || input.firePressed;
+    if (story) {
+      if (!fire || this.gunJam) this.gunHeat = Math.max(0, (this.gunHeat || 0) - dt / 2.2);
+      if (this.gunJam && this.gunHeat < 0.3) this.gunJam = false;
+    } else this.gunJam = false;
     for (const t of this.turrets) {
       // (ROADMAP 11.27: one still taking shape as it was drawn, game/partpen.js fly)
       const target = t.p && t.p.shaping > performance.now() ? t.yaw0 : t.yaw0 + clamp(angleDiff(t.yaw0, want), -t.arc, t.arc);
       t.yaw = dampAngle(t.yaw, target, 4, dt);
       t.node.rotation.y = t.yaw;
       t.cool -= dt;
-      if (fire && t.cool <= 0) this.fireTurret(t);
+      if (fire && t.cool <= 0 && !this.gunJam) this.fireTurret(t);
     }
   }
 
@@ -1367,8 +1377,17 @@ class Vehicle {
     const along = _tb.copy(t.pivot || _tz.set(0, t.muzzle.y, 0));
     t.node.localToWorld(along);
     along.subVectors(mw, along).normalize();
-    const dir = game.weapons.aimPoint.clone().sub(mw).normalize();
+    const dir = (this._aimAt || game.weapons.aimPoint).clone().sub(mw).normalize();
     if (dir.dot(along) < Math.cos(Math.min(Math.PI, t.arc + 0.45))) dir.copy(along);
+    // (the chase's gun: hotter with every shot)
+    if (g.type === 'mg' && game.prologue && game.prologue.chaseGun) {
+      this.gunHeat = (this.gunHeat || 0) + g.reload / 3.1;
+      if (this.gunHeat >= 1) {
+        this.gunJam = true;
+        game.audio.play('sizzle', 0.5);
+        game.fx.smoke(mw.x, mw.y + 0.1, mw.z, 0.8);
+      }
+    }
     const sp = g.spread || 0.02;
     dir.x += (Math.random() - 0.5) * sp;
     dir.y += (Math.random() - 0.5) * sp;

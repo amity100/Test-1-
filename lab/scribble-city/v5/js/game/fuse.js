@@ -2774,6 +2774,18 @@ export class Fuse {
       const r0 = (fz.wheels && fz.wheels.r) || 0.34;
       for (const o of R.models) {
         const ud = o.m.userData;
+        // (ROADMAP 23.21: the story's landed rotor out of the film's pictures from inside the car - game/prologue/director.js
+        // rotorHide: whatever it is made of, the stock blades or the bands of the drawing itself. Still, a hand over their
+        // heads, they were pale lines across both faces in every close picture of the ending)
+        if ((o.role === 'rotor' || (o.p && o.p.type === 'rotor')) && ud.popAt === undefined) {
+          if (v.rotorHide) {
+            o.m.visible = false;
+            ud.filmHid = true;
+          } else if (ud.filmHid) {
+            o.m.visible = true;
+            ud.filmHid = false;
+          }
+        }
         if (ud.popAt !== undefined) {
           const k = Math.max(0, (now - ud.popAt) / 380);
           if (k >= 1) {

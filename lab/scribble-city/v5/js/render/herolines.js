@@ -349,8 +349,9 @@ function head() {
   }
   // the locks: along the middle of each, and along an edge of it
   for (const L of LOCKS) {
-    P.add(K.hair, L.mid, L.n, { w: 2.0, a: 0.9, col: HAIR });
-    P.add(K.hair, L.edge, L.n, { w: 1.3, a: 0.75, col: HAIR });
+    // (ROADMAP 23.13: a head of many thin locks - a fine line along each, none along its edge: L.lw, L.la)
+    P.add(K.hair, L.mid, L.n, { w: L.lw || 2.0, a: L.la || 0.9, col: HAIR });
+    if (!L.lw) P.add(K.hair, L.edge, L.n, { w: 1.3, a: 0.75, col: HAIR });
   }
   return P;
 }

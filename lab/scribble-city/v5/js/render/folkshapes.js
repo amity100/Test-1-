@@ -789,6 +789,26 @@ const STYLES = {
     },
     clumps: 0.008,
   },
+  // (ROADMAP 23.13: Michael's) wavy, swept up and back off the forehead, full on top, back over the ears - which stand clear of
+  // it - and down to the collar, where it turns out in curls; the hairline a little back at the corners of the forehead
+  sweep: {
+    edge: lineOf([[0, 0.66], [0.45, 0.61], [0.85, 0.9], [1.12, 1.3], [1.3, 1.44], [1.5, 1.4], [1.72, 1.16], [2.15, 1.6], [2.6, 1.93], [Math.PI, 2.0]]),
+    thick: (th, phi) => {
+      const top = Math.max(0, Math.cos(th));
+      const front = Math.max(0, Math.cos(phi));
+      const back = Math.max(0, -Math.cos(phi));
+      // (its waves: long lumps lying back along the head)
+      // (its strands in ridges laid back along the head, a little wavy: the cap's own shape - not shards lying on it)
+      // (ridges some three centimetres apart, each waving a little as it goes back)
+      const across = Math.sin(th) * Math.sin(phi);
+      const along = Math.sin(th) * Math.cos(phi);
+      const wave = 0.0038 * (0.5 + 0.5 * Math.sin(across * 21 + 1.1 * Math.sin(along * 6 + across * 3)));
+      // (full: three centimetres of it over the forehead where it lifts, two on the crown, one and a half at the sides and the nape)
+      return 0.011 + 0.016 * top ** 1.1 + 0.02 * front * Math.sin(Math.min(Math.PI / 2, th * 1.7)) * (0.35 + 0.65 * top) + 0.008 * back * Math.sin(th) + 0.004 * Math.sin(th) + wave;
+    },
+    clumps: 0.005,
+    fine: true,
+  },
   // drawn back sleek into a bun at the nape: the edge round the face, the ears half under it
   bun: {
     edge: lineOf([[0, 0.58], [0.6, 0.6], [1.1, 1.06], [1.4, 1.5], [1.75, 1.48], [2.3, 1.62], [Math.PI, 1.8]]),
@@ -824,6 +844,9 @@ const STYLES = {
   },
 };
 
+// (which of a jacket's two front edges is its wearer's left: the lapel a pin is worn on)
+const PIN_SIDE = 1;
+
 function hairKit(spec, headR) {
   const st = STYLES[spec.hair.style] || STYLES.side;
   // (on a real head the skull rises higher over the eyes: the hairline over the temples, not down
@@ -839,12 +862,13 @@ function hairKit(spec, headR) {
     const phi = Math.atan2(x, z);
     return headR(x / L, y / L, z / L) + (th < edge(phi) ? thick(th, phi) : 0.0015);
   };
-  return { edge, thick, capR };
+  return { edge, thick, capR, fine: !!st.fine };
 }
 
 function hairCapGeo(kit, headR) {
-  const rings = 16;
-  const seg = 56;
+  // (ROADMAP 23.13: fine - a head of hair whose shape is in the cap itself, its combed ridges: twice the points each way)
+  const rings = kit.fine ? 34 : 16;
+  const seg = kit.fine ? 112 : 56;
   const { pos, uv, idx, seams } = polar(rings, seg, kit.edge, (th, phi) => headR(Math.sin(th) * Math.sin(phi), Math.cos(th), Math.sin(th) * Math.cos(phi)) + kit.thick(th, phi));
   const g = finish(make(pos, uv, idx), (x, y, z, out) => ((out[0] = 0), (out[1] = 0), (out[2] = 0), out), seams);
   return region(g, [0, 0, 1, 0.92]);
@@ -883,6 +907,7 @@ function locksGeo(kit, headR, list, out) {
     // along the sides)
     if (q.back) d.set(0, -0.15, -1).addScaledVector(n, -(-0.15 * n.y - n.z)).normalize();
     const L = q.L;
+    const sideV = new THREE.Vector3().crossVectors(n, d).normalize();
     const p1 = p0.clone().addScaledVector(d, L * 0.5);
     const p2 = p0.clone().addScaledVector(d, L);
     p2.y -= L * (q.fall || 0);
@@ -897,6 +922,8 @@ function locksGeo(kit, headR, list, out) {
       const b = 2 * s * (1 - s);
       const c = s * s;
       C.set(a * p0.x + b * p1.x + c * p2.x, a * p0.y + b * p1.y + c * p2.y, a * p0.z + b * p1.z + c * p2.z);
+      // (ROADMAP 23.13: a wavy lock - from side to side of its way as it goes)
+      if (q.wav) C.addScaledVector(sideV, Math.sin(s * Math.PI * 2 * (q.waves || 1) + (q.ph || 0)) * q.wav * Math.min(1, s * 3));
       onHair(C, s, q.rise);
       Tn.set(2 * (1 - s) * (p1.x - p0.x) + 2 * s * (p2.x - p1.x), 2 * (1 - s) * (p1.y - p0.y) + 2 * s * (p2.y - p1.y), 2 * (1 - s) * (p1.z - p0.z) + 2 * s * (p2.z - p1.z)).normalize();
       const nOut = C.clone().normalize();
@@ -906,14 +933,17 @@ function locksGeo(kit, headR, list, out) {
       for (let j = 0; j < AROUND; j++) {
         const an = (j / AROUND) * Math.PI * 2;
         pos.push(C.x + B.x * Math.cos(an) * rw + N.x * Math.sin(an) * rw * 0.3, C.y + B.y * Math.cos(an) * rw + N.y * Math.sin(an) * rw * 0.3, C.z + B.z * Math.cos(an) * rw + N.z * Math.sin(an) * rw * 0.3);
-        uv.push(0.42 + (j / AROUND) * 0.16, 0.25 + s * 0.6);
+        // (a grey lock: its picture the grey strip along the top of the hair's - render/folkink.js temples - its strands lying
+        // along the picture's x)
+        if (q.grey) uv.push(0.04 + q.gu + s * 0.3, 0.948 + (j / AROUND) * 0.04);
+        else uv.push(0.42 + (j / AROUND) * 0.16, 0.25 + s * 0.6);
       }
       if (r % 2 === 0 || r === RINGS - 1) {
         mid.push(C.clone().addScaledVector(N, rw * 0.3 + 0.0012).toArray());
         edge.push(C.clone().addScaledVector(B, rw * 0.55).addScaledVector(N, rw * 0.2 + 0.0012).toArray());
       }
     }
-    out.push({ mid, edge, n: n.toArray(), w: q.w });
+    out.push({ mid, edge, n: n.toArray(), w: q.w, lw: q.lw, la: q.la });
     for (let r = 0; r < RINGS - 1; r++) {
       for (let j = 0; j < AROUND; j++) {
         const a = base + r * AROUND + j;
@@ -928,7 +958,7 @@ function locksGeo(kit, headR, list, out) {
 }
 
 // the locks of each style
-function locksOf(style, R) {
+function locksOf(style, R, kit) {
   const L = [];
   const add = (phi, th, down, side, len, w, rise, fall = 0, back = false) => L.push({ phi, th, down, side, L: len, w, rise, fall, back });
   if (style === 'side') {
@@ -945,6 +975,34 @@ function locksOf(style, R) {
       add(phi, 0.3 + R() * 0.14, 0, 0, 0.07 + 0.04 * R(), 0.014 + 0.004 * R(), 0.003, 0, true);
     }
     for (let i = 0; i < 10; i++) add(Math.PI + (R() - 0.5) * 1.4, 0.9 + R() * 0.5, 1, (R() - 0.5) * 0.3, 0.035, 0.012, 0.002, 0.2);
+  } else if (style === 'sweep') {
+    // (ROADMAP 23.13) many thin locks, each a wave: off the forehead from the hairline, lifted, and back over the crown; a second
+    // row further back; the sides back over the ears - the lower of them grey, at the temples; at the nape the ends turning out
+    // (few, and lying close: a lock stood off the cap is outlined all round by the picture's own edges, and a head of them was a
+    // heap of shards. The cap carries the hair's shape; the locks only break its edge - lifted at the forehead, the sides back
+    // over the ears, the ends turning out at the nape - a fine line along each)
+    const wavy = (a, w) => {
+      const q = L[L.length - 1];
+      Object.assign(q, { wav: a * (0.8 + 0.4 * R()), waves: w, ph: q.phi * 2.4 + q.th * 3 + (R() - 0.5) * 0.5, lw: 1.15, la: 0.6 });
+    };
+    for (let i = 0; i < 16; i++) {
+      const phi = ((i + 0.5) / 16 - 0.5) * 2.3 + (R() - 0.5) * 0.08;
+      add(phi, Math.max(0.2, kit.edge(phi) - 0.07 - R() * 0.06), 0, 0, 0.11 + 0.04 * R(), 0.01 + 0.003 * R(), 0.003 + 0.003 * R(), 0, true);
+      wavy(0.003, 0.8);
+    }
+    for (const sd of [-1, 1]) for (let i = 0; i < 9; i++) {
+      const phi = sd * (0.85 + (i / 9) * 1.0 + (R() - 0.5) * 0.06);
+      const e = kit.edge(phi);
+      const th = Math.max(0.5, e - 0.05 - (i % 3) * 0.13);
+      add(phi, th, 0, 0, 0.07 + 0.03 * R(), 0.0085 + 0.002 * R(), 0.0015, 0, true);
+      wavy(0.002, 0.8);
+      // (grey: the lowest of them, over the ear and at the temple)
+      if (Math.abs(phi) > 1.0 && Math.abs(phi) < 1.75 && i % 3 === 0) Object.assign(L[L.length - 1], { grey: true, gu: R() * 0.6 });
+    }
+    for (let i = 0; i < 12; i++) {
+      add(Math.PI + ((i + 0.5) / 12 - 0.5) * 2.2, 1.5 + R() * 0.35, 1, (R() - 0.5) * 0.5, 0.035 + 0.02 * R(), 0.011 + 0.003 * R(), 0.003, 0.35);
+      wavy(0.002, 0.8);
+    }
   } else if (style === 'bun') {
     // sleek: a few long strands drawn back from the face to the bun
     for (let i = 0; i < 16; i++) {
@@ -1466,7 +1524,7 @@ function makeFolkBody(k) {
     head: headGeo(H),
     hair: hairCapGeo(kit, headR),
   };
-  const lockList = locksOf(style, R);
+  const lockList = locksOf(style, R, kit);
   if (lockList.length) parts.locks = locksGeo(kit, headR, lockList, locks);
   if (style === 'long') parts.fall = longHairGeo(kit, headR, spec.hair.len || 0.27);
   if (style === 'bun') parts.bun = bunGeo(headR);
@@ -1516,8 +1574,11 @@ function makeFolkBody(k) {
   // (the jacket worn open: its front edges proud of the body, widening into the lapels - a blazer's
   // open in a V from its button at the waist up to the collarbones, its lapels laid back either side)
   if (spec.top.kind === 'blazer') {
-    const half = (y) => 0.026 + Math.max(0, y - 0.1) * 0.17 + Math.max(0, 0.1 - y) * 0.12;
-    const edge = (sd) => region(patch(T, -0.086, 0.455, (y) => sd * (half(y) - 0.004), (y) => sd * (half(y) + 0.014 + Math.max(0, y - 0.2) * 0.2), 0.0062, 2, 18), JK.edge, true);
+    // (ROADMAP 23.13: open - unbuttoned, hanging open by so much more all the way down; pin: something on its left lapel - that
+    // edge its own place on the picture, JK.edgeL)
+    const o = spec.top.open || 0;
+    const half = (y) => 0.026 + o + Math.max(0, y - 0.1) * 0.17 + Math.max(0, 0.1 - y) * 0.12;
+    const edge = (sd) => region(patch(T, -0.086, 0.455, (y) => sd * (half(y) - 0.004), (y) => sd * (half(y) + 0.014 + Math.max(0, y - 0.2) * 0.2), 0.0062, 2, 18), spec.top.pin && sd === PIN_SIDE ? JK.edgeL : JK.edge, true);
     parts.zip = merge([edge(1), edge(-1)]);
     parts.tee = region(frontPatch(T, half), PT.front, true);
   } else {

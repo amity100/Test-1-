@@ -1099,7 +1099,12 @@ export function heroSoleGeo() {
 // radius of what the hand holds - a round thing across the palm (along x), in front of it, the four
 // fingers closed round it from below and the thumb over it from the other side; 0, the hand as it
 // hangs
-export function heroHandGeo(left = false, grip = 0) {
+// (ROADMAP 23.11, the owner's word: "it does not look as if she is holding the marker at all - it looks stuck to her hand") a
+// hand that writes: the pen between the pads of the thumb and the first finger, lying on the side of the second, the other two
+// curled into the palm. In the hand's own frame: ax, the pen's way from its point up its barrel (back over the web of the thumb);
+// q, where it is held; tip, how far below that its point is
+export const PINCH = { ax: [0.1104, 0.6724, 0.7326], q: [0.024, -0.117, -0.064], tip: 0.03 };
+export function heroHandGeo(left = false, grip = 0, pinch = false) {
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
   const parts = [];
   // the palm and the back of the hand
@@ -1124,7 +1129,32 @@ export function heroHandGeo(left = false, grip = 0) {
     [-0.009, 0.077, 0.0084],
     [-0.027, 0.062, 0.0076],
   ];
-  if (grip > 0) {
+  if (pinch) {
+    // the first finger bent to the pen's top, the second under it, a little further round; the ring and the little finger shut
+    const dir = (an) => V(0, -Math.cos(an), -Math.sin(an));
+    const bent = [[0.7, 1.35, 1.75, -0.005], [0.75, 1.4, 1.85, 0.005], [1.0, 2.0, 2.7, 0], [1.1, 2.1, 2.8, 0]];
+    fingers.forEach(([x, len, r], fi) => {
+      const [a1, a2, a3, dx] = bent[fi];
+      const a = V(x, -0.094, -0.002);
+      const b = a.clone().addScaledVector(dir(a1), len * 0.42);
+      const c = b.clone().addScaledVector(dir(a2), len * 0.33);
+      const d = c.clone().addScaledVector(dir(a3), len * 0.25);
+      b.x += dx * 0.4;
+      c.x += dx * 0.8;
+      d.x += dx;
+      parts.push(capsule(a, b, r, r * 0.96, 8));
+      parts.push(capsule(b, c, r * 0.96, r * 0.9, 8));
+      parts.push(capsule(c, d, r * 0.9, r * 0.8, 8));
+    });
+    // the thumb: out from the heel of the hand, forward, and its end in against the pen from the other side
+    const t0 = V(0.03, -0.028, -0.008);
+    const t1 = V(0.042, -0.062, -0.028);
+    const t2 = V(0.04, -0.092, -0.046);
+    const t3 = V(0.031, -0.113, -0.057);
+    parts.push(capsule(t0, t1, 0.0118, 0.0105, 8));
+    parts.push(capsule(t1, t2, 0.0105, 0.0095, 8));
+    parts.push(capsule(t2, t3, 0.0095, 0.0085, 8));
+  } else if (grip > 0) {
     // (what it holds: its middle a little up the palm from the knuckles, against the palm)
     const yc = -0.07;
     const zc = -0.012 - grip;

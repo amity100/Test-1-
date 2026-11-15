@@ -68,10 +68,12 @@ export const EXPRESSIONS = {
   laugh: { au6: 1, au12: 1, jaw: 0.55, au7: 0.3 },
   sad: { au1: 0.85, au4: 0.35, au15: 0.75, au17: 0.4 },
   surprise: { au1: 1, au2: 1, au5: 1, jaw: 0.5 },
+  // (ROADMAP 23.11: what cannot be - past surprise: the nostrils wide, the lips a little drawn, the brows as high as they go)
+  shock: { au1: 1, au2: 1, au5: 1, jaw: 0.6, au20: 0.3, au38: 0.5, au16: 0.3 },
   disgust: { au9: 0.95, au10: 0.6, au15: 0.3, au17: 0.3, au4: 0.35 },
 };
 // (the city's feelings, render/people.js faceOf: what each is as a portrait's)
-const MOOD = { angry: 'angry', scared: 'fear', hurt: 'distress', joy: 'joy', sad: 'sad', surprised: 'surprise', dead: null, laugh: 'laugh', shout: 'shout', worried: 'distress', shock: 'surprise' };
+const MOOD = { angry: 'angry', scared: 'fear', hurt: 'distress', joy: 'joy', sad: 'sad', surprised: 'surprise', dead: null, laugh: 'laugh', shout: 'shout', worried: 'distress', shock: 'shock' };
 
 const sstep = (a, b, v) => {
   const t = Math.max(0, Math.min(1, (v - a) / (b - a)));
@@ -987,7 +989,7 @@ export class Portrait {
   // ew: the city's eight moves of it (render/people.js faceOf: the jaw, a smile, the corners down,
   // the brows up, the brows down, each eye shut, the mouth wide), mood: what they feel (or null),
   // o: { expr, k, au } held as asked (the face lab), say: their words' tone, gaze: [x, y, yaw, pitch]
-  update(dt, ew, mood, o, say, gaze) {
+  update(dt, ew, mood, o, say, gaze, full = 0) {
     const want = this.want;
     want.fill(0);
     const set = (name, v) => {
@@ -1038,10 +1040,15 @@ export class Portrait {
       // (cast round 8: grinFrom - only from so big a smile: a child's quiet smile is a closed one)
       if (this.spec.grin && ew[1] > (this.spec.grinFrom ?? 0.3)) set('au10', ew[1] * this.spec.grin);
     }
+    // (ROADMAP 23.13: a face's own set at rest - narrowed eyes under a brow drawn down, one corner of the mouth up - under whatever
+    // it feels and says: spec.rest, the moves and how far. Not on a face held as asked, the face lab's)
+    if (this.spec.rest && !o) for (const [name, v] of Object.entries(this.spec.rest)) set(name, v);
     // (v5, ROADMAP 18.9: a gentle face - a child's - opens its mouth less wide and keeps its upper lip
     // over its teeth: spec.jawK, spec.lipK; wide open and lips up, a little girl's face was a monster's)
-    if (this.spec.jawK !== undefined) want[AUI.jaw] *= this.spec.jawK;
-    if (this.spec.lipK !== undefined) {
+    // (ROADMAP 23.11: full - the film's, a moment past gentleness: these limits lifted by so much, render/people.js faceFull)
+    const lift = (k, to) => k + (Math.max(k, to) - k) * full;
+    if (this.spec.jawK !== undefined) want[AUI.jaw] *= lift(this.spec.jawK, 0.96);
+    if (this.spec.lipK !== undefined && full < 0.5) {
       want[AUI.au10R] *= this.spec.lipK;
       want[AUI.au10L] *= this.spec.lipK;
       want[AUI.au20R] *= this.spec.lipK;
@@ -1070,7 +1077,7 @@ export class Portrait {
     // off the iris and the lips stretched to the sides, spec.browK the brows' climb and knit: at a
     // grown man's full measure on Lily's big eyes, her fear was a horror film's)
     if (this.spec.wideK !== undefined) {
-      for (const n of ['au5R', 'au5L', 'au20R', 'au20L']) want[AUI[n]] *= this.spec.wideK;
+      for (const n of ['au5R', 'au5L', 'au20R', 'au20L']) want[AUI[n]] *= lift(this.spec.wideK, 0.82);
     }
     if (this.spec.browK !== undefined) {
       for (const n of ['au1R', 'au1L', 'au2R', 'au2L', 'au4R', 'au4L']) want[AUI[n]] *= this.spec.browK;

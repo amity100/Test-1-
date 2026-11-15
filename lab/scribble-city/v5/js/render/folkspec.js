@@ -35,6 +35,13 @@ export const SKINS = {
     sh1: ['#8e5c3c', '#805236', '#744a30'], sh2: ['#5c3e46', '#4e3a4c', '#68482e', '#44323c'], sh3: ['#301c1a', '#3c241c', '#281818'],
     light: ['#f0c89e', '#f8d6ae', '#e6bc90'], neck: [90, 52, 32], rgb: [0.8, 0.62, 0.46],
   },
+  // (ROADMAP 23.13: Michael's - a tan gone bronze in the sun, browner and less red than tan: under the evening's light a tan face
+  // went red, a golden one pink)
+  bronze: {
+    base: '#d0a57e', grain: ['#d8af88', '#bc916a', '#cea37a', '#b0855e', '#d6ad84'], warm: ['#c68c6a', '#cc9674', '#ba805e'],
+    sh1: ['#8a5e3a', '#7c5434', '#704c2e'], sh2: ['#5c4242', '#4e3c46', '#664a32', '#44363c'], sh3: ['#2e1c18', '#3a241a', '#261814'],
+    light: ['#f0cc9c', '#f8d8ac', '#e6c08e'], neck: [90, 56, 34], rgb: [0.8, 0.64, 0.46],
+  },
   deep: {
     base: '#76452e', grain: ['#82503a', '#663a26', '#7c4a32', '#5a3220', '#885640'], warm: ['#8a4636', '#985242', '#7a3c2e'],
     sh1: ['#4a281c', '#3e2216', '#361e16'], sh2: ['#2e1c2a', '#28182c', '#36201c', '#22162a'], sh3: ['#140a0c', '#1c0e0c', '#100808'],
@@ -54,6 +61,8 @@ export const IRIS = {
   // (ROADMAP 14.9)
   blue: ['#2a4a7a', '#3e6aa4', '#6a94c4', '#30507e', '#8ab0d8'],
   amber: ['#5a3a0c', '#9a6a1c', '#b8862a', '#6a4810', '#c89a40'],
+  // (ROADMAP 23.13: Michael's, as his sheet has them - a green hazel, deep)
+  hazelGreen: ['#1a200e', '#3c4826', '#4e5a30', '#2a3218', '#5a6038'],
 };
 
 /**
@@ -769,7 +778,47 @@ export const VENDOR = {
   shoes: feet('sneaker', '#f0ece4'),
   acc: {},
 };
-export const STORY_CAST = [VENDOR];
+// (ROADMAP 23.13, the owner's word and his sheet - THE BROTHER: "modelled as Danny and Lily are, for the scenes to come as well, and
+// his face from the game on the board".) Michael Cruz, 44, Danny's older brother, running for mayor: 1.85 m, solid and fit. A long
+// face on a strong square jaw and chin, cheekbones over lean cheeks, a straight long nose, a heavy low brow over narrow hazel-green
+// eyes, thin lips with a sure half-smile; dark brown hair, wavy, swept up and back off his forehead and down to his collar, grey at
+// the temples; a day's stubble; a small mole on his right cheek. A charcoal pinstripe suit, worn open, a white shirt buttoned to the
+// collar, a burgundy patterned tie with a gold bar, a white pocket square, a flag pin on his left lapel, a brown belt, oxblood
+// oxfords, a gold signet ring on his right hand, a gold watch on a brown strap.
+export const MICHAEL = {
+  key: 'michael', name: 'Michael', age: 44, fem: false, role: 'michael', how: 'cast',
+  build: { height: 1.06, head: 1.0, bulk: 1.03, limbs: 1.0 },
+  body: { belly: -0.1, chest: 0.16, thick: 0.02 },
+  morph: {
+    'head-rectangular': 0.45, 'head-square': 0.35, 'head-scale-vert-incr': 0.08, 'head-age-incr': 0.5, 'head-fat-decr': 0.3, 'forehead-scale-vert-decr': 0.2,
+    'chin-bones-incr': 0.9, 'chin-width-incr': 0.7, 'chin-prominent-incr': 0.55, 'chin-height-incr': 0.2, 'chin-cleft-incr': 0.4,
+    'cheek-bones-incr': 0.7, 'cheek-volume-decr': 0.5, 'cheek-inner-decr': 0.35,
+    'nose-scale-vert-incr': 0.7, 'nose-scale-depth-incr': 0.6, 'nose-volume-incr': 0.35, 'nose-hump-incr': 0.2, 'nose-point-down': 0.15,
+    'eyebrows-trans-forward': 0.75, 'eyebrows-trans-down': 0.6, 'eyebrows-angle-up': 0.3, 'eye-scale-decr': 0.3, 'eye-bag-incr': 0.35,
+    'mouth-upperlip-volume-decr': 0.45, 'mouth-lowerlip-volume-decr': 0.15, 'mouth-scale-horiz-incr': 0.3,
+  },
+  shape: { cheeks: -0.6, jaw: 1.18, dbl: 0, neck: 1.06 },
+  expr: 'soft',
+  // (his face at rest: the eyes narrowed under the brow, one corner of his mouth up; and its lines drawn deeper as it moves)
+  rest: { au7: 0.55, au4: 0.3, au6: 0.22, blink: 0.16, au12L: 0.24, au2: 0.1 },
+  carve: 0.7, creaseK: 1.5,
+  head: { jaw: 1.12, chin: 1.04, nose: 1.1, lips: 0.82, brow: 1.2 },
+  skin: 'bronze', eyes: { iris: 'hazelGreen', open: 0.68, lid: 0.86, lashes: 0.15, liner: 0 },
+  brows: { col: ['#22140c', '#2e1c10', '#180e08'], thick: 1.5, arch: 0.14 },
+  mouth: { w: 1.06, full: 0.8, lip: [shade(SKINS.bronze.warm[0], 0.8), shade(SKINS.bronze.warm[1], 0.9)], lipstick: null },
+  beard: 'shadow', beardK: 2.4, beardCol: ['#2a1c14', '#3a2a20', '#1e140e', '#6a625c'], lines: 0.9, freckles: 0, blush: 0.05,
+  // (his own mark: x his left as the head's - on his right cheek)
+  mole: [-0.046, -0.026],
+  hair: { style: 'sweep', base: '#4a3020', dark: ['#22140c', '#2c1a10', '#1a0e08'], mid: ['#5e3e26', '#6a482c', '#523420'], light: ['#a67a46', '#b68a54', '#926a3a'], grey: 0, wave: 1, temples: 1 },
+  // (a fine dark wool: its lights near its own tone - a coarse cloth's pale strokes read as scratches on it)
+  top: jacket('blazer', 'wool', '#2c2b38', { light: ['#454459', '#4e4d63', '#3e3d51'], stripe: '#7c7a96', stripeA: 0.5, square: '#f4f0e6', buttons: '#1a1820', pin: 'flag', open: 0.026 }),
+  inner: under('shirt', '#f3eee4', { open: 0, tie: { base: '#6e1c2c', dark: ['#3e0e18', '#4c1420', '#340a14'], light: ['#a04452', '#b05662'], dot: '#c89aa0', bar: '#d4aa50' } }),
+  bottom: legs('trousers', '#2c2b38', { light: ['#454459', '#4e4d63', '#3e3d51'], stripe: '#7c7a96', stripeA: 0.5 }),
+  belt: { col: '#4a2c1a', buckle: '#c8a860' },
+  shoes: feet('oxford', '#3c1c18'),
+  acc: { watch: '#c8a860', strap: '#4a2c1a', ring: '#d8b050' },
+};
+export const STORY_CAST = [VENDOR, MICHAEL];
 FOLK.splice(PHONE_N, 0, LILY, ...WHEEL_KIDS, ...STORY_CAST);
 export const FOLK_PHONE = PHONE_N + 1 + WHEEL_KIDS.length + STORY_CAST.length;
 

@@ -826,7 +826,9 @@ function strokesFor(fig, item, side, w) {
         const ax = fig.pencilAx;
         // (through the hollow of her fist - render/people.js closes it round it, fig.grip - its point
         // MARKER_TIP below it: game/prologue/page.js)
-        _c.copy(fig.grip ? fistOf(fig, 1, fig.grip, _fh) : h).addScaledVector(ax, -MARKER_TIP * S);
+        // (ROADMAP 23.11: held to write - fig.pinch, its point where the page has it)
+        if (fig.pinch) _c.copy(fig.pinch.tip);
+        else _c.copy(fig.grip ? fistOf(fig, 1, fig.grip, _fh) : h).addScaledVector(ax, -MARKER_TIP * S);
         if (fig.pencilCol) {
           // (round 25, the player's word: smaller markers, as a child's are - a felt tip the colour it
           // draws, a grey collar, a white barrel, and its cap at the end in its colour)

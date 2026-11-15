@@ -108,8 +108,10 @@ export class Autopilot {
     if (!c) return 99;
     const da = wrap(Math.atan2(x - c.pos.x, z - c.pos.z) - c.yaw);
     let thr = top;
-    if (Math.abs(da) > 0.6 && Math.abs(c.speed) > 8) thr = 0.1;
-    if (Math.abs(da) > 1.1 && Math.abs(c.speed) > 5) thr = -0.4;
+    // (going forward: by how fast it goes that way. Rolling backwards after a back-off, with where it is going behind it, it
+    // braked - backwards - for good: round and round the turn in reverse at nine metres a second. ROADMAP 23.19)
+    if (Math.abs(da) > 0.6 && c.speed > 8) thr = 0.1;
+    if (Math.abs(da) > 1.1 && c.speed > 5) thr = -0.4;
     // (near the point and well off it: slow, not round and round it)
     const dist = Math.hypot(x - c.pos.x, z - c.pos.z);
     if (dist < 12 && Math.abs(da) > 0.5) thr = Math.min(thr, Math.abs(c.speed) > 6 ? -0.3 : 0.35);
@@ -121,9 +123,38 @@ export class Autopilot {
       this.stuck = 0;
       this.back = 1.0;
     }
+    // (against a parapet's end with its wheels still turning: its speed stays up and it goes nowhere - it stood so at the foot of
+    // a ramp for a minute and more, shot at. By how far it has got in a second and a half. ROADMAP 23.20)
+    const R = this.ref || (this.ref = { x: c.pos.x, z: c.pos.z, t: 0 });
+    R.t += this.dt;
+    if (R.t > 1.5) {
+      if (thr > 0.3 && this.back <= 0 && Math.hypot(c.pos.x - R.x, c.pos.z - R.z) < 1.2) {
+        this.back = 1.2;
+        this.stuck = 0;
+        // (and again at the same point of its way: it came at it from the wrong side - past the foot of a ramp, the ramp's wall
+        // between them. Back to the point two before it, and round to it again)
+        if (this.wp === this.snagWp) this.snagN++;
+        else {
+          this.snagWp = this.wp;
+          this.snagN = 1;
+        }
+        if (this.snagN >= 2 && this.wp >= 2) {
+          this.wp -= 2;
+          this.snagN = 0;
+          this.snagWp = -1;
+        }
+      }
+      R.x = c.pos.x;
+      R.z = c.pos.z;
+      R.t = 0;
+    }
     if (this.back > 0) {
       this.back -= this.dt;
       thr = -0.8;
+      steer = -steer;
+    } else if (c.speed < -1.5) {
+      // (still rolling back when the back-off is over: forward again, the wheel as it was backing till it goes forward)
+      thr = 1;
       steer = -steer;
     }
     this.set(-steer, thr);
@@ -144,6 +175,15 @@ export class Autopilot {
     const c = this.g.player.inVehicle;
     if (!c) return;
     while (this.wp < list.length && Math.hypot(list[this.wp][0] - c.pos.x, list[this.wp][1] - c.pos.z) < (list[this.wp][2] || near)) this.wp++;
+    // (round and round a point it cannot turn tightly enough to touch - it went so on a floor for a minute and more: after some
+    // seconds at the same point and near it, the next. ROADMAP 23.20)
+    if (this.wp !== this.orbitWp) {
+      this.orbitWp = this.wp;
+      this.orbitT = 0;
+    } else if (this.wp < list.length) {
+      this.orbitT += this.dt;
+      if (this.orbitT > 5 && Math.hypot(list[this.wp][0] - c.pos.x, list[this.wp][1] - c.pos.z) < 9) this.wp++;
+    }
     if (this.wp >= list.length) {
       this.set(0, 0);
       return;

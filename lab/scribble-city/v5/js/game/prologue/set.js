@@ -18,7 +18,7 @@ export { PARK } from './carpark.js';
 //    back. Until it is rubbed out (erase(): an eraser over it, row by row, two and a half seconds -
 //    the paper coming through, crumbs flying - and then the sky where it was);
 //  - Sunset Scoops, the ice cream stand at the pier's gate, where Lily waits;
-//  - Michael Cruz's campaign boards (his face from his sheet, his name, his slogan);
+//  - Michael Cruz's campaign boards (his face as the game draws him, his name, his slogan);
 //  - 5th Street Garage, inland in the middle of the city, and Bayshore Parking across 5th Street
 //    from it (carpark.js): the chase goes up the one and the car flies across to the roof of the
 //    other. (The two smaller car parks out at the island's southern tip it replaced are gone.)
@@ -755,7 +755,9 @@ export class PrologueSet {
     text('for everyone"', tx + 2, 410, 44, '#f4efe2', FONT_SIGN, 400, { maxWidth: tw });
     text('VOTE NOV 7  ★  CRUZ FOR MAYOR  ★  VOTE NOV 7', W / 2, H - 22, 32, '#ffffff', FONT_UI, 800, { align: 'center' });
     const tex = canvasTexture(c);
-    // his face, from his sheet, as the game draws (tools/illustrate_portrait.py): in when the
+    // (ROADMAP 23.13, the owner's word: "on the board he looks photographed - the board should carry the version of him from the
+    // game, modelled as Danny and Lily are") his face as the game itself draws him - render/folkspec.js MICHAEL, photographed in
+    // the game and cut to the board's frame (tools/castone.mjs posterLook / posterSmile, tools/boardface.py): in when the
     // picture is in
     const img = new Image();
     img.onload = () => {
@@ -774,7 +776,7 @@ export class PrologueSet {
       sk.poly([[px, 14], [px + pw, 14], [px + pw, 14 + ph], [px, 14 + ph]], true, { width: 7, color: '#f4efe2' });
       tex.needsUpdate = true;
     };
-    img.src = new URL(`${window.__gameBase ? '' : '../../../'}img/prologue/michael_${right ? 'smile' : 'look'}_ill.jpg`, window.__gameBase || import.meta.url).href;
+    img.src = new URL(`${window.__gameBase ? '' : '../../../'}img/prologue/michael_${right ? 'smile' : 'look'}_game.jpg`, window.__gameBase || import.meta.url).href;
     return tex;
   }
 
@@ -1342,6 +1344,25 @@ export class PrologueSet {
     this.eraser = { pos: new THREE.Vector3(), dir: new THREE.Vector3(0, 0.83, 0.55).normalize().applyAxisAngle(UPV, WHEEL.yaw), along: new THREE.Vector3(0, 0, 1).applyAxisAngle(UPV, WHEEL.yaw), on: false, rub: 0, w: ERASE.w };
     const p0 = this.eraserAt(0, { z: 0, y: 0, rub: 0 });
     this.eraser.pos.set(-1, p0.y, p0.z).applyAxisAngle(UPV, WHEEL.yaw).add(HUB);
+  }
+
+  // (ROADMAP 23.11, the owner's word: "it cannot go with a bang - a few moments first, of something bad on its way") before it
+  // goes: for a blink a small piece of it is not there - (z, y) in the wheel's own frame, r metres across; on false, back as it
+  // was. Only before the erasing itself (the mask still clean)
+  glitch(z, y, r, on) {
+    const E = this.eraseMask;
+    if (!E || this.erasing || this.wheelGone) return;
+    const S = ERASE.px;
+    const H = ERASE.half;
+    const ctx = E.ctx;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = on ? 'rgba(255,255,255,0.9)' : '#000';
+    ctx.beginPath();
+    ctx.arc((z / (2 * H) + 0.5) * S, (0.5 - y / (2 * H)) * S, (r / (2 * H)) * S * (on ? 1 : 1.35), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    E.tex.needsUpdate = true;
   }
 
   erase() {
