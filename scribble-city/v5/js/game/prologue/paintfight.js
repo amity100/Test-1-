@@ -138,7 +138,7 @@ export class PaintFight {
     car.yields = true;
     Q.keep = o.keep !== undefined ? o.keep : 7;
     Q.catchUp = !!o.catchUp;
-    Q.paused = o.mode === 'wait';
+    Q.paused = o.mode === 'wait' || o.hold > 0;
     if (o.seed) Q.seed(o.seed);
     const e = {
       car,
@@ -156,6 +156,8 @@ export class PaintFight {
       own: !!o.own,
       warn: null,
       label: o.label || '',
+      // (ROADMAP 23.19: after him only in so many seconds - the two men have first to get back to their car)
+      holdT: o.hold || 0,
     };
     this.enemies.push(e);
     const L = this.P.pursuers || (this.P.pursuers = []);
@@ -208,6 +210,11 @@ export class PaintFight {
       }
       e.Q.prey = me || e.Q.prey;
       if (!me) continue;
+      if (e.holdT > 0) {
+        e.holdT -= dt;
+        if (e.holdT > 0) continue;
+        e.Q.paused = false;
+      }
       // (ROADMAP 23.19: hurt by his gun - smoke from under its hood, grey and then black; Vince and Bruno's, stopped, till it
       // comes after him again)
       if (e.hp !== undefined && e.hp < CAR_HP * 0.6) {

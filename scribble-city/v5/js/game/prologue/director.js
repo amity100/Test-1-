@@ -1747,7 +1747,7 @@ export class Prologue {
     // (ROADMAP 23.18: also when the car she rode in has let her go already - outOfCar takes her ride away with Danny's, and
     // this then left her as she had been in it: sitting, at a seat's height, wherever she was put next. Found in scene 5:
     // Lily sat in the air beside him across the car park's floor)
-    if (!L.pl.ride && !L.riding) return;
+    // (and whatever she was left as: out of a car she is on her feet - called only as she gets out of one)
     const c = L.pl.ride;
     L.pl.ride = null;
     L.riding = false;
@@ -5357,7 +5357,8 @@ export class Prologue {
     const seed = this.thugsInside
       ? [[IN_PARK.car.x + 6, 0.17, IN_PARK.car.z], [DANNY_CAR.x - 9, 0.17, DANNY_CAR.z - 1.5], [DANNY_CAR.x - 5.5, 0.17, DANNY_CAR.z - 8]]
       : [[THUG_CAR.x + 4, 0.17, THUG_CAR.z - 0.4], [E.x - 3, 0.17, E.z + 4.2], [E.x, 0.17, E.z + 0.8], [E.x, 0.17, E.z - 7]];
-    const e = this.fight.add(v, { keep: 10, catchUp: true, color: 0, fireT: 2.5, seed });
+    // (from inside they are twenty metres from his bay: a breath before they come, as when they came in from the street)
+    const e = this.fight.add(v, { keep: 10, catchUp: true, color: 0, fireT: this.thugsInside ? 4.5 : 2.5, seed, hold: this.thugsInside ? 2.4 : 0 });
     this.pursuers = [e.Q];
     this.pursuer = e.Q;
   }

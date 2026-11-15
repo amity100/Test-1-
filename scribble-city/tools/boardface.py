@@ -75,9 +75,12 @@ for key, name in which.items():
     a = a.crop(box)
     m = m.crop(box)
     # (a board in the evening's light washes its picture out: him a little deeper and fuller than he was photographed)
-    a = ImageEnhance.Color(a).enhance(float(os.environ.get('SAT', 1.12)))
-    gm = float(os.environ.get('GAMMA', 1.12))
-    a = a.point(lambda v: int(255 * (v / 255) ** gm))
+    # (ROADMAP 23.18: a good deal deeper. The board's own surface doubles what is on it - its lamps, the evening sun, the look's
+    # paper: a face as light as it was photographed came out white, its features gone. At a little over half, skin is skin)
+    a = ImageEnhance.Color(a).enhance(float(os.environ.get('SAT', 1.3)))
+    gm = float(os.environ.get('GAMMA', 1.1))
+    mul = float(os.environ.get('MUL', 0.56))
+    a = a.point(lambda v: int(255 * mul * (v / 255) ** gm))
     g = ground(a.size[0] // 4, a.size[1] // 4).resize(a.size, Image.BICUBIC)
     im = Image.composite(a, g, m).resize((OW, OH), Image.LANCZOS)
     to = f'michael_{key}_game.jpg'

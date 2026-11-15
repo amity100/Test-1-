@@ -108,8 +108,10 @@ export class Autopilot {
     if (!c) return 99;
     const da = wrap(Math.atan2(x - c.pos.x, z - c.pos.z) - c.yaw);
     let thr = top;
-    if (Math.abs(da) > 0.6 && Math.abs(c.speed) > 8) thr = 0.1;
-    if (Math.abs(da) > 1.1 && Math.abs(c.speed) > 5) thr = -0.4;
+    // (going forward: by how fast it goes that way. Rolling backwards after a back-off, with where it is going behind it, it
+    // braked - backwards - for good: round and round the turn in reverse at nine metres a second. ROADMAP 23.19)
+    if (Math.abs(da) > 0.6 && c.speed > 8) thr = 0.1;
+    if (Math.abs(da) > 1.1 && c.speed > 5) thr = -0.4;
     // (near the point and well off it: slow, not round and round it)
     const dist = Math.hypot(x - c.pos.x, z - c.pos.z);
     if (dist < 12 && Math.abs(da) > 0.5) thr = Math.min(thr, Math.abs(c.speed) > 6 ? -0.3 : 0.35);
@@ -124,6 +126,10 @@ export class Autopilot {
     if (this.back > 0) {
       this.back -= this.dt;
       thr = -0.8;
+      steer = -steer;
+    } else if (c.speed < -1.5) {
+      // (still rolling back when the back-off is over: forward again, the wheel as it was backing till it goes forward)
+      thr = 1;
       steer = -steer;
     }
     this.set(-steer, thr);

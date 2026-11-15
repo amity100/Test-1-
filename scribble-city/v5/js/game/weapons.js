@@ -1557,6 +1557,15 @@ export class Weapons {
     if (hit.type === 'car') {
       // a car hit: dented, its glass, a tyre... (game/damage.js); yours keep their own count
       const c = hit.car;
+      // (ROADMAP 23.19: one of the story's cars after him - a car somebody drives, as his own is: what his gun does to it is
+      // the fight's own count, game/prologue/paintfight.js shot)
+      const F = game.prologue && game.prologue.fight;
+      if (pr.owner === 'player' && F && F.shot && F.shot(c, pr.damage, hit)) {
+        fx.sparks(hit.x, hit.y, hit.z, 5, STEEL);
+        fx.impact(hit.x, hit.y, hit.z, 0.5);
+        if (Math.hypot(hit.x - game.camera.position.x, hit.z - game.camera.position.z) < 45) game.audio.play('clang', 0.35);
+        return;
+      }
       if (hit.own) {
         // (ROADMAP 11.28: what the rear shield, the dome stop - game/gearguard2.js)
         if (game.gear && game.gear.shields(c, pr.x - ux * 5, pr.z - uz * 5)) {
@@ -1568,13 +1577,8 @@ export class Weapons {
         c.hurt(pr.owner === 'player' ? pr.damage * 0.5 : pr.damage);
         game.damage.hit(c, hit.x, hit.y, hit.z, pr.damage * 0.6, true);
       } else {
-        // (ROADMAP 23.19: one of the story's cars after him - what his gun does to it is the fight's own count:
-        // game/prologue/paintfight.js shot)
-        const F = game.prologue && game.prologue.fight;
-        if (!(pr.owner === 'player' && F && F.shot && F.shot(c, pr.damage, hit))) {
-          game.damage.hit(c, hit.x, hit.y, hit.z, pr.damage * 0.7);
-          game.traffic.shotAt(c, pr.owner);
-        }
+        game.damage.hit(c, hit.x, hit.y, hit.z, pr.damage * 0.7);
+        game.traffic.shotAt(c, pr.owner);
       }
       fx.sparks(hit.x, hit.y, hit.z, 4, STEEL);
       fx.impact(hit.x, hit.y, hit.z, 0.45);
