@@ -677,7 +677,9 @@ export class Prologue {
     // (ROADMAP 23.21: the landed car's rotor, stopped - its blades out of the close pictures inside the car: game/fuse.js)
     if (this.sceneN === 9) {
       const rc = this.game.player.inVehicle;
-      if (rc) rc.rotorHide = !!this.holdCam && !!rc.rotorStill && this.game.camera.position.distanceTo(rc.pos) < 3.4;
+      // (from inside it: near its middle and under its roof's height - not the pictures of the whole car from beside or over it)
+      const cp = this.game.camera.position;
+      if (rc) rc.rotorHide = !!this.holdCam && !!rc.rotorStill && Math.hypot(cp.x - rc.pos.x, cp.z - rc.pos.z) < 2.3 && cp.y < (rc.pos.y || 0) + 1.9;
     }
     // (Danny walking somewhere in a shot, on his own feet - or running)
     if (this.walkTo && this.walkDanny(this.walkTo.x, this.walkTo.z, this.walkTo.speed, this.walkTo.sprint)) this.walkTo = null;
