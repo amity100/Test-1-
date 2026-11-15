@@ -117,6 +117,33 @@ const KEEP = {
   land: { x0: -194, x1: -166, z0: LZ0, z1: LZ1 },
 };
 
+// ------------------------------------------------------------------ (ROADMAP 23.20) the west wing, the bridges
+// The owner's word: the car park twice as big, with parts of its own and more than one way up. West of Meridian Avenue, where a
+// row of houses stood between it and the bay: the old wing - the same floors under a roof nobody drives on, narrower, worse lit.
+// A ramp of its own up its west wall from every floor - all of them up to the south, one over the other in the same lane (each a
+// slab, not solid: the one under it is driven under it), so that from the top of one the floor is driven back north to the foot of
+// the next; and from two floors a works ramp of steel plates in the aisle along its east wall, up to the north: at the top of the
+// ramp from the floor under it, the short way on. (As first built the lane's ramps went up to the south and to the north in turn,
+// one over the other: the top of each was under the foot of the next - no room over a car's roof there.) Two bridges a floor
+// over the avenue, from the hall's turns to the wing's, each between the hall's wall columns: open at their sides, the city below.
+const WX0 = -250;
+const WX1 = -216;
+// (its top floor that is driven on; its roof, LV(NDECK), is shut)
+const NWING = NDECK - 1;
+const W_LANE = 8.6;
+const BRIDGES = [{ z0: 187.4, z1: 206.6 }, { z0: 260.2, z1: 280.0 }];
+const WRAMPS = Array.from({ length: NWING }, (_, k) => ({ k, x0: WX0 + 0.3, x1: WX0 + 0.3 + W_LANE, xc: WX0 + 0.3 + W_LANE / 2, zLow: RN, zHigh: RS }));
+// (how thick a ramp's slab is, over the ramp under it)
+const W_RAMP_T = 0.5;
+// (its floor east of the ramp's lane: a row of bays nose to the lane, the aisle [W_A0, W_A1], a row of bays, the works aisle
+// along the east wall from W_B0 - the works ramps stand in it)
+const W_A0 = -235.4;
+const W_A1 = -227.8;
+const W_AC = (W_A0 + W_A1) / 2;
+const W_B0 = -222.5;
+const W_BC = -219.4;
+const XRAMPS = [1, 3].map((k) => ({ k, x0: W_BC - 2.7, x1: W_BC + 2.7, xc: W_BC, zLow: 253, zHigh: 213, z0: 213, z1: 253, works: true }));
+
 // ------------------------------------------------------------------ what the director needs
 // The car park as the prologue's director sees it (all in world metres; y the floor's height):
 // where the two men wait at the door on 5th Street, Danny's car, the way up floor by floor, the
@@ -138,6 +165,9 @@ export const PARK = {
   turnS: (RS + MZ1 - CORE_D) / 2,
   roofBarX: ROOF_BAR_X,
   landing: { name: 'BAYSHORE PARKING', x0: LX0, x1: LX1, z0: LZ0, z1: LZ1, levels: LY.slice(), floorToFloor: LDH, grade: LDH / (34 - L_RAMP_EASE), ramps: L_RAMPS, aisles: L_AISLE, gate: L_GATE },
+  // (ROADMAP 23.20) the west wing over the avenue: its ground, its ramps (as the hall's: { k, x0, x1, xc, zLow, zHigh }), its
+  // works ramps, the bridges ({ z0, z1 }, from the hall's west wall at x0 to the wing at wing.x1), its top driven floor
+  wing: { x0: WX0, x1: WX1, z0: MZ0, z1: MZ1, ramps: WRAMPS, works: XRAMPS, bridges: BRIDGES, top: NWING, aisleX: W_AC, worksX: W_BC },
   // the street door of the stair tower at the corner of 5th Street and Washington Avenue (the
   // way in on foot, through its lobby to the street floor), where the two men wait, which way they
   // face (east, down 5th Street, where Danny comes from)
@@ -231,6 +261,8 @@ export const PARK = {
   levelAt: (x, z, y) => {
     const m = mainFloor(x, z, y);
     if (m > -Infinity) return (m - Y0) / DH;
+    const w = wingFloor(x, z, y);
+    if (w > -Infinity) return (w - Y0) / DH;
     const b = landFloor(x, z, y);
     return b > -Infinity ? 10 + (b - Y0) / LDH : null;
   },
@@ -346,8 +378,75 @@ function landCeilAt(x, z, y) {
   return Infinity;
 }
 
+// ---- the wing's floors and the bridges' (ROADMAP 23.20)
+function wingHole(k, x, z) {
+  for (const r of WRAMPS) if (r.k + 1 === k && x > r.x0 && x < r.x1 && z > RN && z < RS) return true;
+  for (const r of XRAMPS) if (r.k + 1 === k && x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) return true;
+  return false;
+}
+const inWing = (x, z) => x >= WX0 && x <= WX1 && z >= MZ0 && z <= MZ1;
+const onBridge = (x, z) => x > WX1 && x < MX0 && ((z >= BRIDGES[0].z0 && z <= BRIDGES[0].z1) || (z >= BRIDGES[1].z0 && z <= BRIDGES[1].z1));
+function wingFloor(x, z, y) {
+  const lim = y + 1.1;
+  let best = -Infinity;
+  if (inWing(x, z)) {
+    for (let k = 0; k <= NDECK; k++) {
+      const h = LV(k);
+      if (h > lim) break;
+      if (!wingHole(k, x, z)) best = h;
+    }
+    for (const r of WRAMPS) {
+      if (x < r.x0 || x > r.x1) continue;
+      const h = mainRampY(r, z);
+      if (h !== null && h <= lim && h > best) best = h;
+    }
+    for (const r of XRAMPS) {
+      if (x < r.x0 || x > r.x1) continue;
+      const h = mainRampY(r, z);
+      if (h !== null && h <= lim && h > best) best = h;
+    }
+  } else if (onBridge(x, z)) {
+    for (let k = 1; k <= NWING; k++) {
+      const h = LV(k);
+      if (h > lim) break;
+      best = h;
+    }
+  }
+  return best;
+}
+function wingCeilAt(x, z, y) {
+  if (inWing(x, z)) {
+    let c = Infinity;
+    for (let k = 1; k <= NDECK; k++) {
+      const under = LV(k) - SLAB - BEAM;
+      if (under < y + 0.6) continue;
+      if (!wingHole(k, x, z)) {
+        c = under;
+        break;
+      }
+    }
+    // (in the ramps' lane: the slab of the ramp over this one)
+    for (const r of WRAMPS) {
+      if (x < r.x0 || x > r.x1) continue;
+      const h = mainRampY(r, z);
+      if (h !== null && h - W_RAMP_T >= y + 0.6 && h - W_RAMP_T < c) c = h - W_RAMP_T;
+    }
+    return c;
+  }
+  if (onBridge(x, z)) {
+    for (let k = 1; k <= NWING; k++) {
+      const under = LV(k) - SLAB - 0.35;
+      if (under < y + 0.6) continue;
+      return under;
+    }
+  }
+  return Infinity;
+}
+
 function parkFloor(x, z, y) {
   let best = mainFloor(x, z, y);
+  const w = wingFloor(x, z, y);
+  if (w > best) best = w;
   const b = landFloor(x, z, y);
   if (b > best) best = b;
   for (const e of PARK.extra) {
@@ -366,7 +465,9 @@ function parkCeiling(x, z, y) {
   // (outside them it is the camera's own look, stopped by their floors' edges, that keeps it out)
   const inMain = x > MX0 - 1 && x < MX1 + 1 && z > MZ0 - 1 && z < MZ1 + 1;
   const inLand = LAND_ON && x > LX0 - 1 && x < LX1 + 1 && z > LZ0 - 1 && z < LZ1 + 1;
-  if (!inMain && !inLand) return Infinity;
+  // (the wing and the bridges' side of the avenue)
+  const inWest = x > WX0 - 1 && x < MX0 + 1 && z > MZ0 - 1 && z < MZ1 + 1;
+  if (!inMain && !inLand && !inWest) return Infinity;
   let c = Infinity;
   for (const [dx, dz] of RING) {
     const sx = x + dx;
@@ -374,10 +475,47 @@ function parkCeiling(x, z, y) {
     const soft = Math.hypot(dx, dz) * 0.22;
     let u = Infinity;
     if (inMain && sx > MX0 && sx < MX1 && sz > MZ0 && sz < MZ1) u = mainCeilAt(sx, sz, y);
+    else if (inWest && sx <= MX0) u = wingCeilAt(sx, sz, y);
     else if (inLand && sx > LX0 && sx < LX1 && sz > LZ0 && sz < LZ1) u = landCeilAt(sx, sz, y);
     if (u + soft < c) c = u + soft;
   }
   return c;
+}
+
+// (ROADMAP 23.20) a floor's slab round its openings: boxes [x0, z0, x1, z1] covering the rectangle less the holes ([x0, z0, x1,
+// z1] each)
+function slabPieces(x0, z0, x1, z1, holes) {
+  const zs = [z0, z1];
+  for (const h of holes) {
+    if (h[1] > z0 && h[1] < z1) zs.push(h[1]);
+    if (h[3] > z0 && h[3] < z1) zs.push(h[3]);
+  }
+  zs.sort((a, b) => a - b);
+  const out = [];
+  for (let i = 0; i + 1 < zs.length; i++) {
+    const za = zs[i];
+    const zb = zs[i + 1];
+    if (zb - za < 0.01) continue;
+    for (const [a, b] of xRuns(x0, x1, (za + zb) / 2, holes)) out.push([a, za, b, zb]);
+  }
+  return out;
+}
+// (the stretches of x0..x1 at z that are in no hole)
+function xRuns(x0, x1, z, holes) {
+  let runs = [[x0, x1]];
+  for (const h of holes) {
+    if (z < h[1] || z > h[3]) continue;
+    const next = [];
+    for (const [a, b] of runs) {
+      if (h[2] <= a || h[0] >= b) next.push([a, b]);
+      else {
+        if (h[0] - a > 0.01) next.push([a, h[0]]);
+        if (b - h[2] > 0.01) next.push([h[2], b]);
+      }
+    }
+    runs = next;
+  }
+  return runs;
 }
 
 // ------------------------------------------------------------------ shapes of its own
@@ -541,7 +679,9 @@ export class CarPark {
     // parked cars ({ x, y, z, yaw, tilt, roll, spec })
     this.main = { s: { x0: MX0, x1: MX1, z0: MZ0, z1: MZ1 }, parked: [] };
     this.land = { s: { x0: LX0, x1: LX1, z0: LZ0, z1: LZ1 }, parked: [] };
-    this.parts = [this.main, this.land];
+    // (ROADMAP 23.20: the west wing, with the bridges)
+    this.wing = { s: { x0: WX0, x1: MX0, z0: MZ0, z1: MZ1 }, parked: [] };
+    this.parts = [this.main, this.wing, this.land];
     this.tris = 0;
   }
 
@@ -563,6 +703,11 @@ export class CarPark {
     this.mainInside(KI, M);
     this.facade(KS, M);
     this.details(KI, M);
+    // (ROADMAP 23.20: the west wing and the bridges - a body and an inside of their own)
+    const KW = new Kit();
+    const KWI = new Kit();
+    this.wingShell(KW, M);
+    this.wingInside(KWI, M);
     if (LAND_ON) {
       this.landShell(KL, M);
       this.landInside(KLI, M);
@@ -571,7 +716,7 @@ export class CarPark {
     // (what is inside each - the paint, the lights, the pipes, the signs - is drawn near it only,
     // and not for the sun: its shadows are the floors')
     this.near = [];
-    for (const [K, seed, name, inside] of [[KS, 0.21, 'shell', false], [KI, 0.47, 'inside', true], [KL, 0.63, 'landing', false], [KLI, 0.71, 'landing-inside', true]]) {
+    for (const [K, seed, name, inside] of [[KS, 0.21, 'shell', false], [KI, 0.47, 'inside', true], [KW, 0.83, 'wing', false], [KWI, 0.91, 'wing-inside', true], [KL, 0.63, 'landing', false], [KLI, 0.71, 'landing-inside', true]]) {
       const g = K.build({ seed });
       g.name = `carpark-${name}`;
       for (const m of g.children) {
@@ -583,12 +728,14 @@ export class CarPark {
       g.updateMatrix();
       this.game.scene.add(g);
       this.groups.push(g);
-      if (inside) this.near.push({ g, s: name === 'inside' ? this.main.s : this.land.s });
+      if (inside) this.near.push({ g, s: name === 'inside' ? this.main.s : name === 'wing-inside' ? this.wing.s : this.land.s });
     }
     // (on the city's map, and on the minimap's picture of the city - drawn before these were built)
     const w = this.game.world;
     const fp = [
       { x0: MX0, z0: MZ0, x1: MX1, z1: MZ1, top: LV(NDECK), color: new THREE.Color(0.86, 0.84, 0.8), trim: new THREE.Color(0.1, 0.34, 0.78) },
+      { x0: WX0, z0: MZ0, x1: WX1, z1: MZ1, top: LV(NDECK), color: new THREE.Color(0.8, 0.77, 0.72), trim: new THREE.Color(0.62, 0.36, 0.22) },
+      ...BRIDGES.map((q) => ({ x0: WX1, z0: q.z0, x1: MX0, z1: q.z1, top: LV(NWING), color: new THREE.Color(0.86, 0.84, 0.8), trim: new THREE.Color(0.1, 0.34, 0.78) })),
       ...(LAND_ON ? [{ x0: LX0, z0: LZ0, x1: LX1, z1: LZ1, top: LY[LY.length - 1], color: new THREE.Color(0.86, 0.84, 0.8), trim: new THREE.Color(0.22, 0.62, 0.7) }] : []),
     ];
     if (w.footprints) w.footprints.push(...fp);
@@ -612,6 +759,7 @@ export class CarPark {
     const nav = this.game.world.nav;
     if (nav && nav.queueRefresh) {
       nav.queueRefresh(MX0 - 2, MZ0 - 2, MX1 + 2, MZ1 + 2);
+      nav.queueRefresh(WX0 - 2, MZ0 - 2, WX1 + 2, MZ1 + 2);
       if (LAND_ON) nav.queueRefresh(LX0 - 2, LZ0 - 2, LX1 + 2, LZ1 + 2);
     }
   }
@@ -668,6 +816,12 @@ export class CarPark {
     }
     if (LAND_ON && x > LX0 && x < LX1 && z > LZ0 && z < LZ1) {
       for (let k = 1; k < LY.length; k++) if (y > LY[k] - SLAB && y < LY[k] && !landHole(k, x, z)) return `land L${k}`;
+    }
+    if (inWing(x, z)) {
+      for (let k = 1; k <= NDECK; k++) if (y > LV(k) - SLAB && y < LV(k) && !wingHole(k, x, z)) return `wing L${k}`;
+    }
+    if (onBridge(x, z)) {
+      for (let k = 1; k <= NWING; k++) if (y > LV(k) - SLAB && y < LV(k)) return `bridge L${k}`;
     }
     return null;
   }
@@ -789,9 +943,13 @@ export class CarPark {
       for (const [xx, nx] of [[MX0, -1], [MX1, 1]]) {
         const xa = Math.min(xx, xx - nx * 0.25);
         const xb = Math.max(xx, xx - nx * 0.25);
-        K.box(M.matte, xa, bot, MZ0, xb, top, MZ1, PANEL);
-        K.box(M.paint, Math.min(xx, xx + nx * 0.02), top - 0.36, MZ0, Math.max(xx, xx + nx * 0.02), top - 0.14, MZ1, BLUE_P);
-        wall(xa - 0.05, MZ0, xb + 0.05, MZ1, y - 0.3, top);
+        // (ROADMAP 23.20: the west wall open where the two bridges come in, on the floors they are on)
+        const runs = nx < 0 && k >= 1 && k <= NWING ? [[MZ0, BRIDGES[0].z0], [BRIDGES[0].z1, BRIDGES[1].z0], [BRIDGES[1].z1, MZ1]] : [[MZ0, MZ1]];
+        for (const [za, zb] of runs) {
+          K.box(M.matte, xa, bot, za, xb, top, zb, PANEL);
+          K.box(M.paint, Math.min(xx, xx + nx * 0.02), top - 0.36, za, Math.max(xx, xx + nx * 0.02), top - 0.14, zb, BLUE_P);
+          wall(xa - 0.05, za, xb + 0.05, zb, y - 0.3, top);
+        }
       }
     }
     // (the way out onto 7th Street: its roller shutter down)
@@ -888,6 +1046,8 @@ export class CarPark {
           if (inCoreSpan(sd, a)) continue;
           // (none over the way in, nor the door from the street)
           if (k === 0 && sd.axis === 'z' && sd.n > 0 && a > E_AISLE_X - 4.8 && a < E_AISLE_X + 4.8) continue;
+          // (ROADMAP 23.20: nor across the bridges' mouths in the west face)
+          if (k >= 1 && k <= NWING && sd.axis === 'x' && sd.n < 0 && BRIDGES.some((q) => a > q.z0 - 0.2 && a < q.z1 + 0.2)) continue;
           const deep = i % 3 === 0 ? 0.46 : i % 3 === 1 ? 0.3 : 0.22;
           onFace(sd, a - 0.03, a + 0.03, 0.04, 0.04 + deep, k === 0 ? 2.6 : yb, yt, M.metal, i % 3 === 0 ? FIN : FIN_D);
         }
@@ -1349,6 +1509,325 @@ export class CarPark {
     });
   }
 
+  // ------------------------------------------------------------------ (ROADMAP 23.20) the west wing and the bridges: their body
+  // The old wing, on the bay: older concrete, plain parapets and the open air over them where the hall has its bronze fins;
+  // every floor's slab whole but for the openings its ramps come up through; a ramp up its west wall, and the works ramps - steel
+  // plates between rusty rails; columns in its walls, by the ramp's lane and down its middle beside the bays. The bridges: a slab
+  // a floor from the hall's west wall to the wing's east, a low wall and a rail along both sides, piers at their ends.
+  wingShell(K, M) {
+    const wall = this.wall;
+    const OLD = linC(0.5, 0.485, 0.46);
+    const OLD_TOP = linC(0.37, 0.362, 0.365);
+    const OLD_UNDER = linC(0.27, 0.262, 0.275);
+    const OLD_BAND = linC(0.62, 0.36, 0.22);
+    const RUST = linC(0.46, 0.27, 0.17);
+    const PLATE = linC(0.4, 0.42, 0.46);
+    K.box(M.matte, WX0, -2.4, MZ0, WX1, Y0 - 0.004, MZ1, OLD_TOP);
+    wall(WX0, MZ0, WX1, MZ1, -1, Y0 - 0.01, 'floor');
+    const holesOf = (k) => {
+      const H = [];
+      for (const r of WRAMPS) if (r.k + 1 === k) H.push([r.x0, RN, r.x1, RS]);
+      for (const r of XRAMPS) if (r.k + 1 === k) H.push([r.x0, r.z0, r.x1, r.z1]);
+      return H;
+    };
+    for (let k = 1; k <= NDECK; k++) {
+      const y = LV(k);
+      const holes = holesOf(k);
+      for (const [a0, b0, a1, b1] of slabPieces(WX0, MZ0, WX1, MZ1, holes)) {
+        K.box(M.matte, a0, y - SLAB, b0, a1, y, b1, k === NDECK ? CONC_ROOF : OLD_TOP);
+        wall(a0, b0, a1, b1, y - SLAB + 0.02, y, 'floor');
+      }
+      // round the openings: a parapet along the ramp's inner side (its low end is the foot of this floor's own ramp, over the
+      // opening; the top floor's has none: a parapet across it); the works opening fenced in steel
+      for (const r of WRAMPS) {
+        if (r.k + 1 !== k) continue;
+        K.box(M.matte, r.x1, y, RN, r.x1 + 0.3, y + PAR, RS, OLD);
+        K.box(M.paint, r.x1 - 0.01, y + PAR - 0.28, RN, r.x1 + 0.31, y + PAR - 0.08, RS, OLD_BAND);
+        wall(r.x1, RN, r.x1 + 0.3, RS, y - 0.3, y + PAR);
+        if (k < NWING) continue;
+        K.box(M.matte, r.x0, y, RN - 0.3, r.x1, y + PAR, RN, OLD);
+        wall(r.x0, RN - 0.3, r.x1, RN, y - 0.3, y + PAR);
+      }
+      for (const r of XRAMPS) {
+        if (r.k + 1 !== k) continue;
+        for (const xa of [r.x0 - 0.1, r.x1]) {
+          K.box(M.metal, xa, y + 0.86, r.z0, xa + 0.1, y + 0.96, r.z1, RUST);
+          K.box(M.metal, xa, y + 0.42, r.z0, xa + 0.1, y + 0.5, r.z1, RUST);
+          for (let z = r.z0; z <= r.z1 + 1e-6; z += 2.5) K.box(M.metal, xa, y, z - 0.05, xa + 0.1, y + 0.96, z + 0.05, RUST);
+          wall(xa, r.z0, xa + 0.1, r.z1, y - 0.3, y + 0.96);
+        }
+        // (across its low end)
+        const zl = r.zLow > r.zHigh ? r.z1 : r.z0 - 0.1;
+        K.box(M.metal, r.x0, y + 0.86, zl, r.x1, y + 0.96, zl + 0.1, RUST);
+        K.box(M.metal, r.x0, y + 0.42, zl, r.x1, y + 0.5, zl + 0.1, RUST);
+        wall(r.x0, zl, r.x1, zl + 0.1, y - 0.3, y + 0.96);
+      }
+      // the beams under it across, a span apart (not over an opening)
+      for (let z = MZ0 + SPAN; z < MZ1 - 1; z += SPAN) {
+        for (const [xa, xb] of xRuns(WX0 + 0.3, WX1 - 0.3, z, holes)) if (xb - xa > 0.5) K.box(M.matte, xa, y - SLAB - BEAM, z - 0.25, xb, y - SLAB, z + 0.25, OLD_UNDER);
+      }
+    }
+    // ---- the ramps, eased at both ends: the street floor's and the works ramps solid on their floors; the lane's others slabs,
+    // one over the other (a beam under each edge); a parapet (the works ramps: a steel rail) along both sides
+    const ramp = (r) => {
+      const z0 = Math.min(r.zLow, r.zHigh);
+      const z1 = Math.max(r.zLow, r.zHigh);
+      const f = (z) => mainRampY(r, Math.max(z0, Math.min(z1, z)));
+      const pts = [];
+      for (let z = z0; z < z1 - 1e-6; z += z - z0 < R_EASE + 0.5 || z1 - z < R_EASE + 1.5 ? 1 : 7) pts.push([z, f(z)]);
+      pts.push([z1, f(z1)]);
+      const base = LV(r.k);
+      const slab = !r.works && r.k > 0;
+      // (what is under it at z: its floor, or the slab's own underside)
+      const under = (z) => (slab ? Math.min(f(z), f(Math.min(z1, z + 2))) - W_RAMP_T : base - 0.3);
+      K.add(r.works ? M.metal : M.matte, prism('z', pts, r.x0 + 0.02, r.x1 - 0.02, slab ? (s, yy) => yy - W_RAMP_T : () => base), r.works ? PLATE : CONC_RAMP);
+      if (slab) for (const xa of [r.x0 + 0.3, r.x1 - 0.75]) K.add(M.matte, prism('z', pts.map(([z, yy]) => [z, yy - W_RAMP_T]), xa, xa + 0.45, (s, yy) => yy - 0.4), OLD_UNDER);
+      const h = r.works ? 0.9 : PAR;
+      for (const xa of [r.x0 + 0.02, r.x1 - (r.works ? 0.12 : 0.26)]) {
+        const w = r.works ? 0.1 : 0.24;
+        if (r.works) K.add(M.metal, prism('z', pts.map(([z, yy]) => [z, yy + h]), xa, xa + w, (s, yy) => yy - 0.1), RUST);
+        else {
+          K.add(M.matte, prism('z', pts.map(([z, yy]) => [z, yy + h]), xa, xa + w, slab ? (s, yy) => yy - h - W_RAMP_T : () => base), OLD);
+          K.add(M.paint, prism('z', pts.map(([z, yy]) => [z, yy + h - 0.06]), xa - 0.01, xa + w + 0.01, (s, yy) => yy - 0.22), OLD_BAND);
+        }
+        for (let z = z0; z < z1 - 1e-6; z += 2) {
+          const ze = Math.min(z1, z + 2);
+          wall(xa, z, xa + w, ze, under(z), Math.max(f(z), f(ze)) + h);
+        }
+      }
+      // (the works ramp's plates: a seam across it every few metres)
+      if (r.works) for (let z = z0 + 2; z < z1 - 1; z += 2.4) K.add(M.paint, prism('z', [[z - 0.03, f(z) + 0.012], [z + 0.03, f(z) + 0.012]], r.x0 + 0.1, r.x1 - 0.1, (s, yy) => yy - 0.014), INK);
+      for (let z = z0; z < z1 - 1e-6; z += 1.2) {
+        const ze = Math.min(z1, z + 1.2);
+        const top = Math.min(f(z), f(ze));
+        wall(r.x0, z, r.x1, ze, slab ? top - W_RAMP_T : base - 0.3, top, 'floor');
+      }
+    };
+    for (const r of WRAMPS) ramp(r);
+    for (const r of XRAMPS) ramp(r);
+    // ---- the outer walls, each level: a parapet of old panels, the open air over it; its east face open at the bridges
+    const B0 = BRIDGES[0];
+    const B1 = BRIDGES[1];
+    for (let k = 0; k <= NDECK; k++) {
+      const y = LV(k);
+      const top = y + (k === NDECK ? PAR : 1.3);
+      const bot = k === 0 ? -0.6 : y - SLAB - 0.15;
+      for (const [zz, nz] of [[MZ0, -1], [MZ1, 1]]) {
+        const za = Math.min(zz, zz - nz * 0.25);
+        const zb = Math.max(zz, zz - nz * 0.25);
+        K.box(M.matte, WX0, bot, za, WX1, top, zb, OLD);
+        K.box(M.paint, WX0, top - 0.34, Math.min(zz, zz + nz * 0.02), WX1, top - 0.16, Math.max(zz, zz + nz * 0.02), OLD_BAND);
+        wall(WX0, za - 0.05, WX1, zb + 0.05, y - 0.3, top);
+      }
+      for (const [xx, nx] of [[WX0, -1], [WX1, 1]]) {
+        const xa = Math.min(xx, xx - nx * 0.25);
+        const xb = Math.max(xx, xx - nx * 0.25);
+        const runs = nx > 0 && k >= 1 && k <= NWING ? [[MZ0, B0.z0], [B0.z1, B1.z0], [B1.z1, MZ1]] : [[MZ0, MZ1]];
+        for (const [za, zb] of runs) {
+          K.box(M.matte, xa, bot, za, xb, top, zb, OLD);
+          K.box(M.paint, Math.min(xx, xx + nx * 0.02), top - 0.34, za, Math.max(xx, xx + nx * 0.02), top - 0.16, zb, OLD_BAND);
+          wall(xa - 0.05, za, xb + 0.05, zb, y - 0.3, top);
+        }
+      }
+    }
+    // ---- the columns: in its walls, by the ramp's lane, down the middle beside the bays (none in the turns)
+    const topIn = LV(NDECK) - SLAB;
+    const col = (x, z, y1, w = 0.42) => {
+      K.box(M.matte, x - w, -0.6, z - w, x + w, y1, z + w, OLD);
+      wall(x - w, z - w, x + w, z + w, 0, y1, 'pole');
+    };
+    this.wingCols = [];
+    for (let z = MZ0 + SPAN; z < MZ1 - 1; z += SPAN) for (const x of [WX0 + 0.42, WX1 - 0.42]) col(x, z, LV(NDECK) + PAR);
+    for (let z = RN + 1.6; z < RS - 1; z += SPAN) {
+      const x = WX0 + 0.3 + W_LANE + 0.75;
+      col(x, z, topIn);
+      this.wingCols.push([x, z]);
+    }
+    // (at the mouths of the two rows of bays, either side of the aisle, under the beams)
+    for (let z = MZ0 + 3 * SPAN; z < RS + 1; z += SPAN) {
+      for (const x of [W_A0 - 0.42, W_A1 + 0.42]) {
+        col(x, z, topIn, 0.38);
+        this.wingCols.push([x, z]);
+      }
+    }
+    // ---- the bridges
+    for (const b of BRIDGES) {
+      for (let k = 1; k <= NWING; k++) {
+        const y = LV(k);
+        K.box(M.matte, WX1, y - SLAB, b.z0, MX0, y, b.z1, CONC_TOP);
+        wall(WX1, b.z0, MX0, b.z1, y - SLAB + 0.02, y, 'floor');
+        for (const z of [b.z0, b.z1 - 0.45]) K.box(M.matte, WX1, y - SLAB - 0.6, z, MX0, y - SLAB, z + 0.45, CONC_UNDER);
+        for (let x = WX1 + 4.33; x < MX0 - 1; x += 4.33) K.box(M.matte, x - 0.2, y - SLAB - 0.42, b.z0 + 0.45, x + 0.2, y - SLAB, b.z1 - 0.45, CONC_UNDER);
+        // (a low wall and a rail along each side: the avenue seen over it)
+        for (const [za, zb] of [[b.z0, b.z0 + 0.25], [b.z1 - 0.25, b.z1]]) {
+          K.box(M.matte, WX1, y, za, MX0, y + 0.78, zb, PANEL);
+          K.box(M.paint, WX1, y + 0.5, za - 0.01, MX0, y + 0.66, zb + 0.01, BLUE_P);
+          K.box(M.metal, WX1, y + 1.02, za + 0.08, MX0, y + 1.1, zb - 0.08, STEEL);
+          for (let x = WX1 + 1.3; x < MX0; x += 2.6) K.box(M.metal, x - 0.04, y + 0.78, za + 0.09, x + 0.04, y + 1.02, zb - 0.09, STEEL);
+          wall(WX1, za, MX0, zb, y - 0.3, y + 1.1);
+        }
+      }
+      // (its piers, by the avenue's two sidewalks, up to its top slab)
+      for (const x of [WX1 + 1.0, MX0 - 1.0]) {
+        for (const z of [b.z0 + 0.5, b.z1 - 0.5]) {
+          K.box(M.matte, x - 0.45, 0.02, z - 0.45, x + 0.45, LV(NWING) - SLAB, z + 0.45, CONC_COL);
+          wall(x - 0.45, z - 0.45, x + 0.45, z + 0.45, 0, LV(NWING), 'pole');
+        }
+      }
+    }
+  }
+
+  // (ROADMAP 23.20) what is inside the wing and on the bridges: fewer tubes than the hall's, orange, many of them dead; the way
+  // painted to its ramp; the bays - a row nose to its east wall, two down its middle; the works at the works ramps' feet; water
+  // lying on its floors; the bridges' lane lines, the lights under each, lamp posts on the top one
+  wingInside(K, M) {
+    const rng = mulberry(9191);
+    const SODIUM = linC(1, 0.58, 0.22);
+    const WATER = linC(0.1, 0.115, 0.15);
+    const CONE = linC(0.95, 0.42, 0.1);
+    const LED = linC(1, 0.84, 0.58);
+    const FK = new Kit();
+    this.wingBays = [];
+    const works = (k) => XRAMPS.find((r) => r.k === k) || null;
+    const worksOver = (k) => XRAMPS.find((r) => r.k + 1 === k) || null;
+    for (let k = 0; k <= NWING; k++) {
+      const y = LV(k);
+      const flat = () => y;
+      const up = WRAMPS[k] || null;
+      const holeOver = (x, z) => wingHole(k + 1, x, z);
+      // ---- under the floor over this one: its tubes
+      const ly = LV(k + 1) - SLAB - 0.1;
+      for (const x of [WX0 + 0.3 + W_LANE / 2, W_A0 - 2.65, W_AC, W_BC]) {
+        for (let z = MZ0 + SPAN * 0.5; z < MZ1 - 2; z += SPAN) {
+          if (holeOver(x, z)) continue;
+          K.box(M.metal, x - 0.78, ly - 0.08, z - 0.14, x + 0.78, ly + 0.08, z + 0.14, DARK);
+          const r = rng();
+          if (r < 0.45) continue;
+          (r < 0.68 ? FK : K).box(M.glow, x - 0.7, ly - 0.11, z - 0.07, x + 0.7, ly - 0.08, z + 0.07, SODIUM);
+        }
+      }
+      // (the lane: under the slab of the ramp over this floor's)
+      const over = WRAMPS[k + 1];
+      if (over) {
+        for (let z = RN + 7; z < RS - 3; z += 13) {
+          const ty = mainRampY(over, z) - W_RAMP_T - 0.1;
+          K.box(M.metal, over.xc - 0.78, ty - 0.08, z - 0.14, over.xc + 0.78, ty + 0.08, z + 0.14, DARK);
+          const r = rng();
+          if (r < 0.3) continue;
+          (r < 0.55 ? FK : K).box(M.glow, over.xc - 0.7, ty - 0.11, z - 0.07, over.xc + 0.7, ty - 0.08, z + 0.07, SODIUM);
+        }
+      }
+      // ---- the columns' hazard paint at their feet
+      for (const [x, z] of this.wingCols) {
+        const w = x > W_A0 - 1 ? 0.4 : 0.44;
+        for (let i = 0; i < 3; i++) K.box(M.paint, x - w, y + i * 0.3, z - w, x + w, y + (i + 1) * 0.3, z + w, i % 2 ? INK : YEL);
+      }
+      // ---- the way, painted: to the foot of its ramp, and UP
+      // (its ramp's foot is in the north: from the bridge there west to it; from the top of the ramp from the floor under it,
+      // in the south, round into the aisle and north along it)
+      const zN = (MZ0 + RN) / 2;
+      const zS = (RS + MZ1) / 2;
+      if (up) {
+        paintArrow(K, M.paint, WHITE, WX1 - 7, zN, -1, 0, flat, 5.5);
+        paintArrow(K, M.paint, WHITE, W_A0 - 1, zN + 2, -0.8, 0.6, flat, 5);
+        paintArrow(K, M.paint, WHITE, up.xc, up.zLow - 5, 0, 1, flat, 5.5);
+        paintWord(K, M.paint, YEL, 'UP ' + LEVEL_NAME[k + 1], 1.4, up.xc, up.zLow - 2.4, 0, 1, flat, 0.023);
+        paintArrow(K, M.paint, WHITE, W_A0 - 3.5, zS, 1, 0, flat, 5);
+        for (const z of [RS - 9, (RN + RS) / 2, RN + 9]) paintArrow(K, M.paint, WHITE, W_AC, z, 0, -1, flat, 5);
+      }
+      paintWord(K, M.paint, LEVEL_C[k], 'W' + LEVEL_NAME[k], 3.0, W_AC, zN - 6, 0, 1, flat, 0.021);
+      // (the aisle's edges)
+      for (const x of [W_A0, W_A1, W_B0]) paintLine(K, M.paint, YEL, x, RN + 1.8, x, RS - 1.8, 0.12, flat, 0.021);
+      // ---- the bays: a row nose to the ramps' lane, a row east of the aisle
+      const rowZ0 = RN + 3.2;
+      const rowZ1 = RS - 3.2;
+      const wk = works(k) || worksOver(k);
+      for (const [xb, face, xo, xi] of [[W_A0 - 2.65, -Math.PI / 2, W_A0, W_A0 - 5.3], [W_A1 + 2.65, Math.PI / 2, W_A1, W_A1 + 5.3]]) {
+        for (let z = rowZ0; z <= rowZ1 + 1e-6; z += 2.7) {
+          // (none where a works ramp stands on this floor or comes up through it, nor in its way on and off)
+          if (wk && xb + 2.4 > wk.x0 - 0.5 && xb - 2.4 < wk.x1 + 0.5 && z > wk.z0 - 7 && z < wk.z1 + 7) continue;
+          paintLine(K, M.paint, WHITE, Math.min(xo, xi), z - 1.35, Math.max(xo, xi), z - 1.35, 0.1, flat, 0.021);
+          if (this.wingCols.some(([cx, cz]) => Math.abs(cx - xo) < 0.6 && Math.abs(cz - z) < 1.5)) continue;
+          this.wingBays.push({ k, x: xb, z, yaw: face });
+        }
+      }
+      // ---- the works: at a works ramp's foot its barriers, cones, a pallet of plates, the board
+      const wr = works(k);
+      if (wr) {
+        // (out from its foot, the way it is come to)
+        const o = Math.sign(wr.zLow - wr.zHigh);
+        for (let i = 0; i < 5; i++) {
+          const cx = i % 2 ? wr.x1 + 0.18 : wr.x0 - 0.45;
+          const cz = wr.zLow + o * (0.8 + Math.floor(i / 2) * 2.4);
+          K.cyl(M.paint, 0.2, 0.05, y, y + 0.62, CONE, { axis: 'y', x: cx, z: cz, segs: 7 });
+          K.box(M.paint, cx - 0.22, y, cz - 0.22, cx + 0.22, y + 0.04, cz + 0.22, INK);
+        }
+        const pz = wr.zLow + o * 9.5;
+        K.box(M.matte, wr.x0 - 3.4, y, pz - 0.8, wr.x0 - 2.2, y + 0.14, pz + 0.8, linC(0.5, 0.38, 0.24));
+        for (let i = 0; i < 4; i++) K.box(M.metal, wr.x0 - 3.35, y + 0.14 + i * 0.07, pz - 0.75, wr.x0 - 2.25, y + 0.2 + i * 0.07, pz + 0.75, linC(0.4, 0.42, 0.46));
+        const by = LV(k + 1) - SLAB - BEAM - 0.2;
+        const bz = wr.zLow + o * 0.44;
+        K.box(M.paint, wr.xc - 2.2, by - 0.9, bz - 0.06, wr.xc + 2.2, by, bz + 0.06, linC(0.95, 0.62, 0.1));
+        wallWord(K, M.paint, INK, 'WORKS RAMP', 0.5, wr.xc, by - 0.72, bz + o * 0.07, 0, o, 0.012);
+        paintArrow(K, M.paint, YEL, wr.xc, wr.zLow + o * 3.4, 0, -o, flat, 4.2);
+      }
+      // ---- water lying on it
+      for (let j = 0; j < 5; j++) {
+        const px = WX0 + 10 + rng() * (WX1 - WX0 - 14);
+        const pz = MZ0 + 6 + rng() * (MZ1 - MZ0 - 12);
+        if (wingHole(k, px, pz) || (wk && px > wk.x0 - 2 && px < wk.x1 + 2 && pz > wk.z0 - 2 && pz < wk.z1 + 2)) continue;
+        const pr = 0.7 + rng() * 1.3;
+        const g = new THREE.CylinderGeometry(pr, pr, 0.006, 14);
+        g.scale(1, 1, 0.55 + rng() * 0.4);
+        g.rotateY(rng() * Math.PI);
+        g.translate(px, y + 0.006, pz);
+        K.add(M.glass, g, WATER);
+      }
+    }
+    // ---- the bridges: two lanes each side of the walls' middle columns, a warm line of light under the one over it; on the
+    // top one, lamp posts
+    for (const b of BRIDGES) {
+      const zc = (b.z0 + b.z1) / 2;
+      for (let k = 1; k <= NWING; k++) {
+        const y = LV(k);
+        const flat = () => y;
+        paintLine(K, M.paint, YEL, WX1 + 0.6, zc - 0.14, MX0 - 0.6, zc - 0.14, 0.1, flat, 0.021);
+        paintLine(K, M.paint, YEL, WX1 + 0.6, zc + 0.14, MX0 - 0.6, zc + 0.14, 0.1, flat, 0.021);
+        paintArrow(K, M.paint, WHITE, (WX1 + MX0) / 2, (b.z0 + zc) / 2, -1, 0, flat, 4.6);
+        paintArrow(K, M.paint, WHITE, (WX1 + MX0) / 2, (b.z1 + zc) / 2, 1, 0, flat, 4.6);
+        // (over each end of it, where it goes: in the hall WEST WING, in the wing MAIN HALL - the roof is the hall's)
+        const sy = LV(k + 1) - SLAB - BEAM - 0.25;
+        const BOARD = linC(0.95, 0.62, 0.1);
+        K.box(M.paint, MX0 + 0.95, sy - 0.8, zc - 2.7, MX0 + 1.07, sy, zc + 2.7, BOARD);
+        wallWord(K, M.paint, INK, 'WEST WING', 0.44, MX0 + 1.07, sy - 0.62, zc, 1, 0, 0.012);
+        K.box(M.paint, WX1 - 1.07, sy - 0.8, zc - 2.7, WX1 - 0.95, sy, zc + 2.7, BOARD);
+        wallWord(K, M.paint, INK, k === NWING ? 'HALL - ROOF' : 'MAIN HALL', 0.44, WX1 - 1.07, sy - 0.62, zc, -1, 0, 0.012);
+        if (k < NWING) {
+          const uy = LV(k + 1) - SLAB - 0.6;
+          for (const z of [b.z0 + 0.5, b.z1 - 0.56]) K.box(M.glow, WX1 + 0.5, uy - 0.05, z, MX0 - 0.5, uy, z + 0.06, LED);
+        } else {
+          for (const x of [WX1 + 6.5, (WX1 + MX0) / 2, MX0 - 6.5]) {
+            K.cyl(M.metal, 0.06, 0.09, y, y + 4.6, DARK, { axis: 'y', x, z: zc, segs: 6 });
+            K.box(M.paint, x - 0.3, y + 4.5, zc - 0.9, x + 0.3, y + 4.62, zc + 0.9, DARK);
+            K.box(M.glow, x - 0.24, y + 4.46, zc - 0.84, x + 0.24, y + 4.5, zc + 0.84, LAMP);
+            this.wall(x - 0.1, zc - 0.1, x + 0.1, zc + 0.1, y, y + 4.6, 'pole');
+          }
+        }
+      }
+    }
+    // (its failing tubes: a lot of their own, blinking - update)
+    const g = FK.build({ seed: 0.77 });
+    for (const m of g.children) {
+      m.frustumCulled = true;
+      m.userData.noShadow = true;
+    }
+    g.name = 'carpark-wing-flicker';
+    g.updateMatrix();
+    this.game.scene.add(g);
+    this.groups.push(g);
+    (this.flick || (this.flick = [])).push({ g, t: 0, next: 1.1, on: true });
+  }
+
   // ------------------------------------------------------------------ Bayshore Parking
   landShell(K, M) {
     const wall = this.wall;
@@ -1594,6 +2073,11 @@ export class CarPark {
       // (nose in to the middle line; now and then backed in)
       const back = rng() < 0.2;
       put(this.main.parked, b.x, b.z, LV(b.k), back ? b.yaw + Math.PI : b.yaw, 0, 0);
+    }
+    // (ROADMAP 23.20: the wing fuller than the hall, its cars older in the eye's mind: more of its bays taken)
+    for (const b of this.wingBays || []) {
+      if (rng() > 0.62) continue;
+      put(this.wing.parked, b.x, b.z, LV(b.k), rng() < 0.25 ? b.yaw + Math.PI : b.yaw, 0, 0);
     }
     for (const b of this.landBays) {
       if (rng() > (b.k === LY.length - 1 ? 0.35 : 0.62)) continue;

@@ -1869,6 +1869,8 @@ export class Prologue {
     // (round 11: come onto a floor - a wreck, or caught, starts again from here on where it came onto
     // it, the top of the ramp from the floor under it; and theirs on the floor over it put out to wait)
     const k = Math.round(lv);
+    // (ROADMAP 23.20: over a bridge into the west wing, or up its own ramp onto a floor of it: one of theirs is waiting there)
+    if (PARK.wing && v.pos.x < PARK.main.x0 - 3 && Math.abs(lv - k) < 0.03) this.armWing(k, v.pos.z < (PARK.main.zN + PARK.main.zS) / 2);
     if (k >= 1 && Math.abs(lv - k) < 0.03 && k > (this.checkLv || 0)) {
       const r = PARK.ramps[k - 1];
       if (r) {
@@ -1910,6 +1912,19 @@ export class Prologue {
       at(M.xc + sx * 1.5, M.levels[k + 1], r.zHigh + up * 9, r.west ? -Math.PI / 2 : Math.PI / 2, { wakeAt: { x: r.xc, z: (r.zLow + r.zHigh) / 2 + up * 10, y: M.levels[k] + M.floorToFloor * 0.6, r: 12 }, color: 2 });
     }
     A.set(k, list);
+  }
+
+  // (ROADMAP 23.20) theirs in the west wing: one waiting, dark, in its aisle on a floor he comes onto - at the far end of it
+  // from where he came in, nose to him
+  armWing(k, fromNorth) {
+    const F = this.fight;
+    const W = PARK.wing;
+    if (!F || !W || k < 1 || k > W.top) return;
+    const A = this.armedW || (this.armedW = new Map());
+    if (A.has(k)) return;
+    const M = PARK.main;
+    const z = fromNorth ? M.zS - 14 : M.zN + 14;
+    A.set(k, [F.spawn(W.aisleX, M.levels[k], z, fromNorth ? Math.PI : 0, { mode: 'wait', wake: 36, lv: k, keep: 9, color: (k + 2) % 4 })]);
   }
 
   // caught: too much paint on the car - they have him. A beat of it, and back to where he came onto
@@ -2013,6 +2028,11 @@ export class Prologue {
         if (this.armed && this.armed.has(k)) {
           for (const e of this.armed.get(k)) if (F.enemies.includes(e)) F.remove(e);
           this.armed.delete(k);
+        }
+        // (and the wing's: whichever of them still wait are let go - one is put out again when he comes onto a floor of it)
+        if (this.armedW) {
+          for (const list of this.armedW.values()) for (const e of list) if (F.enemies.includes(e) && e.mode === 'wait') F.remove(e);
+          this.armedW.clear();
         }
         if (this.climb) this.armFloor(k);
       }

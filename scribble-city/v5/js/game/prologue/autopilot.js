@@ -123,6 +123,19 @@ export class Autopilot {
       this.stuck = 0;
       this.back = 1.0;
     }
+    // (against a parapet's end with its wheels still turning: its speed stays up and it goes nowhere - it stood so at the foot of
+    // a ramp for a minute and more, shot at. By how far it has got in a second and a half. ROADMAP 23.20)
+    const R = this.ref || (this.ref = { x: c.pos.x, z: c.pos.z, t: 0 });
+    R.t += this.dt;
+    if (R.t > 1.5) {
+      if (thr > 0.3 && this.back <= 0 && Math.hypot(c.pos.x - R.x, c.pos.z - R.z) < 1.2) {
+        this.back = 1.2;
+        this.stuck = 0;
+      }
+      R.x = c.pos.x;
+      R.z = c.pos.z;
+      R.t = 0;
+    }
     if (this.back > 0) {
       this.back -= this.dt;
       thr = -0.8;
