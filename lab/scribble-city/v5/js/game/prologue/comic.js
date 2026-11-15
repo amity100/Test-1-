@@ -362,7 +362,9 @@ export class Comic {
     g.save();
     g.globalAlpha = a;
     // the sheet: paper, a faint dot of print over it
-    g.fillStyle = '#f2e8d5';
+    // (ROADMAP 23.10: this.dark - a film's black between its panels, their edges a thin light line: the scenes in the game's own
+    // look, grown-up. Cream paper with a print's dots between them was a comic book's page)
+    g.fillStyle = this.dark ? '#08060d' : '#f2e8d5';
     g.fillRect(0, 0, W, H);
     if (!this.dots) {
       const d = document.createElement('canvas');
@@ -374,8 +376,10 @@ export class Comic {
       x.fill();
       this.dots = g.createPattern(d, 'repeat');
     }
-    g.fillStyle = this.dots;
-    g.fillRect(0, 0, W, H);
+    if (!this.dark) {
+      g.fillStyle = this.dots;
+      g.fillRect(0, 0, W, H);
+    }
     const top = H * 0.115;
     const ph = H - top * 2;
     const ink = Math.max(3, H * 0.0065);
@@ -402,9 +406,9 @@ export class Comic {
         g.fillRect(r.x, r.y, r.w, r.h);
       }
       g.restore();
-      g.lineWidth = ink;
+      g.lineWidth = this.dark ? Math.max(1.5, ink * 0.45) : ink;
       g.lineJoin = 'round';
-      g.strokeStyle = '#120e18';
+      g.strokeStyle = this.dark ? 'rgba(255,250,240,0.85)' : '#120e18';
       g.stroke();
       g.restore();
     }
