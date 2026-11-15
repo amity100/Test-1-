@@ -2297,14 +2297,11 @@ export class Prologue {
     yield 0.35;
     yield* this.say('D01', P.fig, 0.12);
 
-    // 6. HER: a giggle - his hand through her curls - and she has an answer. From by his arm, at her height
-    this.shot({
-      from: () => { const l = hd(L); return v3(l.x - ux * 0.8 + wx * 1.1, l.y + 0.03, l.z - uz * 0.8 + wz * 1.1); },
-      to: () => { const l = hd(L); return v3(l.x - ux * 0.74 + wx * 1.02, l.y + 0.03, l.z - uz * 0.74 + wz * 1.02); },
-      look: () => { const l = hd(L); return v3(l.x - wx * 0.05, l.y + 0.03, l.z - wz * 0.05); },
-      fov: 25, dur: 5, hand: 0.15, key: 0.5, keySide: -1, rim: 1.2, dof: 1, shade: [P.fig],
-    });
-    this.feel(L.fig, 'laugh', 1.5);
+    // 6. A GIGGLE, his hand through her curls: the two of them from the west again, nearer - the giant wheel behind them
+    // (ROADMAP 23.8: it was from by his hip, over his arm - his body a black shape across four tenths of the picture, her face
+    // turned away up at him. Two people a step apart are seen from the side; each alone, from in front)
+    this.shot({ from: at(0.2, 3.5, 0.98), to: at(0.24, 3.25, 1.0), look: at(0.27, 0, 1.12), fov: 27, dur: 4, hand: 0.15, key: 0.8, keySide: -1, rim: 1.1 });
+    this.feel(L.fig, 'laugh', 1.6);
     this.feel(P.fig, 'joy', 4);
     this.pose(P.fig, { fLean: 0.17 }, 0.4, 'out');
     {
@@ -2313,19 +2310,36 @@ export class Prologue {
       this.hold(P.fig, 'R', () => {
         const q = L.fig.j.headC;
         const hs = (L.fig.headScale || 1) * (L.fig.scale || 1);
-        const rub = Math.sin((this.clock - t0) * 13) * 0.014 * Math.max(0, Math.min(1, (this.clock - t0 - 0.35) * 4)) * Math.max(0, 1 - (this.clock - t0 - 0.35) / 1.1);
+        const rub = Math.sin((this.clock - t0) * 13) * 0.014 * Math.max(0, Math.min(1, (this.clock - t0 - 0.35) * 4)) * Math.max(0, 1 - (this.clock - t0 - 0.35) / 1.4);
         return v3(q.x - ux * 0.02 + wx * rub, q.y + 0.125 * hs, q.z - uz * 0.02 + wz * rub);
       }, { on: true, palm: v3(0, -1, 0), fingers: dir(0.95, 0.1, -0.1), pole: dir(-0.3, -0.9, -0.2), ease: 0.36 });
     }
+    yield 0.3;
     yield* this.say('LG1', L.fig, 0.1);
+    yield 0.4;
+
+    // 6b. HER ANSWER: her face, from in front of him at her own height - the sea and the last of the sun behind her. (She has
+    // ducked out from under his hand, a step back from him: on the cut)
+    this.unhold(P.fig, 'R', 0);
+    this.pose(P.fig, { fLean: 0.07 }, 0.01);
+    {
+      const q = at(1.1, 0.04);
+      this.put(L, q.x, q.z, yawL);
+    }
+    L.fig.lookAt = P.fig.j.headC;
     this.feel(L.fig, 'tease', 5);
-    this.unhold(P.fig, 'R', 0.45);
-    this.pose(P.fig, { fLean: 0.07 }, 0.5, 'inout');
+    this.shot({
+      from: () => { const l = hd(L); return v3(l.x - ux * 0.95 + wx * 0.26, l.y + 0.03, l.z - uz * 0.95 + wz * 0.26); },
+      to: () => { const l = hd(L); return v3(l.x - ux * 0.89 + wx * 0.24, l.y + 0.03, l.z - uz * 0.89 + wz * 0.24); },
+      look: () => { const l = hd(L); return v3(l.x - wx * 0.04, l.y + 0.01, l.z - wz * 0.04); },
+      fov: 24, dur: 4, hand: 0.15, key: 0.6, keySide: -1, rim: 1.2, dof: 1,
+    });
+    yield 0.2;
     yield* this.say('L02', L.fig, 0.15);
     // (and past him she has seen something)
     L.fig.lookAt = v3(B.x, B.cy, B.z);
     this.feel(L.fig, 'surprised', 1.2);
-    yield 0.55;
+    yield 0.6;
 
     // 7. WHAT SHE HAS SEEN: her uncle, on a board over the promenade - the lens going in on him, slowly, as she asks
     this.shot({ from: v3(M.x + 1.6, G + 1.5, M.z + 1.2), to: v3(M.x + 2.0, G + 1.6, M.z + 2.4), look: v3(B.x, B.cy - 0.55, B.z), fov: 19, fovTo: 15.5, dur: 4, ease: 'inout', hand: 0.1, key: 0 });
