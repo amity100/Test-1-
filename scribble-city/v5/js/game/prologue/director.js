@@ -81,7 +81,7 @@ const EASES = {
 };
 const LILY_SEAT = { x: 40.2, z: 233.0, yaw: Math.PI / 2 };
 // (ROADMAP 23) the scenes filmed again, in the game's new look: ?filmlook=0 the film as it was
-const NEW_LOOK = new Set([2]);
+const NEW_LOOK = new Set([2, 3]);
 const VIEW = { x: 63.5, z: 238.9 };
 // (ROADMAP 18.9: where the wheel stood - its gate on the pier - and the people there who will not
 // remember it: scene 4 is asked there)
@@ -378,6 +378,7 @@ export class Prologue {
     this.sceneN = n;
     // (ROADMAP 23: the scenes filmed again in the game's own look - render/look.js lookFrame, tickLook below)
     this.newLook = NEW_LOOK.has(n) && this.lookNew;
+    if (this.comic) this.comic.dark = !!this.newLook;
     this.sketching = false;
     this.stillHands = false;
     // (round 18: the cars locked only on the way to his own - s5 sets it)
@@ -2156,18 +2157,21 @@ export class Prologue {
   // of the city's drawn people chosen by a rule (the nth woman, the nth man of the list), each with something to do. A couple at
   // the pier's railing, looking out at the sea and talking; two on the bench by the gate; a man at the far railing with his
   // phone; a woman buying at Gino's counter; two walking out along the pier to the wheel, slowly, and back.
+  // the nth woman, or man, of the city's drawn people (grown, not one of the people at work): the same one every time
+  folkNth(fem, n) {
+    let k = -1;
+    for (let i = 6; i < 36 && i < FOLK.length; i++) {
+      const F = FOLK[i];
+      if (!F || F.role || !!F.fem !== fem || F.age < 20) continue;
+      if (++k === n) return i;
+    }
+    return fem ? 3 : 1;
+  }
+
   spawnExtras() {
     if (this.extras) return;
     this.extras = [];
-    const pickNth = (fem, n) => {
-      let k = -1;
-      for (let i = 6; i < 36 && i < FOLK.length; i++) {
-        const F = FOLK[i];
-        if (!F || F.role || !!F.fem !== fem || F.age < 20) continue;
-        if (++k === n) return i;
-      }
-      return fem ? 3 : 1;
-    };
+    const pickNth = (fem, n) => this.folkNth(fem, n);
     const sea = v3(60, 1.2, 190);
     const mk = (key, fem, n, x, z, yaw, o = {}) => {
       const c = this.person(key, x, z, folkLook(pickNth(fem, n)), { face: yaw });
@@ -2332,7 +2336,7 @@ export class Prologue {
     // (nobody but the story's own people on it: a passer-by a step from the lens was a giant's leg across the picture)
     // (ROADMAP 23.9: and wide - whoever is seen behind them, far off, is one of the evening's own eight: spawnExtras)
     this.spawnExtras();
-    this.setZone = { x: 50, z: 240, r: 44 };
+    this.setZone = { x: 46, z: 240, r: 30 };
     // him: still out of the picture, down the promenade. Her: on her stool, turned to the wheel
     {
       const d0 = at(-4.4, 0.7);
@@ -2629,6 +2633,10 @@ export class Prologue {
     if (g.gps) g.gps.clear();
     this.film(true);
     this.hour(18.3, 0.004);
+    // (ROADMAP 23.10: the scene in the game's own look and the film's grown-up tone. Nobody of the city's within a few steps of
+    // where the two of them stand: a passer-by's arm was across the edge of her close shots)
+    this.spawnExtras();
+    this.setZone = { x: VIEW.x, z: VIEW.z, r: 7.5 };
     const toW = Math.atan2(WHEEL.x - VIEW.x, WHEEL.z - VIEW.z);
     const ux = Math.sin(toW);
     const uz = Math.cos(toW);
@@ -2637,6 +2645,9 @@ export class Prologue {
     const rz = ux;
     // (her ice cream finished on the way: her hands free for her drawing)
     if (this.castMod && this.castMod.giveIceCream) this.castMod.giveIceCream(L.fig, false);
+    // (ROADMAP 23.10: and her sketchbook in her bag till she sits down to draw - in her hand it came up under her chin with her
+    // plea, its spiral and its stickers a clutter in her close shot)
+    if (this.castMod && this.castMod.giveSketchbook) this.castMod.giveSketchbook(L.fig, false);
     // the two of them at the railing, the wheel ahead (he on her right)
     this.putDanny(VIEW.x + rx * 1.3, VIEW.z + rz * 1.3, toW);
     this.put(L, VIEW.x, VIEW.z, toW);
@@ -2701,9 +2712,10 @@ export class Prologue {
     yield Math.min(1.1, plw * 0.4);
     // (round 23, the review: the pier behind her, softened - not a pink wall: the pink is kept for the
     // story's great moments)
+    // (ROADMAP 23.10: her hand down for it - reaching for his, it came straight at the lens: a pale shape under her chin)
+    L.fig.reachL = null;
     this.shot({ ...this.single(L, P, { dist: 0.75, side: 0.22, up: -0.05, drop: 0.06 }), fov: 30, dur: 2.2, hand: 0.25, dof: 1 });
     yield Math.max(0.4, plw - Math.min(1.1, plw * 0.4));
-    L.fig.reachL = null;
     // him, warm: from her side, below
     this.shot({ ...this.single(P, L, { dist: 1.4, side: -0.36, up: -0.3, drop: 0.12 }), fov: 34, dur: 2.6, hand: 0.3 });
     this.feel(P.fig, 'joy', 2.6);
@@ -2752,7 +2764,8 @@ export class Prologue {
     };
     yield 2.6;
     // (over her shoulder: the first lines of it on her page - and the wheel itself beyond it)
-    this.shot({ from: () => v3(page.at.x - ux * 0.55 + rx * 0.3, page.at.y + 0.38, page.at.z - uz * 0.55 + rz * 0.3), look: () => v3(page.at.x + ux * 3, page.at.y + 0.9, page.at.z + uz * 3), fov: 44, dur: 2.2, hand: 0.25 });
+    // (ROADMAP 23.10: the page in it - the lens looked over it at the wheel, and showed her curls and his sleeve)
+    this.shot({ from: () => v3(page.at.x - ux * 0.12 + rx * 0.62, page.at.y + 0.5, page.at.z - uz * 0.12 + rz * 0.62), look: () => v3(page.at.x - rx * 0.04, page.at.y, page.at.z - rz * 0.04), fov: 40, dur: 2.2, hand: 0.15, key: 0.7, keySide: 1 });
     yield 2.0;
     // a man along the pier, by the wheel's gate - on his shirt, over his heart, a mark that is
     // something like an eraser, and not one. Danny sees it; the man turns his head to him
@@ -2787,7 +2800,7 @@ export class Prologue {
     // his face: what was that - and behind the camera, along the pier, the evening's crowd coming
     // this way from the wheel's gate (round 13: crowdAhead)
     this.feel(P.fig, 'worried', 4);
-    this.shot({ ...this.single(P, man, { dist: 1.35, side: 0.34, up: -0.18, drop: 0.08 }), fov: 32, dur: 1.8, hand: 0.35 });
+    this.shot({ ...this.single(P, man, { dist: 1.35, side: -0.4, up: -0.14, drop: 0.08 }), fov: 30, dur: 1.8, hand: 0.3, dof: 1 });
     const crowd = this.crowdAhead(man);
     yield 1.7;
     // (round 23, the review: the film's last picture from where the game's own camera takes over -
@@ -2918,12 +2931,15 @@ export class Prologue {
     this.feel(L.fig, 'joy', 4);
     yield 0.45;
     {
-      const pa = page.at;
-      const hD = this.headJ(P) || v3(P.pos.x, 1.7, P.pos.z);
-      const dx = hD.x - pa.x;
-      const dz = hD.z - pa.z;
+      // (ROADMAP 23.10: from his own eyes - down at the page she holds up to him, her face over it. The lens was put a step
+      // from the page towards him, and that was inside his jacket: a black picture)
+      const hD = this.headJ(P) || v3(P.pos.x, (P.pos.y || 0) + 1.7, P.pos.z);
+      const hL = () => this.headJ(L) || v3(L.pos.x, (L.pos.y || 0) + 1.2, L.pos.z);
+      const dx = L.pos.x - P.pos.x;
+      const dz = L.pos.z - P.pos.z;
       const d = Math.hypot(dx, dz) || 1;
-      this.shot({ from: [pa.x + (dx / d) * 0.85, pa.y + 0.3, pa.z + (dz / d) * 0.85], to: [pa.x + (dx / d) * 0.72, pa.y + 0.28, pa.z + (dz / d) * 0.72], look: [pa.x, pa.y + 0.14, pa.z], fov: 44, dur: 3.0, hand: 0.3 });
+      const eye = v3(hD.x + (dx / d) * 0.1, hD.y - 0.02, hD.z + (dz / d) * 0.1);
+      this.shot({ from: eye, to: v3(eye.x + (dx / d) * 0.06, eye.y - 0.03, eye.z + (dz / d) * 0.06), look: () => { const h = hL(); const pa = page.at; return v3(pa.x * 0.6 + h.x * 0.4, pa.y * 0.6 + h.y * 0.4, pa.z * 0.6 + h.z * 0.4); }, fov: 44, dur: 3.0, hand: 0.2, key: 0.9, keySide: -1 });
     }
     yield 0.2;
     yield* this.say('L06', L.fig, 0.3);
@@ -3011,7 +3027,7 @@ export class Prologue {
     // (close on it, the camera after it: the top gondolas' colours going to paper, the crumbs)
     // (round 9: the frame tilting as it goes on - nothing is right any more)
     this.shot({ from: [VIEW.x + ux * 0.2 - rx * 1.3, 1.2, VIEW.z + uz * 0.2 - rz * 1.3], look: onX(-5), fov: 30, fovTo: 27, dur: 1.6, hand: 0.45, roll: 0, rollTo: 0.09 });
-    if (C && X) C.word('SHHHK!', v3(X.pos.x, X.pos.y + 9, X.pos.z), { life: 0.9, size: 0.085, fill: '#fffaf0', burst: '#ff6f9a', tilt: -0.16 });
+    // (ROADMAP 23.10: no drawn sound word over it - the owner's word: childish. What it does is seen, and heard)
     yield () => et() > 1.4;
     // her: it cannot be - her mouth open, the page against her
     this.feel(L.fig, 'scared', 14);
@@ -3042,16 +3058,17 @@ export class Prologue {
     // the two of them from in front and below, close: she has come to him and holds on to his arm with
     // both hands; his arm across in front of her
     {
-      this.put(L, VIEW.x + rx * 0.72, VIEW.z + rz * 0.72, toW);
+      // (ROADMAP 23.10: tucked in against his side, his arm round her shoulders, his hand on her far one; her hand in his jacket.
+      // His arm went out to a point in front of her, straight as a rail, and the two of them were small in the picture)
+      this.put(L, VIEW.x + rx * 0.93, VIEW.z + rz * 0.93, toW);
       const mx = (L.pos.x + P.pos.x) / 2;
       const mz = (L.pos.z + P.pos.z) / 2;
-      this.shot({ from: [mx + ux * 2.7, 1.05, mz + uz * 2.7], to: [mx + ux * 2.5, 1.06, mz + uz * 2.5], look: [mx - rx * 0.05, 1.42, mz - rz * 0.05], fov: 46, dur: 1.4, hand: 0.5 });
+      const gy = P.pos.y || 0;
+      this.shot({ from: [mx + ux * 2.15 + rx * 0.25, gy + 0.72, mz + uz * 2.15 + rz * 0.25], to: [mx + ux * 1.95 + rx * 0.22, gy + 0.74, mz + uz * 1.95 + rz * 0.22], look: [mx, gy + 1.12, mz], fov: 38, dur: 1.4, hand: 0.4, key: 0.9, keySide: 1 });
       if (C) C.rub(null);
-      // (round 23, the review: his hand to her shoulder, near him, his arm bent round her - a point at
-      // her waist in front of her was out of his reach, and the arm went out straight to the side)
-      P.fig.reachL = v3(L.pos.x + (P.pos.x - L.pos.x) * 0.3 + ux * 0.14, (L.pos.y || 0) + 1.02, L.pos.z + (P.pos.z - L.pos.z) * 0.3 + uz * 0.14);
-      L.fig.reachR = P.fig.j.elbowL;
-      L.fig.reachL = P.fig.j.handL;
+      this.pose(P.fig, { fSide: -0.03, fLean: 0.04 }, 0.3, 'out');
+      this.hold(P.fig, 'L', () => { const sh = L.fig.j.shoulderL; return v3(sh.x - rx * 0.01, sh.y + 0.05, sh.z - rz * 0.01); }, { on: true, palm: v3(0, -1, 0), fingers: v3(ux * 0.6 - rx * 0.35, -0.7, uz * 0.6 - rz * 0.35), pole: v3(-ux * 0.6 - rx * 0.2, -0.75, -uz * 0.6 - rz * 0.2), ease: 0.25 });
+      this.hold(L.fig, 'R', () => { const h = P.fig.j.hip; return v3(h.x - rx * 0.17 + ux * 0.1, h.y + 0.2, h.z - rz * 0.17 + uz * 0.1); }, { palm: v3(rx, 0, rz), fingers: v3(ux * 0.4 + rx * 0.5, 0.75, uz * 0.4 + rz * 0.5), grip: true, ease: 0.25 });
     }
     yield () => et() > 6.1;
     // (the last of it: the bottom gondolas going)
@@ -3059,7 +3076,6 @@ export class Prologue {
     // and the eraser's marks drawn where they were lay over the railing, as if it was rubbed out)
     this.shot({ from: [VIEW.x + ux * 0.2 - rx * 1.3, 2.35, VIEW.z + uz * 0.2 - rz * 1.3], look: onX(2), fov: 32, dur: 1.1, hand: 0.5, roll: 0.05, rollTo: 0.12, whip: 0.22 });
     if (C && X) C.rub(X);
-    if (C && X) C.word('SHHHHK!', v3(X.pos.x, X.pos.y + 6, X.pos.z), { life: 0.8, size: 0.075, fill: '#fffaf0', burst: '#ff6f9a', tilt: 0.18 });
     yield () => et() > 7.0;
     // as it goes: a comic's page, for a moment - where it was; her face; his (their arms down: the
     // panels their faces alone)
@@ -3067,6 +3083,9 @@ export class Prologue {
     L.fig.reachR = null;
     L.fig.reachL = null;
     P.fig.reachL = null;
+    this.unhold(P.fig, null, 0);
+    this.unhold(L.fig, null, 0);
+    this.pose(P.fig, { fSide: 0, fLean: 0 }, 0.01);
     if (C && C.page) {
       C.page([
         [[0.015, 0.03], [0.39, 0.03], [0.355, 0.97], [0.015, 0.97]],
@@ -3122,7 +3141,7 @@ export class Prologue {
       const B = this.single(P, wv, { dist: 2.6, side: 0.3, up: -0.12, drop: 0.06 });
       this.shot({ from: A.from, to: B.from, look: A.look, fov: 44, vertigo: true, dur: 1.9, ease: 'inout', hand: 0.1, shake: 0.05 });
       if (C && C.impact) C.impact(this.headJ(P), 0.1);
-      this.emote([0.55, 0.08, 0.1]);
+      this.emote([0.5, 0.07, 0.09], 0.8);
       this.sample('sfx/sting.mp3', 0.75);
       if (C && C.focus) C.focus(() => this.headJ(P), 1.6, 1);
     }
@@ -3142,7 +3161,7 @@ export class Prologue {
     }
     yield 1.8;
     // (her: in on her eyes, the colour behind her gone cold - her words as his end)
-    this.emote([0.12, 0.16, 0.42]);
+    this.emote([0.1, 0.16, 0.36], 0.74);
     {
       const LA = this.single(L, wv, { dist: 0.8, side: -0.16, up: 0.0, drop: 0.05 });
       const LB = this.single(L, wv, { dist: 0.62, side: -0.12, up: 0.0, drop: 0.05 });
@@ -3163,6 +3182,7 @@ export class Prologue {
     L.fig.lookAt = null;
     // (round 13: him through them, to where it stood - stressed, looking round, asking: seen, not
     // walked by the player)
+    this.setZone = null;
     yield* this.searchMontage();
     this.start(4);
   }
@@ -3544,9 +3564,11 @@ export class Prologue {
   // man with the bag
   spawnPier() {
     if (this.cast.g1) return;
-    const g1 = this.person('g1', GUYS[0].x, GUYS[0].z, civilianLook({ fem: false, kind: 'casual' }), { face: 0.2 });
-    const g2 = this.person('g2', GUYS[1].x, GUYS[1].z, civilianLook({ fem: false, kind: 'casual' }), { face: 0.4 });
-    const m = this.person('man', MAN.x, MAN.z, civilianLook({ fem: false }), { face: 1.6 });
+    // (ROADMAP 23.9, the owner's word: the film's people fixed, "not somebody else every time it is played" - the two at the
+    // railing and the man he asks were whoever the city dealt)
+    const g1 = this.person('g1', GUYS[0].x, GUYS[0].z, folkLook(this.folkNth(false, 4)), { face: 0.2 });
+    const g2 = this.person('g2', GUYS[1].x, GUYS[1].z, folkLook(this.folkNth(false, 5)), { face: 0.4 });
+    const m = this.person('man', MAN.x, MAN.z, folkLook(this.folkNth(false, 6)), { face: 1.6 });
     for (const c of [g1, g2, m]) {
       c.pl.face = Math.atan2(WHEEL.x - c.pos.x, WHEEL.z - c.pos.z);
       c.fig.lookAt = v3(WHEEL.x, 26, WHEEL.z);
