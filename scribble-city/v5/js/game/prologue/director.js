@@ -1206,6 +1206,7 @@ export class Prologue {
 
   put(c, x, z, face = null) {
     if (!c) return;
+    this.carry(c.fig, x - c.pos.x, z - c.pos.z);
     c.pos.set(x, c.pos.y, z);
     c.pl.x = x;
     c.pl.z = z;
@@ -1711,8 +1712,23 @@ export class Prologue {
     if (c && c.pos) this.put(L, c.pos.x - Math.cos(c.yaw) * 1.3, c.pos.z + Math.sin(c.yaw) * 1.3, c.yaw);
   }
 
+  // (ROADMAP 23.10) somebody of the film put somewhere else on a cut: their joints taken along at once. The rig sets them where
+  // the body is only on its next step - and whatever was worked out from them in the same instant (a lens on a face, a hand laid
+  // on a shoulder) was worked out from where they had stood: a first frame from nine metres off, a hand in the air
+  carry(fig, dx, dz) {
+    if (!fig || !fig.j || (!dx && !dz)) return;
+    for (const key in fig.j) {
+      const q = fig.j[key];
+      if (q && q.isVector3) {
+        q.x += dx;
+        q.z += dz;
+      }
+    }
+  }
+
   putDanny(x, z, yaw) {
     const p = this.game.player;
+    this.carry(p.fig, x - p.pos.x, z - p.pos.z);
     p.pos.set(x, p.pos.y, z);
     p.vel.set(0, 0, 0);
     p.yaw = yaw;
@@ -2707,8 +2723,12 @@ export class Prologue {
     }
     yield 0.15;
     // (round 10: her pleading face, an anime's - in close on her eyes, the world behind her pink)
+    // (ROADMAP 23.10: said with her face - the line's own gesture, her hands up under her chin, was a pale shape of fingers at
+    // the lens in her close shot)
+    this.stillHands = true;
     const pl = this.say('L21', L.fig, 0.25);
     const plw = pl.next().value || 0;
+    this.stillHands = false;
     yield Math.min(1.1, plw * 0.4);
     // (round 23, the review: the pier behind her, softened - not a pink wall: the pink is kept for the
     // story's great moments)
