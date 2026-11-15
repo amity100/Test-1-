@@ -539,7 +539,10 @@ export class Prologue {
     const g = this.game;
     const cp = g.camera.position;
     const H = this.hidden || (this.hidden = new Set());
-    const mine = new Set(Object.values(this.cast));
+    // (ROADMAP 23.12: the film's own passers-by - the pier's crowd, the evening's strollers - are passers-by here too: one of them
+    // going by a hand's breadth from the lens was half the picture)
+    const mine = new Set();
+    for (const [key, c] of Object.entries(this.cast)) if (!/^(crowd|eve)\d/.test(key)) mine.add(c);
     // (ROADMAP 18.9: and nobody of the city's between the camera and whoever the shot is on - a
     // passer-by on his phone across half of the thugs' scene: from the camera to well short of its
     // subject, in front of it, out of the picture until they are past)
@@ -3322,6 +3325,10 @@ export class Prologue {
       const A2 = this.single(P, wv, { dist: 1.0, side: -0.2, up: -0.1, drop: 0.03 });
       const B2 = this.single(P, wv, { dist: 0.84, side: -0.17, up: -0.08, drop: 0.03 });
       this.shot({ from: A2.from, to: B2.from, look: A2.look, fov: 30, dur: 2.2, hand: 0.3, dof: 1, fill: 1.1 });
+      // (and she, out from his side: a step along the railing towards where it stood, while the picture is on him - so that the
+      // one over her shoulder after it is over hers, not his back across it, and her close shot hers alone: against him, his
+      // arm and coat were a third of it)
+      this.glide(L, VIEW.x + rx * 0.1, VIEW.z + rz * 0.1, 1.2, true);
     }
     yield 1.9;
     this.emote(null);
@@ -3332,9 +3339,6 @@ export class Prologue {
       const fr = v3(h.x - ux * 0.75 + rx * 0.35, h.y + 0.12, h.z - uz * 0.75 + rz * 0.35);
       const far = fr.distanceTo(v3(WHEEL.x, 24, WHEEL.z));
       this.shot({ from: fr, to: fr.clone().add(v3(-ux * 0.15, 0.02, -uz * 0.15)), look: [WHEEL.x, 22, WHEEL.z], fov: 42, dur: 2.0, hand: 0.15, focus: [0.8, far], focusDur: 1.2, dof: 1 });
-      // (out from his side, a step along the railing towards where it stood - and alone in her close shot after it: against
-      // him, his arm and coat were a third of her picture)
-      this.glide(L, VIEW.x + rx * 0.12, VIEW.z + rz * 0.12, 1.1, true);
     }
     yield 1.8;
     // (her: in on her eyes, the colour behind her gone cold - her words as his end)
@@ -3536,11 +3540,13 @@ export class Prologue {
       const q = mk('eve' + i, pool.length > 3 ? pool[2 + ((i >> 1) % (pool.length - 2))] : ks[(i * 3 + 1) % ks.length], a, sd);
       this.go(q, q.pos.x - fx * 70, q.pos.z - fz * 70, 0.95 + (i % 3) * 0.15);
     });
-    const A1 = mk('ask1', men.length ? men[0] : ks[0], 10.1, -0.2);
-    const A2 = mk('ask2', women.length ? women[0] : ks[1 % ks.length], 18.5, 0.25);
-    const K2 = kids.length ? mk('ask2k', kids[0], 18.55, 0.9) : null;
-    const A3 = mk('ask3', men.length > 1 ? men[1] : ks[2 % ks.length], 26.6, -0.38);
-    const B3 = mk('ask3b', women.length > 1 ? women[1] : ks[3 % ks.length], 26.6, 0.36);
+    // (at the railings till he comes to each of them: stood in the middle of the pier, the first of them was between him and the
+    // long lens ahead of him, his back across the picture)
+    const A1 = mk('ask1', men.length ? men[0] : ks[0], 10.1, -3.1);
+    const A2 = mk('ask2', women.length ? women[0] : ks[1 % ks.length], 18.5, 3.0);
+    const K2 = kids.length ? mk('ask2k', kids[0], 18.55, 3.6) : null;
+    const A3 = mk('ask3', men.length > 1 ? men[1] : ks[2 % ks.length], 26.6, -3.3);
+    const B3 = mk('ask3b', women.length > 1 ? women[1] : ks[3 % ks.length], 26.6, -2.6);
     // (inside his head: the world gone far off and muffled, only his heart loud - till he shouts at the
     // two at the railing, scene 4: core/audio.js muffle, comic.js pulse)
     if (g.audio.muffle) {
@@ -3693,7 +3699,7 @@ export class Prologue {
       P.fig.lookAt = v3(P.pos.x - fx * 8, 1.5, P.pos.z - fz * 8);
       P.fig.say = null;
       this.feel(P.fig, 'scared', 6);
-      this.shot({ from: v3(P.pos.x + fx * 7.5 + rx * 2.2, gy + 8.6, P.pos.z + fz * 7.5 + rz * 2.2), to: v3(P.pos.x + fx * 8.6 + rx * 2.4, gy + 9.6, P.pos.z + fz * 8.6 + rz * 2.4), look: v3(P.pos.x - fx * 1.5, gy + 0.9, P.pos.z - fz * 1.5), fov: 40, dur: 2.6, ease: 'lin', hand: 0.3, roll: -0.04 });
+      this.shot({ from: v3(P.pos.x + fx * 5.2 + rx * 1.5, gy + 4.9, P.pos.z + fz * 5.2 + rz * 1.5), to: v3(P.pos.x + fx * 6.4 + rx * 1.8, gy + 6.0, P.pos.z + fz * 6.4 + rz * 1.8), look: v3(P.pos.x - fx * 0.6, gy + 1.0, P.pos.z - fz * 0.6), fov: 38, dur: 2.6, ease: 'lin', hand: 0.3, roll: -0.04 });
       yield 0.5;
       this.thought('זה לא יכול להיות.', 1.7);
       yield 1.9;
