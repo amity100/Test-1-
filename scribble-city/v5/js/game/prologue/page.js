@@ -174,7 +174,9 @@ export class HeldPage {
     const read = mode === 'read' || up;
     // in front of her chest (up before her eyes to read it; lower, let down)
     _c.copy(j.shoulderL).add(j.shoulderR).multiplyScalar(0.5);
-    _c.addScaledVector(f.forward, (hug ? 0.12 : up ? 0.36 : read ? 0.3 : 0.27) * S);
+    // (ROADMAP 23.18: held to her a hand's width off her chest - at 0.12 it lay in the front of her hoodie, the ends of its
+    // drawstrings through the paper)
+    _c.addScaledVector(f.forward, (hug ? 0.2 : up ? 0.36 : read ? 0.3 : 0.27) * S);
     _c.y += (hug ? -0.13 : up ? 0.34 : read ? 0.1 : mode === 'low' ? -0.2 : -0.06) * S;
     // facing who looks at it (only so far round from her front), or her own eyes, or her chest
     const to = typeof this.to === 'function' ? this.to() : this.to;
@@ -221,7 +223,10 @@ export class HeldPage {
     // edge, the paper in her fist: render/people.js fig.grip / fig.gripL, the edge up through the fist)
     f.reachR = f.reachR || new THREE.Vector3();
     f.reachL = f.reachL || new THREE.Vector3();
-    const ew = this.W / 2 - 0.006;
+    // (ROADMAP 23.18: each hand on the edge at its own side, whichever way the picture faces. Held to her - read, hugged, held up
+    // high - the picture's own right is her right, and her right hand went to its left edge and her left to its right: her arms
+    // crossed over the page, through it. Seen in scene 4: an X of sleeves across the drawing)
+    const ew = (this.W / 2 - 0.006) * (_x.dot(_l.crossVectors(UP, f.forward)) >= 0 ? 1 : -1);
     this.fistOn(f, 1, _y, _a.copy(_c).addScaledVector(_x, -ew).addScaledVector(_y, -0.02), f.reachR);
     this.fistOn(f, -1, _y, _a.copy(_c).addScaledVector(_x, ew).addScaledVector(_y, -0.02), f.reachL);
   }

@@ -926,6 +926,9 @@ function faceOf(fig, F, t, cam) {
       if (ja > 0.42) _want[3] = Math.max(_want[3], (ja - 0.42) * 0.9);
       // (a smile at rest gives way to the words; joy keeps it - and whatever feeling has a smile in it)
       if (!(mood && MOODS[mood] && MOODS[mood][1] > 0)) _want[1] = Math.min(_want[1], 0.15);
+      // (ROADMAP 23.18: and a low feeling's words are not said through a grin - sad, worried, afraid or hurt, the lips are not
+      // pulled wide on an e or an i as a glad mouth's are: Lily asked what had happened to the children with a broad smile)
+      if (_want[7] > 0 && (mood === 'sad' || mood === 'worried' || mood === 'scared' || mood === 'hurt' || mood === 'pleading')) _want[7] *= 0.3;
       const end = p / Math.max(1, n);
       const q = say.text.indexOf('?') >= 0;
       const x = say.text.indexOf('!') >= 0;
