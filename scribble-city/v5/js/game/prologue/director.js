@@ -409,6 +409,8 @@ export class Prologue {
       this.gunmen = [];
     }
     this.gunsInside = false;
+    // (ROADMAP 23.19: a machine gun can be drawn on the car while they are after him - game/drawlock.js chaseGear)
+    this.chaseGun = n === 6 || n === 7;
     // (and the car park's lamps only through the chase: tickLamps)
     if (n < 6 || n > 8) this.lamps = null;
     this.sceneAt = this.clock || 0;
@@ -5125,6 +5127,29 @@ export class Prologue {
     this.start(6);
   }
 
+  // (ROADMAP 23.19) what his car's gun turns to in the chase (game/vehicles.js drawnGuns): the nearest of theirs after him -
+  // within 55 m, on his floor or the ramp to it - a little ahead of where it is, by how fast it goes. null: none of them
+  // (the gun then as it is in the game: where he looks)
+  gunAim(me) {
+    const F = this.fight;
+    if (!this.chaseGun || !F || !F.enemies.length || this.holdCam) return null;
+    let best = null;
+    let bd = 55;
+    for (const e of F.enemies) {
+      const c = e.car;
+      if (!c || c.dead || e.mode !== 'chase' || e.outT > 0) continue;
+      const d = Math.hypot(c.pos.x - me.pos.x, c.pos.z - me.pos.z);
+      if (d < bd && Math.abs((c.pos.y || 0) - (me.pos.y || 0)) < 4.5) {
+        bd = d;
+        best = c;
+      }
+    }
+    if (!best) return null;
+    const lead = bd / 95;
+    const A = this._gunAim || (this._gunAim = v3(0, 0, 0));
+    return A.set(best.pos.x + (best.vx || 0) * lead, (best.pos.y || 0) + 0.75, best.pos.z + (best.vz || 0) * lead);
+  }
+
   // (ROADMAP 23.18) a car's lamps lit in the dark of the car park: their light on the floor ahead of it and on whoever stands in
   // it (render/materials.js flashLight - a light of the moment, given again each frame), and the two lamps themselves bright
   // in the picture. this.lamps: [{ car, k (how far on), want }]. In the film three lights down the beam; in play one.
@@ -5358,6 +5383,8 @@ export class Prologue {
     yield* this.say('D20', P.fig, 0.25);
     yield* this.say('L13', L.fig, 0.2);
     yield* this.say('D21', P.fig, 0.3);
+    // (ROADMAP 23.19: and he can shoot back - a machine gun drawn on the car)
+    this.howto('gun', 14);
     // up and up: the way up has no way out but the roof - half way, the dark car still on them
     // (round 8's car park is eight floors, not six: its levels from PARK - the roof run the top floor)
     // (round 11: the roof the top level - round the turn at its north end off the last ramp, and into

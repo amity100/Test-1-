@@ -1568,8 +1568,13 @@ export class Weapons {
         c.hurt(pr.owner === 'player' ? pr.damage * 0.5 : pr.damage);
         game.damage.hit(c, hit.x, hit.y, hit.z, pr.damage * 0.6, true);
       } else {
-        game.damage.hit(c, hit.x, hit.y, hit.z, pr.damage * 0.7);
-        game.traffic.shotAt(c, pr.owner);
+        // (ROADMAP 23.19: one of the story's cars after him - what his gun does to it is the fight's own count:
+        // game/prologue/paintfight.js shot)
+        const F = game.prologue && game.prologue.fight;
+        if (!(pr.owner === 'player' && F && F.shot && F.shot(c, pr.damage, hit))) {
+          game.damage.hit(c, hit.x, hit.y, hit.z, pr.damage * 0.7);
+          game.traffic.shotAt(c, pr.owner);
+        }
       }
       fx.sparks(hit.x, hit.y, hit.z, 4, STEEL);
       fx.impact(hit.x, hit.y, hit.z, 0.45);

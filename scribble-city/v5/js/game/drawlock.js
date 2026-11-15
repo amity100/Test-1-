@@ -42,6 +42,12 @@ export function parGone(game, type) {
   return !(type === 'rotor' && game.prologue && game.prologue.drawingRotor);
 }
 
+// (ROADMAP 23.19, the owner's word: a gun drawn on the car, in the chase) open on the car while the story's chase is on -
+// game/prologue/director.js chaseGun
+export function chaseGear(game, id) {
+  return id === 'mg' && !!(game && game.prologue && game.prologue.chaseGun);
+}
+
 // the early list while it holds (ui/album.js setEarly)
 export function isEarly(game) {
   return !!(game && game.album && game.album.early);

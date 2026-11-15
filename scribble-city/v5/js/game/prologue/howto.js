@@ -127,6 +127,16 @@ function howtoHe(key, touch) {
         lines: T ? (btns() ? [['◀ ▶', 'הגה'], ['גז', 'הדוושה מימין'], ['בלם יד', 'בפניות']] : [['ג׳ויסטיק', 'גז והגה']]) : [['W', 'גז'], ['A D', 'הגה'], ['Space', 'בלם יד בפניות']],
         tip: 'סעו מהר וזגזגו: לאט מדי, והצבע פוגע. הפס הצבעוני למטה הוא כוח המכונית.',
       };
+    // (ROADMAP 23.19: the chase's gun)
+    case 'gun':
+      return {
+        title: 'יורים בחזרה!',
+        say: 'ציירו על המכונית מקלע. הוא עולה על הגג ומכוון לבד אל מי שרודף אחריכם.',
+        lines: T
+          ? [['כפתור העיפרון', 'פותח את העט - העיר מאטה בזמן הציור'], ['מקלע', 'מציירים כמו בציור שבעט'], ['כפתור האש', 'מחזיקים: יורה על הרודפים']]
+          : [['Q', 'פותח את העט - העיר מאטה בזמן הציור'], ['מקלע', 'מציירים כמו בציור שבעט'], ['לחצן העכבר', 'מחזיקים: יורה על הרודפים']],
+        tip: 'מכונית שנפגעת מעשנת, נדלקת - ומתפוצצת. הקנה מתחמם: יורים בצרורות.',
+      };
     case 'floor':
       return {
         title: 'גז עד הסוף!',
@@ -259,6 +269,15 @@ function howtoEn(key, touch) {
         say: 'They are after you, shooting paint. Up the ramps, floor after floor, to the roof. Their cars wait in the dark.',
         lines: T ? (btns() ? [['◀ ▶', 'steer'], ['Gas', 'the pedal on the right'], ['Handbrake', 'in the turns']] : [['Stick', 'gas and steering']]) : [['W', 'gas'], ['A D', 'steer'], ['Space', 'handbrake in the turns']],
         tip: 'Drive fast and zigzag: too slow, and the paint hits. The coloured bar below is the car\'s strength.',
+      };
+    case 'gun':
+      return {
+        title: 'Shoot back!',
+        say: 'Draw a machine gun on the car. It goes on the roof and aims by itself at whoever is after you.',
+        lines: T
+          ? [['Pencil button', 'opens the pen - the city slows while you draw'], ['Machine gun', 'draw it like the picture in the pen'], ['Fire button', 'hold: it fires at them']]
+          : [['Q', 'opens the pen - the city slows while you draw'], ['Machine gun', 'draw it like the picture in the pen'], ['Mouse button', 'hold: it fires at them']],
+        tip: 'A car that is hit smokes, burns - and blows up. The barrel runs hot: fire in bursts.',
       };
     case 'floor':
       return { title: 'Floor it!', say: 'Drive straight to the edge of the roof, and do not stop.', lines: T ? (btns() ? [['Gas', 'hold it down, do not let go']] : [['Stick', 'forward, all the way']]) : [['W', 'gas, all the way']] };

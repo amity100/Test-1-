@@ -288,7 +288,7 @@ export class Damage {
       // (a burning car lights up the street round it, flickering: the two nearest)
       if (D && D.burning && D.burnT >= 0 && lit < 2 && !c.gone && Math.hypot(c.pos.x - cam.x, c.pos.z - cam.z) < 70) {
         lit++;
-        flashLight(c.pos.x, 1.8, c.pos.z, 10, FIRE_LIGHT, 1.5 + 0.5 * Math.sin(game.time * 13 + lit) + 0.3 * Math.sin(game.time * 31));
+        flashLight(c.pos.x, (c.pos.y || 0) + 1.8, c.pos.z, 10, FIRE_LIGHT, 1.5 + 0.5 * Math.sin(game.time * 13 + lit) + 0.3 * Math.sin(game.time * 31));
       }
       if (!D || c.gone || c.dead || c.taken || c.poofT !== undefined) {
         // (gone from the street, or driven off by you: the player's car carries its own)
@@ -326,12 +326,14 @@ export class Damage {
       const x = c.pos.x + fx * hood + (Math.random() - 0.5) * 0.6;
       const z = c.pos.z + fz * hood + (Math.random() - 0.5) * 0.6;
       const black = burning || D.burnt || hurt > 0.7;
-      game.fx.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', x, (burning ? 2.0 : 1.2) + Math.random() * 0.3, z, {
+      // (ROADMAP 23.19: over the car wherever it stands - on a car park's fifth floor too: these were heights over the street)
+      const y0 = c.pos.y || 0;
+      game.fx.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', x, y0 + (burning ? 2.0 : 1.2) + Math.random() * 0.3, z, {
         size: burning ? 1.8 : 1.0, grow: 1.4, life: burning ? 1.8 : 1.3, vy: 1.4, alpha: burning ? 0.85 : 0.6, tint: black ? SMOKE_BLACK : SMOKE_GREY,
       });
       // (and the fire's own: quick orange puffs)
       if (burning) {
-        game.fx.sprite('smoke1', x + (Math.random() - 0.5) * 0.8, 1.1 + Math.random() * 0.3, z + (Math.random() - 0.5) * 0.8, {
+        game.fx.sprite('smoke1', x + (Math.random() - 0.5) * 0.8, y0 + 1.1 + Math.random() * 0.3, z + (Math.random() - 0.5) * 0.8, {
           size: 0.9 + Math.random() * 0.5, grow: 0.6, life: 0.45, vy: 2.4, alpha: 0.9, tint: FIRE_PUFF,
         });
       }
@@ -373,7 +375,7 @@ export class Damage {
         if (h < 0.05) continue;
         const bx = c.pos.x + fx * u + rx * s;
         const bz = c.pos.z + fz * u + rz * s;
-        const by = top - 0.05;
+        const by = (c.pos.y || 0) + top - 0.05;
         const sway = Math.sin(t * 9 + i * 2.3) * 0.15;
         const mx = bx + rx * sway * 0.5;
         const mz = bz + rz * sway * 0.5;

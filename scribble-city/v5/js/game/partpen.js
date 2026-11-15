@@ -688,6 +688,13 @@ export class PartPen {
       while (mine.length && mine.length >= G.play.slots(cat)) fz.removeVeh(v, mine.shift(), true);
     }
     const { part, L } = itemPart(item, n, fz.drawCtx(v), inkI, this.game.time, d, G ? G.level(item) : 1);
+    // (ROADMAP 23.19: in the story's chase a machine gun goes on the roof and turns all the way round - they are behind him;
+    // on the hood it turns only a little, ahead: game/fuse.js arc)
+    if (item === 'mg' && this.game.prologue && this.game.prologue.chaseGun) {
+      part.v = 'turret';
+      part.at[0] = 0;
+      part.at[2] = 0;
+    }
     fz.justAdded = part;
     // (ROADMAP 11.27: designed, flown to - it fills once its ink has straightened onto it)
     fz.popDelay = L && L.T3 && pop >= FLY_MS ? pop + TIDY_MS : pop;

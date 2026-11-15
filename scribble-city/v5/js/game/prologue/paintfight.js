@@ -79,6 +79,13 @@ function protoPuff() {
 }
 const UP = new THREE.Vector3(0, 1, 0);
 const MELTS = 14;
+// (ROADMAP 23.19) what one of theirs takes of his gun before it is a wreck (a machine gun's shot: 8-20), how long Vince and
+// Bruno's own car is out of it when it has taken as much, how many burnt shells are left standing at once
+const CAR_HP = 380;
+const OUT_S = 15;
+const WRECKS = 4;
+const SMOKE_GREY = [0.55, 0.55, 0.58];
+const SMOKE_BLACK = [0.12, 0.11, 0.12];
 // (what the paint flies past: the cars parked about - their own boxes - and the floors; it melts walls)
 const SKIP = new Set(['car', 'floor']);
 
@@ -201,6 +208,24 @@ export class PaintFight {
       }
       e.Q.prey = me || e.Q.prey;
       if (!me) continue;
+      // (ROADMAP 23.19: hurt by his gun - smoke from under its hood, grey and then black; Vince and Bruno's, stopped, till it
+      // comes after him again)
+      if (e.hp !== undefined && e.hp < CAR_HP * 0.6) {
+        e.puffT = (e.puffT || 0) - dt;
+        if (e.puffT <= 0) {
+          e.puffT = e.hp < CAR_HP * 0.33 ? 0.14 : 0.3;
+          const hl = (c.halfLen || 2.3) * 0.6;
+          g.fx.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', c.pos.x + Math.sin(c.yaw) * hl + (Math.random() - 0.5) * 0.5, (c.pos.y || 0) + 1.25, c.pos.z + Math.cos(c.yaw) * hl + (Math.random() - 0.5) * 0.5, { size: 1.0, grow: 1.4, life: 1.2, vy: 1.3, alpha: 0.6, tint: e.hp < CAR_HP * 0.33 ? SMOKE_BLACK : SMOKE_GREY });
+        }
+      }
+      if (e.outT > 0) {
+        e.outT -= dt;
+        if (e.outT <= 0 && !this.P.holdCam) {
+          e.hp = CAR_HP * 0.6;
+          this.wakeUp(e);
+        }
+        continue;
+      }
       const lv = this.level(c.pos);
       const d = Math.hypot(me.pos.x - c.pos.x, me.pos.z - c.pos.z);
       const dy = Math.abs(me.pos.y - c.pos.y);
@@ -223,7 +248,7 @@ export class PaintFight {
     // back from being caught)
     this.grace = Math.max(0, (this.grace || 0) - dt);
     if (me && this.on && !this.P.holdCam && this.grace === 0) {
-      const live = this.enemies.filter((e) => e.mode === 'chase' && e.gun && e.car && !e.car.dead && e.d !== undefined).sort((a, b) => a.d - b.d);
+      const live = this.enemies.filter((e) => e.mode === 'chase' && e.gun && e.car && !e.car.dead && e.d !== undefined && !(e.outT > 0)).sort((a, b) => a.d - b.d);
       for (let i = 0; i < live.length; i++) {
         const e = live[i];
         if (i < 2) this.shoot(e, me, e.d, e.dy, dt);
@@ -245,7 +270,7 @@ export class PaintFight {
   placeShooters(me, posOnly = false) {
     const pool = this.shooters;
     if (!pool.length) return;
-    const act = me && this.on ? this.enemies.filter((e) => e.mode === 'chase' && e.gun && e.car && !e.car.dead && e.d !== undefined).sort((a, b) => a.d - b.d) : [];
+    const act = me && this.on ? this.enemies.filter((e) => e.mode === 'chase' && e.gun && e.car && !e.car.dead && e.d !== undefined && !(e.outT > 0)).sort((a, b) => a.d - b.d) : [];
     for (let i = 0; i < pool.length; i++) {
       const sh = pool[i];
       const c = sh.c;
@@ -694,6 +719,95 @@ export class PaintFight {
     document.head.appendChild(st);
   }
 
+  // ------------------------------------------------------------------ his gun on them (ROADMAP 23.19)
+  // a shot of his into a car (game/weapons.js): true if it is one of theirs - dented and its glass broken as any car's, but how
+  // much it takes, and its end, are counted here: under three fifths smoke, under a third on fire and slower, at nothing a wreck
+  shot(car, dmg, hit) {
+    const e = this.enemies.find((q) => q.car === car);
+    if (!e) return false;
+    const g = this.g;
+    if (e.outT > 0 || e.mode !== 'chase') return true;
+    if (e.hp === undefined) e.hp = CAR_HP;
+    e.hp -= dmg;
+    this.gunHits = (this.gunHits || 0) + 1;
+    const D = g.damage && g.damage.of ? g.damage.of(car) : null;
+    if (g.damage && g.damage.hit) g.damage.hit(car, hit.x, hit.y, hit.z, dmg * 0.7, true);
+    if (D && e.hp < CAR_HP * 0.33 && !D.burning && !D.burnt) {
+      // (on fire - game/damage.js draws its flames and lights the floor round it; it never goes up by itself: its fuse is ours)
+      D.burning = true;
+      D.burnT = 0;
+      D.fuse = 1e9;
+      e.Q.boldness = 0.72;
+      g.audio.play('whoosh', 0.5);
+    }
+    if (e.hp <= 0) this.wreck(e);
+    return true;
+  }
+
+  // one of theirs done for: the blast, a breath of slow motion - and its burnt shell left where it stops, in the way of whoever
+  // comes after. Vince and Bruno's own car (not made for the fight) is only out of it for a while: the story needs them
+  wreck(e) {
+    const g = this.g;
+    const P = this.P;
+    const c = e.car;
+    const x = c.pos.x;
+    const y = c.pos.y || 0;
+    const z = c.pos.z;
+    g.fx.boom(x, y + 1, z, 5.5);
+    g.fx.crumbs(x, y + 1.1, z, 26, 5, true);
+    g.audio.play('boom', 1);
+    g.camRig.addShake(0.55);
+    this.glint(e, false);
+    const C = P.comic;
+    if (C && C.word) C.word('KA-BOOM!', new THREE.Vector3(x, y + 2.3, z), { fill: '#ff6f3a', burst: '#ffd23f', size: 0.1, life: 1.0 });
+    if (P.slow && !P.holdCam) {
+      P.slow(0.28, 12);
+      setTimeout(() => {
+        if (!P.holdCam && P.kWant < 1) P.slow(1, 5);
+      }, 380);
+    }
+    this.kills = (this.kills || 0) + 1;
+    const D = g.damage && g.damage.of ? g.damage.of(c) : null;
+    c.speed *= 0.3;
+    c.vx *= 0.3;
+    c.vz *= 0.3;
+    if (!e.own) {
+      e.outT = OUT_S;
+      e.hp = 1;
+      e.Q.paused = true;
+      e.Q.boldness = 1;
+      if (D) D.burning = false;
+      return;
+    }
+    if (D) {
+      D.burning = false;
+      D.burnt = true;
+      D.glass = 2;
+    }
+    const i = this.enemies.indexOf(e);
+    if (i >= 0) this.enemies.splice(i, 1);
+    if (P.pursuers) P.pursuers = P.pursuers.filter((q) => q !== e.Q);
+    if (e.shooter) {
+      e.shooter.e = null;
+      e.shooter = null;
+    }
+    e.Q.dispose();
+    if (e.warn) this.root.remove(e.warn);
+    // (thrown a little round as it goes)
+    c.yaw += (Math.random() < 0.5 ? -1 : 1) * (0.35 + Math.random() * 0.4);
+    const W = this.wrecks || (this.wrecks = []);
+    W.push(c);
+    while (W.length > WRECKS) this.dropWreck(W.shift());
+  }
+
+  dropWreck(c) {
+    const g = this.g;
+    if (!c || c.dead) return;
+    g.vehicles.list = g.vehicles.list.filter((v) => v !== c);
+    if (g.damage && g.damage.cars) g.damage.cars.delete(c);
+    c.dispose();
+  }
+
   // ------------------------------------------------------------------ after a reset
   // (caught, or the car wrecked: everything of theirs on this floor sent back to where it waited -
   // or, coming after him, a little way back along his way)
@@ -711,6 +825,20 @@ export class PaintFight {
     }
     for (const o of this.carSplats) o.car.group.remove(o.s);
     this.carSplats = [];
+    // (ROADMAP 23.19: the floor begun again - the burnt shells of the last try off it; whoever was hurt, whole)
+    for (const c of this.wrecks || []) this.dropWreck(c);
+    this.wrecks = [];
+    for (const e of this.enemies) {
+      if (e.hp === undefined) continue;
+      e.hp = CAR_HP;
+      e.Q.boldness = 1;
+      if (e.outT > 0) {
+        e.outT = 0;
+        e.Q.paused = false;
+      }
+      const D = e.car && e.car.dmg;
+      if (D) D.burning = false;
+    }
   }
 
   // (the fight over - the roof: theirs stopped where they are, the first car of them apart)
@@ -730,6 +858,8 @@ export class PaintFight {
     for (const o of this.melts) this.dropMelt(o);
     this.melts = [];
     for (const e of this.enemies.slice()) this.remove(e);
+    for (const c of this.wrecks || []) this.dropWreck(c);
+    this.wrecks = [];
     for (const o of this.carSplats) o.car.group.remove(o.s);
     this.carSplats = [];
     this.g.scene.remove(this.root);
