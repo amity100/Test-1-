@@ -131,6 +131,18 @@ export class Autopilot {
       if (thr > 0.3 && this.back <= 0 && Math.hypot(c.pos.x - R.x, c.pos.z - R.z) < 1.2) {
         this.back = 1.2;
         this.stuck = 0;
+        // (and again at the same point of its way: it came at it from the wrong side - past the foot of a ramp, the ramp's wall
+        // between them. Back to the point two before it, and round to it again)
+        if (this.wp === this.snagWp) this.snagN++;
+        else {
+          this.snagWp = this.wp;
+          this.snagN = 1;
+        }
+        if (this.snagN >= 2 && this.wp >= 2) {
+          this.wp -= 2;
+          this.snagN = 0;
+          this.snagWp = -1;
+        }
       }
       R.x = c.pos.x;
       R.z = c.pos.z;
@@ -163,6 +175,15 @@ export class Autopilot {
     const c = this.g.player.inVehicle;
     if (!c) return;
     while (this.wp < list.length && Math.hypot(list[this.wp][0] - c.pos.x, list[this.wp][1] - c.pos.z) < (list[this.wp][2] || near)) this.wp++;
+    // (round and round a point it cannot turn tightly enough to touch - it went so on a floor for a minute and more: after some
+    // seconds at the same point and near it, the next. ROADMAP 23.20)
+    if (this.wp !== this.orbitWp) {
+      this.orbitWp = this.wp;
+      this.orbitT = 0;
+    } else if (this.wp < list.length) {
+      this.orbitT += this.dt;
+      if (this.orbitT > 5 && Math.hypot(list[this.wp][0] - c.pos.x, list[this.wp][1] - c.pos.z) < 9) this.wp++;
+    }
     if (this.wp >= list.length) {
       this.set(0, 0);
       return;
