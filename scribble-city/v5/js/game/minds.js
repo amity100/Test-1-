@@ -234,7 +234,9 @@ export class Minds {
       // (a smile for you, near, a while after: not a grin for four minutes)
       else if (fresh && m.saw.what === 'good' && d < 6 && now - m.sawT < 90) feel = 'joy';
       else if (this.dread > 1.2 && d < 9 && (armed || m.bold < 0.5)) feel = 'scared';
-      if (feel && d < 10 && !(c.panicT > 0)) {
+      // (ROADMAP 23.21: not those the story holds - c.ctrl, its cast: their faces are the film's. Lily, a warm child with you
+      // near, noticed you two seconds into asking what had happened to the children on the wheel, and beamed)
+      if (feel && d < 10 && !(c.panicT > 0) && !c.ctrl) {
         c.fig.feel = { mood: feel, until: now + 1 };
         // (and a look at you now and then - not a stare: ROADMAP 13.10)
         if (head && now > (m.glanceT || 0) && !c.convo) {
@@ -244,7 +246,7 @@ export class Minds {
         }
       }
       // (intelligence round) aware of you
-      if (onFoot && !feel && d < 12 && d > 0.7 && !(c.panicT > 0) && !c.convo && now > (m.noticeT || 0)) {
+      if (onFoot && !feel && d < 12 && d > 0.7 && !(c.panicT > 0) && !c.convo && !c.ctrl && now > (m.noticeT || 0)) {
         if (!X) X = this.heroNow(pl, armed, head);
         if (this.notice(c, m, d, dx, dz, step, X, said)) {
           said = true;

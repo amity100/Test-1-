@@ -2,6 +2,7 @@
 // playing to it: the scene is prepared and played by the story's own test pilot (tools/perf/lib.mjs open, game/prologue/autopilot.js),
 // stepped to each time asked, and photographed. Each picture's tag: the scene's second, F in a film shot (the camera held) or P in play.
 //   node tools/filmsheet.mjs <outDir> <scene 1-9> <t1,t2,...>      EXTRA="look=1" (added to the address)   KEEP=1 (the single pictures kept)
+//   FROM=7 (played from an earlier scene on into the one asked for: scenes 8 and 9 need what scene 7 made - the drawn ramp, the flight)
 import fs from 'node:fs';
 import path from 'node:path';
 import { open } from './perf/lib.mjs';
@@ -11,7 +12,21 @@ const sc = +process.argv[3] || 2;
 const AT = (process.argv[4] || '4,10,16,22,28,34').split(',').map(Number);
 fs.mkdirSync(OUT, { recursive: true });
 const t0 = Date.now();
-const { pg, close } = await open({ where: `s${sc}`, query: process.env.EXTRA || '', cond: `P.sceneT > ${AT[0]}`, dsf: 1 });
+const from = +process.env.FROM || sc;
+const { pg, close } = await open({ where: `s${from}`, query: process.env.EXTRA || '', cond: from === sc ? `P.sceneT > ${AT[0]}` : 'P.sceneT > 0.5', dsf: 1 });
+if (from !== sc) {
+  const got = await pg.evaluate(async (sc) => {
+    const g = window.__game;
+    const P = g.prologue;
+    let n = 0;
+    while (P.sceneN !== sc && n < 30 * 400) {
+      for (let k = 0; k < 6; k++) g.update(1 / 30);
+      n += 6;
+    }
+    return P.sceneN;
+  }, sc);
+  console.log(`from s${from}: now scene ${got}  (${Math.round((Date.now() - t0) / 1000)} s)`);
+}
 const shots = [];
 for (let i = 0; i < AT.length; i++) {
   const r = await pg.evaluate(async ([at, sc]) => {

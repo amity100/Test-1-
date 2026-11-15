@@ -7,6 +7,8 @@
 //   into memory (OfflineAudioContext) in place of the live one, and it is run by hand, a fifteenth of a second a picture; at the
 //   end what it rendered is written as a wav and put under the pictures by ffmpeg
 //   BURN=1: a review copy - each shot's number and the scene's own clock in the picture's top corner (in the recording only)
+//   THRU=8: on through the scenes after the one asked for, to the end time in scene THRU's own clock (scenes 8 and 9 cannot be
+//   begun at: they need what scene 7 made - the drawn ramp, the flight): node tools/filmclip.mjs out 7 0.5 24  with THRU=8
 //   WATCH="<js>": a line of JS asked after every picture (g: the game, P: the prologue) - its answer printed whenever it changes,
 //   with the scene's time: for finding the moment something goes wrong in the very run that is filmed
 import fs from 'node:fs';
@@ -25,7 +27,8 @@ fs.mkdirSync(dir, { recursive: true });
 for (const f of fs.readdirSync(dir)) fs.unlinkSync(path.join(dir, f));
 const SOUND = !!process.env.SOUND;
 const SR = 48000;
-const MAXS = Math.ceil(T1 - T0 + 12);
+const LAST = +process.env.THRU || sc;
+const MAXS = Math.ceil(T1 - T0 + 12) + (LAST > sc ? 90 * (LAST - sc) : 0);
 // (in place of the live AudioContext: one that renders into memory, the game's own nodes on it. The game tells a context that
 // renders into memory apart from a live one - game/prologue/score.js: its recorded music is not loaded for one - so this one
 // is not to be known for what it is)
@@ -104,7 +107,7 @@ for (;;) {
     if (w !== globalThis.__watched) console.log(`${r.t.toFixed(2)}  ${w}`);
     globalThis.__watched = w;
   }
-  if (r.scene !== sc || r.t > T1 || n > 3000) break;
+  if (r.scene < sc || r.scene > LAST || (r.scene === LAST && r.t > T1) || n > 3600) break;
   // (two of the browser's own frames first: a sheet drawn over the game's picture - the film's comic pages, Lily's sketchbook -
   // was photographed torn, its top from the frame before, when it moved fast)
   await pg.evaluate(() => new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res))));

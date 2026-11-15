@@ -92,7 +92,7 @@ const IN_PARK = { car: { x: -175.5, z: 280.7, yaw: Math.PI / 2 }, danny: { x: -1
 // (ROADMAP 23) the scenes filmed again, in the game's new look: ?filmlook=0 the film as it was
 // (ROADMAP 23.12, stage 3: scene 4 too - nobody remembers)
 // (ROADMAP 23.18, stage 4: and scene 5 - the two men, in the car park)
-const NEW_LOOK = new Set([2, 3, 4, 5]);
+const NEW_LOOK = new Set([2, 3, 4, 5, 7, 8]);
 const VIEW = { x: 63.5, z: 238.9 };
 // (ROADMAP 18.9: where the wheel stood - its gate on the pier - and the people there who will not
 // remember it: scene 4 is asked there)
@@ -5477,11 +5477,21 @@ export class Prologue {
       };
     }
     // (round 10: the idea lighting up his face - the world behind him gone hot orange, the lines in)
-    this.shot({ from: this.inCar(car, 0.02, 1.2, 0.5), look: this.faceOf(P), fov: 44, dur: 1.6, hand: 0.25 });
-    this.emote([1.0, 0.45, 0.12]);
-    if (this.comic && this.comic.focus) this.comic.focus(() => this.headJ(P), 1.4, 0.7);
-    yield 1.5;
-    this.emote(null);
+    if (this.newLook) {
+      // (ROADMAP 23.21: no wash of orange and lines round his head - a grown-up film's way: the lens closing on his eyes, the
+      // picture shut down to a strip across them, a heart's beat)
+      this.shot({ from: this.inCar(car, 0.02, 1.2, 0.5), look: this.faceOf(P), fov: 40, fovTo: 26, dur: 1.6, ease: 'out', hand: 0.2, dof: 1, key: 0.8 });
+      yield 0.45;
+      this.comic.strip(1.05, { h: 0.3, slant: -0.06 });
+      g.audio.play('heartbeat', 0.7);
+      yield 1.05;
+    } else {
+      this.shot({ from: this.inCar(car, 0.02, 1.2, 0.5), look: this.faceOf(P), fov: 44, dur: 1.6, hand: 0.25 });
+      this.emote([1.0, 0.45, 0.12]);
+      if (this.comic && this.comic.focus) this.comic.focus(() => this.headJ(P), 1.4, 0.7);
+      yield 1.5;
+      this.emote(null);
+    }
     // (round 18, the player's word: no pencil in his hand - it looked odd. From outside his open
     // window, his eyes on the roof's edge, a beat; then it is the player's, to draw - and the giant
     // pencil out of the sky draws what is drawn)
@@ -5717,6 +5727,16 @@ export class Prologue {
     // the rear three-quarters of it leaving the lip
     this.shot({ from: () => off(car, 7, 5, 1.2), look: () => v3(car.pos.x, car.pos.y + 0.6, car.pos.z), fov: 50, dur: 1.4, hand: 0.4, shake: 0.12, roll: 0.08, rollTo: 0.02 });
     this.flash(0.1, '#ffffff');
+    // (ROADMAP 23.21: the card of how to take the ramp was still up over the picture as it flew)
+    this.howto(null);
+    // (ROADMAP 23.21, stage 7: the roof behind them - the two after him at the ramp; one of them over the edge)
+    if (this.newLook && !this.ff) {
+      yield 0.5;
+      yield* this.overTheEdge(car, prof);
+      // (and back to them, in the air: from under its nose, the sky over it)
+      this.shot({ from: () => off(car, -5.5, -3.6, -1.1), look: () => v3(car.pos.x, car.pos.y + 0.7, car.pos.z), fov: 46, dur: 1.2, hand: 0.4, shake: 0.1, roll: -0.05 });
+      this.comic.lines(null, 0.7, 1);
+    }
     yield () => J.apex;
     // the title: at the top of it the time all but stopped, the camera drawing round and up and away -
     // the game's name and who made it, five seconds of it
@@ -5801,10 +5821,19 @@ export class Prologue {
       const fx = Math.sin(car.yaw);
       const fz = Math.cos(car.yaw);
       const face = () => this.headJ(P) || v3(car.pos.x, car.pos.y + 1.3, car.pos.z);
+      // (ROADMAP 23.21: by the car's own frame, tipped as it is - nose down half a radian, the place worked out level stood over
+      // the back of his head: his hair and the car's tail in the picture, no face. Out beside his window and a little ahead of
+      // him, level with his eyes as he sits)
+      const tip = () => {
+        const p = this.newLook ? car.bodyPitch || 0 : 0;
+        return { F: v3(fx * Math.cos(p), Math.sin(p), fz * Math.cos(p)), U: v3(-fx * Math.sin(p), Math.cos(p), -fz * Math.sin(p)) };
+      };
       this.shot({
         from: () => {
           const h = face();
-          return v3(h.x + fz * 0.95 + fx * 0.85, h.y + 0.14, h.z - fx * 0.95 + fz * 0.85);
+          if (!this.newLook) return v3(h.x + fz * 0.95 + fx * 0.85, h.y + 0.14, h.z - fx * 0.95 + fz * 0.85);
+          const T = tip();
+          return v3(h.x + fz * 0.9, h.y, h.z - fx * 0.9).addScaledVector(T.F, 0.95).addScaledVector(T.U, 0.1);
         },
         look: () => {
           const h = face();
@@ -5814,6 +5843,7 @@ export class Prologue {
         dur: 3,
         hand: 0.15,
         dof: 1,
+        key: 0.7,
       });
     }
     if (this.comic && this.comic.focus) this.comic.focus(() => this.headJ(P), 1.4, 0.9);
@@ -5821,7 +5851,8 @@ export class Prologue {
     yield 1.4;
     // and the idea, at the last second: a rotor
     this.flash(0.18, '#fffaf0');
-    this.emote([1.0, 0.86, 0.45]);
+    if (this.newLook) this.comic.strip(1.0, { h: 0.34, slant: -0.07 });
+    else this.emote([1.0, 0.86, 0.45]);
     this.feel(P.fig, 'surprised', 1.2);
     this.thought('רוטור!', 1.2);
     g.audio.play('magic', 0.5);
@@ -5846,6 +5877,193 @@ export class Prologue {
     this.howto('fly', 12);
     this.hour(18.62, 0.004);
     this.start(9);
+  }
+
+  // (ROADMAP 23.21, stage 7; the owner's word for it: "sounds great") the roof behind them as they fly. The two after him come at
+  // the ramp flat out: the dark car on its brakes, round sideways in its own smoke, stopped short of it; the other too late - up
+  // the ramp and over its lip with nothing like the speed for it, and down the face of the building into 5th Street. Three
+  // pictures. Danny's car is out of them: it waits in the air where it is (its flight held), and flies on when they are over.
+  // Their cars go by a hand of their own here (game/vehicles.js script) - the world's time is its own, their smoke and the
+  // blast as quick as they are.
+  *overTheEdge(car, prof) {
+    const g = this.game;
+    const S = prof.startX;
+    const Lp = prof.lipX;
+    const rz = prof.z;
+    const H = prof.h;
+    const Y = ROOF;
+    const yaw0 = car.yaw;
+    const held = car.script;
+    car.script = () => {};
+    const SMOKE = [0.8, 0.78, 0.82];
+    const puff = (c, n = 1, back = 1.6) => {
+      const bx = Math.sin(c.yaw) * back;
+      const bz = Math.cos(c.yaw) * back;
+      for (let i = 0; i < n; i++) g.fx.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', c.pos.x - bx + (Math.random() - 0.5) * 1.5, c.pos.y + 0.3, c.pos.z - bz + (Math.random() - 0.5) * 1.5, { size: 1.0 + Math.random() * 0.9, grow: 1.9, life: 1.1, vy: 0.7, alpha: 0.55, tint: SMOKE });
+    };
+    const place = (c, lx, lz, y) => {
+      const q = wld(lx, y, lz);
+      c.pos.set(q.x, y, q.z);
+    };
+    const floorY = (lx, lz, y) => {
+      const q = wld(lx, 0, lz);
+      const h = PARK.floorAt(q.x, q.z, y + 1.4);
+      return Number.isFinite(h) && h > Y - 0.5 ? h : Y;
+    };
+    // ---- the dark car: on its brakes from the first, its tail out, round a quarter and more, stopped a car's length and a half
+    // short of the ramp
+    const Pc = this.pursuer && this.pursuer.car;
+    if (Pc) {
+      let x = S + 31;
+      let z = rz - 1.5;
+      let sp = 23;
+      let tt = 0;
+      Pc.air = false;
+      Pc.script = (dt) => {
+        tt += dt;
+        sp = Math.max(0, sp - 20 * dt);
+        const k = clamp(tt / 1.15, 0, 1);
+        const e = k * k * (3 - 2 * k);
+        x -= sp * dt;
+        z -= sp * dt * 0.2 * e;
+        place(Pc, x, z, Y + 0.05);
+        Pc.yaw = yaw0 + 1.3 * e;
+        Pc.speed = sp;
+        Pc.vx = Pc.vz = 0;
+        Pc.bodyRoll = -0.1 * Math.sin(k * Math.PI);
+        if (sp > 2 && Math.random() < 0.85) puff(Pc, 2, 0.4);
+      };
+      Pc.script(0);
+    }
+    // ---- the other: flat out to a car's length from the ramp, its brakes too late, up the ramp losing its speed, its front
+    // wheels over the lip - it hangs there, tips, and goes
+    const lane = rz + 1.5;
+    const sc = g.vehicles.spawnStock({ kind: 'sedan', color: [0.07, 0.07, 0.09] }, { x: car.pos.x, z: car.pos.z }, yaw0);
+    sc.kept = true;
+    let sx = S + 34;
+    let sy = Y;
+    let sv = 27;
+    let phase = 0;
+    let st = 0;
+    let vy = 0;
+    let pitch = 0;
+    let roll = 0;
+    let lit = 0;
+    const hitAt = v3(0, 0, 0);
+    sc.script = (dt) => {
+      st += dt;
+      if (phase === 0) {
+        const dec = sx > S + 12 ? 0 : sx > S ? 9 : 13.2;
+        sv = Math.max(5.2, sv - dec * dt);
+        sx -= sv * dt;
+        const y0 = floorY(sx, lane, sy);
+        // (its nose with the slope under it - not with the drop past the lip, a car's length before it is there)
+        const y1 = floorY(sx - 1.3, lane, sy + 0.8);
+        if (y1 > y0 - 0.5) pitch = Math.atan2(y1 - y0, 1.3);
+        sy = y0;
+        if (dec && Math.random() < 0.75) puff(sc, 1);
+        if (sx <= Lp + 0.35) {
+          phase = 1;
+          st = 0;
+          g.audio.play('crash', 0.45);
+        }
+      } else if (phase === 1) {
+        // (on the lip: its nose over, down)
+        sx -= 1.5 * dt;
+        pitch += (-0.5 - pitch) * Math.min(1, dt * 5);
+        if (st > 0.36) {
+          phase = 2;
+          vy = -1;
+          sv = 3.4;
+        }
+      } else if (phase === 2) {
+        vy -= 29 * dt;
+        sy += vy * dt;
+        sx -= sv * dt;
+        pitch -= 2.5 * dt;
+        roll += 0.8 * dt;
+        const q = wld(sx, 0, lane);
+        const gy = groundHeight(q.x, q.z) + 0.45;
+        if (sy <= gy) {
+          sy = gy;
+          phase = 3;
+          st = 0;
+          hitAt.set(q.x, gy, q.z);
+          g.fx.boom(q.x, gy + 1, q.z, 7);
+          g.fx.boom(q.x + 1.2, gy + 2.2, q.z - 0.8, 4.5);
+          g.fx.crumbs(q.x, gy + 1.2, q.z, 30, 7, true);
+          g.fx.sparks(q.x, gy + 1, q.z, 22, [1, 0.72, 0.3]);
+          g.fx.ring(q.x, gy + 0.2, q.z, 1, 11, 0.5, [1, 0.8, 0.5], 5);
+          for (let i = 0; i < 7; i++) g.fx.sprite(i % 2 ? 'smoke0' : 'smoke1', q.x + (Math.random() - 0.5) * 3, gy + 1 + Math.random() * 2, q.z + (Math.random() - 0.5) * 3, { size: 2.2 + Math.random() * 1.6, grow: 2.2, life: 1.6, vy: 2.4, alpha: 0.7, tint: [0.2, 0.19, 0.22] });
+          g.audio.play('boom', 0.85);
+          g.camRig.addShake(0.35);
+          if (this.comic && this.comic.word) this.comic.word('KA-BOOM!', v3(q.x, gy + 3, q.z), { fill: '#ff6f3a', burst: '#ffd23f', size: 0.085, life: 1.0, tilt: -0.1 });
+          const D = g.damage && g.damage.of ? g.damage.of(sc) : null;
+          if (D) {
+            D.burnt = true;
+            D.glass = 2;
+          }
+        }
+      }
+      place(sc, sx, lane, sy + 0.05);
+      sc.yaw = yaw0;
+      sc.bodyPitch = pitch;
+      sc.bodyRoll = roll;
+      sc.speed = phase === 0 ? sv : 0;
+      sc.vx = sc.vz = 0;
+      sc.air = phase === 2;
+    };
+    sc.script(0);
+    // ---- 1: low on the roof by the ramp's foot, back up the run - the two of them coming at us
+    g.audio.play('roar', 0.8);
+    g.audio.play('skid', 1);
+    this.shot({ from: wld(S + 6.5, Y + 0.55, rz + 5.8), look: wld(S + 27, Y + 1.0, rz), lookTo: wld(S + 13, Y + 1.0, rz + 0.4), fov: 36, dur: 1.3, ease: 'inout', hand: 0.5, shake: 0.1, roll: 0.04 });
+    if (Pc && this.comic && this.comic.word) this.comic.word('SKREEEE!', wld(S + 19, Y + 2.6, rz - 2.6), { fill: '#f2efe6', burst: '#1b1430', size: 0.085, life: 1.1, tilt: 0.12 });
+    let t = 0;
+    let sk = 0.3;
+    yield () => {
+      const dt = this.dtR || 1 / 30;
+      t += dt;
+      sk -= dt;
+      if (sk <= 0 && t < 1.2) {
+        sk = 0.3;
+        g.audio.play('skid', 0.9);
+      }
+      return t >= 1.25 || sx < S + 3;
+    };
+    // ---- 2: from out over the street beside the lip - it comes up the ramp at us, too slow, and its nose goes over
+    // (over the ramp's rail, down on to its way: from level with its lip the rail hid the car coming up it)
+    this.shot({ from: wld(Lp - 6.5, Y + H + 4.6, rz + 7.2), look: () => v3(sc.pos.x, sc.pos.y + 0.6, sc.pos.z), fov: 38, dur: 3, hand: 0.45, shake: 0.06, roll: -0.04 });
+    yield () => phase >= 2;
+    yield 0.16;
+    // ---- 3: from the street, a man's height, up at it - dark against the sky, turning over as it comes down the face of the
+    // building, and into the road in front of us. (From over the lip, straight down: a speck on a wall of windows, and the blast
+    // not in the picture at all)
+    this.shot({ from: wld(Lp - 20, 1.35, lane - 7.5), look: () => v3(sc.pos.x, Math.max(1.6, sc.pos.y * 0.86 + 1.2), sc.pos.z), fov: 30, fovTo: 56, dur: 1.75, ease: 'in', hand: 0.6, shake: 0.08, roll: 0.05, rollTo: 0 });
+    g.audio.play('whoosh', 0.6);
+    let after = 0;
+    yield () => {
+      const dt = this.dtR || 1 / 30;
+      if (phase === 3) {
+        after += dt;
+        // (the blast lights the street and the wall over it)
+        lit = Math.max(0, 1 - after / 0.4);
+        if (lit > 0) flashLight(hitAt.x, hitAt.y + 3, hitAt.z, 34, [1, 0.6, 0.24], 2.6 * lit);
+      }
+      t += dt;
+      if (phase === 3 && after - dt <= 0 && this.shots) this.shots.addShake ? this.shots.addShake(0.5) : 0;
+      return after > 0.8 || t > 9;
+    };
+    // (it is gone from the game: what is left of it is the street's)
+    g.vehicles.list = g.vehicles.list.filter((v) => v !== sc);
+    sc.dispose();
+    if (Pc) {
+      Pc.script = null;
+      Pc.speed = 0;
+      Pc.vx = Pc.vz = 0;
+      Pc.bodyRoll = 0;
+    }
+    car.script = held;
   }
 
   // (round 12) the rotor, drawn on the car in the air - the game's own car pen (game/partpen.js,
