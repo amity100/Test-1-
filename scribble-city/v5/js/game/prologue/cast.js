@@ -1,4 +1,4 @@
-import { FOLK, FOLK_ON, LILY, WHEEL_KIDS, VENDOR, SKINS, hexRGB } from '../../render/folkspec.js';
+import { FOLK, FOLK_ON, LILY, WHEEL_KIDS, VENDOR, MICHAEL, SKINS, hexRGB } from '../../render/folkspec.js';
 import { folkLook, civilianLook, modest } from '../looks.js';
 
 // (v5, ROADMAP 18) The prologue's people: how each of them looks, for game/civilians.js
@@ -18,6 +18,14 @@ export function vendorLook() {
   const L = folkLook(k);
   L.apron = [0.95, 0.56, 0.7];
   return L;
+}
+
+// (ROADMAP 23.13) Michael Cruz, Danny's brother, as his sheet has him: the same man every time - null where this renderer did not
+// make him
+export function michaelLook() {
+  const k = FOLK.indexOf(MICHAEL);
+  if (k < 0 || k >= FOLK_ON.n) return null;
+  return folkLook(k);
 }
 
 // (round 25, the player's word: the kids on the wheel drawn as the city's people are, children's faces

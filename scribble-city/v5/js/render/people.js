@@ -602,6 +602,44 @@ function handFrame(hd, f, n, fore, left, kx, sy, out = _m) {
   return out;
 }
 
+// (ROADMAP 23.13, the owner's word: 'the kids on the wheel - their hands are the wrong way round too. You must stop this bug.')
+// A hand nobody posed, turned the way an arm turns it - by the arm itself, wherever it is, and not by the body's front (which was
+// right for an arm hanging, patched for one reaching out ahead, and a quarter turn wrong for one raised: a child waving showed
+// the edge of its hand). The forearm at rest, between palm up and palm down: the palm faces along the elbow's hinge - a right
+// hand's against it, a left hand's with it - and the thumb is on the inside of the bend. The hinge: the upper arm x the forearm;
+// an arm all but straight has none, and takes where it would be - across the forearm, level (the forearm x up), and for an arm
+// straight down or straight up, the body's own right. So: hanging, the palm to the thigh and the thumb ahead; reaching out
+// ahead, the thumb up; raised to wave, the palm to the front; a hand to the chest, the palm on the chest.
+// sh, el, hd: shoulder, elbow, wrist; right: the body's right (unit); out: the palm's way (unit, across the forearm)
+const _ru = new THREE.Vector3();
+const _rc = new THREE.Vector3();
+const _rh = new THREE.Vector3();
+const _rf = new THREE.Vector3();
+const _rp = new THREE.Vector3();
+function restPalm(sh, el, hd, right, left, out) {
+  _ru.subVectors(el, sh).normalize();
+  _rc.subVectors(hd, el).normalize();
+  _rh.crossVectors(_ru, _rc);
+  const bend = _rh.length();
+  // (straight: across the forearm and level - and where the forearm is upright, the body's right)
+  _rf.crossVectors(_rc, UP);
+  const lf = _rf.length();
+  if (lf > 1e-4) _rf.divideScalar(lf);
+  const up = Math.max(0, Math.min(1, (0.5 - lf) / 0.35));
+  _rp.copy(right).addScaledVector(_rc, -right.dot(_rc));
+  if (_rp.lengthSq() > 1e-6) _rf.multiplyScalar(1 - up).addScaledVector(_rp.normalize(), up);
+  // (bent: the hinge itself, from a bend of some ten degrees to its own from twenty-five)
+  const wb = Math.max(0, Math.min(1, (bend - 0.17) / 0.26));
+  if (bend > 1e-4) _rh.divideScalar(bend);
+  _rh.multiplyScalar(wb * wb * (3 - 2 * wb)).addScaledVector(_rf, 1 - wb * wb * (3 - 2 * wb));
+  _rh.addScaledVector(_rc, -_rh.dot(_rc));
+  if (_rh.lengthSq() < 1e-8) _rh.copy(right).addScaledVector(_rc, -right.dot(_rc));
+  _rh.normalize();
+  return out.copy(_rh).multiplyScalar(left ? 1 : -1);
+}
+const _rN = new THREE.Vector3();
+const _rR = new THREE.Vector3();
+
 // a part at c in the frame (r, u, f) (unit axes), scaled (sx, sy, sz)
 function framed(c, r, u, f, sx, sy, sz, out = _m) {
   out.set(r.x * sx, u.x * sy, f.x * sz, c.x, r.y * sx, u.y * sy, f.y * sz, c.y, r.z * sx, u.z * sy, f.z * sz, c.z, 0, 0, 0, 1);
@@ -790,14 +828,16 @@ function heroFace(fig, t) {
   const fear = mood === 'surprised' || mood === 'scared' || mood === 'shock';
   const low = mood === 'sad' || mood === 'worried' || mood === 'hurt' || mood === 'pleading';
   if (jaw >= 0) {
-    if (jaw > 0.3) return mood === 'laugh' ? 'laugh' : glad ? 'smileTalk' : mad ? 'shout' : fear ? 'surprised' : low ? 'worriedTalk' : 'talk2';
-    if (jaw > 0.1) return glad ? 'smileTalk' : mad ? 'angryTalk' : low ? 'worriedTalk' : 'talk1';
+    if (jaw > 0.3) return mood === 'laugh' ? 'laugh' : glad ? 'smileTalk' : mad ? 'shout' : fear ? (mood === 'shock' ? 'shock' : 'surprised') : low ? 'worriedTalk' : 'talk2';
+    if (jaw > 0.1) return glad ? 'smileTalk' : mad ? 'angryTalk' : low ? 'worriedTalk' : fear && mood !== 'surprised' ? 'fear' : 'talk1';
   }
   if (mood === 'laugh') return 'laugh';
   if (glad) return mood === 'tender' || mood === 'smirk' || mood === 'bliss' ? 'soft' : 'smile';
   if (mood === 'shout') return 'shout';
   if (mad) return 'angry';
-  if (fear) return 'surprised';
+  // (ROADMAP 23.11: shock and fear his own faces - they were surprise's, all three the one face)
+  // (and as he speaks through it, between his words: the fear's mouth, not the gape again at every breath)
+  if (fear) return mood === 'shock' ? (jaw >= 0 ? 'fear' : 'shock') : mood === 'scared' ? 'fear' : 'surprised';
   if (low) return 'worried';
   return null;
 }
@@ -831,7 +871,10 @@ function faceOf(fig, F, t, cam) {
     // gape, the lips pulled wide over the teeth: spec.moodMouthK, the feeling's jaw and wide mouth; its
     // words still move it as they do)
     // (cast round 8: but a laugh and a shout are open mouths - at a quarter they were clenched teeth)
-    const mk = F.spec.moodMouthK !== undefined ? (mood === 'laugh' || mood === 'shout' || mood === 'joy' ? Math.max(0.7, F.spec.moodMouthK) : F.spec.moodMouthK) : 1;
+    // (ROADMAP 23.11, the owner's word: "shock - not dolls": fig.faceFull, the film's - a gentle face's limits lifted for a moment
+    // that is past gentleness: her mouth open as far as a child's does in a real fright)
+    const mk0 = F.spec.moodMouthK !== undefined ? (mood === 'laugh' || mood === 'shout' || mood === 'joy' ? Math.max(0.7, F.spec.moodMouthK) : F.spec.moodMouthK) : 1;
+    const mk = mk0 + (Math.max(mk0, 0.74) - mk0) * (fig.faceFull || 0);
     for (let e = 0; e < 8; e++) _want[e] = Math.max(e === 1 ? 0 : _want[e], e === 0 || e === 7 ? M[e] * mk : M[e]);
     // (no smile at rest under a feeling that has none of its own)
     if (!(M[1] > 0)) _want[1] = 0;
@@ -1260,6 +1303,10 @@ export class PersonRenderer {
       face: { fair: [0.9, 0.86, 0.84], light: [0.94, 0.91, 0.89] }[spec.skin] || PAPER_W,
       sole: linC(spec.shoes.sole),
       watch: spec.acc.watch ? linC(hexRGB(spec.acc.watch)) : null,
+      // (ROADMAP 23.13: a watch on a leather strap - its case the watch's colour; a ring on the right hand)
+      strap: spec.acc.strap ? linC(hexRGB(spec.acc.strap)) : null,
+      ring: spec.acc.ring ? linC(hexRGB(spec.acc.ring)) : null,
+      softLocks: spec.hair.style === 'sweep',
       earring: spec.acc.earrings ? linC(hexRGB(spec.acc.earrings)) : null,
       // (long hair over the ears: no earrings seen)
       earsOn: spec.hair.style !== 'long',
@@ -2354,14 +2401,9 @@ export class PersonRenderer {
       if (pkA < 0.7) {
         const hp = ai === 0 ? (shut ? p.heroGripR : p.heroHandR) : shut ? p.heroGripL : p.heroHandL;
         if (hF && !grip) hp.push(handFrame(hd, hF, fig.handN[ai], _c, ai === 1, k, S), skin, own, handId, ind);
-        else {
-          let hRef = grip || fwd;
-          if (!grip) {
-            const dd = Math.abs(_c.dot(fwd));
-            if (dd > 0.55) hRef = _hRef.copy(fwd).multiplyScalar(1 - Math.min(1, (dd - 0.55) / 0.3)).addScaledVector(UP, Math.min(1, (dd - 0.55) / 0.3)).normalize();
-          }
-          hp.push(along(hd, _d, 0.19, k, hRef), skin, own, handId, ind);
-        }
+        else if (grip || pkA > 0.01) hp.push(along(hd, _d, 0.19, k, grip || fwd), skin, own, handId, ind);
+        // (ROADMAP 23.13: as his arm turns it - restPalm)
+        else hp.push(handFrame(hd, _c, restPalm(sh, el, hd, _rR.subVectors(arms[0][0], arms[1][0]).normalize(), ai === 1, _rN), _c, ai === 1, k, S), skin, own, handId, ind);
       }
       if (ai === 1) {
         // (a steel watch on a leather strap, just out of the cuff: its face on the back of the wrist)
@@ -2581,27 +2623,36 @@ export class PersonRenderer {
       }
       // (an open hand reaching out in front: its thumb up - turned by the body's front alone, the
       // hand along it had no way round to turn, and a hand reaching forward came out any way round)
-      let hRef = grip || fwd;
-      if (!grip) {
-        const dd = Math.abs(_c.dot(fwd));
-        if (dd > 0.55) {
-          const b = Math.min(1, (dd - 0.55) / 0.3);
-          hRef = _hRef.copy(fwd).multiplyScalar(1 - b).addScaledVector(UP, b).normalize();
-        }
-      }
       // (ROADMAP 23: a hand posed - its own way, as it was asked)
       const hF = fig.handF && fig.handF[ai];
       const shut = grip || (fig.handGrip && fig.handGrip[ai] > 0.5);
       const hp = lite(ai === 0 ? (shut ? p.heroGripR : p.heroHandR) : shut ? p.heroGripL : p.heroHandL, lvB);
       if (hF && !grip) hp.push(handFrame(hd, hF, fig.handN[ai], _c, ai === 1, k * (fem ? 0.88 : 1), ((fem ? 0.17 : 0.19) / 0.19) * S), skin, own, id(), ind);
-      else hp.push(along(hd, _d, 0.19, k * (fem ? 0.88 : 1), hRef), skin, own, id(), ind);
+      else if (grip) hp.push(along(hd, _d, 0.19, k * (fem ? 0.88 : 1), grip), skin, own, id(), ind);
+      // (ROADMAP 23.13: as their arm turns it - restPalm)
+      else hp.push(handFrame(hd, _c, restPalm(sh, el, hd, _rR.subVectors(arms[0][0], arms[1][0]).normalize(), ai === 1, _rN), _c, ai === 1, k * (fem ? 0.88 : 1), ((fem ? 0.17 : 0.19) / 0.19) * S), skin, own, id(), ind);
+      // (ROADMAP 23.13: a signet ring on the right hand's ring finger - a band round its first joint, its face on the back of it.
+      // The hand's own frame is the matrix just made: from the wrist down -y, the palm to -z)
+      if (ai === 0 && F.ring) {
+        _rg.set(-0.009, -0.112, -0.003).applyMatrix4(_m);
+        _x.setFromMatrixColumn(_m, 0).normalize();
+        _y.setFromMatrixColumn(_m, 1).normalize();
+        _z.setFromMatrixColumn(_m, 2).normalize();
+        p.sphere.push(framed(_rg, _x, _y, _z, 0.0118 * S, 0.0042 * S, 0.0118 * S, _mR), F.ring, own, id(), ind);
+        _rg.addScaledVector(_z, 0.0098 * S);
+        p.boxP.push(framed(_rg, _x, _y, _z, 0.0115 * S, 0.0095 * S, 0.0045 * S, _mR), F.ring, own, id(), ind);
+      }
       if (ai === 1 && F.watch) {
         _a.copy(hd).addScaledVector(_c, -0.025 * S);
         _x.copy(rgt).multiplyScalar(-1).addScaledVector(_c, rgt.dot(_c)).normalize();
         _z.crossVectors(_c, _x).normalize();
-        p.sphere.push(framed(_a, _x, _c, _z, 0.036 * S, 0.011 * S, 0.033 * S), F.watch, own, id(), ind);
+        p.sphere.push(framed(_a, _x, _c, _z, 0.036 * S, 0.011 * S, 0.033 * S), F.strap || F.watch, own, id(), ind);
         _a.addScaledVector(_x, 0.029 * S);
-        p.boxP.push(framed(_a, _c, _x, _z, 0.024 * S, 0.008 * S, 0.024 * S), linC(DIAL), own, id(), ind);
+        if (F.strap) {
+          p.boxP.push(framed(_a, _c, _x, _z, 0.03 * S, 0.008 * S, 0.03 * S), F.watch, own, id(), ind);
+          _a.addScaledVector(_x, 0.002 * S);
+          p.boxP.push(framed(_a, _c, _x, _z, 0.022 * S, 0.008 * S, 0.022 * S), linC(DIAL_DARK), own, id(), ind);
+        } else p.boxP.push(framed(_a, _c, _x, _z, 0.024 * S, 0.008 * S, 0.024 * S), linC(DIAL), own, id(), ind);
       }
     }
     // ---- the legs, the shoes (a dress: the legs bare under it)
@@ -2654,7 +2705,7 @@ export class PersonRenderer {
           else if (fig.recoil > 0.2 || fig.stagger > 0) mood = 'hurt';
           else if (fig.punch >= 0 || fig.kick >= 0 || fig.guard > 0.3) mood = 'angry';
         }
-        port.update(fdt, _fEw, mood, fig.__portrait || null, fig.say && !fig.say.done ? fig.say.tone : null, gaze);
+        port.update(fdt, _fEw, mood, fig.__portrait || null, fig.say && !fig.say.done ? fig.say.tone : null, gaze, fig.faceFull || 0);
         port.place(_mP);
         // (its neck: from the neck's frame into the head's - render/portrait.js part 7)
         // (no neck drawn for them this frame - their body hidden: none under the portrait either)
@@ -2675,8 +2726,10 @@ export class PersonRenderer {
         if (!port) HL.set('head', 'head', _m, _fEw, gaze);
       }
       framed(hc, hr, hu, hf, hs, hs, hs, _mH);
-      lite(q.hair, lvB).push(_mH, white, own, id(), ind);
-      if (q.locks && !hatK) lite(q.locks, lvB).push(_mH, white, own, id(), ind);
+      // (ROADMAP 23.13: softLocks - a combed head's locks one part with its cap: no outline round each of them)
+      const hairId = id();
+      lite(q.hair, lvB).push(_mH, white, own, hairId, ind);
+      if (q.locks && !hatK) lite(q.locks, lvB).push(_mH, white, own, F.softLocks ? hairId : id(), ind);
       if (q.fall) lite(q.fall, lvB).push(_mH, white, own, id(), ind);
       if (q.bun && !hatK) lite(q.bun, lvB).push(_mH, white, own, id(), ind);
       if (q.tail) lite(q.tail, lvB).push(_mH, white, own, id(), ind);
@@ -2949,6 +3002,9 @@ const HERO_SOLE = [0.13, 0.11, 0.1];
 const CHAIN = [0.78, 0.78, 0.8];
 const WATCH = [0.1, 0.09, 0.09];
 const DIAL = [0.72, 0.72, 0.75];
+const DIAL_DARK = [0.1, 0.11, 0.1];
+const _rg = new THREE.Vector3();
+const _mR = new THREE.Matrix4();
 const _heroTex = {};
 const _keyC = new THREE.Color(1.0, 0.62, 0.68);
 const _hx = new THREE.Vector3();

@@ -27,6 +27,8 @@ export const JK = {
   collar: [0, 0, 0.5, 0.14],
   edge: [0.5, 0, 1, 0.06],
   flap: [0.5, 0.06, 0.75, 0.14],
+  // (ROADMAP 23.13: a blazer's left front edge when something is pinned on its lapel - its own place, so the pin is on one lapel only)
+  edgeL: [0.75, 0.06, 1, 0.14],
 };
 export const PT = {
   thigh: [0, 0.5, 1, 1],
@@ -230,6 +232,8 @@ export function paintFace(c, o = {}) {
   const jaw = E.jaw || 0;
   const smile = E.smile || 0;
   const brow = E.brow || null;
+  // (ROADMAP 23.11: his eyes wide open - shock, fear: the lids well off the iris, the iris a little smaller in them)
+  const wide = E.eyes === 'wide' ? 1 : 0;
   const g = c.getContext('2d', { willReadFrequently: true });
   const W = c.width;
   const H = c.height;
@@ -310,7 +314,7 @@ export function paintFace(c, o = {}) {
     // (wide open with the brows up; narrowed by a real smile, the cheeks pushing up under them)
     // (cast round 1, his sheet: his eyes open - they were two slits)
     // (cast round 3: narrowed a little under the low brows - open, not startled)
-    const eh = 0.0064 * K * (brow === 'up' ? 1.3 : 1) * (1 - Math.max(0, smile) * 0.3);
+    const eh = 0.0064 * K * (brow === 'up' ? 1.3 : 1) * (1 + (brow === 'up' ? 0.4 : 0.62) * wide) * (1 - Math.max(0, smile) * 0.3);
     // (the inner corner by the nose, a touch lower; the outer a touch higher)
     const ix = cx + sd * ew * 0.5;
     const iy = cy + 0.06 * eh;
@@ -367,7 +371,7 @@ export function paintFace(c, o = {}) {
     // the iris: hazel, its strokes out from the pupil; the pupil; the light in it
     const irx = cx + sd * 0.0012 * K;
     const iry = cy - eh * 0.05;
-    const ir = 0.006 * K;
+    const ir = 0.006 * K * (1 - 0.12 * wide);
     g.globalAlpha = 1;
     g.fillStyle = '#4e3520';
     g.beginPath();
@@ -424,7 +428,7 @@ export function paintFace(c, o = {}) {
   // ---- the brows: thick, low, drawn hair by hair; the scar through the left one
   // (up: the whole brow raised, surprise; down: the inner ends pulled down and in, anger; worried: the
   // inner ends up, the outer down a little)
-  const BR = brow === 'up' ? [0.0062, 0.0072, 0.005] : brow === 'down' ? [-0.0058, -0.0022, 0.0014] : brow === 'worried' ? [0.0064, 0.0022, -0.0018] : [0, 0, 0];
+  const BR = brow === 'up' ? [0.0062 + 0.0024 * wide, 0.0072 + 0.003 * wide, 0.005 + 0.002 * wide] : brow === 'down' ? [-0.0058, -0.0022, 0.0014] : brow === 'worried' ? [0.0064 + 0.002 * wide, 0.0022 + 0.0012 * wide, -0.0018] : [0, 0, 0];
   for (const sd of [1, -1]) {
     // (cast round 3, his sheet: low over the eyes and nearly straight, the inner ends lowest - he weighs you up; they arched
     // high over the eyes, a mild surprise)

@@ -225,6 +225,11 @@ export const EXPRS = {
   angryTalk: { brow: 'down', smile: -0.3, jaw: 0.45 },
   shout: { brow: 'down', jaw: 0.9, smile: -0.25 },
   surprised: { brow: 'up', jaw: 0.5 },
+  // (ROADMAP 23.11, the owner's word: "shock - not dolls with all but the same face". shock: what cannot be - his eyes wide
+  // open, white all round the iris, his brows as high as they go, his mouth fallen open; fear: after it - his eyes still wide,
+  // his brows drawn up and together, his mouth a little open and pulled down)
+  shock: { brow: 'up', jaw: 0.7, eyes: 'wide', smile: -0.15 },
+  fear: { brow: 'worried', jaw: 0.26, eyes: 'wide', smile: -0.4 },
   worried: { brow: 'worried', smile: -0.5 },
   worriedTalk: { brow: 'worried', smile: -0.35, jaw: 0.4 },
 };
