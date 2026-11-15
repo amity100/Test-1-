@@ -567,6 +567,14 @@ export class Voices {
       this.linger = null;
       return;
     }
+    // (ROADMAP 23.21: not while the story's film has the picture - nobody in the street has a word for a man standing in a
+    // film's shot. Danny stood by Lily two and a half seconds, as the film had him stand: she "turned to him and said" a glad
+    // line of the street's - and beamed, half way through asking what had happened to the children on the wheel)
+    if (game.prologue && game.prologue.holdCam) {
+      this.linger = null;
+      this.lingerT = 0;
+      return;
+    }
     const p = pl.pos;
     const civs = game.civilians;
     // a gun pointed at somebody: hands up; kept on them, they run
@@ -711,7 +719,7 @@ export class Voices {
     }
     if (close && close === this.linger) {
       this.lingerT += dt;
-      if (this.lingerT > 2.5 && (close.lingeredT || 0) < game.time && !close.convo) {
+      if (this.lingerT > 2.5 && (close.lingeredT || 0) < game.time && !close.convo && !close.ctrl) {
         close.lingeredT = game.time + 25;
         this.stats.lingers++;
         // (somebody walking stops, turns to you, says it, and goes on)
