@@ -1,6 +1,7 @@
 import { sideProfile, sidePoint } from '../render/cars.js';
 import { PAINTS } from '../game/garage.js';
 
+import { tr } from '../core/lang.js';
 // The paint shop (ROADMAP 4.6): the car from the side on a sheet of paper. Pick its new colour,
 // then draw on it with the pens - flames, stripes, a name, whatever you like. The drawing goes
 // onto both sides of the car, on its skin (render/cars.js sidePoint), drawn with the city's own
@@ -10,16 +11,16 @@ const $ = (id) => document.getElementById(id);
 // the pens: their colour on the paper and in the city (dark: the ink of the outlines; brighter
 // than white: they glow, like neon)
 export const PENS = [
-  { css: '#1b1622', c: [0.05, 0.05, 0.07], name: 'דיו' },
-  { css: '#ffffff', c: [0.97, 0.97, 0.95], name: 'לבן' },
-  { css: '#e8333d', c: [0.95, 0.18, 0.22], name: 'אדום' },
-  { css: '#ffd23f', c: [1.0, 0.84, 0.22], name: 'צהוב' },
-  { css: '#33d6ff', c: [0.25, 0.85, 1.0], name: 'תכלת' },
-  { css: '#4ee06a', c: [0.32, 0.9, 0.42], name: 'ירוק' },
-  { css: '#ff7cc8', c: [1.0, 0.48, 0.78], name: 'ורוד' },
-  { css: '#ff8a2a', c: [1.0, 0.55, 0.16], name: 'כתום' },
-  { css: '#fff1a8', c: [2.6, 2.1, 0.8], name: 'ניאון זהב', glow: true },
-  { css: '#ff9bf0', c: [2.4, 0.8, 2.0], name: 'ניאון ורוד', glow: true },
+  { css: '#1b1622', c: [0.05, 0.05, 0.07], name: tr('דיו', 'Ink') },
+  { css: '#ffffff', c: [0.97, 0.97, 0.95], name: tr('לבן', 'White') },
+  { css: '#e8333d', c: [0.95, 0.18, 0.22], name: tr('אדום', 'Red') },
+  { css: '#ffd23f', c: [1.0, 0.84, 0.22], name: tr('צהוב', 'Yellow') },
+  { css: '#33d6ff', c: [0.25, 0.85, 1.0], name: tr('תכלת', 'Light blue') },
+  { css: '#4ee06a', c: [0.32, 0.9, 0.42], name: tr('ירוק', 'Green') },
+  { css: '#ff7cc8', c: [1.0, 0.48, 0.78], name: tr('ורוד', 'Pink') },
+  { css: '#ff8a2a', c: [1.0, 0.55, 0.16], name: tr('כתום', 'Orange') },
+  { css: '#fff1a8', c: [2.6, 2.1, 0.8], name: tr('ניאון זהב', 'Neon gold'), glow: true },
+  { css: '#ff9bf0', c: [2.4, 0.8, 2.0], name: tr('ניאון ורוד', 'Neon pink'), glow: true },
 ];
 const WIDTH = { thin: { px: 3.2, w: 2.6 }, thick: { px: 7.5, w: 5.4 } };
 const MAX_PTS = 450;

@@ -1,3 +1,4 @@
+import { tr } from '../core/lang.js';
 // (ROADMAP 9.4, not with ?classic) Ink: what the drawings are drawn with.
 //   - the pen holds so much ink (the bottle by the wallet, and a bar over the sheet while you
 //     draw); every line drawn in the air uses some of it. Drawn about as long as the blueprint's
@@ -10,10 +11,10 @@
 //     kit. Each holds more ink and makes every drawing better (points onto its score).
 
 export const TOOLS = [
-  { id: 'hb', name: 'עיפרון HB', cap: 100, bonus: 0, price: 0 },
-  { id: '2b', name: 'עיפרון 2B רך', cap: 125, bonus: 4, price: 90 },
-  { id: 'markers', name: 'ערכת טושים', cap: 160, bonus: 8, price: 260 },
-  { id: 'kit', name: 'ערכת אמן מקצועית', cap: 200, bonus: 12, price: 650 },
+  { id: 'hb', name: tr('עיפרון HB', 'HB pencil'), cap: 100, bonus: 0, price: 0 },
+  { id: '2b', name: tr('עיפרון 2B רך', 'Soft 2B pencil'), cap: 125, bonus: 4, price: 90 },
+  { id: 'markers', name: tr('ערכת טושים', 'Marker set'), cap: 160, bonus: 8, price: 260 },
+  { id: 'kit', name: tr('ערכת אמן מקצועית', 'Professional artist\'s kit'), cap: 200, bonus: 12, price: 650 },
 ];
 export const BOTTLE = 20; // $: a bottle of ink, the pen full again
 const TRICKLE = 0.25; // ink a second, by itself
@@ -88,7 +89,7 @@ export class Ink {
     const was = this.level;
     this.level = Math.min(this.cap, this.level + n);
     this.render();
-    if (why && this.level - was >= 1) this.game.hud.toast(`+${Math.round(this.level - was)} דיו ${why}`, 'good', 1.8);
+    if (why && this.level - was >= 1) this.game.hud.toast(tr(`+${Math.round(this.level - was)} דיו ${why}`, `+${Math.round(this.level - was)} ink ${why}`), 'good', 1.8);
     return this.level - was;
   }
 
@@ -99,7 +100,7 @@ export class Ink {
     this.stats.bottles++;
     this.render();
     g.audio.play('pour', 0.6);
-    g.hud.toast('העט מלא דיו!', 'good', 2);
+    g.hud.toast(tr('העט מלא דיו!', 'The pen is full of ink!'), 'good', 2);
   }
 
   // a better tool (paid for in the shop): more ink, better drawings; full when bought
@@ -112,7 +113,7 @@ export class Ink {
     this.stats.tools++;
     this.render();
     g.audio.play('ding', 0.6);
-    g.hud.toast(`${T.name}! עד ${T.cap} דיו בעט, ו־${T.bonus}+ לכל ציור`, 'good', 3.4);
+    g.hud.toast(tr(`${T.name}! עד ${T.cap} דיו בעט, ו־${T.bonus}+ לכל ציור`, `${T.name}! Up to ${T.cap} ink in the pen, and +${T.bonus} for every drawing`), 'good', 3.4);
     return true;
   }
 
@@ -120,7 +121,7 @@ export class Ink {
   fromEnemy(e) {
     const G = this.game.gangs;
     if (!e || !G || G.gangOf(e) !== 'erasers') return;
-    if (this.fill(ENEMY_INK, 'מהמחק שנפל') > 0) this.stats.found++;
+    if (this.fill(ENEMY_INK, tr('מהמחק שנפל', 'from the eraser that dropped')) > 0) this.stats.found++;
   }
 
   update(dt) {

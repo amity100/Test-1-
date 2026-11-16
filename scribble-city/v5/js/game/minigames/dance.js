@@ -7,22 +7,23 @@
 
 import { Band, makeSong } from '../../core/music.js';
 import { INK, PENS, MARKER, box, figure, line, text, cash } from './ink2d.js';
+import { tr } from '../../core/lang.js';
 
 const TRACKS = [
-  { name: 'Neon Nights', style: 'disco', n: 41, he: 'דיסקו' },
-  { name: 'City Lights', style: 'synth', n: 7, he: 'סינת׳' },
-  { name: 'Ink Riot', style: 'rock', n: 23, he: 'רוק' },
+  { name: 'Neon Nights', style: 'disco', n: 41, he: tr('דיסקו', 'Disco') },
+  { name: 'City Lights', style: 'synth', n: 7, he: tr('סינת׳', 'Synth') },
+  { name: 'Ink Riot', style: 'rock', n: 23, he: tr('רוק', 'Rock') },
 ];
 const DIFFS = [
-  { he: 'קל', bars: 16, speed: 360, gap: 4, mult: 1 },
-  { he: 'רגיל', bars: 24, speed: 450, gap: 2, mult: 1.6 },
-  { he: 'קשה', bars: 32, speed: 540, gap: 1, mult: 2.4 },
+  { he: tr('קל', 'Easy'), bars: 16, speed: 360, gap: 4, mult: 1 },
+  { he: tr('רגיל', 'Normal'), bars: 24, speed: 450, gap: 2, mult: 1.6 },
+  { he: tr('קשה', 'Hard'), bars: 32, speed: 540, gap: 1, mult: 2.4 },
 ];
 // the windows, in seconds either side of the beat
 const WIN = [
-  { t: 0.05, he: 'מושלם!', pts: 300, hype: 0.035, col: PENS.yellow },
-  { t: 0.09, he: 'יפה!', pts: 200, hype: 0.022, col: PENS.cyan },
-  { t: 0.135, he: 'טוב', pts: 100, hype: 0.01, col: PENS.green },
+  { t: 0.05, he: tr('מושלם!', 'Perfect!'), pts: 300, hype: 0.035, col: PENS.yellow },
+  { t: 0.09, he: tr('יפה!', 'Great!'), pts: 200, hype: 0.022, col: PENS.cyan },
+  { t: 0.135, he: tr('טוב', 'Good'), pts: 100, hype: 0.01, col: PENS.green },
 ];
 const LANE_COL = [PENS.pink, PENS.cyan, PENS.yellow, PENS.green];
 // the keys of each lane: the arrows, or D F J K
@@ -94,9 +95,9 @@ export class DanceGame {
   //      pick (choose the song and the floor first, default true) }
   constructor(o = {}) {
     this.o = o;
-    this.title = 'Ink Beat · ריקוד';
-    this.help = 'חצים (או D F J K) כשהחץ מגיע לקו · חץ ארוך: להחזיק · Enter להתחיל · Esc לצאת';
-    this.helpTouch = 'נוגעים בנתיב כשהחץ מגיע לקו';
+    this.title = tr('Ink Beat · ריקוד', 'Ink Beat · dance');
+    this.help = tr('חצים (או D F J K) כשהחץ מגיע לקו · חץ ארוך: להחזיק · Enter להתחיל · Esc לצאת', 'Arrows (or D F J K) when the arrow reaches the line · a long arrow: hold · Enter to start · Esc to leave');
+    this.helpTouch = tr('נוגעים בנתיב כשהחץ מגיע לקו', 'Tap the lane when the arrow reaches the line');
     this.pad = 'tap';
   }
 
@@ -304,7 +305,7 @@ export class DanceGame {
     this.hype = Math.max(0, this.hype - 0.06);
     this.pose = -1;
     this.poseT = 0.4;
-    this.pops.push({ he: 'פספוס', col: '#9a9aa8', t: 0, x: this.lx(l) });
+    this.pops.push({ he: tr('פספוס', 'Miss'), col: '#9a9aa8', t: 0, x: this.lx(l) });
   }
 
   finish() {
@@ -328,7 +329,7 @@ export class DanceGame {
     this.res = { score: this.score, grade, acc, combo: this.maxCombo, tips, record: this.score > best, diff: this.diff, track: this.track };
     this.scene = 'results';
     this.t = 0;
-    if (tips && this.api.money) this.api.money.earn(tips, `טיפים: ${this.o.venue || 'Ink Beat'}`);
+    if (tips && this.api.money) this.api.money.earn(tips, tr(`טיפים: ${this.o.venue || 'Ink Beat'}`, `Tips: ${this.o.venue || 'Ink Beat'}`));
     this.api.audio.play(grade === 'D' ? 'buzzer' : 'cheer', 0.6);
   }
 
@@ -495,7 +496,7 @@ export class DanceGame {
     const left = this.t0 - now;
     if (left > 0) {
       const beats = Math.ceil(left / (this.spb * 4));
-      text(g, beats > 3 ? 'מוכנים?' : String(beats), this.L.x0 + this.L.w * 2, 300, { size: beats > 3 ? 48 : 90, color: PENS.white, outline: '#0a0818', ow: 8 });
+      text(g, beats > 3 ? tr('מוכנים?', 'Ready?') : String(beats), this.L.x0 + this.L.w * 2, 300, { size: beats > 3 ? 48 : 90, color: PENS.white, outline: '#0a0818', ow: 8 });
     }
   }
 
@@ -550,27 +551,27 @@ export class DanceGame {
       f.armsUp = (this.poseT > 0 && this.pose === 2) || this.fever > 0 ? 1 : 0;
     } else figure(g, this.L.dancer, this.L.feet, this.L.size, pose, { shirt: this.fever > 0 ? PENS.yellow : PENS.pink, legs: '#2b2f55', hair: '#2a1a12' });
     // the score, the row, the hype
-    text(g, `ניקוד ${this.score.toLocaleString('en-US')}`, 170, 150, { size: 28, color: PENS.white, outline: '#0a0818', ow: 6 });
-    if (this.combo >= 5) text(g, `רצף ${this.combo}`, 170, 186, { size: 24, color: PENS.yellow, outline: '#0a0818', ow: 6 });
+    text(g, tr(`ניקוד ${this.score.toLocaleString('en-US')}`, `Score ${this.score.toLocaleString('en-US')}`), 170, 150, { size: 28, color: PENS.white, outline: '#0a0818', ow: 6 });
+    if (this.combo >= 5) text(g, tr(`רצף ${this.combo}`, `Streak ${this.combo}`), 170, 186, { size: 24, color: PENS.yellow, outline: '#0a0818', ow: 6 });
     const hx = 40;
     const hy = 210;
     box(g, hx, hy, 260, 18, { fill: '#0a0818', color: PENS.white, w: 2, r: 8, seed: 21 });
     g.fillStyle = this.fever > 0 ? PENS.yellow : PENS.pink;
     g.fillRect(hx + 3, hy + 3, 254 * this.hype, 12);
-    text(g, this.fever > 0 ? 'הקהל משתולל! ×2' : 'ההייפ של הקהל', hx + 130, hy + 34, { size: 18, color: PENS.white, outline: '#0a0818', ow: 4 });
+    text(g, this.fever > 0 ? tr('הקהל משתולל! ×2', 'The crowd is going wild! ×2') : tr('ההייפ של הקהל', 'The crowd\'s hype'), hx + 130, hy + 34, { size: 18, color: PENS.white, outline: '#0a0818', ow: 4 });
   }
 
   drawMenu(g, W) {
     text(g, 'Ink Beat', W / 2, 150, { font: MARKER, size: 52, color: PENS.yellow, outline: '#0a0818', ow: 8 });
     // the songs, right to left
-    TRACKS.forEach((tr, i) => {
+    TRACKS.forEach((tk, i) => {
       const x = 110 + (2 - i) * 270;
       const sel = i === this.track;
       box(g, x, 180, 240, 140, { fill: sel ? 'rgba(255,95,162,0.35)' : 'rgba(10,8,24,0.6)', color: sel ? PENS.yellow : PENS.white, w: sel ? 5 : 2, r: 14, seed: 30 + i });
-      text(g, tr.name, x + 120, 230, { font: MARKER, size: 30, color: PENS.white, outline: '#0a0818', ow: 5 });
-      text(g, tr.he, x + 120, 268, { size: 22, color: PENS.cyan, outline: '#0a0818', ow: 4 });
-      const b = Math.max(this.best[tr.style + this.diff] || 0, 0);
-      if (b) text(g, `שיא ${b.toLocaleString('en-US')}`, x + 120, 298, { size: 18, color: PENS.yellow, outline: '#0a0818', ow: 4 });
+      text(g, tk.name, x + 120, 230, { font: MARKER, size: 30, color: PENS.white, outline: '#0a0818', ow: 5 });
+      text(g, tk.he, x + 120, 268, { size: 22, color: PENS.cyan, outline: '#0a0818', ow: 4 });
+      const b = Math.max(this.best[tk.style + this.diff] || 0, 0);
+      if (b) text(g, tr(`שיא ${b.toLocaleString('en-US')}`, `Best ${b.toLocaleString('en-US')}`), x + 120, 298, { size: 18, color: PENS.yellow, outline: '#0a0818', ow: 4 });
     });
     DIFFS.forEach((d, i) => {
       const x = 230 + (2 - i) * 180;
@@ -579,25 +580,25 @@ export class DanceGame {
       text(g, d.he, x + 80, 401, { size: 28, color: PENS.white, outline: '#0a0818', ow: 5 });
     });
     box(g, 380, 470, 240, 80, { fill: PENS.pink, color: INK, w: 4, r: 16, seed: 50 });
-    text(g, 'יאללה!', 500, 511, { size: 40, color: INK, outline: PENS.white, ow: 5 });
-    if (this.row === 0 && !this.touch) text(g, '◀ ▶ שיר · ▼ רמה', W / 2, 455, { size: 18, color: PENS.white, outline: '#0a0818', ow: 4 });
+    text(g, tr('יאללה!', 'Let\'s go!'), 500, 511, { size: 40, color: INK, outline: PENS.white, ow: 5 });
+    if (this.row === 0 && !this.touch) text(g, tr('◀ ▶ שיר · ▼ רמה', '◀ ▶ song · ▼ level'), W / 2, 455, { size: 18, color: PENS.white, outline: '#0a0818', ow: 4 });
   }
 
   drawResults(g, W) {
     const r = this.res;
     text(g, r.grade, W / 2, 175, { font: MARKER, size: 120, color: r.grade === 'S' ? PENS.yellow : r.grade === 'D' ? '#9a9aa8' : PENS.pink, outline: '#0a0818', ow: 10 });
-    if (r.record) text(g, 'שיא חדש!', W / 2, 262, { size: 32, color: PENS.yellow, outline: '#0a0818', ow: 6 });
+    if (r.record) text(g, tr('שיא חדש!', 'New record!'), W / 2, 262, { size: 32, color: PENS.yellow, outline: '#0a0818', ow: 6 });
     const rows = [
-      `ניקוד ${r.score.toLocaleString('en-US')}`,
-      `דיוק ${Math.round(r.acc * 100)}% · רצף הכי ארוך ${r.combo}`,
-      `מושלם ${this.counts[0]} · יפה ${this.counts[1]} · טוב ${this.counts[2]} · פספוס ${this.counts[3]}`,
+      tr(`ניקוד ${r.score.toLocaleString('en-US')}`, `Score ${r.score.toLocaleString('en-US')}`),
+      tr(`דיוק ${Math.round(r.acc * 100)}% · רצף הכי ארוך ${r.combo}`, `Accuracy ${Math.round(r.acc * 100)}% · longest streak ${r.combo}`),
+      tr(`מושלם ${this.counts[0]} · יפה ${this.counts[1]} · טוב ${this.counts[2]} · פספוס ${this.counts[3]}`, `Perfect ${this.counts[0]} · great ${this.counts[1]} · good ${this.counts[2]} · missed ${this.counts[3]}`),
     ];
     rows.forEach((s, i) => text(g, s, W / 2, 310 + i * 40, { size: 26, color: PENS.white, outline: '#0a0818', ow: 5 }));
-    if (r.tips) text(g, `הקהל זרק לכם ${cash(r.tips)} בטיפים`, W / 2, 432, { size: 26, color: PENS.green, outline: '#0a0818', ow: 5 });
+    if (r.tips) text(g, tr(`הקהל זרק לכם ${cash(r.tips)} בטיפים`, `The crowd threw you ${cash(r.tips)} in tips`), W / 2, 432, { size: 26, color: PENS.green, outline: '#0a0818', ow: 5 });
     box(g, 520, 480, 220, 70, { fill: PENS.cyan, color: INK, w: 4, r: 14, seed: 60 });
-    text(g, 'עוד שיר', 630, 516, { size: 30, color: INK, outline: PENS.white, ow: 4 });
+    text(g, tr('עוד שיר', 'Another song'), 630, 516, { size: 30, color: INK, outline: PENS.white, ow: 4 });
     box(g, 260, 480, 220, 70, { fill: 'rgba(255,253,246,0.85)', color: INK, w: 4, r: 14, seed: 61 });
-    text(g, 'יציאה', 370, 516, { size: 30, color: INK, outline: PENS.white, ow: 4 });
+    text(g, tr('יציאה', 'Leave'), 370, 516, { size: 30, color: INK, outline: PENS.white, ow: 4 });
   }
 }
 

@@ -5,6 +5,7 @@ import { setupDrawn, startMode } from './hybrid.js';
 import { rideSpec } from './partsum.js';
 import { buildRide } from './partbuild.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.6) A vehicle drawn freehand from the side (ui/freedraw.js, read by
 // game/freeform.js), its shape what it does. Each line drawn is read as a part of it:
 //   - a big closed shape: the body (as long, as high as it was drawn; as wide as it is long); a
@@ -23,7 +24,7 @@ import { buildRide } from './partbuild.js';
 // off the mark, jets give it a boost, wings let it glide off a ramp). It rides as one of the kinds
 // the city has, with a model built from the drawing, in the colours it was drawn in.
 
-export const KIND_NAME = { car: 'מכונית', glider: 'מכונית עם כנפיים', jetcar: 'מכונית סילון', copter: 'מסוק', plane: 'מטוס', still: 'פסל', bike: 'אופנוע', bus: 'אוטובוס', monster: 'מכונית מפלצת', tank: 'טנק', boat: 'סירה', balloon: 'כדור פורח', skate: 'סקייטבורד' };
+export const KIND_NAME = { car: tr('מכונית', 'car'), glider: tr('מכונית עם כנפיים', 'A car with wings'), jetcar: tr('מכונית סילון', 'A jet car'), copter: tr('מסוק', 'Helicopter'), plane: tr('מטוס', 'Plane'), still: tr('פסל', 'A statue'), bike: tr('אופנוע', 'Motorbike'), bus: tr('אוטובוס', 'Bus'), monster: tr('מכונית מפלצת', 'A monster car'), tank: tr('טנק', 'Tank'), boat: tr('סירה', 'Boat'), balloon: tr('כדור פורח', 'Hot-air balloon'), skate: tr('סקייטבורד', 'Skateboard') };
 
 // ------------------------------------------------------------------ reading the lines
 // a stroke's shape: [z, y] points in metres (z forward, y up from the ground)
@@ -199,7 +200,7 @@ function guess(sh, B, isMain, inside) {
 export function specOf(design) {
   const P = design.strokes;
   const bodies = P.filter((s) => s.type === 'body');
-  if (!bodies.length) return { ok: false, why: 'חסר גוף: ציירו צורה סגורה גדולה' };
+  if (!bodies.length) return { ok: false, why: tr('חסר גוף: ציירו צורה סגורה גדולה', 'No body: draw a big closed shape') };
   let x0 = Infinity;
   let x1 = -Infinity;
   let y0 = Infinity;
@@ -215,7 +216,7 @@ export function specOf(design) {
   }
   const L = x1 - x0;
   const H = y1 - y0;
-  if (L < (design.force ? 0.15 : 0.4)) return { ok: false, why: 'הגוף קטן מדי' };
+  if (L < (design.force ? 0.15 : 0.4)) return { ok: false, why: tr('הגוף קטן מדי', 'The body is too small') };
   const wheels = P.filter((s) => s.type === 'wheel').map((s) => {
     const sh = shapeOf(s.pts);
     return { z: sh.mx, y: sh.my, r: clamp((sh.w + sh.h) / 4, design.force === 'skate' ? 0.03 : 0.15, 1.3) };
@@ -245,7 +246,7 @@ export function specOf(design) {
   const base = kind === 'copter' || kind === 'plane' || kind === 'boat' || kind === 'balloon' ? kind : kind === 'still' ? null : 'car';
   const out = { ok: !!base, kind, base, label: KIND_NAME[kind], L, H, W, mass, area, wheels, wings, rotors, props, jets, guns, chord, x0, x1, y0, y1 };
   if (!base) {
-    out.why = 'בלי גלגלים, רוטור, או כנפיים עם מדחף — הוא לא יזוז';
+    out.why = tr('בלי גלגלים, רוטור, או כנפיים עם מדחף — הוא לא יזוז', 'No wheels, rotor, or wings with a propeller — it won\'t move');
     out.stats = { speed: 0, grip: 0, steady: 0, air: 0 };
     return out;
   }

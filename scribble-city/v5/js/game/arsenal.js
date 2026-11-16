@@ -1,5 +1,6 @@
 import { GRADE } from './weapons.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 6.6, not with ?classic) Handling the arsenal:
 //   - magazines: a gun holds so many shots before it has to be reloaded (R, or by itself once it
 //     is empty, a moment with the gun down); the rest wait in your pockets. The HUD shows both.
@@ -59,7 +60,7 @@ export class Arsenal {
     this.game.hud.updateWeapon();
     if (!this.told && !this.game.touch) {
       this.told = true;
-      this.game.hud.toast('טוענים… (R טוען לפני שהמחסנית נגמרת)', 'info', 2.4);
+      this.game.hud.toast(tr('טוענים… (R טוען לפני שהמחסנית נגמרת)', 'Reloading… (R reloads before the magazine runs out)'), 'info', 2.4);
     }
     return true;
   }
@@ -94,9 +95,9 @@ export class Arsenal {
   ammoText(slot) {
     if (slot.mag === undefined) return null;
     if (slot.mag > slot.ammo) slot.mag = slot.ammo;
-    if (this.reloadT > 0 && this.slot === slot) return 'טוענים…';
+    if (this.reloadT > 0 && this.slot === slot) return tr('טוענים…', 'Reloading…');
     const rest = slot.ammo - slot.mag;
-    return `${slot.mag} / ${rest}${slot.mag < this.magOf(slot) && rest > 0 && !this.game.touch ? ' · R לטעון' : ''}`;
+    return `${slot.mag} / ${rest}${slot.mag < this.magOf(slot) && rest > 0 && !this.game.touch ? tr(' · R לטעון', ' · R to reload') : ''}`;
   }
 
   // anything to refill? (the stationery shop asks only then: game/money.js)

@@ -1,6 +1,7 @@
 import { clamp } from '../core/util.js';
 import { placeOf, carNums } from './itemlook.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.27) The thing designed from the drawing. What a drawing is read as (game/partnet.js) says
 // what it is; here it is made the way such a thing is made - a machine gun on its mount, a cannon on
 // its carriage or in its turret, wings, a hot-air balloon - and the drawing says how: how long it is
@@ -1541,11 +1542,11 @@ export function variantOf(id, lines) {
   try {
     if (id === 'cannon') {
       const G = gunFrame(L, 'cannon');
-      return G.elev > 0.5 ? { name: 'מרגמה', say: 'ירי בקשת' } : null;
+      return G.elev > 0.5 ? { name: tr('מרגמה', 'Mortar'), say: tr('ירי בקשת', 'Arcing fire') } : null;
     }
     if (id === 'mg') {
       const t = mgTraits(gunFrame(L));
-      return t.barrels >= 3 ? { name: 'מיניגאן', say: `${t.barrels} קנים · מהיר פי 2` } : null;
+      return t.barrels >= 3 ? { name: tr('מיניגאן', 'Minigun'), say: tr(`${t.barrels} קנים · מהיר פי 2`, `${t.barrels} barrels · twice as fast`) } : null;
     }
 
   } catch (err) {

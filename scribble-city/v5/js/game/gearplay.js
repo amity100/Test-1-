@@ -1,6 +1,7 @@
 import { ITEMS, OPEN_ORDER, CATS, CAT_ORDER } from './itemcat.js';
 import { EARLY_GEAR, gearGone, isEarly, storyGift, chaseGear } from './drawlock.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.28) Not everything open: the things of the pen come as the game goes on.
 //
 // At the start: the machine gun, the turbo and the armour, one of each category on the car at a time.
@@ -80,10 +81,10 @@ export class GearPlay {
 
   // (a drawing of a thing not open yet) what is said by it: its name and what it takes
   lockSay(id) {
-    if (gearGone(this.game, id)) return 'נפתח בהמשך';
-    if (!this.lab && isEarly(this.game)) return 'נפתח בהמשך הסיפור';
+    if (gearGone(this.game, id)) return tr('נפתח בהמשך', 'Opens later');
+    if (!this.lab && isEarly(this.game)) return tr('נפתח בהמשך הסיפור', 'Opens later in the story');
     const n = this.pagesTo(id);
-    return n === 1 ? 'עוד דף שרטוט אחד' : `עוד ${n} דפי שרטוט`;
+    return n === 1 ? tr('עוד דף שרטוט אחד', 'One more blueprint page') : tr(`עוד ${n} דפי שרטוט`, `${n} more blueprint pages`);
   }
 
   // a blueprint page found: the next thing opens - its id, or null (all open)
@@ -95,8 +96,8 @@ export class GearPlay {
     this.save();
     const g = this.game;
     if (g.hud) {
-      if (id) g.hud.toast(`דף שרטוט${why ? ` (${why})` : ''} · נפתח: ${ITEMS[id].name}`, 'good', 3.4);
-      else g.hud.toast('דף שרטוט · הכול כבר פתוח', 'info', 2.4);
+      if (id) g.hud.toast(tr(`דף שרטוט${why ? ` (${why})` : ''} · נפתח: ${ITEMS[id].name}`, `Blueprint page${why ? ` (${why})` : ''} · opened: ${ITEMS[id].name}`), 'good', 3.4);
+      else g.hud.toast(tr('דף שרטוט · הכול כבר פתוח', 'Blueprint page · everything is open already'), 'info', 2.4);
     }
     if (g.audio) g.audio.play('pageflip', 0.7);
     return id;
@@ -114,7 +115,7 @@ export class GearPlay {
     const M = this.game.money;
     if (pr === null || (M && !M.can(pr))) return false;
     // (no money in this game: free, as the rest of the garage is)
-    if (M) M.pay(pr, `${ITEMS[id].name} רמה ${this.level(id) + 1}`);
+    if (M) M.pay(pr, tr(`${ITEMS[id].name} רמה ${this.level(id) + 1}`, `${ITEMS[id].name} level ${this.level(id) + 1}`));
     this.state.lv[id] = this.level(id) + 1;
     this.save();
     return true;

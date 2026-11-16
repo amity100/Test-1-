@@ -1,6 +1,7 @@
 import { NODES } from '../world/roads.js';
 import { AVES, STREETS, NORTH_EDGE, SOUTH_EDGE, WEST_EDGE, BLVD } from '../world/layout.js';
 
+import { tr } from '../core/lang.js';
 // The GPS (ROADMAP 2.2): a destination marked on the city's map, and the way there along the
 // roads, drawn on the map and on the minimap. The way is found on the traffic's own plan of the
 // roads (world/roads.js): every crossing, plus the ends of the roads past the last crossing (the
@@ -210,7 +211,7 @@ export class GPS {
       const name = this.target.name;
       this.clear();
       const hud = this.game.hud;
-      if (hud) hud.toast(name ? `הגעתם: ${name}` : 'הגעתם ליעד!', 'good', 2.4);
+      if (hud) hud.toast(name ? tr(`הגעתם: ${name}`, `You've arrived: ${name}`) : tr('הגעתם ליעד!', 'You\'ve reached your destination!'), 'good', 2.4);
       if (this.game.audio) this.game.audio.play('ding', 0.7);
       return;
     }
@@ -220,7 +221,7 @@ export class GPS {
       this.find();
     }
     const len = this.route ? this.route.len : d;
-    this.show(len < 1000 ? `${Math.max(10, Math.round(len / 10) * 10)} מ׳` : `${(len / 1000).toFixed(1)} ק״מ`);
+    this.show(len < 1000 ? tr(`${Math.max(10, Math.round(len / 10) * 10)} מ׳`, `${Math.max(10, Math.round(len / 10) * 10)} m`) : tr(`${(len / 1000).toFixed(1)} ק״מ`, `${(len / 1000).toFixed(1)} km`));
   }
 
   // the distance under the minimap (written only when it changes)

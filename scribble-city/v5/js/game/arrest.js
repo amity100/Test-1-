@@ -1,6 +1,7 @@
 import { dress } from './wardrobe.js';
 import { fmt } from './money.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 6.3, not with ?classic) Arrested instead of killed.
 //   - H (on a phone, the hands button) with the police after you: your hands go up. They hold
 //     their fire and the nearest officer walks up and puts the cuffs on. Move, or H again, and it
@@ -65,7 +66,7 @@ export class Arrest {
     // (the key, said once)
     if (!this.told && p.mode === 'foot' && !game.touch) {
       this.told = true;
-      game.hud.toast('המשטרה אחריכם. H — להרים ידיים ולהיכנע', 'info', 3);
+      game.hud.toast(tr('המשטרה אחריכם. H — להרים ידיים ולהיכנע', 'The police are after you. H — hands up and surrender'), 'info', 3);
     }
     const input = game.input;
     if (game.state === 'play' && input.wasPressed('KeyH') && p.mode === 'foot' && !game.dialog.open && !game.airdraw.open) {
@@ -126,7 +127,7 @@ export class Arrest {
     this.cuffT = 0;
     this.stats.surrenders++;
     game.player.fig.surrender = 1;
-    game.hud.toast('ידיים למעלה. השוטרים מפסיקים לירות ובאים לאזוק אתכם', 'info', 2.4);
+    game.hud.toast(tr('ידיים למעלה. השוטרים מפסיקים לירות ובאים לאזוק אתכם', 'Hands up. The cops stop shooting and come to cuff you'), 'info', 2.4);
   }
 
   drop(told) {
@@ -134,7 +135,7 @@ export class Arrest {
     this.cuffer = null;
     this.cuffT = 0;
     this.game.player.fig.surrender = 0;
-    if (told) this.game.hud.toast('הורדתם את הידיים, והם יורים שוב!', 'bad', 1.8);
+    if (told) this.game.hud.toast(tr('הורדתם את הידיים, והם יורים שוב!', 'You lowered your hands, and they\'re shooting again!'), 'bad', 1.8);
   }
 
   // the nearest officer comes up to you (game/enemies.js asks: Arrest.walk)
@@ -224,7 +225,7 @@ export class Arrest {
       const why = document.getElementById('busted-why');
       if (why) why.textContent = WHY[this.reason] || WHY.hands;
       const fine = document.getElementById('busted-fine');
-      if (fine) fine.textContent = this.fine ? `הקנס: ${fmt(this.fine)}, מהמזומן (ואם אין מספיק, מהבנק).` : '';
+      if (fine) fine.textContent = this.fine ? tr(`הקנס: ${fmt(this.fine)}, מהמזומן (ואם אין מספיק, מהבנק).`, `The fine: ${fmt(this.fine)}, from your cash (and if there isn't enough, from the bank).`) : '';
       if (this.sheet) this.sheet.classList.remove('hidden');
     }
   }
@@ -264,10 +265,10 @@ export class Arrest {
     this.stats.released++;
     game.state = 'play';
     if (!game.touch) game.input.requestLock(true);
-    const what = lost > 0 && vest ? 'הנשק והאפוד הוחרמו' : lost > 0 ? 'הנשק הוחרם' : vest ? 'האפוד הוחרם' : 'לא היה מה להחרים';
-    const paid = game.money && this.fine ? game.money.take(this.fine, 'קנס במשטרה') : 0;
+    const what = lost > 0 && vest ? tr('הנשק והאפוד הוחרמו', 'Your weapon and vest were confiscated') : lost > 0 ? tr('הנשק הוחרם', 'Your weapon was confiscated') : vest ? tr('האפוד הוחרם', 'Your vest was confiscated') : tr('לא היה מה להחרים', 'There was nothing to confiscate');
+    const paid = game.money && this.fine ? game.money.take(this.fine, tr('קנס במשטרה', 'Police fine')) : 0;
     this.fine = 0;
-    game.hud.toast(`שוחררתם מתחנת המשטרה. ${what}${paid ? `, ושילמתם קנס של ${fmt(paid)}` : ''}`, 'info', 3.4);
+    game.hud.toast(tr(`שוחררתם מתחנת המשטרה. ${what}${paid ? `, ושילמתם קנס של ${fmt(paid)}` : ''}`, `You were released from the police station. ${what}${paid ? tr(`, ושילמתם קנס של ${fmt(paid)}`, `, and paid a fine of ${fmt(paid)}`) : ''}`), 'info', 3.4);
   }
 
   // ------------------------------------------------------------------ the hands button (phones)
@@ -285,8 +286,8 @@ export class Arrest {
 }
 
 const WHY = {
-  hands: 'נכנעתם, והשוטרים אזקו אתכם.',
-  grab: 'שוטר תפס אתכם ואזק אתכם.',
-  down: 'נפלתם, והשוטרים אזקו אתכם במקום לירות.',
-  car: 'עצרתם, והשוטרים הוציאו אתכם מהרכב.',
+  hands: tr('נכנעתם, והשוטרים אזקו אתכם.', 'You surrendered, and the cops cuffed you.'),
+  grab: tr('שוטר תפס אתכם ואזק אתכם.', 'A cop caught you and cuffed you.'),
+  down: tr('נפלתם, והשוטרים אזקו אתכם במקום לירות.', 'You went down, and the cops cuffed you instead of shooting.'),
+  car: tr('עצרתם, והשוטרים הוציאו אתכם מהרכב.', 'You stopped, and the cops pulled you out of the car.'),
 };

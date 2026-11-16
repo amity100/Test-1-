@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Kit, itemMats, linC } from './items.js';
 import { clamp } from '../core/util.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.23) The broken bridge: the lab's first mission, for drawing on your car.
 //
 // The bridge out to the island at the end of 9th Street is broken off over the sea, and the police
@@ -32,12 +33,12 @@ const SLIP = { x0: 137, x1: 151, z0: 14, z1: 22 };
 const BACK = { x: 60, z: Z, yaw: Math.PI / 2 };
 // again, from the island (off to its side: not where a car lands)
 const AGAIN = { x: 172, z: 42 };
-const WAYS = { wings: 'כנפיים', rotor: 'רוטור', balloon: 'בלון', floats: 'מצופים', spring: 'קפיץ', plane: 'מטוס (כנפיים + סילון)', chute: 'מצנח', jump: 'קפיצה', bridge: 'גשר מתקפל' };
+const WAYS = { wings: tr('כנפיים', 'Wings'), rotor: tr('רוטור', 'Rotor'), balloon: tr('בלון', 'Balloon'), floats: tr('מצופים', 'Floats'), spring: tr('קפיץ', 'Spring'), plane: tr('מטוס (כנפיים + סילון)', 'A plane (wings + jet)'), chute: tr('מצנח', 'Parachute'), jump: tr('קפיצה', 'Jump'), bridge: tr('גשר מתקפל', 'Folding bridge') };
 const ALL_WAYS = ['wings', 'rotor', 'balloon', 'floats', 'spring', 'plane'];
 // (ROADMAP 11.25: with the part pen, what its "functional" category draws - floats are its propeller)
 const PEN_WAYS = ['wings', 'balloon', 'rotor', 'floats', 'spring', 'plane', 'bridge'];
 // (ROADMAP 11.28: by the names of the things of the pen - game/itemcat.js)
-const PEN_WAY_NAME = { floats: 'ערכת מים (סירה)', plane: 'מטוס (כנפיים + טורבו)', balloon: 'כדור פורח', rotor: 'מדחף מסוק', spring: 'קפיצה על־קולית', wings: 'כנפי מטוס', bridge: 'גשר מתקפל' };
+const PEN_WAY_NAME = { floats: tr('ערכת מים (סירה)', 'A water kit (boat)'), plane: tr('מטוס (כנפיים + טורבו)', 'A plane (wings + turbo)'), balloon: tr('כדור פורח', 'Hot-air balloon'), rotor: tr('מדחף מסוק', 'Helicopter rotor'), spring: tr('קפיצה על־קולית', 'Supersonic leap'), wings: tr('כנפי מטוס', 'Plane wings'), bridge: tr('גשר מתקפל', 'Folding bridge') };
 const KEY = 'scribble-city-v5-bridge';
 const RING_C = [1, 0.82, 0.16];
 
@@ -207,14 +208,14 @@ export class BrokenBridge {
       // (the way to it, once)
       if (this.state === 'idle' && !this.gpsOn && g.gps && g.time > 1) {
         this.gpsOn = true;
-        if (Math.hypot(pos.x - START.x, pos.z - START.z) > 20) g.gps.set(START.x, START.z, 'הגשר השבור');
+        if (Math.hypot(pos.x - START.x, pos.z - START.z) > 20) g.gps.set(START.x, START.z, tr('הגשר השבור', 'The broken bridge'));
       }
       if (this.state === 'won' && this.tellAt && g.time > this.tellAt) {
         this.tellAt = 0;
         const all = this.pen() ? PEN_WAYS : ALL_WAYS;
         const left = all.filter((k) => !this.solved.has(k));
         const n = all.length - left.length;
-        g.hud.toast(left.length ? `מצאתם ${n} מתוך ${all.length} דרכים — נסו גם: ${left.slice(0, 3).map((k) => this.wayName(k)).join(', ')} (העיגול הצהוב — שוב)` : 'מצאתם את כל הדרכים!', 'good', 5);
+        g.hud.toast(left.length ? tr(`מצאתם ${n} מתוך ${all.length} דרכים — נסו גם: ${left.slice(0, 3).map((k) => this.wayName(k)).join(', ')} (העיגול הצהוב — שוב)`, `You found ${n} of ${all.length} ways — try these too: ${left.slice(0, 3).map((k) => this.wayName(k)).join(', ')} (the yellow circle — again)`) : tr('מצאתם את כל הדרכים!', 'You found every way!'), 'good', 5);
       }
       const at = this.state === 'won' ? AGAIN : START;
       const ok = p.mode === 'foot' || (v && !v.air && (v.kind === 'car' || v.kind === 'bike') && Math.abs(v.speed || 0) < 9);
@@ -250,7 +251,7 @@ export class BrokenBridge {
     // (the way: to the bridge, then over to the island)
     if (g.gps && !this.gpsIsle && pos.x > RAMP0 - 30) {
       this.gpsIsle = true;
-      g.gps.set((ISLE.x0 + ISLE.x1) / 2, Z, 'האי');
+      g.gps.set((ISLE.x0 + ISLE.x1) / 2, Z, tr('האי', 'The island'));
     }
     // (by the bridge with nothing on the car that would get it over: what to try)
     const near = pos.x > 36 && pos.x < EDGE + 2 && Math.abs(pos.z - Z) < 40;
@@ -258,8 +259,8 @@ export class BrokenBridge {
     if (near && !this.toldPen && !this.toldOnce && pos.x > 48) {
       this.toldPen = true;
       this.toldOnce = true;
-      const what = this.pen() ? 'תנועה — ציירו כנפי מטוס, כדור פורח, מדחף מסוק, ערכת מים או גשר מתקפל' : 'ציירו על המכונית משהו שיעביר אתכם';
-      g.hud.radio(g.touch ? `הגשר שבור באמצע! ✎ — ${what}` : `הגשר שבור באמצע! Q — ${what}`);
+      const what = this.pen() ? tr('תנועה — ציירו כנפי מטוס, כדור פורח, מדחף מסוק, ערכת מים או גשר מתקפל', 'Movement — draw plane wings, a hot-air balloon, a helicopter rotor, a water kit or a folding bridge') : tr('ציירו על המכונית משהו שיעביר אתכם', 'Draw something on the car that will get you across');
+      g.hud.radio(g.touch ? tr(`הגשר שבור באמצע! ✎ — ${what}`, `The bridge is broken in the middle! ✎ — ${what}`) : tr(`הגשר שבור באמצע! Q — ${what}`, `The bridge is broken in the middle! Q — ${what}`));
       this.radioT = g.time + 6;
     }
     if (this.radioT && g.time > this.radioT) {
@@ -312,11 +313,11 @@ export class BrokenBridge {
     this.saved = null;
     this.toldPen = false;
     this.gpsIsle = false;
-    g.hud.big('הגשר השבור', 2000);
+    g.hud.big(tr('הגשר השבור', 'The broken bridge'), 2000);
     g.audio.play('alarm', 0.5);
-    g.hud.toast('המשטרה בדרך! הגשר לאי נשבר באמצע — תמצאו דרך לעבור את המים', 'bad', 4);
+    g.hud.toast(tr('המשטרה בדרך! הגשר לאי נשבר באמצע — תמצאו דרך לעבור את המים', 'The police are on the way! The bridge to the island broke in the middle — find a way across the water'), 'bad', 4);
     if (g.police) g.police.addHeat(1.8, v.pos.x, v.pos.z, true);
-    if (g.gps) g.gps.set(RAMP0 - 4, Z, 'הגשר השבור');
+    if (g.gps) g.gps.set(RAMP0 - 4, Z, tr('הגשר השבור', 'The broken bridge'));
     g.updateGoals();
   }
 
@@ -331,7 +332,7 @@ export class BrokenBridge {
     this.state = 'down';
     this.downT = 2.4;
     this.tries++;
-    g.hud.big('נפלתם למים!', 1700);
+    g.hud.big(tr('נפלתם למים!', 'You fell in the water!'), 1700);
     this.hint = null;
   }
 
@@ -355,11 +356,11 @@ export class BrokenBridge {
     this.used.clear();
     this.gpsIsle = false;
     // (ROADMAP 11.26: wings big enough lift it off - up, over, and down onto the island)
-    const up = g.touch ? '▲' : 'רווח';
+    const up = g.touch ? '▲' : tr('רווח', 'Space');
     const dn = g.touch ? '▼' : 'C';
-    const wings = `כנפיים גדולות: מהר, ${up} — ממריאה, ${dn} — נוחתת על האי`;
-    if (this.pen()) g.hud.toast(this.tries % 2 ? 'שוב! אולי ערכת מים — ולשוט מהחוף לרציף שמימין' : `שוב! ${wings} · או כדור פורח, מדחף מסוק, גשר מתקפל`, 'info', 4.5);
-    else g.hud.toast(this.tries % 2 ? 'שוב! אולי מצופים — צורה ארוכה ונמוכה לאורך המכונית, ולשוט לרציף שמימין' : `שוב! ${wings}`, 'info', 4.5);
+    const wings = tr(`כנפיים גדולות: מהר, ${up} — ממריאה, ${dn} — נוחתת על האי`, `Big wings: fast, ${up} — takes off, ${dn} — lands on the island`);
+    if (this.pen()) g.hud.toast(this.tries % 2 ? tr('שוב! אולי ערכת מים — ולשוט מהחוף לרציף שמימין', 'Again! Maybe a water kit — and sail from the beach to the jetty on the right') : tr(`שוב! ${wings} · או כדור פורח, מדחף מסוק, גשר מתקפל`, `Again! ${wings} · or a hot-air balloon, a helicopter rotor, a folding bridge`), 'info', 4.5);
+    else g.hud.toast(this.tries % 2 ? tr('שוב! אולי מצופים — צורה ארוכה ונמוכה לאורך המכונית, ולשוט לרציף שמימין', 'Again! Maybe floats — a long, low shape along the car, and sail to the jetty on the right') : tr(`שוב! ${wings}`, `Again! ${wings}`), 'info', 4.5);
   }
 
   win(v) {
@@ -372,13 +373,13 @@ export class BrokenBridge {
     } catch (err) {
       // (not kept)
     }
-    g.hud.big('עברתם את הגשר!', 2400);
+    g.hud.big(tr('עברתם את הגשר!', 'You got across the bridge!'), 2400);
     g.audio.play('cheer', 0.7);
-    g.hud.toast(`הדרך שלכם: ${this.wayName(how)}`, 'good', 4.5);
+    g.hud.toast(tr(`הדרך שלכם: ${this.wayName(how)}`, `Your way: ${this.wayName(how)}`), 'good', 4.5);
     if (g.police) g.police.clear();
-    if (g.money) g.money.earn(how === 'jump' ? 200 : 400, 'הגשר השבור');
+    if (g.money) g.money.earn(how === 'jump' ? 200 : 400, tr('הגשר השבור', 'The broken bridge'));
     // (ROADMAP 11.28: a blueprint page for it - game/gearplay.js)
-    if (g.gear) g.gear.play.page('הגשר השבור');
+    if (g.gear) g.gear.play.page(tr('הגשר השבור', 'The broken bridge'));
     if (g.gps) g.gps.clear();
     this.tellAt = g.time + 3;
     this.hint = null;
@@ -411,11 +412,11 @@ export class BrokenBridge {
     if (this.state === 'on' || this.state === 'down') {
       const v = g.player.inVehicle;
       return [
-        { text: 'לעבור לאי — הגשר שבור באמצע', done: false },
-        { text: g.touch ? 'לצייר על המכונית (✎) משהו שיעביר אותה' : 'לצייר על המכונית (Q) משהו שיעביר אותה', done: !!(v && canCross(v)) },
+        { text: tr('לעבור לאי — הגשר שבור באמצע', 'Get to the island — the bridge is broken in the middle'), done: false },
+        { text: g.touch ? tr('לצייר על המכונית (✎) משהו שיעביר אותה', 'Draw something on the car (✎) that will get it across') : tr('לצייר על המכונית (Q) משהו שיעביר אותה', 'Draw something on the car (Q) that will get it across'), done: !!(v && canCross(v)) },
       ];
     }
-    if (this.state === 'idle') return [{ text: 'משימה: הגשר השבור — העיגול הצהוב בקצה רחוב 9', done: false }];
+    if (this.state === 'idle') return [{ text: tr('משימה: הגשר השבור — העיגול הצהוב בקצה רחוב 9', 'Mission: the broken bridge — the yellow circle at the end of 9th Street'), done: false }];
     return null;
   }
 

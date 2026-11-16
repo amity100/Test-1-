@@ -1,5 +1,6 @@
 import { angleDiff } from '../core/util.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 6.4, not with ?classic) Getting away. The police see what is in front of them and in
 // their line of sight (game/enemies.js; their cars too, now: in front of them, and all round up
 // close). And what they look for while they search is what they saw last:
@@ -16,10 +17,10 @@ const CAR_EYES = 1.3; // a police car sees in front of it (radians either side),
 const CAR_RANGE = 45; // (game/police.js)
 
 const TOLD = {
-  car: 'רכב אחר: הם מחפשים את הרכב הקודם, וקשה להם לזהות אתכם',
-  paint: 'צבע חדש: הם לא מזהים את הרכב',
-  foot: 'ברגל: הם מחפשים רכב, וקשה להם לזהות אתכם',
-  look: 'בגדים אחרים: קשה להם לזהות אתכם',
+  car: tr('רכב אחר: הם מחפשים את הרכב הקודם, וקשה להם לזהות אתכם', 'A different car: they\'re looking for the old one, and it\'s hard for them to recognize you'),
+  paint: tr('צבע חדש: הם לא מזהים את הרכב', 'New paint: they don\'t recognize the car'),
+  foot: tr('ברגל: הם מחפשים רכב, וקשה להם לזהות אתכם', 'On foot: they\'re looking for a car, and it\'s hard for them to recognize you'),
+  look: tr('בגדים אחרים: קשה להם לזהות אתכם', 'Different clothes: it\'s hard for them to recognize you'),
 };
 
 function paintKey(v) {
@@ -132,7 +133,7 @@ export class Lose {
     if (!P.hostile || !P.searching) return false;
     P.clear();
     this.stats.sprayed++;
-    game.hud.toast('צבע חדש, והמשטרה איבדה את העקבות', 'good', 2.8);
+    game.hud.toast(tr('צבע חדש, והמשטרה איבדה את העקבות', 'New paint, and the police lost the trail'), 'good', 2.8);
     return true;
   }
 }

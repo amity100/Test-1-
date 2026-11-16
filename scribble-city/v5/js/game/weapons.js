@@ -6,40 +6,41 @@ import { blendMatrix } from './materialize.js';
 import { Fists, FISTS } from './fists.js';
 import { clamp } from '../core/util.js';
 
+import { tr } from '../core/lang.js';
 // kind: melee (swung), gun (fires projectiles), throw (the thing itself flies), beam (a ray while
 // the trigger is held). The first ones are the original arsenal; the rest are drawn from the new
 // blueprints on the billboards around the city.
 export const WEAPON_DEFS = {
-  pencil: { id: 'pencil', name: 'עיפרון-מחק', kind: 'melee', damage: 34, rate: 2.4, range: 2.7 },
-  paint: { id: 'paint', name: 'אקדח צבע', kind: 'gun', projectile: 'paint', damage: 10, rate: 7.5, speed: 46, gravity: 6, spread: 0.016, ammo: 90, hands: 1 },
-  rifle: { id: 'rifle', name: 'רובה עפרונות', kind: 'gun', projectile: 'pencil', damage: 27, rate: 3.4, speed: 92, gravity: 2.5, spread: 0.005, ammo: 40, hands: 2 },
-  bazooka: { id: 'bazooka', name: 'בזוקת מחקים', kind: 'gun', projectile: 'eraser', damage: 150, radius: 6.5, rate: 0.8, speed: 36, gravity: 4, spread: 0.004, ammo: 8, hands: 2 },
+  pencil: { id: 'pencil', name: tr('עיפרון-מחק', 'Pencil-eraser'), kind: 'melee', damage: 34, rate: 2.4, range: 2.7 },
+  paint: { id: 'paint', name: tr('אקדח צבע', 'Paint gun'), kind: 'gun', projectile: 'paint', damage: 10, rate: 7.5, speed: 46, gravity: 6, spread: 0.016, ammo: 90, hands: 1 },
+  rifle: { id: 'rifle', name: tr('רובה עפרונות', 'Pencil rifle'), kind: 'gun', projectile: 'pencil', damage: 27, rate: 3.4, speed: 92, gravity: 2.5, spread: 0.005, ammo: 40, hands: 2 },
+  bazooka: { id: 'bazooka', name: tr('בזוקת מחקים', 'Eraser bazooka'), kind: 'gun', projectile: 'eraser', damage: 150, radius: 6.5, rate: 0.8, speed: 36, gravity: 4, spread: 0.004, ammo: 8, hands: 2 },
   // police gear you can pick up
-  pen: { id: 'pen', name: 'עט-אקדח', kind: 'gun', projectile: 'ink', damage: 15, rate: 4, speed: 78, gravity: 3, spread: 0.008, ammo: 24, hands: 1, gear: true },
-  m4: { id: 'm4', name: 'רובה צבע M4', kind: 'gun', projectile: 'paint', damage: 8, rate: 10, speed: 64, gravity: 4, spread: 0.02, ammo: 60, hands: 2, gear: true },
-  bigEraser: { id: 'bigEraser', name: 'מחק בית-ספר ענק', kind: 'melee', damage: 62, rate: 1.7, range: 2.8, uses: 30, gear: true },
+  pen: { id: 'pen', name: tr('עט-אקדח', 'Pen pistol'), kind: 'gun', projectile: 'ink', damage: 15, rate: 4, speed: 78, gravity: 3, spread: 0.008, ammo: 24, hands: 1, gear: true },
+  m4: { id: 'm4', name: tr('רובה צבע M4', 'M4 paint rifle'), kind: 'gun', projectile: 'paint', damage: 8, rate: 10, speed: 64, gravity: 4, spread: 0.02, ammo: 60, hands: 2, gear: true },
+  bigEraser: { id: 'bigEraser', name: tr('מחק בית-ספר ענק', 'Giant school eraser'), kind: 'melee', damage: 62, rate: 1.7, range: 2.8, uses: 30, gear: true },
   // the new arsenal
-  shotgun: { id: 'shotgun', name: 'רובה ציד צבעוני', kind: 'gun', projectile: 'crayon', pellets: 8, damage: 11, rate: 1.3, speed: 72, gravity: 3, spread: 0.07, ammo: 30, hands: 2, kick: 0.22, sound: 'shotgun' },
-  stapler: { id: 'stapler', name: 'אקדח שדכן', kind: 'gun', projectile: 'staple', damage: 8, rate: 9, speed: 88, gravity: 1.2, spread: 0.02, ammo: 160, hands: 1, pin: 0.45, sound: 'staple' },
-  katana: { id: 'katana', name: 'חרב סרגל', kind: 'melee', damage: 78, rate: 2.6, range: 3.3, arc: 1.5, slash: true },
-  planes: { id: 'planes', name: 'משגר מטוסי נייר', kind: 'gun', projectile: 'plane', damage: 70, radius: 3.4, rate: 1.6, speed: 21, gravity: 0, spread: 0.03, ammo: 18, hands: 2, homing: 3.4, sound: 'whoosh' },
-  inkbomb: { id: 'inkbomb', name: 'רימון דיו', kind: 'throw', projectile: 'inkbomb', damage: 125, radius: 5.5, rate: 1.1, speed: 17, gravity: 16, ammo: 6, hands: 1, fuse: 1.6 },
-  glue: { id: 'glue', name: 'אקדח דבק', kind: 'gun', projectile: 'glue', damage: 6, rate: 3.2, speed: 40, gravity: 8, spread: 0.012, ammo: 40, hands: 1, stick: 4.5, sound: 'glue' },
-  laser: { id: 'laser', name: 'לייזר מרקר זוהר', kind: 'beam', damage: 95, range: 90, ammo: 14, hands: 2 },
-  boomerang: { id: 'boomerang', name: 'מספריים בומרנג', kind: 'throw', projectile: 'scissors', damage: 58, rate: 1.4, speed: 27, gravity: 0, range: 22, hands: 1 },
-  minigun: { id: 'minigun', name: 'מיניגאן מחדדים', kind: 'gun', projectile: 'shaving', damage: 9, rate: 20, speed: 96, gravity: 2, spread: 0.04, ammo: 450, hands: 2, spin: true, sound: 'mini' },
-  shield: { id: 'shield', name: 'מגן קרטון', kind: 'melee', damage: 24, rate: 1.5, range: 2.1, block: 0.85, uses: 80 },
+  shotgun: { id: 'shotgun', name: tr('רובה ציד צבעוני', 'Colorful shotgun'), kind: 'gun', projectile: 'crayon', pellets: 8, damage: 11, rate: 1.3, speed: 72, gravity: 3, spread: 0.07, ammo: 30, hands: 2, kick: 0.22, sound: 'shotgun' },
+  stapler: { id: 'stapler', name: tr('אקדח שדכן', 'Stapler pistol'), kind: 'gun', projectile: 'staple', damage: 8, rate: 9, speed: 88, gravity: 1.2, spread: 0.02, ammo: 160, hands: 1, pin: 0.45, sound: 'staple' },
+  katana: { id: 'katana', name: tr('חרב סרגל', 'Ruler sword'), kind: 'melee', damage: 78, rate: 2.6, range: 3.3, arc: 1.5, slash: true },
+  planes: { id: 'planes', name: tr('משגר מטוסי נייר', 'Paper plane launcher'), kind: 'gun', projectile: 'plane', damage: 70, radius: 3.4, rate: 1.6, speed: 21, gravity: 0, spread: 0.03, ammo: 18, hands: 2, homing: 3.4, sound: 'whoosh' },
+  inkbomb: { id: 'inkbomb', name: tr('רימון דיו', 'Ink grenade'), kind: 'throw', projectile: 'inkbomb', damage: 125, radius: 5.5, rate: 1.1, speed: 17, gravity: 16, ammo: 6, hands: 1, fuse: 1.6 },
+  glue: { id: 'glue', name: tr('אקדח דבק', 'Glue gun'), kind: 'gun', projectile: 'glue', damage: 6, rate: 3.2, speed: 40, gravity: 8, spread: 0.012, ammo: 40, hands: 1, stick: 4.5, sound: 'glue' },
+  laser: { id: 'laser', name: tr('לייזר מרקר זוהר', 'Glowing marker laser'), kind: 'beam', damage: 95, range: 90, ammo: 14, hands: 2 },
+  boomerang: { id: 'boomerang', name: tr('מספריים בומרנג', 'Boomerang scissors'), kind: 'throw', projectile: 'scissors', damage: 58, rate: 1.4, speed: 27, gravity: 0, range: 22, hands: 1 },
+  minigun: { id: 'minigun', name: tr('מיניגאן מחדדים', 'Sharpener minigun'), kind: 'gun', projectile: 'shaving', damage: 9, rate: 20, speed: 96, gravity: 2, spread: 0.04, ammo: 450, hands: 2, spin: true, sound: 'mini' },
+  shield: { id: 'shield', name: tr('מגן קרטון', 'Cardboard shield'), kind: 'melee', damage: 24, rate: 1.5, range: 2.1, block: 0.85, uses: 80 },
   // the machine guns that rub the city out: correction fluid, little erasers, paint
-  tippex: { id: 'tippex', name: 'מקלע טיפקס', kind: 'gun', projectile: 'tippex', damage: 13, rate: 11, speed: 64, gravity: 5, spread: 0.026, ammo: 280, hands: 2, sound: 'tippex' },
-  erasermg: { id: 'erasermg', name: 'מקלע מחקים', kind: 'gun', projectile: 'rubber', damage: 15, rate: 12, speed: 82, gravity: 3, spread: 0.03, ammo: 320, hands: 2, sound: 'rubber' },
-  paintmg: { id: 'paintmg', name: 'מקלע צבע', kind: 'gun', projectile: 'paintmg', damage: 11, rate: 14, speed: 58, gravity: 5, spread: 0.034, ammo: 380, hands: 2, sound: 'paint' },
+  tippex: { id: 'tippex', name: tr('מקלע טיפקס', 'White-out machine gun'), kind: 'gun', projectile: 'tippex', damage: 13, rate: 11, speed: 64, gravity: 5, spread: 0.026, ammo: 280, hands: 2, sound: 'tippex' },
+  erasermg: { id: 'erasermg', name: tr('מקלע מחקים', 'Eraser machine gun'), kind: 'gun', projectile: 'rubber', damage: 15, rate: 12, speed: 82, gravity: 3, spread: 0.03, ammo: 320, hands: 2, sound: 'rubber' },
+  paintmg: { id: 'paintmg', name: tr('מקלע צבע', 'Paint machine gun'), kind: 'gun', projectile: 'paintmg', damage: 11, rate: 14, speed: 58, gravity: 5, spread: 0.034, ammo: 380, hands: 2, sound: 'paint' },
 };
 
 export const GRADE = {
-  perfect: { dmg: 1.3, ammo: 1.5, spread: 0.5, jam: 0, speed: 1.1, label: 'מושלם' },
-  good: { dmg: 1, ammo: 1, spread: 1, jam: 0, speed: 1, label: 'טוב' },
-  wonky: { dmg: 0.75, ammo: 0.9, spread: 3.2, jam: 0.12, speed: 0.85, label: 'עקום' },
-  fail: { dmg: 0.25, ammo: 0.6, spread: 6, jam: 0.3, speed: 0.32, label: 'גרוע' },
+  perfect: { dmg: 1.3, ammo: 1.5, spread: 0.5, jam: 0, speed: 1.1, label: tr('מושלם', 'Perfect') },
+  good: { dmg: 1, ammo: 1, spread: 1, jam: 0, speed: 1, label: tr('טוב', 'Good') },
+  wonky: { dmg: 0.75, ammo: 0.9, spread: 3.2, jam: 0.12, speed: 0.85, label: tr('עקום', 'Crooked') },
+  fail: { dmg: 0.25, ammo: 0.6, spread: 6, jam: 0.3, speed: 0.32, label: tr('גרוע', 'Bad') },
 };
 
 const PAINT_COLORS = [[0.85, 0.35, 0.3], [0.3, 0.5, 0.85], [0.35, 0.7, 0.4], [0.9, 0.72, 0.25], [0.6, 0.4, 0.75]];
@@ -253,7 +254,7 @@ export class Weapons {
     if (this.slots[i].def.bare && !this.fistsTold) {
       this.fistsTold = true;
       const touch = this.game.touch;
-      this.game.hud.toast(touch ? 'אגרופים! לחיצה — מכה, שלוש ברצף — בעיטה · כפתור המגן — הגנה' : 'אגרופים! קליק — מכה, שלוש ברצף — בעיטה · קליק ימני — הגנה', 'info', 3.4);
+      this.game.hud.toast(touch ? tr('אגרופים! לחיצה — מכה, שלוש ברצף — בעיטה · כפתור המגן — הגנה', 'Fists! Tap — a punch, three in a row — a kick · the shield button — block') : tr('אגרופים! קליק — מכה, שלוש ברצף — בעיטה · קליק ימני — הגנה', 'Fists! Click — a punch, three in a row — a kick · right-click — block'), 'info', 3.4);
     }
   }
 
@@ -340,7 +341,7 @@ export class Weapons {
       // (only drawing for now: the pencil's eraser end does nothing yet - said, now and then)
       if (input.firePressed && game.time - (this.drawOnlyT || -99) > 6) {
         this.drawOnlyT = game.time;
-        game.hud.toast(game.touch ? 'בינתיים רק מציירים: כפתור העיפרון ✏ — וציירו' : 'בינתיים רק מציירים: Q — וציירו באוויר', 'info', 2.6);
+        game.hud.toast(game.touch ? tr('בינתיים רק מציירים: כפתור העיפרון ✏ — וציירו', 'For now you only draw: the pencil button ✏ — and draw') : tr('בינתיים רק מציירים: Q — וציירו באוויר', 'For now you only draw: Q — and draw in the air'), 'info', 2.6);
       }
     } else if (canAct && def.kind === 'melee') {
       if ((input.firePressed || input.fire) && this.cooldown <= 0) {
@@ -508,7 +509,7 @@ export class Weapons {
       game.civilians.panic(at, 40, 'shot', { by: 'player', armed: true });
       game.onCrime('shoot', at.x, at.z);
     }
-    if (slot.ammo <= 0) this.drop(slot, `ה${def.name} נגמר — אפשר לצייר אותו שוב`);
+    if (slot.ammo <= 0) this.drop(slot, tr(`ה${def.name} נגמר — אפשר לצייר אותו שוב`, `The ${def.name} ran out — you can draw it again`));
     game.hud.updateWeapon();
   }
 
@@ -624,7 +625,7 @@ export class Weapons {
       this.launch(slot, from.x, from.y, from.z, hx * sh, vy, hz * sh, { fuse: def.fuse, life: def.fuse + 0.3, spin: 0, el: def.element || null });
       slot.ammo--;
       game.audio.play('swing');
-      if (slot.ammo <= 0) this.drop(slot, 'נגמרו בקבוקי הדיו — אפשר לצייר עוד');
+      if (slot.ammo <= 0) this.drop(slot, tr('נגמרו בקבוקי הדיו — אפשר לצייר עוד', 'The ink bottles ran out — you can draw more'));
     } else {
       // the scissors: straight out to the aim (or as far as they go), then home
       const dir = _v.copy(to).sub(from).normalize();
@@ -695,7 +696,7 @@ export class Weapons {
       game.onCrime('shoot', player.pos.x, player.pos.z);
       game.audio.play('laser', 0.6);
     }
-    if (slot.ammo <= 0) this.drop(slot, 'המרקר הזוהר התייבש — אפשר לצייר חדש');
+    if (slot.ammo <= 0) this.drop(slot, tr('המרקר הזוהר התייבש — אפשר לצייר חדש', 'The glowing marker dried up — you can draw a new one'));
     game.hud.updateWeapon();
   }
 
@@ -792,7 +793,7 @@ export class Weapons {
       if (!over && slot.uses !== undefined) {
         // a real eraser wears down as you use it
         slot.uses--;
-        if (slot.uses <= 0) this.drop(slot, `ה${def.name} נשחק עד הסוף`);
+        if (slot.uses <= 0) this.drop(slot, tr(`ה${def.name} נשחק עד הסוף`, `The ${def.name} wore down to nothing`));
         game.hud.updateWeapon();
       }
     }
@@ -834,8 +835,8 @@ export class Weapons {
       if (S.uses <= 0) {
         if (S === this.off) {
           this.clearOff();
-          game.hud.toast('המגן נקרע — אפשר לצייר חדש', 'info');
-        } else this.drop(slot, 'המגן נקרע — אפשר לצייר חדש');
+          game.hud.toast(tr('המגן נקרע — אפשר לצייר חדש', 'The shield tore — you can draw a new one'), 'info');
+        } else this.drop(slot, tr('המגן נקרע — אפשר לצייר חדש', 'The shield tore — you can draw a new one'));
       }
       game.hud.updateWeapon();
     }

@@ -45,26 +45,26 @@
   <div class="ld-grade"></div>
   <div class="ld-grain"></div>
   <div class="ld-logo">
-    <div class="ld-kicker">חוף מיאמי · שקיעה</div>
+    <div class="ld-kicker" data-he="חוף מיאמי · שקיעה">Miami Beach · Sunset</div>
     <h1 dir="ltr">Beyond the Outline</h1>
-    <div class="ld-sub">מה שמציירים — אמיתי</div>
+    <div class="ld-sub" data-he="מה שמציירים — אמיתי">What you draw is real</div>
   </div>
   <div id="ld-note" class="hidden"></div>
   <div class="ld-tips">
-    <div class="ld-tip-h">טיפ</div>
-    <p style="--i:0">מה שמציירים נהיה אמיתי: ציירו באוויר רובה, חרב או אפילו מסוק — והם בידיים שלכם.</p>
-    <p style="--i:1">רוטור על גג המכונית — והיא ממריאה כמו מסוק. כנפיים — והיא דואה.</p>
-    <p style="--i:2">כל מכונית שחונה ברחוב יכולה להיות שלכם. רק שהמשטרה לא תראה.</p>
-    <p style="--i:3">ציירו כנפיים על המכונית — והיא גולשת מעל הגגות.</p>
-    <p style="--i:4">מצלמים שלטי שרטוטים ברחבי העיר ומציירים אותם. ככל שהציור טוב יותר — הנשק חזק יותר.</p>
-    <p style="--i:5">נכנסים לכל חנות שהדלת שלה פתוחה: לקנות, לאכול, או סתם להסתכל.</p>
+    <div class="ld-tip-h" data-he="טיפ">Tip</div>
+    <p style="--i:0" data-he="מה שמציירים נהיה אמיתי: ציירו באוויר רובה, חרב או אפילו מסוק — והם בידיים שלכם.">What you draw becomes real: sketch a rifle, a sword, even a helicopter in the air — and it’s in your hands.</p>
+    <p style="--i:1" data-he="כל מכונית שחונה ברחוב יכולה להיות שלכם. רק שהמשטרה לא תראה.">Any car parked on the street can be yours. Just don’t let the cops see you.</p>
+    <p style="--i:2" data-he="טורבו על המכונית — והיא טסה קדימה.">Draw a turbo on your car — and it rockets forward.</p>
+    <p style="--i:3" data-he="ציור שציירתם פעם אחת נשמר אצלכם — ומאז הוא מוכן בלחיצה.">Anything you’ve drawn once is saved — after that it’s ready at a tap.</p>
+    <p style="--i:4" data-he="מצלמים שלטי שרטוטים ברחבי העיר ומציירים אותם. ככל שהציור טוב יותר — הנשק חזק יותר.">Photograph blueprint signs around the city and draw them. The better your drawing, the stronger the weapon.</p>
+    <p style="--i:5" data-he="נכנסים לכל חנות שהדלת שלה פתוחה: לקנות, לאכול, או סתם להסתכל.">Walk into any shop with an open door: buy, eat, or just look around.</p>
   </div>
   <div class="ld-meter">
     <div class="ld-track">
       <div class="ld-fill"></div>
       <div class="ld-ride"><svg class="ld-pencil" viewBox="0 0 60 16" aria-hidden="true"><path d="M12 2h38v12H12z" fill="#ffd23f" stroke="#1b1430" stroke-width="2"/><path d="M12 6h38" stroke="#e8a92a" stroke-width="2"/><path d="M50 2h8v12h-8z" fill="#ff7ab8" stroke="#1b1430" stroke-width="2"/><path d="M12 2L1.5 8 12 14z" fill="#f3d7a8" stroke="#1b1430" stroke-width="2" stroke-linejoin="round"/><path d="M1.5 8l4.5-2.6v5.2z" fill="#1b1430"/></svg></div>
     </div>
-    <div class="ld-row"><span id="ld-status">מחדדים את העטים…</span><span id="ld-pct">0%</span></div>
+    <div class="ld-row"><span id="ld-status" data-he="מחדדים את העטים…">Sharpening the pens…</span><span id="ld-pct">0%</span></div>
   </div>
   <!-- (round 10: once loaded, this is the game's start screen - its buttons come here) -->
   <div id="ld-start"></div>
@@ -128,32 +128,32 @@
     <div id="underwater" class="hidden"></div>
     <div id="damage"></div>
     <div id="splats"></div>
-    <div id="wanted" class="hidden" aria-label="רמת חיפוש משטרתי"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
+    <div id="wanted" class="hidden" aria-label="Police wanted level" data-he-aria="רמת חיפוש משטרתי"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
 
     <div id="topbar">
       <div id="health" class="paper-card">
-        <div class="label">חיים</div>
+        <div class="label" data-he="חיים">Health</div>
         <div class="bar"><div class="fill"></div></div>
-        <div id="breath" class="hidden" aria-label="אוויר"><span class="ico">○</span><div class="bar"><div class="fill"></div></div></div>
-        <div id="stamina" class="hidden" aria-label="סיבולת"><span class="ico">»</span><div class="bar"><div class="fill"></div></div></div>
-        <div id="armor" class="hidden" aria-label="אפוד מגן"><span class="ico">◈</span><div class="bar"><div class="fill"></div></div></div>
+        <div id="breath" class="hidden" aria-label="Air" data-he-aria="אוויר"><span class="ico">○</span><div class="bar"><div class="fill"></div></div></div>
+        <div id="stamina" class="hidden" aria-label="Stamina" data-he-aria="סיבולת"><span class="ico">»</span><div class="bar"><div class="fill"></div></div></div>
+        <div id="armor" class="hidden" aria-label="Body armor" data-he-aria="אפוד מגן"><span class="ico">◈</span><div class="bar"><div class="fill"></div></div></div>
       </div>
       <div id="vehicle-hp" class="paper-card hidden">
-        <div class="label">כלי</div>
+        <div class="label" data-he="כלי">Vehicle</div>
         <div class="bar"><div class="fill"></div></div>
-        <div id="fuel" class="hidden" aria-label="דלק"><span class="ico">⛽</span><div class="bar"><div class="fill"></div></div></div>
+        <div id="fuel" class="hidden" aria-label="Fuel" data-he-aria="דלק"><span class="ico">⛽</span><div class="bar"><div class="fill"></div></div></div>
       </div>
       <div id="district" class="paper-card"></div>
-      <div id="clock" class="paper-card" aria-label="השעה בעיר"></div>
-      <div id="money" class="paper-card hidden" aria-label="מזומן"><span id="money-cash" dir="ltr"></span></div>
-      <div id="ink" class="paper-card hidden" aria-label="דיו" title="הדיו בעט"><span class="bottle"><i id="ink-fill"></i></span></div>
+      <div id="clock" class="paper-card" aria-label="City time" data-he-aria="השעה בעיר"></div>
+      <div id="money" class="paper-card hidden" aria-label="Cash" data-he-aria="מזומן"><span id="money-cash" dir="ltr"></span></div>
+      <div id="ink" class="paper-card hidden" aria-label="Ink" data-he-aria="דיו" title="Ink left in the pen" data-he-title="הדיו בעט"><span class="bottle"><i id="ink-fill"></i></span></div>
     </div>
 
     <div id="goals" class="sticky"></div>
 
     <div id="minimap-wrap" class="paper-card"><canvas id="minimap" width="200" height="200"></canvas></div>
-    <div id="gps-dist" class="hidden" aria-label="המרחק ליעד"></div>
-    <div id="saving" class="hidden">נשמר ✓</div>
+    <div id="gps-dist" class="hidden" aria-label="Distance to destination" data-he-aria="המרחק ליעד"></div>
+    <div id="saving" class="hidden" data-he="נשמר ✓">Saved ✓</div>
 
     <div id="weapon" class="paper-card">
       <canvas id="weapon-icon" width="120" height="72"></canvas>
@@ -164,7 +164,7 @@
 
     <div id="radio" class="hidden" dir="ltr"></div>
     <div id="subs" class="hidden" dir="ltr"></div>
-    <div id="hidden-tag" class="hidden">מוסתר</div>
+    <div id="hidden-tag" class="hidden" data-he="מוסתר">Hidden</div>
     <div id="prompt" class="hidden"></div>
     <div id="toasts"></div>
     <div id="bigmsg" class="hidden"></div>
@@ -174,11 +174,11 @@
   <!-- the paint shop (ROADMAP 4.6): the car from the side, its colour, a design drawn on it -->
   <div id="paintshop" class="hidden">
     <div class="ps-sheet paper-card">
-      <div class="ps-head"><span class="ps-title">צבעייה</span><span class="ps-hint">בוחרים צבע ומציירים על הרכב. הציור יופיע על שני הצדדים</span></div>
+      <div class="ps-head"><span class="ps-title" data-he="צבעייה">Paint Shop</span><span class="ps-hint" data-he="בוחרים צבע ומציירים על הרכב. הציור יופיע על שני הצדדים">Pick a color and draw on the car. The drawing shows on both sides</span></div>
       <canvas id="ps-canvas" width="1000" height="400"></canvas>
-      <div class="ps-row"><span class="ps-label">צבע הרכב</span><div id="ps-paints" class="ps-swatches"></div></div>
-      <div class="ps-row"><span class="ps-label">עט</span><div id="ps-pens" class="ps-swatches"></div><button id="ps-thin" class="ps-btn">דק</button><button id="ps-thick" class="ps-btn">עבה</button></div>
-      <div class="ps-row ps-actions"><button id="ps-undo" class="ps-btn">בטל קו</button><button id="ps-clear" class="ps-btn">נקה ציור</button><span class="ps-gap"></span><button id="ps-cancel" class="ps-btn">ביטול</button><button id="ps-done" class="ps-btn primary">צבעו את הרכב!</button></div>
+      <div class="ps-row"><span class="ps-label" data-he="צבע הרכב">Car color</span><div id="ps-paints" class="ps-swatches"></div></div>
+      <div class="ps-row"><span class="ps-label" data-he="עט">Pen</span><div id="ps-pens" class="ps-swatches"></div><button id="ps-thin" class="ps-btn" data-he="דק">Thin</button><button id="ps-thick" class="ps-btn" data-he="עבה">Thick</button></div>
+      <div class="ps-row ps-actions"><button id="ps-undo" class="ps-btn" data-he="בטל קו">Undo line</button><button id="ps-clear" class="ps-btn" data-he="נקה ציור">Clear drawing</button><span class="ps-gap"></span><button id="ps-cancel" class="ps-btn" data-he="ביטול">Cancel</button><button id="ps-done" class="ps-btn primary" data-he="צבעו את הרכב!">Paint the car!</button></div>
     </div>
   </div>
 
@@ -186,27 +186,27 @@
     <div id="stick-zone"><div id="stick-base"><div id="stick-knob"></div></div></div>
     <div id="look-zone"></div>
     <!-- at the wheel (core/input.js): ◀ ▶ under the left thumb, one strip to slide along; the pedals under the right -->
-    <div id="steer-zone" aria-label="היגוי"><div id="steer-l" class="steer" aria-label="שמאלה"><svg class="ico" viewBox="0 0 24 24"><path d="M15.6 4.6 6.4 12l9.2 7.4z"/></svg></div><div id="steer-r" class="steer" aria-label="ימינה"><svg class="ico" viewBox="0 0 24 24"><path d="M8.4 4.6 17.6 12l-9.2 7.4z"/></svg></div></div>
-    <button id="btn-brake" class="pedal" aria-label="בלם, ובעמידה רוורס"><svg class="ico" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="11" rx="3"/><path d="M7.5 9.2h9M7.5 12.8h9M12 16.5v4"/></svg><span>בלם</span></button>
-    <button id="btn-gas" class="pedal" aria-label="גז"><svg class="ico" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="16" rx="3"/><path d="M10 6.5h4M10 10.5h4M10 14.5h4M12 18.5v3"/></svg><span>גז</span></button>
-    <button id="btn-handbrake" class="pedal pill hidden" aria-label="בלם יד"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.2"/><path d="M4.8 6.6a9.2 9.2 0 0 0 0 10.8M19.2 6.6a9.2 9.2 0 0 1 0 10.8M10.6 15.2V8.8h1.9a1.9 1.9 0 0 1 0 3.8h-1.9"/></svg><span>בלם יד</span></button>
-    <button id="btn-boost" class="pedal pill hidden" aria-label="טורבו"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21.5c-3.7 0-6.2-2.5-6.2-5.8 0-3.4 2.7-5.2 3.5-8.7 1.8 1.3 2.5 3.1 2.5 4.8 1-.6 1.7-1.8 1.8-3.1 2.5 1.9 4.6 4.5 4.6 7.1 0 3.3-2.5 5.7-6.2 5.7z"/></svg><span>טורבו</span></button>
-    <button id="btn-fire" class="tbtn big" aria-label="ירי"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="1.6"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5"/></svg></button>
-    <button id="btn-jump" class="tbtn" aria-label="קפיצה"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20V5M6 10l6-6 6 6M5 21h14"/></svg></button>
-    <button id="btn-draw" class="tbtn empty" aria-label="לצייר באוויר"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20l1.2-4.6L16.6 4a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8z"/><path d="M14.6 6l3.4 3.4M4 20l4.6-1.2"/></svg><span class="lbl">לצייר</span><span class="badge hidden"></span></button>
-    <div id="draw-hint" class="hidden"><svg viewBox="0 0 120 90"><path d="M10 12 C 50 6, 92 22, 100 70"/><path d="M86 58 L 100 72 L 108 52"/></svg><span>לחצו על העיפרון כדי לצייר באוויר!</span></div>
-    <button id="btn-photo" class="tbtn hidden" aria-label="צילום"><span class="lbl">לצלם</span><svg class="ico" viewBox="0 0 24 24"><path d="M3 8.5h4l1.6-2.5h6.8L17 8.5h4V19H3z"/><circle cx="12" cy="13.2" r="3.6"/></svg></button>
-    <button id="btn-enter" class="tbtn hidden" aria-label="כניסה לרכב"><svg class="ico" viewBox="0 0 24 24"><path d="M2.5 15.5v-3l2.5-.5 2.5-4h8l3.5 4 2.5.6v2.9z"/><circle cx="7" cy="16.5" r="2"/><circle cx="17" cy="16.5" r="2"/></svg></button>
-    <button id="btn-swap" class="tbtn" aria-label="החלפת נשק"><svg class="ico" viewBox="0 0 24 24"><path d="M4 9h13l-3-3M20 15H7l3 3"/></svg></button>
-    <button id="btn-radio" class="tbtn small hidden" aria-label="רדיו"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 8l9-5"/><circle cx="15.5" cy="14" r="2.6"/><path d="M6 12.5h4M6 15.5h4"/></svg></button>
-    <button id="btn-view" class="tbtn small hidden" aria-label="מבט מהרכב"><svg class="ico" viewBox="0 0 24 24"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.8"/></svg></button>
+    <div id="steer-zone" aria-label="Steering" data-he-aria="היגוי"><div id="steer-l" class="steer" aria-label="Left" data-he-aria="שמאלה"><svg class="ico" viewBox="0 0 24 24"><path d="M15.6 4.6 6.4 12l9.2 7.4z"/></svg></div><div id="steer-r" class="steer" aria-label="Right" data-he-aria="ימינה"><svg class="ico" viewBox="0 0 24 24"><path d="M8.4 4.6 17.6 12l-9.2 7.4z"/></svg></div></div>
+    <button id="btn-brake" class="pedal" aria-label="Brake; reverse when stopped" data-he-aria="בלם, ובעמידה רוורס"><svg class="ico" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="11" rx="3"/><path d="M7.5 9.2h9M7.5 12.8h9M12 16.5v4"/></svg><span data-he="בלם">Brake</span></button>
+    <button id="btn-gas" class="pedal" aria-label="Gas" data-he-aria="גז"><svg class="ico" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="16" rx="3"/><path d="M10 6.5h4M10 10.5h4M10 14.5h4M12 18.5v3"/></svg><span data-he="גז">Gas</span></button>
+    <button id="btn-handbrake" class="pedal pill hidden" aria-label="Handbrake" data-he-aria="בלם יד"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.2"/><path d="M4.8 6.6a9.2 9.2 0 0 0 0 10.8M19.2 6.6a9.2 9.2 0 0 1 0 10.8M10.6 15.2V8.8h1.9a1.9 1.9 0 0 1 0 3.8h-1.9"/></svg><span data-he="בלם יד">Handbrake</span></button>
+    <button id="btn-boost" class="pedal pill hidden" aria-label="Turbo" data-he-aria="טורבו"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21.5c-3.7 0-6.2-2.5-6.2-5.8 0-3.4 2.7-5.2 3.5-8.7 1.8 1.3 2.5 3.1 2.5 4.8 1-.6 1.7-1.8 1.8-3.1 2.5 1.9 4.6 4.5 4.6 7.1 0 3.3-2.5 5.7-6.2 5.7z"/></svg><span data-he="טורבו">Turbo</span></button>
+    <button id="btn-fire" class="tbtn big" aria-label="Fire" data-he-aria="ירי"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="1.6"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5"/></svg></button>
+    <button id="btn-jump" class="tbtn" aria-label="Jump" data-he-aria="קפיצה"><svg class="ico" viewBox="0 0 24 24"><path d="M12 20V5M6 10l6-6 6 6M5 21h14"/></svg></button>
+    <button id="btn-draw" class="tbtn empty" aria-label="Draw in the air" data-he-aria="לצייר באוויר"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20l1.2-4.6L16.6 4a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8z"/><path d="M14.6 6l3.4 3.4M4 20l4.6-1.2"/></svg><span class="lbl" data-he="לצייר">Draw</span><span class="badge hidden"></span></button>
+    <div id="draw-hint" class="hidden"><svg viewBox="0 0 120 90"><path d="M10 12 C 50 6, 92 22, 100 70"/><path d="M86 58 L 100 72 L 108 52"/></svg><span data-he="לחצו על העיפרון כדי לצייר באוויר!">Tap the pencil to draw in the air!</span></div>
+    <button id="btn-photo" class="tbtn hidden" aria-label="Photo" data-he-aria="צילום"><span class="lbl" data-he="לצלם">Snap</span><svg class="ico" viewBox="0 0 24 24"><path d="M3 8.5h4l1.6-2.5h6.8L17 8.5h4V19H3z"/><circle cx="12" cy="13.2" r="3.6"/></svg></button>
+    <button id="btn-enter" class="tbtn hidden" aria-label="Get in" data-he-aria="כניסה לרכב"><svg class="ico" viewBox="0 0 24 24"><path d="M2.5 15.5v-3l2.5-.5 2.5-4h8l3.5 4 2.5.6v2.9z"/><circle cx="7" cy="16.5" r="2"/><circle cx="17" cy="16.5" r="2"/></svg></button>
+    <button id="btn-swap" class="tbtn" aria-label="Switch weapon" data-he-aria="החלפת נשק"><svg class="ico" viewBox="0 0 24 24"><path d="M4 9h13l-3-3M20 15H7l3 3"/></svg></button>
+    <button id="btn-radio" class="tbtn small hidden" aria-label="Radio" data-he-aria="רדיו"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 8l9-5"/><circle cx="15.5" cy="14" r="2.6"/><path d="M6 12.5h4M6 15.5h4"/></svg></button>
+    <button id="btn-view" class="tbtn small hidden" aria-label="Car view" data-he-aria="מבט מהרכב"><svg class="ico" viewBox="0 0 24 24"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.8"/></svg></button>
     <button id="btn-up" class="tbtn small hidden">▲</button>
     <button id="btn-down" class="tbtn small hidden">▼</button>
-    <button id="btn-chute" class="tbtn hidden" aria-label="מצנח"><span class="lbl">מצנח</span><svg class="ico" viewBox="0 0 24 24"><path d="M3 11a9 7 0 0 1 18 0z"/><path d="M3 11l9 9 9-9M8.5 11l3.5 9 3.5-9"/></svg></button>
-    <button id="btn-guard" class="tbtn small hidden" aria-label="הגנה"><svg class="ico" viewBox="0 0 24 24"><path d="M12 2.8l7.5 3v5.4c0 4.9-3.2 8.4-7.5 10-4.3-1.6-7.5-5.1-7.5-10V5.8z"/><path d="M8.6 11.4h6.8M12 8v7.2"/></svg></button>
-    <button id="btn-hands" class="tbtn small hidden" aria-label="להיכנע"><svg class="ico" viewBox="0 0 24 24"><path d="M7 21v-7.5M7 13.5 4.6 7.2M7 13.5 7.4 5.6M7 13.5 9.6 7M17 21v-7.5M17 13.5l2.4-6.3M17 13.5 16.6 5.6M17 13.5 14.4 7"/></svg></button>
-    <button id="btn-pause" class="tbtn small" aria-label="הפסקה"><svg class="ico" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></button>
-    <button id="btn-phone" class="tbtn small" aria-label="הטלפון"><svg class="ico" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg></button>
+    <button id="btn-chute" class="tbtn hidden" aria-label="Chute" data-he-aria="מצנח"><span class="lbl" data-he="מצנח">Chute</span><svg class="ico" viewBox="0 0 24 24"><path d="M3 11a9 7 0 0 1 18 0z"/><path d="M3 11l9 9 9-9M8.5 11l3.5 9 3.5-9"/></svg></button>
+    <button id="btn-guard" class="tbtn small hidden" aria-label="Guard" data-he-aria="הגנה"><svg class="ico" viewBox="0 0 24 24"><path d="M12 2.8l7.5 3v5.4c0 4.9-3.2 8.4-7.5 10-4.3-1.6-7.5-5.1-7.5-10V5.8z"/><path d="M8.6 11.4h6.8M12 8v7.2"/></svg></button>
+    <button id="btn-hands" class="tbtn small hidden" aria-label="Surrender" data-he-aria="להיכנע"><svg class="ico" viewBox="0 0 24 24"><path d="M7 21v-7.5M7 13.5 4.6 7.2M7 13.5 7.4 5.6M7 13.5 9.6 7M17 21v-7.5M17 13.5l2.4-6.3M17 13.5 16.6 5.6M17 13.5 14.4 7"/></svg></button>
+    <button id="btn-pause" class="tbtn small" aria-label="Pause" data-he-aria="הפסקה"><svg class="ico" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></button>
+    <button id="btn-phone" class="tbtn small" aria-label="Phone" data-he-aria="הטלפון"><svg class="ico" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg></button>
   </div>
 
   <div id="flash"></div>
@@ -214,10 +214,10 @@
 
   <div id="album" class="overlay hidden">
     <div class="sheet">
-      <h2>ספריית השרטוטים — מה לצייר?</h2>
+      <h2 data-he="ספריית השרטוטים — מה לצייר?">Blueprint Library — what to draw?</h2>
       <div id="album-list"></div>
       <div class="sheet-foot">
-        <button id="album-close" class="btn">סגור</button>
+        <button id="album-close" class="btn" data-he="סגור">Close</button>
       </div>
     </div>
   </div>
@@ -229,18 +229,18 @@
     <div id="air-ref" class="polaroid">
       <canvas width="600" height="400"></canvas>
       <div class="caption"></div>
-      <button id="air-zoom" class="ref-btn" aria-label="הגדלה"><svg class="ico" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5l5 5M10.5 7.5v6M7.5 10.5h6"/></svg></button>
-      <button id="air-prev" class="ref-btn ref-nav" aria-label="השרטוט הקודם">‹</button>
-      <button id="air-next" class="ref-btn ref-nav" aria-label="השרטוט הבא">›</button>
+      <button id="air-zoom" class="ref-btn" aria-label="Zoom" data-he-aria="הגדלה"><svg class="ico" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5l5 5M10.5 7.5v6M7.5 10.5h6"/></svg></button>
+      <button id="air-prev" class="ref-btn ref-nav" aria-label="Previous blueprint" data-he-aria="השרטוט הקודם">‹</button>
+      <button id="air-next" class="ref-btn ref-nav" aria-label="Next blueprint" data-he-aria="השרטוט הבא">›</button>
       <div id="air-count"></div>
     </div>
-    <div id="air-head"><div id="air-title"></div><div id="air-status"></div><div id="air-ink" class="hidden" aria-label="דיו"><i id="air-ink-fill"></i></div></div>
+    <div id="air-head"><div id="air-title"></div><div id="air-status"></div><div id="air-ink" class="hidden" aria-label="Ink" data-he-aria="דיו"><i id="air-ink-fill"></i></div></div>
     <div id="air-foot">
-      <button id="air-done" class="btn primary">✓ סיימתי!</button>
-      <button id="air-undo" class="btn">↶ בטל קו</button>
-      <button id="air-clear" class="btn">נקה</button>
-      <button id="air-ghost" class="btn" title="השרטוט מופיע חלש באוויר ואפשר לעבור עליו — אבל הציון מוגבל ל־70">נייר העתקה</button>
-      <button id="air-cancel" class="btn danger">✕ ברח!</button>
+      <button id="air-done" class="btn primary" data-he="✓ סיימתי!">✓ Done!</button>
+      <button id="air-undo" class="btn" data-he="↶ בטל קו">↶ Undo</button>
+      <button id="air-clear" class="btn" data-he="נקה">Clear</button>
+      <button id="air-ghost" class="btn" title="The blueprint shows faintly in the air so you can trace it — but the score is capped at 70" data-he-title="השרטוט מופיע חלש באוויר ואפשר לעבור עליו — אבל הציון מוגבל ל־70" data-he="נייר העתקה">Tracing paper</button>
+      <button id="air-cancel" class="btn danger" data-he="✕ ברח!">✕ Run!</button>
     </div>
   </div>
 
@@ -251,33 +251,33 @@
     <div class="cover">
       <div class="spiral"></div>
       <h1 dir="ltr">Beyond the Outline</h1>
-      <p class="sub">עיר שלמה על המפרץ בשקיעה, מצוירת בעטים צבעוניים · מה שמציירים — אמיתי</p>
+      <p class="sub" data-he="עיר שלמה על המפרץ בשקיעה, מצוירת בעטים צבעוניים · מה שמציירים — אמיתי">A whole city on the bay at sunset, drawn in colored pens · What you draw is real</p>
       <div class="howto">
         <div class="col desktop-only">
-          <h3>מחשב</h3>
-          <p><b>WASD</b> הליכה · <b>עכבר</b> הסתכלות · <b>קליק</b> ירי</p>
-          <p><b>Shift</b> ריצה · <b>רווח</b> קפיצה · <b>1-0</b>, גלגלת או <b>X</b> החלפת נשק</p>
-          <p><b>F</b> צילום שלט · <b>Q</b> ציור באוויר, גם בריצה · <b>T</b> ציור שרטוט · <b>E</b> רכב / דלת / שיחה · <b>M</b> מפה · <b>P</b> טלפון</p>
-          <p>ברכב: <b>WASD</b> נהיגה · <b>קליק</b> תותח · <b>Q</b> ציור על הרכב · <b>רווח/C</b> גובה במסוק · <b>Esc</b> הפסקה</p>
-          <p><b>שלט משחק</b>: כמו ב־GTA. <b>RT</b> ירי · <b>LT</b> כיוון · <b>Ⓐ</b> ריצה · <b>Ⓧ</b> קפיצה · <b>Ⓨ</b> רכב/דלת · <b>Ⓑ</b> צילום · <b>⬆</b> ציור · <b>⬅</b> טלפון · <b>View</b> מפה</p>
+          <h3 data-he="מחשב">Computer</h3>
+          <p data-he-html="&lt;b&gt;WASD&lt;/b&gt; הליכה · &lt;b&gt;עכבר&lt;/b&gt; הסתכלות · &lt;b&gt;קליק&lt;/b&gt; ירי"><b>WASD</b> walk · <b>Mouse</b> look · <b>Click</b> shoot</p>
+          <p data-he-html="&lt;b&gt;Shift&lt;/b&gt; ריצה · &lt;b&gt;רווח&lt;/b&gt; קפיצה · &lt;b&gt;1-0&lt;/b&gt;, גלגלת או &lt;b&gt;X&lt;/b&gt; החלפת נשק"><b>Shift</b> run · <b>Space</b> jump · <b>1-0</b>, scroll wheel or <b>X</b> switch weapon</p>
+          <p data-he-html="&lt;b&gt;F&lt;/b&gt; צילום שלט · &lt;b&gt;Q&lt;/b&gt; ציור באוויר, גם בריצה · &lt;b&gt;T&lt;/b&gt; ציור שרטוט · &lt;b&gt;E&lt;/b&gt; רכב / דלת / שיחה · &lt;b&gt;M&lt;/b&gt; מפה · &lt;b&gt;P&lt;/b&gt; טלפון"><b>F</b> photograph a sign · <b>Q</b> draw in the air, even on the run · <b>T</b> draw a blueprint · <b>E</b> car / door / talk · <b>M</b> map · <b>P</b> phone</p>
+          <p data-he-html="ברכב: &lt;b&gt;WASD&lt;/b&gt; נהיגה · &lt;b&gt;קליק&lt;/b&gt; תותח · &lt;b&gt;Q&lt;/b&gt; ציור על הרכב · &lt;b&gt;רווח/C&lt;/b&gt; גובה במסוק · &lt;b&gt;Esc&lt;/b&gt; הפסקה">In a car: <b>WASD</b> drive · <b>Click</b> cannon · <b>Q</b> draw on the car · <b>Space/C</b> helicopter height · <b>Esc</b> pause</p>
+          <p data-he-html="&lt;b&gt;שלט משחק&lt;/b&gt;: כמו ב־GTA. &lt;b&gt;RT&lt;/b&gt; ירי · &lt;b&gt;LT&lt;/b&gt; כיוון · &lt;b&gt;Ⓐ&lt;/b&gt; ריצה · &lt;b&gt;Ⓧ&lt;/b&gt; קפיצה · &lt;b&gt;Ⓨ&lt;/b&gt; רכב/דלת · &lt;b&gt;Ⓑ&lt;/b&gt; צילום · &lt;b&gt;⬆&lt;/b&gt; ציור · &lt;b&gt;⬅&lt;/b&gt; טלפון · &lt;b&gt;View&lt;/b&gt; מפה"><b>Gamepad</b>: GTA-style. <b>RT</b> shoot · <b>LT</b> aim · <b>Ⓐ</b> run · <b>Ⓧ</b> jump · <b>Ⓨ</b> car/door · <b>Ⓑ</b> photo · <b>⬆</b> draw · <b>⬅</b> phone · <b>View</b> map</p>
         </div>
         <div class="col touch-only">
-          <h3>טלפון</h3>
-          <p>ג׳ויסטיק משמאל · גרירה מימין להסתכלות</p>
-          <p>ברכב: חיצים משמאל להגה · גז, בלם ובלם יד מימין · העיפרון: ציור על הרכב</p>
-          <p>מצלמה — צילום שלט · עיפרון "לצייר" — ציור באוויר, גם בריצה (ומשם השרטוטים) · כוונת — ירי</p>
-          <p>נגיעה במפה הקטנה — מפת העיר כולה · כפתור הטלפון למעלה</p>
+          <h3 data-he="טלפון">Phone</h3>
+          <p data-he="ג׳ויסטיק משמאל · גרירה מימין להסתכלות">Joystick on the left · drag on the right to look around</p>
+          <p data-he="ברכב: חיצים משמאל להגה · גז, בלם ובלם יד מימין · העיפרון: ציור על הרכב">In a car: arrows on the left to steer · gas, brake and handbrake on the right · the pencil: draw on the car</p>
+          <p data-he="מצלמה — צילום שלט · עיפרון &quot;לצייר&quot; — ציור באוויר, גם בריצה (ומשם השרטוטים) · כוונת — ירי">Camera — photograph a sign · the “Draw” pencil — draw in the air, even on the run (your blueprints are there too) · crosshair — shoot</p>
+          <p data-he="נגיעה במפה הקטנה — מפת העיר כולה · כפתור הטלפון למעלה">Tap the minimap — the whole city map · the phone button is at the top</p>
         </div>
         <div class="col">
-          <h3>איך משחקים</h3>
-          <p><b>חדש: ציור באוויר.</b> מציירים ישר על המסך כל נשק או רכב שבא לכם, גם תוך כדי הליכה וריצה, בלי לבחור שום דבר קודם. המשחק מזהה מה ציירתם — מטוס, מסוק, מכונית, משאית, אוטובוס, אופנוע, טנק, אקדח, רובה, חרב, סכין, גרזן, פטיש, פצצה, בומרנג — והצורה קובעת מה הוא יודע לעשות: קנה ארוך יורה רחוק, שני קנים — רובה ציד, הרבה קנים — מיניגאן, להב ארוך מגיע רחוק. הזיהוי למד מציורים של אנשים (Quick, Draw! של Google, CC BY 4.0).</p>
-          <p>מצלמים שלטי שרטוטים ברחבי העיר, מתחבאים, ומציירים אותם באוויר — שבעה־עשר נשקים ורכבים מחכים: מאקדח צבע ורובה עפרונות, דרך חרב סרגל ולייזר מרקר, ועד מיניגאן מחדדים, טנק, אופנוע ומסוק. ככל שהציור טוב יותר — הנשק טוב יותר! נכנסים לכל חנות, ובטיילת יש דוכן שבו מציירים לעצמכם חברה. כל מכונית אפשר לקחת — רק שהמשטרה לא תראה.</p>
+          <h3 data-he="איך משחקים">How to play</h3>
+          <p data-he-html="&lt;b&gt;חדש: ציור באוויר.&lt;/b&gt; מציירים ישר על המסך כל נשק או רכב שבא לכם, גם תוך כדי הליכה וריצה, בלי לבחור שום דבר קודם. המשחק מזהה מה ציירתם — מטוס, מסוק, מכונית, משאית, אוטובוס, אופנוע, טנק, אקדח, רובה, חרב, סכין, גרזן, פטיש, פצצה, בומרנג — והצורה קובעת מה הוא יודע לעשות: קנה ארוך יורה רחוק, שני קנים — רובה ציד, הרבה קנים — מיניגאן, להב ארוך מגיע רחוק. הזיהוי למד מציורים של אנשים (Quick, Draw! של Google, CC BY 4.0)."><b>New: drawing in the air.</b> Draw any weapon or vehicle you like right on the screen, even while walking or running, without picking anything first. The game recognizes what you drew — plane, helicopter, car, truck, bus, motorcycle, tank, pistol, rifle, sword, knife, axe, hammer, bomb, boomerang — and its shape decides what it can do: a long barrel shoots far, two barrels make a shotgun, many barrels a minigun, a long blade reaches far. The recognizer learned from people’s drawings (Google’s Quick, Draw!, CC BY 4.0).</p>
+          <p data-he-html="מצלמים שלטי שרטוטים ברחבי העיר, מתחבאים, ומציירים אותם באוויר — שבעה־עשר נשקים ורכבים מחכים: מאקדח צבע ורובה עפרונות, דרך חרב סרגל ולייזר מרקר, ועד מיניגאן מחדדים, טנק, אופנוע ומסוק. ככל שהציור טוב יותר — הנשק טוב יותר! נכנסים לכל חנות, ובטיילת יש דוכן שבו מציירים לעצמכם חברה. כל מכונית אפשר לקחת — רק שהמשטרה לא תראה.">Photograph blueprint signs around the city, find cover, and draw them in the air — seventeen weapons and vehicles are waiting: from a paint pistol and a pencil rifle, through a ruler sword and a marker laser, to a sharpener minigun, a tank, a motorcycle and a helicopter. The better the drawing, the better the weapon! Walk into any shop, and on the boardwalk there’s a booth where you draw yourself a friend. You can take any car — just don’t let the police see.</p>
         </div>
       </div>
       <div class="cover-btns">
-        <div id="lang-pick" class="lang-pick" role="group" aria-label="שפה · Language"><button type="button" data-l="he">עברית</button><button type="button" data-l="en">English</button></div>
-        <button id="continue-btn" class="btn primary huge hidden">המשך מאיפה שהפסקתם<span id="continue-meta"></span></button>
-        <button id="start-btn" class="btn primary huge" disabled>טוען את העטים…</button>
+        <div id="lang-pick" class="lang-pick" role="group" aria-label="Language · שפה"><button type="button" data-l="he">עברית</button><button type="button" data-l="en">English</button></div>
+        <button id="continue-btn" class="btn primary huge hidden">Continue where you left off<span id="continue-meta"></span></button>
+        <button id="start-btn" class="btn primary huge" disabled data-he="טוען את העטים…">Loading the pens…</button>
       </div>
       <div id="load-status"></div>
       <div id="gpu-note" class="hidden"></div>
@@ -286,172 +286,172 @@
 
   <div id="intro-flash" class="hidden"></div>
 
-  <div id="citymap" class="hidden" aria-label="מפת העיר">
+  <div id="citymap" class="hidden" aria-label="City map" data-he-aria="מפת העיר">
     <canvas id="map-canvas"></canvas>
     <div id="map-me"></div>
-    <div id="map-head" class="paper-card"><h2>מפת העיר</h2><div id="map-where"></div></div>
-    <div id="map-legend" class="paper-card"><h3>מקרא <small>(לחיצה מסתירה)</small></h3><div id="map-legend-list"></div></div>
-    <button id="map-close" class="mbtn" aria-label="סגירת המפה"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    <button id="map-legend-btn" class="mbtn" aria-label="מקרא"><svg class="ico" viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h9"/></svg></button>
+    <div id="map-head" class="paper-card"><h2 data-he="מפת העיר">City map</h2><div id="map-where"></div></div>
+    <div id="map-legend" class="paper-card"><h3 data-he-html="מקרא &lt;small&gt;(לחיצה מסתירה)&lt;/small&gt;">Legend <small>(tap to hide)</small></h3><div id="map-legend-list"></div></div>
+    <button id="map-close" class="mbtn" aria-label="Close map" data-he-aria="סגירת המפה"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <button id="map-legend-btn" class="mbtn" aria-label="Legend" data-he-aria="מקרא"><svg class="ico" viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h9"/></svg></button>
     <div id="map-tools">
-      <button id="map-in" class="mbtn" aria-label="התקרבות"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
-      <button id="map-out" class="mbtn" aria-label="התרחקות"><svg class="ico" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
-      <button id="map-home" class="mbtn" aria-label="למקום שלכם"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="1.8"/><path d="M12 2v3.5M12 18.5V22M2 12h3.5M18.5 12H22"/></svg></button>
+      <button id="map-in" class="mbtn" aria-label="Zoom in" data-he-aria="התקרבות"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button id="map-out" class="mbtn" aria-label="Zoom out" data-he-aria="התרחקות"><svg class="ico" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+      <button id="map-home" class="mbtn" aria-label="Where you are" data-he-aria="למקום שלכם"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="1.8"/><path d="M12 2v3.5M12 18.5V22M2 12h3.5M18.5 12H22"/></svg></button>
     </div>
     <div id="map-card" class="paper-card hidden"></div>
     <div id="map-cross" class="hidden"></div>
     <div id="map-hint"></div>
   </div>
 
-  <div id="phone" class="hidden" aria-label="הטלפון">
+  <div id="phone" class="hidden" aria-label="Phone" data-he-aria="הטלפון">
     <div class="phone-body">
       <div class="phone-notch"></div>
       <div class="phone-status"><span id="phone-clock"></span><span id="phone-sky"></span><span class="phone-bars"><i></i><i></i><i></i></span><span class="phone-bat"></span></div>
       <div class="phone-screen">
         <div id="phone-home" class="phone-page">
-          <div class="phone-hello">עיר השרבוטים</div>
+          <div class="phone-hello" data-he="עיר השרבוטים">Scribble City</div>
           <div id="phone-apps"></div>
-          <p class="phone-soon">אנשי קשר ומשימות — בקרוב</p>
+          <p class="phone-soon" data-he="אנשי קשר ומשימות — בקרוב">Contacts and missions — coming soon</p>
         </div>
         <div id="phone-photos" class="phone-page hidden">
-          <div class="phone-head"><button class="phone-back" aria-label="חזרה">›</button><b>תמונות</b></div>
+          <div class="phone-head"><button class="phone-back" aria-label="Back" data-he-aria="חזרה">›</button><b data-he="תמונות">Photos</b></div>
           <div id="phone-grid"></div>
         </div>
         <div id="phone-skills" class="phone-page hidden">
-          <div class="phone-head"><button class="phone-back" aria-label="חזרה">›</button><b>כישורים</b></div>
+          <div class="phone-head"><button class="phone-back" aria-label="Back" data-he-aria="חזרה">›</button><b data-he="כישורים">Skills</b></div>
           <div id="phone-skill-list"></div>
-          <p class="phone-soon">משתפרים במה שעושים: רצים, יורים, נוהגים, מציירים ומרביצים</p>
+          <p class="phone-soon" data-he="משתפרים במה שעושים: רצים, יורים, נוהגים, מציירים ומרביצים">You get better at what you do: running, shooting, driving, drawing and fighting</p>
         </div>
         <div id="phone-bank" class="phone-page hidden">
-          <div class="phone-head"><button class="phone-back" aria-label="חזרה">›</button><b>בנק PAPERTRUST</b></div>
+          <div class="phone-head"><button class="phone-back" aria-label="Back" data-he-aria="חזרה">›</button><b data-he="בנק PAPERTRUST">PAPERTRUST Bank</b></div>
           <div id="phone-bank-sum"></div>
           <div id="phone-bank-list"></div>
-          <p class="phone-soon">הכסף בבנק שמור גם כשנמחקים. מושכים ומפקידים בכספומט: בחנויות הנוחות ובלובי של המלונות</p>
+          <p class="phone-soon" data-he="הכסף בבנק שמור גם כשנמחקים. מושכים ומפקידים בכספומט: בחנויות הנוחות ובלובי של המלונות">Money in the bank stays safe even when you get erased. Withdraw and deposit at ATMs: in convenience stores and hotel lobbies</p>
         </div>
         <div id="phone-props" class="phone-page hidden">
-          <div class="phone-head"><button class="phone-back" aria-label="חזרה">›</button><b>נכסים</b></div>
+          <div class="phone-head"><button class="phone-back" aria-label="Back" data-he-aria="חזרה">›</button><b data-he="נכסים">Properties</b></div>
           <div id="phone-prop-list"></div>
-          <p class="phone-soon">ההכנסות נכנסות לבנק בכל בוקר בשמונה. במקומות שלכם הכול על חשבון הבית</p>
+          <p class="phone-soon" data-he="ההכנסות נכנסות לבנק בכל בוקר בשמונה. במקומות שלכם הכול על חשבון הבית">Income lands in the bank every morning at eight. At your own places, everything is on the house</p>
         </div>
         <div id="phone-events" class="phone-page hidden">
-          <div class="phone-head"><button class="phone-back" aria-label="חזרה">›</button><b>אירועים בעיר</b></div>
+          <div class="phone-head"><button class="phone-back" aria-label="Back" data-he-aria="חזרה">›</button><b data-he="אירועים בעיר">City Events</b></div>
           <div id="phone-event-list"></div>
-          <p class="phone-soon">פסטיבלים, מסיבות ואירועי תרבות, כל שבוע. כשמשהו מתחיל, תופיע הודעה</p>
+          <p class="phone-soon" data-he="פסטיבלים, מסיבות ואירועי תרבות, כל שבוע. כשמשהו מתחיל, תופיע הודעה">Festivals, parties and cultural events every week. When something starts, you’ll get a notice</p>
         </div>
         <div id="phone-view" class="phone-page hidden">
-          <div class="phone-head"><button class="phone-back" aria-label="חזרה">›</button><b id="phone-view-title"></b></div>
+          <div class="phone-head"><button class="phone-back" aria-label="Back" data-he-aria="חזרה">›</button><b id="phone-view-title"></b></div>
           <img id="phone-view-img" alt="">
-          <div class="phone-actions"><a id="phone-dl" class="btn mini" download>שמירה למכשיר</a><button id="phone-del" class="btn mini">מחיקה</button></div>
+          <div class="phone-actions"><a id="phone-dl" class="btn mini" download data-he="שמירה למכשיר">Save to device</a><button id="phone-del" class="btn mini" data-he="מחיקה">Delete</button></div>
         </div>
       </div>
-      <button id="phone-home-btn" aria-label="סגירת הטלפון"></button>
+      <button id="phone-home-btn" aria-label="Close phone" data-he-aria="סגירת הטלפון"></button>
     </div>
   </div>
   <div id="phone-cam" class="hidden">
     <div class="vf-frame"><i></i><i></i><i></i><i></i></div>
     <div id="vf-hint"></div>
-    <button id="vf-shoot" class="tbtn big" aria-label="צילום"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></svg></button>
-    <button id="vf-back" class="tbtn small" aria-label="חזרה לטלפון"><svg class="ico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+    <button id="vf-shoot" class="tbtn big" aria-label="Photo" data-he-aria="צילום"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></svg></button>
+    <button id="vf-back" class="tbtn small" aria-label="Back to phone" data-he-aria="חזרה לטלפון"><svg class="ico" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
   </div>
   <div id="phone-flash"></div>
 
   <div id="pause" class="overlay hidden">
     <div class="sheet small settings">
-      <h2>הפסקה</h2>
+      <h2 data-he="הפסקה">Paused</h2>
       <div class="pause-btns">
-        <button id="resume-btn" class="btn primary">המשך</button>
-        <button id="map-btn" class="btn">מפת העיר <span class="desktop-only">(M)</span></button>
-        <button id="bench-btn-top" class="btn touch-only">מבחן ביצועים</button>
+        <button id="resume-btn" class="btn primary" data-he="המשך">Resume</button>
+        <button id="map-btn" class="btn" data-he-html="מפת העיר &lt;span class=&quot;desktop-only&quot;&gt;(M)&lt;/span&gt;">City map <span class="desktop-only">(M)</span></button>
+        <button id="bench-btn-top" class="btn touch-only" data-he="מבחן ביצועים">Performance test</button>
       </div>
       <div class="opt-groups">
         <section class="opt-group">
-          <h3>צליל</h3>
-          <label class="opt"><input type="checkbox" id="opt-sound" checked> צלילים</label>
-          <label class="opt vol"><span>אפקטים וקולות העיר</span><input type="range" id="opt-vol-fx" min="0" max="1" step="0.05" value="1"></label>
-          <label class="opt vol"><span>מוזיקה במקומות</span><input type="range" id="opt-vol-music" min="0" max="1" step="0.05" value="1"></label>
-          <label class="opt vol"><span>רדיו</span><input type="range" id="opt-vol-radio" min="0" max="1" step="0.05" value="1"></label>
-          <label class="opt hidden"><input type="checkbox" id="opt-voices"> קולות: אנשים מדברים בקול (באנגלית, בקול של הדפדפן)</label>
+          <h3 data-he="צליל">Sound</h3>
+          <label class="opt"><input type="checkbox" id="opt-sound" checked> <span data-he="צלילים">Sounds</span></label>
+          <label class="opt vol"><span data-he="אפקטים וקולות העיר">Effects and city sounds</span><input type="range" id="opt-vol-fx" min="0" max="1" step="0.05" value="1"></label>
+          <label class="opt vol"><span data-he="מוזיקה במקומות">Music in venues</span><input type="range" id="opt-vol-music" min="0" max="1" step="0.05" value="1"></label>
+          <label class="opt vol"><span data-he="רדיו">Radio</span><input type="range" id="opt-vol-radio" min="0" max="1" step="0.05" value="1"></label>
+          <label class="opt hidden"><input type="checkbox" id="opt-voices"> <span data-he="קולות: אנשים מדברים בקול (באנגלית, בקול של הדפדפן)">Voices: people speak out loud (in English, in the browser’s voice)</span></label>
         </section>
         <section class="opt-group">
-          <h3>שליטה</h3>
-          <label class="opt vol"><span>רגישות המבט</span><input type="range" id="opt-sens" min="0.3" max="2.5" step="0.1" value="1"></label>
-          <label class="opt"><input type="checkbox" id="opt-invert"> היפוך המבט למעלה ולמטה</label>
-          <label class="opt" id="opt-drive-row">שליטה בנהיגה בטלפון
+          <h3 data-he="שליטה">Controls</h3>
+          <label class="opt vol"><span data-he="רגישות המבט">Look sensitivity</span><input type="range" id="opt-sens" min="0.3" max="2.5" step="0.1" value="1"></label>
+          <label class="opt"><input type="checkbox" id="opt-invert"> <span data-he="היפוך המבט למעלה ולמטה">Invert look up/down</span></label>
+          <label class="opt" id="opt-drive-row"><span data-he="שליטה בנהיגה בטלפון">Phone driving controls</span>
             <select id="opt-drive">
-              <option value="buttons">כפתורים</option>
-              <option value="stick">ג׳ויסטיק</option>
+              <option value="buttons" data-he="כפתורים">Buttons</option>
+              <option value="stick" data-he="ג׳ויסטיק">Joystick</option>
             </select>
           </label>
-          <label class="opt hidden" id="opt-carpen-row">ציור על המכונית
+          <label class="opt hidden" id="opt-carpen-row"><span data-he="ציור על המכונית">Drawing on the car</span>
             <select id="opt-carpen">
-              <option value="parts">נשק · תנועה · הגנה</option>
-              <option value="old">כמו קודם (11.22)</option>
+              <option value="parts" data-he="נשק · תנועה · הגנה">Weapon · movement · defense</option>
+              <option value="old" data-he="כמו קודם (11.22)">As before (11.22)</option>
             </select>
           </label>
         </section>
         <section class="opt-group">
-          <h3>תצוגה</h3>
-          <label class="opt"><input type="checkbox" id="opt-subs" checked> כתוביות (ברדיו, ומה שאנשים אומרים)</label>
-          <label class="opt"><input type="checkbox" id="opt-boil" checked> קווים רועדים</label>
-          <label class="opt"><input type="checkbox" id="opt-look" checked> השתקפויות ברחוב הרטוב</label>
-          <label class="opt"><input type="checkbox" id="opt-magic" checked> איכות גבוהה (עוד צבעים בכל משיכה)</label>
-          <label class="opt nc-only"><input type="checkbox" id="opt-smart"> ציור חכם (ניסוי): מהיר יותר, אבל רך יותר בתנועה</label>
-          <label class="opt">קצב הפריימים
+          <h3 data-he="תצוגה">Display</h3>
+          <label class="opt"><input type="checkbox" id="opt-subs" checked> <span data-he="כתוביות (ברדיו, ומה שאנשים אומרים)">Subtitles (the radio, and what people say)</span></label>
+          <label class="opt"><input type="checkbox" id="opt-boil" checked> <span data-he="קווים רועדים">Wobbly lines</span></label>
+          <label class="opt"><input type="checkbox" id="opt-look" checked> <span data-he="השתקפויות ברחוב הרטוב">Reflections on the wet street</span></label>
+          <label class="opt"><input type="checkbox" id="opt-magic" checked> <span data-he="איכות גבוהה (עוד צבעים בכל משיכה)">High quality (more colors in every stroke)</span></label>
+          <label class="opt nc-only"><input type="checkbox" id="opt-smart"> <span data-he="ציור חכם (ניסוי): מהיר יותר, אבל רך יותר בתנועה">Smart drawing (experimental): faster, but softer in motion</span></label>
+          <label class="opt"><span data-he="קצב הפריימים">Frame rate</span>
             <select id="opt-pace">
-              <option value="free">רגיל: כמה שיותר</option>
-              <option value="auto">יציב: אוטומטי</option>
-              <option value="60">יציב: 60 בשנייה</option>
-              <option value="30">יציב: 30 בשנייה</option>
+              <option value="free" data-he="רגיל: כמה שיותר">Normal: as fast as it can</option>
+              <option value="auto" data-he="יציב: אוטומטי">Steady: automatic</option>
+              <option value="60" data-he="יציב: 60 בשנייה">Steady: 60 a second</option>
+              <option value="30" data-he="יציב: 30 בשנייה">Steady: 30 a second</option>
             </select>
           </label>
-          <label class="opt nc-only" id="opt-pens-row">ציור העטים
+          <label class="opt nc-only" id="opt-pens-row"><span data-he="ציור העטים">Pen drawing</span>
             <select id="opt-pens">
-              <option value="auto">אוטומטי: המהיר מבין השניים</option>
-              <option value="two">בשני שלבים (חדש)</option>
-              <option value="one">בשלב אחד (כמו קודם)</option>
+              <option value="auto" data-he="אוטומטי: המהיר מבין השניים">Automatic: the faster of the two</option>
+              <option value="two" data-he="בשני שלבים (חדש)">In two passes (new)</option>
+              <option value="one" data-he="בשלב אחד (כמו קודם)">In one pass (as before)</option>
             </select>
           </label>
-          <label class="opt"><input type="checkbox" id="opt-perf"> מסך ביצועים (F3)</label>
+          <label class="opt"><input type="checkbox" id="opt-perf"> <span data-he="מסך ביצועים (F3)">Performance overlay (F3)</span></label>
         </section>
         <section class="opt-group">
-          <h3>העיר</h3>
-          <label class="opt">שעון העיר
+          <h3 data-he="העיר">The City</h3>
+          <label class="opt"><span data-he="שעון העיר">City clock</span>
             <select id="opt-clock">
-              <option value="24">יום של 24 דקות</option>
-              <option value="48">יום של 48 דקות</option>
-              <option value="96">יום של 96 דקות</option>
-              <option value="0">השעה עומדת</option>
+              <option value="24" data-he="יום של 24 דקות">A 24-minute day</option>
+              <option value="48" data-he="יום של 48 דקות">A 48-minute day</option>
+              <option value="96" data-he="יום של 96 דקות">A 96-minute day</option>
+              <option value="0" data-he="השעה עומדת">Time stands still</option>
             </select>
           </label>
           <div class="opt hours"><span id="clock-now"></span>
-            <button class="btn mini" data-h="7.2">בוקר</button>
-            <button class="btn mini" data-h="12.5">צהריים</button>
-            <button class="btn mini" data-h="18.3">שקיעה</button>
-            <button class="btn mini" data-h="22.5">לילה</button>
+            <button class="btn mini" data-h="7.2" data-he="בוקר">Morning</button>
+            <button class="btn mini" data-h="12.5" data-he="צהריים">Noon</button>
+            <button class="btn mini" data-h="18.3" data-he="שקיעה">Sunset</button>
+            <button class="btn mini" data-h="22.5" data-he="לילה">Night</button>
           </div>
-          <label class="opt nc-only"><input type="checkbox" id="opt-allbp"> מצב Sandbox: כל הציורים והחלקים פתוחים, דיו בלי סוף (כבוי: מגלים, לומדים ופותחים בעיר)</label>
-          <label class="opt">מזג האוויר
+          <label class="opt nc-only"><input type="checkbox" id="opt-allbp"> <span data-he="מצב Sandbox: כל הציורים והחלקים פתוחים, דיו בלי סוף (כבוי: מגלים, לומדים ופותחים בעיר)">Sandbox mode: every drawing and part unlocked, endless ink (off: discover, learn and unlock them in the city)</span></label>
+          <label class="opt"><span data-he="מזג האוויר">Weather</span>
             <select id="opt-weather">
-              <option value="auto">משתנה מעצמו</option>
-              <option value="clear">בהיר</option>
-              <option value="cloudy">מעונן</option>
-              <option value="drizzle">טפטוף</option>
-              <option value="rain">גשם</option>
-              <option value="storm">סערה</option>
-              <option value="fog">ערפל</option>
+              <option value="auto" data-he="משתנה מעצמו">Changes by itself</option>
+              <option value="clear" data-he="בהיר">Clear</option>
+              <option value="cloudy" data-he="מעונן">Cloudy</option>
+              <option value="drizzle" data-he="טפטוף">Drizzle</option>
+              <option value="rain" data-he="גשם">Rain</option>
+              <option value="storm" data-he="סערה">Storm</option>
+              <option value="fog" data-he="ערפל">Fog</option>
             </select>
           </label>
         </section>
         <section class="opt-group saves">
-          <h3>שמירה</h3>
+          <h3 data-he="שמירה">Save</h3>
           <div id="save-rows"></div>
         </section>
       </div>
       <div class="pause-foot">
-        <button id="bench-btn" class="btn mini">מסלול מבחן ביצועים (דקה)</button>
-        <button id="reset-btn" class="btn mini">ההגדרות כמו בהתחלה</button>
+        <button id="bench-btn" class="btn mini" data-he="מסלול מבחן ביצועים (דקה)">Performance test route (1 min)</button>
+        <button id="reset-btn" class="btn mini" data-he="ההגדרות כמו בהתחלה">Reset settings</button>
       </div>
-      <p class="saved-note">ההגדרות נשמרות לפעם הבאה.</p>
+      <p class="saved-note" data-he="ההגדרות נשמרות לפעם הבאה.">Settings are kept for next time.</p>
     </div>
   </div>
 
@@ -459,27 +459,43 @@
 
   <div id="busted" class="overlay hidden">
     <div class="sheet small">
-      <h2>נעצרתם!</h2>
-      <p id="busted-why">נכנעתם, והשוטרים אזקו אתכם.</p>
-      <p>לילה בתא המעצר בתחנת המשטרה שבכיכר המזרקה. הנשק שציירתם והאפוד מוחרמים, ואפשר לצייר אותם שוב.</p>
+      <h2 data-he="נעצרתם!">Busted!</h2>
+      <p id="busted-why" data-he="נכנעתם, והשוטרים אזקו אתכם.">You gave up, and the cops cuffed you.</p>
+      <p data-he="לילה בתא המעצר בתחנת המשטרה שבכיכר המזרקה. הנשק שציירתם והאפוד מוחרמים, ואפשר לצייר אותם שוב.">A night in a cell at the Fountain Square police station. The weapon you drew and your armor are confiscated — you can draw them again.</p>
       <p id="busted-fine" class="money-note"></p>
-      <button id="busted-btn" class="btn primary">לצאת מהתחנה</button>
+      <button id="busted-btn" class="btn primary" data-he="לצאת מהתחנה">Leave the station</button>
     </div>
   </div>
 
   <div id="death" class="overlay hidden">
     <div class="sheet small">
-      <h2>נמחקת!</h2>
-      <p>מישהו מחק אותך מהמחברת… אבל אפשר לצייר אותך מחדש.</p>
+      <h2 data-he="נמחקת!">Erased!</h2>
+      <p data-he="מישהו מחק אותך מהמחברת… אבל אפשר לצייר אותך מחדש.">Someone erased you from the notebook… but you can be drawn again.</p>
       <p id="death-money" class="money-note"></p>
-      <button id="respawn-btn" class="btn primary">צייר אותי מחדש</button>
+      <button id="respawn-btn" class="btn primary" data-he="צייר אותי מחדש">Draw me again</button>
     </div>
   </div>
 
-  <div id="rotate-hint" class="overlay hidden"><div class="sheet small"><h2>סובבו את הטלפון לרוחב</h2><p>המשחק עובד הכי טוב לרוחב.</p></div></div>
+  <div id="rotate-hint" class="overlay hidden"><div class="sheet small"><h2 data-he="סובבו את הטלפון לרוחב">Turn your phone sideways</h2><p data-he="המשחק עובד הכי טוב לרוחב.">The game plays best in landscape.</p></div></div>
   <div id="fatal" class="hidden"></div>
 </div>
 
+<script>
+// (ROADMAP 24) Hebrew, when it was chosen: the page's words from their data-he* before anything is drawn (core/lang.js
+// applyStaticLang does the same, later, for what it is given)
+(function () {
+  try {
+    if (document.documentElement.lang !== 'he') return;
+    var each = function (sel, f) { var a = document.querySelectorAll(sel); for (var i = 0; i < a.length; i++) f(a[i]); };
+    each('[data-he]', function (el) { el.textContent = el.getAttribute('data-he'); });
+    each('[data-he-html]', function (el) { el.innerHTML = el.getAttribute('data-he-html'); });
+    each('[data-he-title]', function (el) { el.title = el.getAttribute('data-he-title'); });
+    each('[data-he-placeholder]', function (el) { el.placeholder = el.getAttribute('data-he-placeholder'); });
+    each('[data-he-aria]', function (el) { el.setAttribute('aria-label', el.getAttribute('data-he-aria')); });
+    document.body.classList.add('lang-he');
+  } catch (e) {}
+})();
+</script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

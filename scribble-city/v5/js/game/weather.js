@@ -3,6 +3,7 @@ import { shared } from '../render/materials.js';
 import { STYLE, GFX } from '../core/util.js';
 import { RainRenderer } from '../render/rain.js';
 
+import { tr } from '../core/lang.js';
 // The city's weather (ROADMAP 1.2): clear, cloudy, drizzle, rain, a storm with lightning and
 // thunder, and fog in the morning. One turns into the next slowly: the clouds come first and the
 // rain after them, the rain stops before the sky clears, the puddles fill while it rains and dry
@@ -33,12 +34,12 @@ const NEXT = {
 };
 
 const SAY = {
-  clear: 'השמיים מתבהרים',
-  cloudy: 'עננים מתקבצים מעל העיר',
-  drizzle: 'מתחיל לטפטף',
-  rain: 'יורד גשם',
-  storm: 'סערה! ברקים ורעמים',
-  fog: 'ערפל בוקר על העיר',
+  clear: tr('השמיים מתבהרים', 'The sky is clearing'),
+  cloudy: tr('עננים מתקבצים מעל העיר', 'Clouds are gathering over the city'),
+  drizzle: tr('מתחיל לטפטף', 'It\'s starting to drizzle'),
+  rain: tr('יורד גשם', 'It\'s raining'),
+  storm: tr('סערה! ברקים ורעמים', 'A storm! Thunder and lightning'),
+  fog: tr('ערפל בוקר על העיר', 'Morning fog over the city'),
 };
 
 const STORE = 'scribble-city-v5-weather';

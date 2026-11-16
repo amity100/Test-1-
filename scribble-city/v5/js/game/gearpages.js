@@ -1,6 +1,7 @@
 import { NODES } from '../world/roads.js';
 import { groundHeight } from '../world/layout.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.28) The blueprint pages: hidden about the city, at the corners of its crossings - each one
 // found opens the next thing of the pen (game/gearplay.js page). A page is a sheet of blue paper standing
 // a little over the road, turning, a thing's drawing in white on it; the minimap shows the ones near you.
@@ -68,7 +69,7 @@ export class GearPages {
       P.state.found.push(s.id);
       g.fx.sparks(s.x, s.y + 1.2, s.z, 18, [0.6, 0.8, 1]);
       g.fx.crumbs(s.x, s.y + 1.2, s.z, 10, 2);
-      P.page(`נמצא דף ${P.state.found.length} מתוך ${this.spots.length}`);
+      P.page(tr(`נמצא דף ${P.state.found.length} מתוך ${this.spots.length}`, `Found page ${P.state.found.length} of ${this.spots.length}`));
     }
   }
 

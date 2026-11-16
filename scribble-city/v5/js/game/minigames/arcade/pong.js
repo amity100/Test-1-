@@ -4,6 +4,7 @@
 
 import { CabGame, NEON, glowLine, glowCircle, glowRect, glowText } from './cab.js';
 
+import { tr } from '../../../core/lang.js';
 const TOP = 70;
 const BOT = 585;
 const PH = 96;
@@ -14,9 +15,9 @@ export class PaperPong extends CabGame {
     super(o);
     this.id = 'pong';
     this.name = 'PAPER PONG';
-    this.title = 'PAPER PONG · מכונת משחק';
-    this.help = 'למעלה ולמטה להזיז את הסרגל · Esc לצאת';
-    this.helpTouch = 'החצים, או אצבע על המסך, להזיז את הסרגל';
+    this.title = tr('PAPER PONG · מכונת משחק', 'PAPER PONG · arcade machine');
+    this.help = tr('למעלה ולמטה להזיז את הסרגל · Esc לצאת', 'Up and down to move the ruler · Esc to leave');
+    this.helpTouch = tr('החצים, או אצבע על המסך, להזיז את הסרגל', 'The arrows, or a finger on the screen, to move the ruler');
     this.color = NEON.white;
     this.tint = '#0a1422';
     this.lives0 = 1;

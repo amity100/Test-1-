@@ -4,6 +4,7 @@ import { CLASSES, VEHICLE_GROUPS } from './sketchnet.js';
 import { placeOf, roleOf } from './partrole.js';
 import { rideCombos } from './combos.js';
 
+import { tr, lang } from '../core/lang.js';
 // (ROADMAP 11.10, the sample) What a ride does is its parts added up - each part does one thing,
 // the same thing on anything it is put on, and how much of it by how big it was drawn:
 //   - a wheel: it drives. The bigger the wheels, the faster; the more of them, the better they hold
@@ -37,11 +38,11 @@ const MOVERS = new Set(['wheel', 'rotor', 'wing', 'prop', 'jet', 'sail', 'balloo
 // it): red fire, orange a blast, yellow a shock, green glue, blue water, purple ink, pink bounces,
 // white correction fluid, neon light
 const INK_EL = [null, null, 'fire', 'blast', 'shock', 'glue', 'water', 'ink', 'bounce', 'tippex', 'light'];
-const EL_NAME = { fire: 'אש', blast: 'נפץ', shock: 'חשמל', glue: 'דבק', water: 'מים', ink: 'דיו', bounce: 'קופצני', tippex: 'טיפקס', light: 'אור' };
+const EL_NAME = { fire: tr('אש', 'Fire'), blast: tr('נפץ', 'Explosive'), shock: tr('חשמל', 'Electric'), glue: tr('דבק', 'Glue'), water: tr('מים', 'Water'), ink: tr('דיו', 'Ink'), bounce: tr('קופצני', 'Bouncy'), tippex: tr('טיפקס', 'White-out'), light: tr('אור', 'Light') };
 // (what each barrel is called on the card: a flamethrower, a water cannon, a ray; a machine gun
 // or a cannon of its ink)
-const STREAM_NAME = { fire: 'להביור', water: 'תותח מים', light: 'לייזר' };
-const gunName = (gn) => (gn.el && STREAM_NAME[gn.el] ? STREAM_NAME[gn.el] : gn.down && gn.type === 'cannon' ? `פצצות${gn.el ? ` ${EL_NAME[gn.el]}` : ''}` : `${gn.type === 'cannon' ? 'תותח' : 'מקלע'}${gn.el ? ` ${EL_NAME[gn.el]}` : ''}`);
+const STREAM_NAME = { fire: tr('להביור', 'Flamethrower'), water: tr('תותח מים', 'Water cannon'), light: tr('לייזר', 'Laser') };
+const gunName = (gn) => (gn.el && STREAM_NAME[gn.el] ? STREAM_NAME[gn.el] : gn.down && gn.type === 'cannon' ? tr(`פצצות${gn.el ? ` ${EL_NAME[gn.el]}` : ''}`, `Bombs${gn.el ? ` ${EL_NAME[gn.el]}` : ''}`) : `${gn.type === 'cannon' ? tr('תותח', 'Cannon') : tr('מקלע', 'Machine gun')}${gn.el ? ` ${EL_NAME[gn.el]}` : ''}`);
 
 function inkOf(inks, i) {
   const ink = inks[i] || inks[0];
@@ -945,7 +946,7 @@ export function rideSpec(design) {
   }
   const L = x1 - x0;
   const H = y1 - y0;
-  if (!bodies.length || !(L > 0)) return { ok: false, why: 'חסר גוף: צורה סגורה גדולה', sum: null };
+  if (!bodies.length || !(L > 0)) return { ok: false, why: tr('חסר גוף: צורה סגורה גדולה', 'No body: a big closed shape'), sum: null };
   bx /= Math.max(1e-9, area);
   by /= Math.max(1e-9, area);
   // ---- (ROADMAP 11.12) each part: what it is, where it is (game/partrole.js) - its wheels first,
@@ -971,14 +972,14 @@ export function rideSpec(design) {
   // ROADMAP 11.13: a wing drawn hanging off its body, made the wing it is from above - wingPlan)
   // (a rocket's engine added in its foot: where it is says what it does - down, it lifts)
   for (const s of S) if (s.made && !(s.implicit && s.part === 'jet') && role.has(s) && (s.part === 'wing' || s.part === 'jet')) role.get(s).v = s.part;
-  for (const s of S) if (s.plan && s.part === 'wing' && role.has(s) && role.get(s).v !== 'wing') Object.assign(role.get(s), { v: 'wing', name: 'כנף', say: ctx.thrust ? 'מרימה: טס כשיש מספיק מהירות' : 'מרימה: יש לו מנוע קטן בפנים — מדחף או סילון יוסיפו מהירות' });
+  for (const s of S) if (s.plan && s.part === 'wing' && role.has(s) && role.get(s).v !== 'wing') Object.assign(role.get(s), { v: 'wing', name: tr('כנף', 'Wing'), say: ctx.thrust ? tr('מרימה: טס כשיש מספיק מהירות', 'Lift: it flies once it has enough speed') : tr('מרימה: יש לו מנוע קטן בפנים — מדחף או סילון יוסיפו מהירות', 'Lift: it has a small engine inside — a propeller or a jet would add speed') });
   // (ROADMAP 11.13: the rotor the game adds where nothing drawn lifts it - two, one over the other,
   // over it: they lift it)
-  for (const s of S) if (s.implicit && s.part === 'rotor' && role.has(s)) Object.assign(role.get(s), { v: 'lift', name: 'רוטור כפול', say: 'שני רוטורים, אחד מעל השני, מסתובבים הפוך: מרים, ולא מסובב אותו סביב עצמו' });
+  for (const s of S) if (s.implicit && s.part === 'rotor' && role.has(s)) Object.assign(role.get(s), { v: 'lift', name: tr('רוטור כפול', 'Twin rotor'), say: tr('שני רוטורים, אחד מעל השני, מסתובבים הפוך: מרים, ולא מסובב אותו סביב עצמו', 'Two rotors, one above the other, turning opposite ways: it lifts, and doesn\'t spin around itself') });
   // (and the small one the engineer adds at a helicopter's tail - game/engineer.js: its tail rotor)
-  for (const s of S) if (s.implicit && s.part === 'prop' && !s.push && role.has(s)) Object.assign(role.get(s), { v: 'tail', name: 'רוטור זנב', say: 'בזנב: מחזיק את המסוק ישר — בלעדיו הוא מסתובב סביב עצמו' });
+  for (const s of S) if (s.implicit && s.part === 'prop' && !s.push && role.has(s)) Object.assign(role.get(s), { v: 'tail', name: tr('רוטור זנב', 'Tail rotor'), say: tr('בזנב: מחזיק את המסוק ישר — בלעדיו הוא מסתובב סביב עצמו', 'On the tail: keeps the helicopter straight — without it, it spins around itself') });
   // (ROADMAP 11.14: the one the game adds at the back of a winged thing with nothing to push it)
-  for (const s of S) if (s.implicit && s.push && role.has(s)) Object.assign(role.get(s), { v: 'pusher', name: 'מדחף דוחף', say: 'נוסף מאחור: דוחף אותו, והכנפיים מרימות' });
+  for (const s of S) if (s.implicit && s.push && role.has(s)) Object.assign(role.get(s), { v: 'pusher', name: tr('מדחף דוחף', 'Pusher propeller'), say: tr('נוסף מאחור: דוחף אותו, והכנפיים מרימות', 'Added at the back: pushes it, and the wings lift') });
   // (a stream - water, fire, light - is no giant cannon however it is drawn)
   for (const s of S) if (s.el && STREAM_NAME[s.el] && role.has(s) && role.get(s).v === 'giant') Object.assign(role.get(s), { v: 'mg', name: STREAM_NAME[s.el], say: '' });
   // ---- what moves it
@@ -1160,18 +1161,18 @@ export function rideSpec(design) {
   const gear = drive && !tracks.length && !!airy && ((rAvg < H * 0.27 && spread < 0.55 && (wings.length > 0 || boom || !rotors.length)) || rAvg < H * 0.18 || (L / Math.max(0.1, H) > 4.8 && rAvg < H * 0.5));
   const force = plane && (gear || !drive) ? 'plane' : copter && (gear || !drive) ? 'copter' : drive ? 'car' : copter ? 'copter' : plane ? 'plane' : balloon ? 'balloon' : boat ? 'boat' : null;
   const warn = [];
-  if (rotors.length && liftR < 1 && !(liftJ >= 1)) warn.push(liftR >= LMIN ? 'הרוטור קטן למשקל — מתרומם לאט. רוטור גדול יותר יטוס מהר יותר' : 'הרוטור קטן מדי למשקל — לא יתרומם. רוטור גדול יותר, או פחות משקל');
-  if (vtols.length && liftJ < 1 && !(rotors.length && liftR >= 1)) warn.push(liftJ >= LMIN ? 'הסילונים שמתחת חלשים למשקל — ממריא לאט. עוד סילון ימריא מהר יותר' : 'הסילונים שמתחת חלשים מדי למשקל — לא ימריא. עוד סילון, או פחות משקל');
-  if (wings.length && thrust > 0 && !plane) warn.push('הכנפיים קטנות מדי למשקל — לא ימריא');
-  else if (wings.length && thrust > 0 && liftW < 0.7) warn.push('הכנפיים קטנות למשקל — צריך הרבה מהירות כדי להמריא. כנפיים גדולות יותר ימריאו מהר יותר');
-  if (wings.length && !thrust && !drive) warn.push('כנפיים בלי מדחף או סילון — אין מה שיזיז אותו');
-  if (inner) warn.push('לא צויר מנוע: יש לו מנוע קטן בפנים. מדחף או סילון שמציירים — מהיר יותר');
-  if (floaty) warn.push('הבלון קטן מדי למשקל — לא מרים, רק מאט נפילה. בלון גדול יותר ימריא');
+  if (rotors.length && liftR < 1 && !(liftJ >= 1)) warn.push(liftR >= LMIN ? tr('הרוטור קטן למשקל — מתרומם לאט. רוטור גדול יותר יטוס מהר יותר', 'The rotor is small for the weight — it lifts slowly. A bigger rotor would fly faster') : tr('הרוטור קטן מדי למשקל — לא יתרומם. רוטור גדול יותר, או פחות משקל', 'The rotor is too small for the weight — it won\'t lift. A bigger rotor, or less weight'));
+  if (vtols.length && liftJ < 1 && !(rotors.length && liftR >= 1)) warn.push(liftJ >= LMIN ? tr('הסילונים שמתחת חלשים למשקל — ממריא לאט. עוד סילון ימריא מהר יותר', 'The jets underneath are weak for the weight — it takes off slowly. Another jet would take off faster') : tr('הסילונים שמתחת חלשים מדי למשקל — לא ימריא. עוד סילון, או פחות משקל', 'The jets underneath are too weak for the weight — it won\'t take off. Another jet, or less weight'));
+  if (wings.length && thrust > 0 && !plane) warn.push(tr('הכנפיים קטנות מדי למשקל — לא ימריא', 'The wings are too small for the weight — it won\'t take off'));
+  else if (wings.length && thrust > 0 && liftW < 0.7) warn.push(tr('הכנפיים קטנות למשקל — צריך הרבה מהירות כדי להמריא. כנפיים גדולות יותר ימריאו מהר יותר', 'The wings are small for the weight — it needs a lot of speed to take off. Bigger wings would take off sooner'));
+  if (wings.length && !thrust && !drive) warn.push(tr('כנפיים בלי מדחף או סילון — אין מה שיזיז אותו', 'Wings without a propeller or a jet — nothing moves it'));
+  if (inner) warn.push(tr('לא צויר מנוע: יש לו מנוע קטן בפנים. מדחף או סילון שמציירים — מהיר יותר', 'No engine drawn: it has a small engine inside. A propeller or a jet you draw — faster'));
+  if (floaty) warn.push(tr('הבלון קטן מדי למשקל — לא מרים, רק מאט נפילה. בלון גדול יותר ימריא', 'The balloon is too small for the weight — it doesn\'t lift, it only slows a fall. A bigger balloon would take off'));
   if (!force) {
     const sum = summary({ ok: false, mass, L, H, wheels, warn, design, liftR, liftJ, liftW, role, com });
     // (ROADMAP 11.13: what it has that would move it, too weak - that, not "add something")
     const weak = warn.find((w) => /קטן מדי|קטנות מדי|חלשים מדי|בלי מדחף/.test(w));
-    return { ok: false, why: weak || 'עוד לא זז — הוסיפו גלגלים, רוטור, כנפיים עם מדחף, מפרש או בלון', sum, mass, role, com, lifts: { R: liftR, J: liftJ, W: liftW / 0.7 } };
+    return { ok: false, why: weak || tr('עוד לא זז — הוסיפו גלגלים, רוטור, כנפיים עם מדחף, מפרש או בלון', 'It doesn\'t move yet — add wheels, a rotor, wings with a propeller, a sail or a balloon'), sum, mass, role, com, lifts: { R: liftR, J: liftJ, W: liftW / 0.7 } };
   }
   const abil = { drive, fly: copter && force !== 'copter' ? 'rotor' : plane && force !== 'plane' ? 'wings' : balloon && force !== 'balloon' ? 'balloon' : undefined, float: boat && force !== 'boat', gun: barrels.length > 0 };
   // (the drawing as game/drawncar.js reads one - and then its numbers, the parts')
@@ -1192,8 +1193,8 @@ export function rideSpec(design) {
   if (inner) {
     const k = planeNoun(S, role, { jets: [], props: [] }, design);
     spec.inner = k === 'fighter' || k === 'airliner' || k === 'jet' ? 'jet' : 'prop';
-    const wi = warn.findIndex((t) => t.startsWith('לא צויר מנוע'));
-    if (wi >= 0) warn[wi] = spec.inner === 'jet' ? 'לא צויר מנוע: יש לו סילון קטן בזנב. סילון או מדחף שמציירים — מהיר יותר' : 'לא צויר מנוע: יש לו מדחף קטן באף. מדחף או סילון שמציירים — מהיר יותר';
+    const wi = warn.findIndex((t) => t.startsWith(tr('לא צויר מנוע', 'No engine drawn')));
+    if (wi >= 0) warn[wi] = spec.inner === 'jet' ? tr('לא צויר מנוע: יש לו סילון קטן בזנב. סילון או מדחף שמציירים — מהיר יותר', 'No engine drawn: it has a small jet on the tail. A jet or a propeller you draw — faster') : tr('לא צויר מנוע: יש לו מדחף קטן באף. מדחף או סילון שמציירים — מהיר יותר', 'No engine drawn: it has a small propeller on the nose. A propeller or a jet you draw — faster');
     if (spec.inner === 'prop') {
       const mb = bodies.reduce((a, b) => (!a || (shapeOf(b.pts).area || 0) > (shapeOf(a.pts).area || 0) ? b : a), null);
       const sp = mb ? spanAt(outline(mb.pts), x1 - L * 0.04) : null;
@@ -1288,22 +1289,22 @@ export function rideSpec(design) {
         if (t < -0.06) {
           spec.tilt = clamp(-t * 0.6, 0.08, 0.3);
           top *= 0.75;
-          warn.push('מרכז הכובד מאחורי הגלגלים — הוא נשען על הזנב ונגרר. גלגל אחורי רחוק יותר, או פחות משקל מאחור');
+          warn.push(tr('מרכז הכובד מאחורי הגלגלים — הוא נשען על הזנב ונגרר. גלגל אחורי רחוק יותר, או פחות משקל מאחור', 'The center of gravity is behind the wheels — it leans on its tail and drags. A rear wheel further back, or less weight at the back'));
         } else if (t > 1.06) {
           spec.tilt = -clamp((t - 1) * 0.6, 0.08, 0.3);
           top *= 0.75;
-          warn.push('מרכז הכובד לפני הגלגלים — האף נגרר על הכביש. גלגל קדמי רחוק יותר, או פחות משקל מקדימה');
+          warn.push(tr('מרכז הכובד לפני הגלגלים — האף נגרר על הכביש. גלגל קדמי רחוק יותר, או פחות משקל מקדימה', 'The center of gravity is in front of the wheels — the nose drags on the road. A front wheel further forward, or less weight in front'));
         } else if (t < 0.14) {
           hx.wheelie = clamp((0.14 - t) / 0.2 + 0.35, 0.35, 1);
           steer *= 0.8;
-          warn.push('מרכז הכובד מעל הגלגלים האחוריים — האף מתרומם בהאצה, וההיגוי קל');
+          warn.push(tr('מרכז הכובד מעל הגלגלים האחוריים — האף מתרומם בהאצה, וההיגוי קל', 'The center of gravity is over the rear wheels — the nose lifts when it speeds up, and the steering is light'));
         } else if (t > 0.86) {
           steer *= 0.85;
           hx.dive = 1.8;
-          warn.push('מרכז הכובד מעל הגלגלים הקדמיים — פונה פחות טוב וצולל בבלימה');
+          warn.push(tr('מרכז הכובד מעל הגלגלים הקדמיים — פונה פחות טוב וצולל בבלימה', 'The center of gravity is over the front wheels — it turns less well and dives when it brakes'));
         }
       }
-      if (hx.tipA) warn.push(roofWheels.length || upside ? 'גבוה וצר — עלול להתהפך בפנייה חדה, אבל גלגלי הגג ימשיכו לנסוע' : 'גבוה וצר — עלול להתהפך בפנייה חדה. רחב יותר, נמוך יותר, או גלגלים על הגג');
+      if (hx.tipA) warn.push(roofWheels.length || upside ? tr('גבוה וצר — עלול להתהפך בפנייה חדה, אבל גלגלי הגג ימשיכו לנסוע', 'Tall and narrow — it may flip in a sharp turn, but the roof wheels will keep it going') : tr('גבוה וצר — עלול להתהפך בפנייה חדה. רחב יותר, נמוך יותר, או גלגלים על הגג', 'Tall and narrow — it may flip in a sharp turn. Wider, lower, or wheels on the roof'));
       const ends = spec.balance === undefined ? 1 : spec.balance < -0.06 || spec.balance > 1.06 ? 0.4 : spec.balance < 0.14 || spec.balance > 0.86 ? 0.75 : 1;
       spec.steady = bike ? 0.45 : clamp(Math.min(1, ssf / (TIP_SSF * 2)) * ends, 0.05, 1);
     } else spec.steady = 0.2;
@@ -1338,12 +1339,12 @@ export function rideSpec(design) {
     if (rotors.length === 1 && !rotors[0].coax && liftR >= LMIN && !tailRS.length && !(liftJ >= 1)) {
       // (ROADMAP 11.15: as drawn, the game holds it nearly straight - a tail rotor holds it all the way)
       spec.spin = assist ? 0.18 : 0.5;
-      warn.push(assist ? 'רוטור אחד בלי רוטור זנב — מסתובב קצת סביב עצמו. רוטור קטן בזנב יחזיק אותו ישר' : 'רוטור אחד בלי רוטור זנב — בטיסה הוא מסתובב סביב עצמו. רוטור קטן בזנב, או רוטור שני, יחזיקו אותו ישר');
+      warn.push(assist ? tr('רוטור אחד בלי רוטור זנב — מסתובב קצת סביב עצמו. רוטור קטן בזנב יחזיק אותו ישר', 'One rotor without a tail rotor — it spins around itself a little. A small rotor on the tail would keep it straight') : tr('רוטור אחד בלי רוטור זנב — בטיסה הוא מסתובב סביב עצמו. רוטור קטן בזנב, או רוטור שני, יחזיקו אותו ישר', 'One rotor without a tail rotor — in flight it spins around itself. A small rotor on the tail, or a second rotor, would keep it straight'));
     }
     if (Math.abs(off) > 0.08) {
       spec.lean = clamp(off * 1.5, -0.3, 0.3);
-      const what = rotors.length && liftR >= 1 ? 'הרוטור' : 'הסילונים';
-      warn.push(off > 0 ? `${what} מאחורי מרכז הכובד — נוטה קדימה וזז לבד` : `${what} לפני מרכז הכובד — נוטה אחורה וזז לבד`);
+      const what = rotors.length && liftR >= 1 ? tr('הרוטור', 'The rotor') : tr('הסילונים', 'The jets');
+      warn.push(off > 0 ? tr(`${what} מאחורי מרכז הכובד — נוטה קדימה וזז לבד`, `${what} behind the center of gravity — it tips forward and moves by itself`) : tr(`${what} לפני מרכז הכובד — נוטה אחורה וזז לבד`, `${what} in front of the center of gravity — it tips back and moves by itself`));
     }
   }
   if (spec.modes.plane) {
@@ -1363,10 +1364,10 @@ export function rideSpec(design) {
       const sm = (com[0] - np / aw) / L;
       if (sm < -0.06) {
         spec.pitchy = clamp(-sm * 5, 0.2, 1);
-        warn.push('מרכז הכובד מאחורי הכנפיים — המטוס מיטלטל באוויר. כנפיים יותר מאחור, או משקל מקדימה');
+        warn.push(tr('מרכז הכובד מאחורי הכנפיים — המטוס מיטלטל באוויר. כנפיים יותר מאחור, או משקל מקדימה', 'The center of gravity is behind the wings — the plane wobbles in the air. Wings further back, or weight in front'));
       } else if (sm > 0.25) {
         spec.stallV = clamp(spec.stallV * 1.15, 11, 30);
-        warn.push('הרבה משקל לפני הכנפיים — צריך יותר מהירות כדי להמריא');
+        warn.push(tr('הרבה משקל לפני הכנפיים — צריך יותר מהירות כדי להמריא', 'A lot of weight in front of the wings — it needs more speed to take off'));
       }
     }
     spec.takeoffV = spec.stallV + 4;
@@ -1381,10 +1382,10 @@ export function rideSpec(design) {
     const envL = shapeOf(balloons[0].pts).w;
     spec.balloon.len = envL;
     spec.balloon.turn = clamp(0.55 - envL * 0.008 + fins.length * 0.04, 0.25, 0.6);
-    if (!push) warn.push('לא צויר מדחף: מנועים קטנים בגונדולה מזיזים אותה לאט. מדחף מאחור — מהירה יותר');
+    if (!push) warn.push(tr('לא צויר מדחף: מנועים קטנים בגונדולה מזיזים אותה לאט. מדחף מאחור — מהירה יותר', 'No propeller drawn: small engines in the gondola move it slowly. A propeller at the back — faster'));
     if (!fins.length) {
       spec.balloon.turn *= 0.7;
-      warn.push('בלי סנפירים בזנב היא מתנדנדת ופונה לאט. סנפירים מאחור ייצבו אותה');
+      warn.push(tr('בלי סנפירים בזנב היא מתנדנדת ופונה לאט. סנפירים מאחור ייצבו אותה', 'Without fins on the tail it wobbles and turns slowly. Fins at the back would steady it'));
     }
   }
   // (ROADMAP 11.14: a hot air balloon with a propeller on its basket - it goes where it is steered,
@@ -1542,87 +1543,87 @@ export function gunOf(s, v = null, mass = 1) {
 
 // ------------------------------------------------------------------ the card: its name, what it does, its numbers
 const NOUN = {
-  car: ['מכונית', 'f'],
-  moto: ['אופנוע', 'm'],
-  mono: ['חד־אופן', 'm'],
-  bicycle: ['אופניים', 'p'],
-  police: ['ניידת', 'f'],
-  van: ['מסחרית', 'f'],
-  pickup: ['טנדר', 'm'],
-  ambulance: ['אמבולנס', 'm'],
-  bus: ['אוטובוס', 'm'],
-  truck: ['משאית', 'f'],
-  firetruck: ['כבאית', 'f'],
-  tractor: ['טרקטור', 'm'],
-  skate: ['סקייטבורד', 'm'],
-  speedboat: ['סירת מנוע', 'f'],
-  canoe: ['קאנו', 'm'],
-  sub: ['צוללת', 'f'],
-  monster: ['מכונית מפלצת', 'f'],
-  jetcar: ['מכונית סילון', 'f'],
-  copter: ['מסוק', 'm'],
-  plane: ['מטוס', 'm'],
-  boat: ['סירה', 'f'],
-  sailboat: ['סירת מפרש', 'f'],
-  ship: ['ספינה', 'f'],
-  balloon: ['כדור פורח', 'm'],
-  tank: ['טנק', 'm'],
-  dozer: ['דחפור', 'm'],
-  crawler: ['רכב זחלים', 'm'],
-  hover: ['רחפת', 'f'],
-  landyacht: ['יאכטת יבשה', 'f'],
-  gun: ['תותח מתגלגל', 'm'],
-  jetcopter: ['רחפן סילון', 'm'],
-  drone: ['רחפן', 'm'],
-  rocket: ['רקטה', 'f'],
-  airliner: ['מטוס נוסעים', 'm'],
-  fighter: ['מטוס קרב', 'm'],
-  jet: ['מטוס סילון', 'm'],
-  biplane: ['מטוס דו־כנפי', 'm'],
-  lightplane: ['מטוס קל', 'm'],
-  tandem: ['מסוק דו־רוטורי', 'm'],
-  airship: ['ספינת אוויר', 'f'],
-  airboat: ['סירת ביצות', 'f'],
-  still: ['פסל', 'm'],
+  car: [tr('מכונית', 'car'), 'f'],
+  moto: [tr('אופנוע', 'Motorbike'), 'm'],
+  mono: [tr('חד־אופן', 'Unicycle'), 'm'],
+  bicycle: [tr('אופניים', 'Bicycle'), 'p'],
+  police: [tr('ניידת', 'police car'), 'f'],
+  van: [tr('מסחרית', 'Van'), 'f'],
+  pickup: [tr('טנדר', 'pickup truck'), 'm'],
+  ambulance: [tr('אמבולנס', 'Ambulance'), 'm'],
+  bus: [tr('אוטובוס', 'Bus'), 'm'],
+  truck: [tr('משאית', 'Truck'), 'f'],
+  firetruck: [tr('כבאית', 'Fire truck'), 'f'],
+  tractor: [tr('טרקטור', 'Tractor'), 'm'],
+  skate: [tr('סקייטבורד', 'Skateboard'), 'm'],
+  speedboat: [tr('סירת מנוע', 'Motorboat'), 'f'],
+  canoe: [tr('קאנו', 'Canoe'), 'm'],
+  sub: [tr('צוללת', 'Submarine'), 'f'],
+  monster: [tr('מכונית מפלצת', 'A monster car'), 'f'],
+  jetcar: [tr('מכונית סילון', 'A jet car'), 'f'],
+  copter: [tr('מסוק', 'Helicopter'), 'm'],
+  plane: [tr('מטוס', 'Plane'), 'm'],
+  boat: [tr('סירה', 'Boat'), 'f'],
+  sailboat: [tr('סירת מפרש', 'Sailboat'), 'f'],
+  ship: [tr('ספינה', 'Ship'), 'f'],
+  balloon: [tr('כדור פורח', 'Hot-air balloon'), 'm'],
+  tank: [tr('טנק', 'Tank'), 'm'],
+  dozer: [tr('דחפור', 'Bulldozer'), 'm'],
+  crawler: [tr('רכב זחלים', 'Tracked vehicle'), 'm'],
+  hover: [tr('רחפת', 'Hovercraft'), 'f'],
+  landyacht: [tr('יאכטת יבשה', 'Land yacht'), 'f'],
+  gun: [tr('תותח מתגלגל', 'Rolling cannon'), 'm'],
+  jetcopter: [tr('רחפן סילון', 'Jet drone'), 'm'],
+  drone: [tr('רחפן', 'Drone'), 'm'],
+  rocket: [tr('רקטה', 'Rocket'), 'f'],
+  airliner: [tr('מטוס נוסעים', 'Airliner'), 'm'],
+  fighter: [tr('מטוס קרב', 'Fighter jet'), 'm'],
+  jet: [tr('מטוס סילון', 'Jet plane'), 'm'],
+  biplane: [tr('מטוס דו־כנפי', 'Biplane'), 'm'],
+  lightplane: [tr('מטוס קל', 'Light plane'), 'm'],
+  tandem: [tr('מסוק דו־רוטורי', 'Twin-rotor helicopter'), 'm'],
+  airship: [tr('ספינת אוויר', 'Airship'), 'f'],
+  airboat: [tr('סירת ביצות', 'Airboat'), 'f'],
+  still: [tr('פסל', 'A statue'), 'm'],
 };
 const ADJ = {
-  fly: ['מעופף', 'מעופפת', 'מעופפים'],
-  glide: ['גולש', 'גולשת', 'גולשים'],
-  float: ['אמפיבי', 'אמפיבית', 'אמפיביים'],
-  armed: ['חמוש', 'חמושה', 'חמושים'],
-  armor: ['משוריין', 'משוריינת', 'משוריינים'],
-  jump: ['קופץ', 'קופצת', 'קופצים'],
-  upside: ['הפוך', 'הפוכה', 'הפוכים'],
-  sail: ['שט', 'שטה', 'שטים'],
-  drive: ['נוסע', 'נוסעת', 'נוסעים'],
+  fly: [tr('מעופף', 'flying'), tr('מעופפת', 'flying'), tr('מעופפים', 'flying')],
+  glide: [tr('גולש', 'gliding'), tr('גולשת', 'gliding'), tr('גולשים', 'gliding')],
+  float: [tr('אמפיבי', 'amphibious'), tr('אמפיבית', 'amphibious'), tr('אמפיביים', 'amphibious')],
+  armed: [tr('חמוש', 'armed'), tr('חמושה', 'armed'), tr('חמושים', 'armed')],
+  armor: [tr('משוריין', 'armored'), tr('משוריינת', 'armored'), tr('משוריינים', 'armored')],
+  jump: [tr('קופץ', 'jumping'), tr('קופצת', 'jumping'), tr('קופצים', 'jumping')],
+  upside: [tr('הפוך', 'upside-down'), tr('הפוכה', 'upside-down'), tr('הפוכים', 'upside-down')],
+  sail: [tr('שט', 'sailing'), tr('שטה', 'sailing'), tr('שטים', 'sailing')],
+  drive: [tr('נוסע', 'driving'), tr('נוסעת', 'driving'), tr('נוסעים', 'driving')],
 };
 // (ROADMAP 11.14) what the network sees in it that is no ride - its noun when it goes all the same
 const BOXY_THING = new Set(['ladder', 'bridge']);
 const THING_NOUN = {
-  house: ['בית', 'm'],
-  tree: ['עץ', 'm'],
-  flower: ['פרח', 'm'],
-  cat: ['חתול', 'm'],
-  star: ['כוכב', 'm'],
-  cloud: ['ענן', 'm'],
-  fish: ['דג', 'm'],
-  face: ['ראש', 'm'],
-  umbrella: ['מטרייה', 'f'],
-  key: ['מפתח', 'm'],
-  ladder: ['סולם', 'm'],
-  bridge: ['גשר', 'm'],
-  sword: ['חרב', 'f'],
-  knife: ['סכין', 'f'],
-  axe: ['גרזן', 'm'],
-  hammer: ['פטיש', 'm'],
-  'baseball bat': ['מחבט', 'm'],
-  boomerang: ['בומרנג', 'm'],
-  rifle: ['רובה', 'm'],
-  pistol: ['אקדח', 'm'],
-  bomb: ['פצצה', 'f'],
-  shield: ['מגן', 'm'],
-  spring: ['קפיץ', 'm'],
-  parachute: ['מצנח', 'm'],
+  house: [tr('בית', 'House'), 'm'],
+  tree: [tr('עץ', 'Tree'), 'm'],
+  flower: [tr('פרח', 'Flower'), 'm'],
+  cat: [tr('חתול', 'Cat'), 'm'],
+  star: [tr('כוכב', 'Star'), 'm'],
+  cloud: [tr('ענן', 'Cloud'), 'm'],
+  fish: [tr('דג', 'Fish'), 'm'],
+  face: [tr('ראש', 'Head'), 'm'],
+  umbrella: [tr('מטרייה', 'Umbrella'), 'f'],
+  key: [tr('מפתח', 'Key'), 'm'],
+  ladder: [tr('סולם', 'Ladder'), 'm'],
+  bridge: [tr('גשר', 'Bridge'), 'm'],
+  sword: [tr('חרב', 'Sword'), 'f'],
+  knife: [tr('סכין', 'Knife'), 'f'],
+  axe: [tr('גרזן', 'Axe'), 'm'],
+  hammer: [tr('פטיש', 'Hammer'), 'm'],
+  'baseball bat': [tr('מחבט', 'Bat'), 'm'],
+  boomerang: [tr('בומרנג', 'Boomerang'), 'm'],
+  rifle: [tr('רובה', 'Rifle'), 'm'],
+  pistol: [tr('אקדח', 'Pistol'), 'm'],
+  bomb: [tr('פצצה', 'Bomb'), 'f'],
+  shield: [tr('מגן', 'Shield'), 'm'],
+  spring: [tr('קפיץ', 'Spring'), 'm'],
+  parachute: [tr('מצנח', 'Parachute'), 'm'],
 };
 // (the network's kind of it: its noun)
 const WATER_NOUN = new Set(['speedboat', 'canoe', 'sub', 'ship', 'sailboat']);
@@ -1743,52 +1744,54 @@ function summary(o) {
     if (spec.armor) say('armor');
     if (spec.spring && spec.spring.jump && adj.length < 2) say('jump');
   }
-  let name = [word, ...adj.slice(0, 2)].join(' ');
+  // (ROADMAP 24: English puts what it is like before what it is - a flying armored car; Hebrew after - מכונית מעופפת משוריינת)
+  let name = lang() === 'en' ? [...adj.slice(0, 2), word].join(' ') : [word, ...adj.slice(0, 2)].join(' ');
+  if (lang() === 'en') name = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
   // (nothing moves it yet, and the network sees a car, a bus, a tractor in it: that, with no wheels -
   // a plain one: a body alone is no police car yet)
   const bare = { police: 'car', ambulance: 'car', firetruck: 'truck' }[kin] || kin;
-  if (noun === 'still' && bare && NOUN[bare] && !WATER_NOUN.has(bare)) name = `${NOUN[bare][0]} בלי גלגלים`;
-  if (has('chute') && spec && spec.chute) name += ' עם מצנח';
-  else if (giant && !whole && noun !== 'tank') name += ' עם תותח ענק';
-  else if (has('blade') && spec && spec.ram && noun !== 'dozer') name += ' עם איל';
-  else if (spec && spec.bumper) name += ' עם פגוש קפיץ';
-  else if (spec && spec.blades && spec.blades.side) name += ' עם להבים';
-  else if (waterOnly) name += ' עם תותח מים';
-  else if (spec && M0(spec).balloon && base !== 'balloon') name += ' עם בלון';
-  else if (spec && spec.balloon && spec.balloon.prop) name += ' עם מדחף';
+  if (noun === 'still' && bare && NOUN[bare] && !WATER_NOUN.has(bare)) name = tr(`${NOUN[bare][0]} בלי גלגלים`, `${NOUN[bare][0]} without wheels`);
+  if (has('chute') && spec && spec.chute) name += tr(' עם מצנח', ' with a parachute');
+  else if (giant && !whole && noun !== 'tank') name += tr(' עם תותח ענק', ' with a giant cannon');
+  else if (has('blade') && spec && spec.ram && noun !== 'dozer') name += tr(' עם איל', ' with a ram');
+  else if (spec && spec.bumper) name += tr(' עם פגוש קפיץ', ' with a spring bumper');
+  else if (spec && spec.blades && spec.blades.side) name += tr(' עם להבים', ' with blades');
+  else if (waterOnly) name += tr(' עם תותח מים', ' with a water cannon');
+  else if (spec && M0(spec).balloon && base !== 'balloon') name += tr(' עם בלון', ' with a balloon');
+  else if (spec && spec.balloon && spec.balloon.prop) name += tr(' עם מדחף', ' with a propeller');
   // ---- what it does (a chip each)
   const abil = [];
   if (spec) {
     const M = spec.modes;
-    if (M.drive) abil.push(['move', 'נסיעה']);
-    if (M.copter) abil.push(['air', 'ריחוף']);
-    if (M.plane) abil.push(['air', 'טיסה']);
-    if (o.glide) abil.push(['air', 'גלישה']);
-    if (M.balloon) abil.push(['air', spec.balloon && spec.balloon.ship ? 'טיסה' : 'התרוממות']);
-    if (M.boat) abil.push(['water', 'שיט']);
-    if (spec.boat && spec.boat.dive) abil.push(['water', 'צלילה']);
-    if (nBarrels) abil.push(['fire', nBarrels > 1 ? `ירי ×${nBarrels}` : 'ירי']);
+    if (M.drive) abil.push(['move', tr('נסיעה', 'Driving')]);
+    if (M.copter) abil.push(['air', tr('ריחוף', 'Hovering')]);
+    if (M.plane) abil.push(['air', tr('טיסה', 'Flight')]);
+    if (o.glide) abil.push(['air', tr('גלישה', 'Gliding')]);
+    if (M.balloon) abil.push(['air', spec.balloon && spec.balloon.ship ? tr('טיסה', 'Flight') : tr('התרוממות', 'Lift')]);
+    if (M.boat) abil.push(['water', tr('שיט', 'Sailing')]);
+    if (spec.boat && spec.boat.dive) abil.push(['water', tr('צלילה', 'Diving')]);
+    if (nBarrels) abil.push(['fire', nBarrels > 1 ? tr(`ירי ×${nBarrels}`, `Fire ×${nBarrels}`) : tr('ירי', 'Fire')]);
     // (a barrel drawn in colour: what it fires, a chip each)
     for (const e of [...new Set((spec.guns || []).map((gn) => gn.el).filter(Boolean))]) abil.push(['el-' + e, EL_NAME[e]]);
-    if (spec.ram) abil.push(['fire', 'ניגוח']);
+    if (spec.ram) abil.push(['fire', tr('ניגוח', 'Ramming')]);
     // (ROADMAP 11.12: what its parts make of it, where they are)
-    if (o.tracks && o.tracks.length) abil.push(['move', 'זחלים']);
-    if (spec.hover) abil.push(['water', 'מים ויבשה']);
-    if (spec.vtols && spec.vtols.length && M.copter) abil.push(['air', 'המראה אנכית']);
-    if (spec.upside) abil.push(['move', 'נוסע הפוך']);
-    else if (spec.roofWheels) abil.push(['move', 'נוסע גם הפוך']);
-    if (giant) abil.push(['fire', 'רתיעה']);
-    if (spec.blades && spec.blades.side) abil.push(['fire', 'להבי צד']);
-    if (spec.blades && spec.blades.rear) abil.push(['fire', 'להב אחורי']);
-    if (spec.bumper) abil.push(['gear', 'פגוש קפיץ']);
-    if (spec.spring && spec.spring.jump) abil.push(['gear', 'קפיצה']);
-    if (spec.spring && spec.spring.kick) abil.push(['gear', 'זינוק']);
-    if (spec.righter) abil.push(['gear', 'מתיישר']);
-    if (spec.handling && spec.handling.brake) abil.push(['move', 'בלם סילון']);
-    if (spec.chute) abil.push(['gear', 'מצנח']);
-    if (spec.floaty) abil.push(['air', 'נפילה איטית']);
-    if (spec.armor) abil.push(['gear', 'שריון']);
-    if ((spec.guns || []).some((gn) => gn.quiet) || (spec.handling && spec.handling.quiet)) abil.push(['gear', 'שקט']);
+    if (o.tracks && o.tracks.length) abil.push(['move', tr('זחלים', 'Tracks')]);
+    if (spec.hover) abil.push(['water', tr('מים ויבשה', 'Water and land')]);
+    if (spec.vtols && spec.vtols.length && M.copter) abil.push(['air', tr('המראה אנכית', 'Vertical takeoff')]);
+    if (spec.upside) abil.push(['move', tr('נוסע הפוך', 'Drives upside-down')]);
+    else if (spec.roofWheels) abil.push(['move', tr('נוסע גם הפוך', 'Drives upside-down too')]);
+    if (giant) abil.push(['fire', tr('רתיעה', 'Recoil')]);
+    if (spec.blades && spec.blades.side) abil.push(['fire', tr('להבי צד', 'Side blades')]);
+    if (spec.blades && spec.blades.rear) abil.push(['fire', tr('להב אחורי', 'Rear blade')]);
+    if (spec.bumper) abil.push(['gear', tr('פגוש קפיץ', 'Spring bumper')]);
+    if (spec.spring && spec.spring.jump) abil.push(['gear', tr('קפיצה', 'Jump')]);
+    if (spec.spring && spec.spring.kick) abil.push(['gear', tr('זינוק', 'Leap')]);
+    if (spec.righter) abil.push(['gear', tr('מתיישר', 'Self-righting')]);
+    if (spec.handling && spec.handling.brake) abil.push(['move', tr('בלם סילון', 'Jet brake')]);
+    if (spec.chute) abil.push(['gear', tr('מצנח', 'Parachute')]);
+    if (spec.floaty) abil.push(['air', tr('נפילה איטית', 'Slow fall')]);
+    if (spec.armor) abil.push(['gear', tr('שריון', 'Armor')]);
+    if ((spec.guns || []).some((gn) => gn.quiet) || (spec.handling && spec.handling.quiet)) abil.push(['gear', tr('שקט', 'Quiet')]);
   }
   // ---- its numbers (each 0..1 for its bar, and as it is said)
   const bars = [];
@@ -1796,52 +1799,52 @@ function summary(o) {
     const M = spec.modes;
     // (on the ground, on the water, in the air: each its own)
     if (M.drive) {
-      bars.push({ k: 'speed', name: 'מהירות', v: (spec.handling.top * 3.6) / 170, txt: `${Math.round(spec.handling.top * 3.6)} קמ״ש` });
-      bars.push({ k: 'accel', name: 'תאוצה', v: spec.handling.power / 24, txt: '' });
-      bars.push({ k: 'grip', name: 'אחיזה', v: spec.handling.grip / 11, txt: '' });
+      bars.push({ k: 'speed', name: tr('מהירות', 'Speed'), v: (spec.handling.top * 3.6) / 170, txt: tr(`${Math.round(spec.handling.top * 3.6)} קמ״ש`, `${Math.round(spec.handling.top * 3.6)} km/h`) });
+      bars.push({ k: 'accel', name: tr('תאוצה', 'Acceleration'), v: spec.handling.power / 24, txt: '' });
+      bars.push({ k: 'grip', name: tr('אחיזה', 'Grip'), v: spec.handling.grip / 11, txt: '' });
       // (ROADMAP 11.12: how steady it stands - its weight over its wheels, low and wide or high
       // and narrow)
-      if (spec.steady !== undefined) bars.push({ k: 'steady', name: 'יציבות', v: spec.steady, txt: spec.handling.tipA ? 'עלול להתהפך' : '', bad: !!spec.handling.tipA || spec.steady < 0.35 });
+      if (spec.steady !== undefined) bars.push({ k: 'steady', name: tr('יציבות', 'Stability'), v: spec.steady, txt: spec.handling.tipA ? tr('עלול להתהפך', 'May flip over') : '', bad: !!spec.handling.tipA || spec.steady < 0.35 });
     } else if (M.boat && spec.boat) {
       const kmh = 20 * spec.boat.q.speed * 3.6;
-      bars.push({ k: 'speed', name: 'מהירות', v: kmh / 100, txt: `${Math.round(kmh)} קמ״ש` });
+      bars.push({ k: 'speed', name: tr('מהירות', 'Speed'), v: kmh / 100, txt: tr(`${Math.round(kmh)} קמ״ש`, `${Math.round(kmh)} km/h`) });
     }
     let air = 0;
     if (M.copter) air = Math.max(air, 24 * spec.qCopter.speed * 3.6);
     if (M.plane) air = Math.max(air, 48 * spec.qPlane.speed * 3.6);
     if (M.balloon && spec.balloon) air = Math.max(air, spec.balloon.drift * 3.6);
-    if (air) bars.push({ k: 'air', name: 'בטיסה', v: air / 240, txt: `${Math.round(air)} קמ״ש` });
+    if (air) bars.push({ k: 'air', name: tr('בטיסה', 'In flight'), v: air / 240, txt: tr(`${Math.round(air)} קמ״ש`, `${Math.round(air)} km/h`) });
     if (rotorOrWings(o)) {
       const lift = Math.max(o.liftR || 0, o.liftJ || 0, o.liftW ? o.liftW / 0.7 : 0);
-      bars.push({ k: 'lift', name: 'עילוי', v: Math.min(1, lift / 2), txt: `×${lift.toFixed(1)}`, bad: lift < 1 });
+      bars.push({ k: 'lift', name: tr('עילוי', 'Lift'), v: Math.min(1, lift / 2), txt: `×${lift.toFixed(1)}`, bad: lift < 1 });
     }
     if (spec.guns.length) {
       const dps = spec.guns.reduce((a, gn) => a + gn.dmg / gn.reload, 0);
       const range = Math.max(...spec.guns.map((gn) => gn.range));
-      bars.push({ k: 'fire', name: 'כוח אש', v: Math.min(1, dps / 320), txt: spec.guns.map(gunName).join(' + ') });
-      bars.push({ k: 'range', name: 'טווח', v: Math.min(1, range / 330), txt: `${range} מ׳` });
+      bars.push({ k: 'fire', name: tr('כוח אש', 'Firepower'), v: Math.min(1, dps / 320), txt: spec.guns.map(gunName).join(' + ') });
+      bars.push({ k: 'range', name: tr('טווח', 'Range'), v: Math.min(1, range / 330), txt: tr(`${range} מ׳`, `${range} m`) });
     }
     if (spec.spring && spec.spring.jump) {
       const h = (spec.spring.jump * spec.spring.jump) / 40;
-      bars.push({ k: 'jump', name: 'קפיצה', v: Math.min(1, h / 5), txt: `${h.toFixed(1)} מ׳` });
+      bars.push({ k: 'jump', name: tr('קפיצה', 'Jump'), v: Math.min(1, h / 5), txt: tr(`${h.toFixed(1)} מ׳`, `${h.toFixed(1)} m`) });
     }
-    bars.push({ k: 'hp', name: 'עמידות', v: spec.hp / 450, txt: `${spec.hp}` });
+    bars.push({ k: 'hp', name: tr('עמידות', 'Toughness'), v: spec.hp / 450, txt: `${spec.hp}` });
   } else if (rotorOrWings(o)) {
     const lift = Math.max(o.liftR || 0, o.liftJ || 0, o.liftW ? o.liftW / 0.7 : 0);
-    bars.push({ k: 'lift', name: 'עילוי', v: Math.min(1, lift / 2), txt: `×${lift.toFixed(1)}`, bad: lift < 1 });
+    bars.push({ k: 'lift', name: tr('עילוי', 'Lift'), v: Math.min(1, lift / 2), txt: `×${lift.toFixed(1)}`, bad: lift < 1 });
   }
   // ---- (ROADMAP 11.11) what its parts make it do that no number says: a line each
   const lines = [];
   if (spec) {
     const D = o.design;
-    if (spec.modes.drive && D.nose !== undefined && D.nose < 0.32) lines.push(['move', 'חרטום מחודד', 'חותך את האוויר: מהיר יותר']);
-    else if (spec.modes.drive && D.nose !== undefined && D.nose > 0.82) lines.push(['move', 'חזית שטוחה', 'דוחפת את האוויר: איטי יותר']);
+    if (spec.modes.drive && D.nose !== undefined && D.nose < 0.32) lines.push(['move', tr('חרטום מחודד', 'A pointed nose'), tr('חותך את האוויר: מהיר יותר', 'Cuts through the air: faster')]);
+    else if (spec.modes.drive && D.nose !== undefined && D.nose > 0.82) lines.push(['move', tr('חזית שטוחה', 'A flat front'), tr('דוחפת את האוויר: איטי יותר', 'Pushes the air: slower')]);
     for (const gn of spec.guns || []) {
-      if (gn.el === 'fire') lines.push(['el-fire', 'קנה אדום', gn.type === 'mg' ? 'להביור: שורף את מה שמולו' : 'פגז שמצית']);
-      else if (gn.el === 'water') lines.push(['el-water', 'קנה כחול', 'סילון מים: הודף ומכבה שריפות']);
-      else if (gn.el === 'light') lines.push(['el-light', 'קנה ניאון', 'קרן אור שעוברת דרך קירות']);
-      else if (gn.el) lines.push(['el-' + gn.el, `${gn.type === 'cannon' ? 'תותח' : 'מקלע'} ${EL_NAME[gn.el]}`, { glue: 'מדביק למקום', shock: 'משתק את מי שסביב', ink: 'ענן דיו שמסתיר', tippex: 'מוחק את מה שפוגע בו', blast: 'מתפוצץ', bounce: 'קופץ מהקירות' }[gn.el]]);
-      if (gn.down) lines.push(['fire', 'קנה כלפי מטה', gn.type === 'cannon' ? 'מטיל פצצות' : 'יורה למטה']);
+      if (gn.el === 'fire') lines.push(['el-fire', tr('קנה אדום', 'A red barrel'), gn.type === 'mg' ? tr('להביור: שורף את מה שמולו', 'Flamethrower: burns whatever\'s in front') : tr('פגז שמצית', 'A shell that sets things on fire')]);
+      else if (gn.el === 'water') lines.push(['el-water', tr('קנה כחול', 'A blue barrel'), tr('סילון מים: הודף ומכבה שריפות', 'A water jet: knocks back and puts out fires')]);
+      else if (gn.el === 'light') lines.push(['el-light', tr('קנה ניאון', 'A neon barrel'), tr('קרן אור שעוברת דרך קירות', 'A beam of light that goes through walls')]);
+      else if (gn.el) lines.push(['el-' + gn.el, `${gn.type === 'cannon' ? tr('תותח', 'Cannon') : tr('מקלע', 'Machine gun')} ${EL_NAME[gn.el]}`, { glue: tr('מדביק למקום', 'Sticks it in place'), shock: tr('משתק את מי שסביב', 'Stuns whoever\'s around'), ink: tr('ענן דיו שמסתיר', 'An ink cloud that hides'), tippex: tr('מוחק את מה שפוגע בו', 'Erases whatever it hits'), blast: tr('מתפוצץ', 'Explodes'), bounce: tr('קופץ מהקירות', 'Bounces off walls') }[gn.el]]);
+      if (gn.down) lines.push(['fire', tr('קנה כלפי מטה', 'A barrel pointing down'), gn.type === 'cannon' ? tr('מטיל פצצות', 'Drops bombs') : tr('יורה למטה', 'Fires downward')]);
     }
   }
   // (ROADMAP 11.12) each part that is something of its own where it is: what it does there (a

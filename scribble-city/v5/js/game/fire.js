@@ -3,6 +3,7 @@ import { groundHeight } from '../world/layout.js';
 import { flashLight } from '../render/materials.js';
 import { firefighterLook } from './looks.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 8.4, not with ?classic) Fire.
 //   - what burns: trash cans and bags, benches, newspaper boxes, the crates and the dumpsters in
 //     the alleys, the palms (their crowns), the bushes, the market's stalls. A blast sets what is
@@ -215,7 +216,7 @@ export class Fire {
       if (!c) return;
       this.engine = { c, f, state: 'drive', t: 0, crew: [], ahead: Infinity, checkT: 0, stuckT: 0 };
       this.stats.engines++;
-      game.hud.toast('כבאית בדרך!', 'info', 2.2);
+      game.hud.toast(tr('כבאית בדרך!', 'A fire truck is on the way!'), 'info', 2.2);
       return;
     }
     const c = E.c;

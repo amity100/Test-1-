@@ -9,6 +9,7 @@ import { venueFrame, floorQuad, wallQuad, canvas, PartySound, drawPeople, Boxes,
 import { paintLED, paintFloor, paintNeon, paintBackdrop, paintBand } from './partyart.js';
 import { megaPlan } from '../world/megaplan.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 12.9, 12.9b) NEON INK's night, the way the world's great clubs do it. Its hall is the
 // city's (world/megaplan.js, world/venues2.js: thirteen metres high, the stage across its back,
 // balconies on three sides, the bars, the VIP sofas); here, the show over it all, built when you
@@ -560,7 +561,7 @@ export class ClubNight {
     if (inP && !this.welcomed && on) {
       this.welcomed = true;
       g.hud.big(F.name, 2200);
-      g.hud.toast('הרחבה מלאה! E על הרחבה כדי לרקוד, מול הבמה כדי לבקש את הדרופ. המדרגות ליד הדלת עולות למרפסות, ל־VIP ולבר העליון', 'info', 5.5);
+      g.hud.toast(tr('הרחבה מלאה! E על הרחבה כדי לרקוד, מול הבמה כדי לבקש את הדרופ. המדרגות ליד הדלת עולות למרפסות, ל־VIP ולבר העליון', 'The dance floor is packed! E on the floor to dance, in front of the stage to ask for the drop. The stairs by the door go up to the balconies, the VIP and the top bar'), 'info', 5.5);
     }
     if (!inP && dist > 50) this.welcomed = false;
     if (this.led) this.led.visible = !this.dancing;
@@ -855,7 +856,7 @@ export class ClubNight {
     p.fig.bellyColor = [0.95, 0.9, 0.6];
     if (g.fx) g.fx.confetti(p.pos.x, p.pos.y + 2.2, p.pos.z, 30, 3);
     g.audio.play('cheer', 0.5);
-    g.hud.toast('הבקבוקים הגיעו עם הזיקוקים! כל המרפסת מריעה לכם. +30 חיים', 'good', 3.5);
+    g.hud.toast(tr('הבקבוקים הגיעו עם הזיקוקים! כל המרפסת מריעה לכם. +30 חיים', 'The bottles arrived with the sparklers! The whole balcony is cheering you. +30 health'), 'good', 3.5);
     for (const w of this.crowd) if (Math.hypot(w.x - p.pos.x, w.z - p.pos.z) < 6) w.cheer = 1;
   }
 
@@ -1026,13 +1027,13 @@ export class ClubNight {
     const d = F.D(p.x);
     const up = p.y > P.by - 1;
     if (!up) {
-      if (Math.abs(u - P.mid) < 3 && d > P.barrier.d && d < P.barrier.d + 1.7) return { kind: 'dj', label: 'E — לבקש מהדי ג׳יי את הדרופ ($20)' };
+      if (Math.abs(u - P.mid) < 3 && d > P.barrier.d && d < P.barrier.d + 1.7) return { kind: 'dj', label: tr('E — לבקש מהדי ג׳יי את הדרופ ($20)', 'E — ask the DJ for the drop ($20)') };
       const fl = P.floor;
-      if (u > fl.u0 && u < fl.u1 && d > fl.d0 && d < fl.d1) return { kind: 'dance', label: 'E — לרקוד על הרחבה (Ink Beat)' };
+      if (u > fl.u0 && u < fl.u1 && d > fl.d0 && d < fl.d1) return { kind: 'dance', label: tr('E — לרקוד על הרחבה (Ink Beat)', 'E — dance on the floor (Ink Beat)') };
       return null;
     }
-    if (d > P.upbar.d0 - 1.4 && Math.abs(u - P.mid) < 6.2) return { kind: 'upbar', label: 'E — הבר העליון: משקאות מעל הרחבה' };
-    for (const v of P.vip) if (Math.abs(d - v.d) < 2.2 && Math.abs(u - v.u) < 4.2) return { kind: 'vip', label: 'E — שירות בקבוקים VIP עם זיקוקים ($150)' };
+    if (d > P.upbar.d0 - 1.4 && Math.abs(u - P.mid) < 6.2) return { kind: 'upbar', label: tr('E — הבר העליון: משקאות מעל הרחבה', 'E — the top bar: drinks over the dance floor') };
+    for (const v of P.vip) if (Math.abs(d - v.d) < 2.2 && Math.abs(u - v.u) < 4.2) return { kind: 'vip', label: tr('E — שירות בקבוקים VIP עם זיקוקים ($150)', 'E — VIP bottle service with sparklers ($150)') };
     return null;
   }
 
@@ -1044,7 +1045,7 @@ export class ClubNight {
     const P = this.P;
     if (tg.kind === 'dj') {
       if (this.part === 'build' || (this.part === 'drop' && this.dropT < 8)) {
-        g.hud.toast('הדי ג׳יי מצביע על הרחבה: זה כבר קורה!', 'info', 2.5);
+        g.hud.toast(tr('הדי ג׳יי מצביע על הרחבה: זה כבר קורה!', 'The DJ points at the dance floor: it\'s happening!'), 'info', 2.5);
         return true;
       }
       if (g.money && !g.money.pay(20, 'DJ')) {
@@ -1053,7 +1054,7 @@ export class ClubNight {
       }
       this.toBuild();
       g.audio.play('coins', 0.5);
-      g.hud.toast('הדי ג׳יי מחייך ומרים יד אל הקהל: הדרופ בדרך!', 'good', 3);
+      g.hud.toast(tr('הדי ג׳יי מחייך ומרים יד אל הקהל: הדרופ בדרך!', 'The DJ smiles and raises a hand to the crowd: the drop is coming!'), 'good', 3);
       return true;
     }
     if (tg.kind === 'dance') {
@@ -1074,14 +1075,14 @@ export class ClubNight {
         if (r && (r.grade === 'S' || r.grade === 'A')) {
           for (const q of this.crowd) if (q.at === 'dance') q.cheer = 1;
           g.audio.play('cheer', 0.5);
-          g.hud.toast('כל הרחבה עצרה להסתכל עליכם!', 'good', 2.8);
-        } else if (r && r.grade) g.hud.toast('רקדתם עם כל המועדון', 'good', 2.4);
+          g.hud.toast(tr('כל הרחבה עצרה להסתכל עליכם!', 'The whole dance floor stopped to watch you!'), 'good', 2.8);
+        } else if (r && r.grade) g.hud.toast(tr('רקדתם עם כל המועדון', 'You danced with the whole club'), 'good', 2.4);
       }, { world });
       return true;
     }
     if (tg.kind === 'vip') {
       if (this.servers.length) {
-        g.hud.toast('המארחים כבר בדרך עם הבקבוקים', 'info', 2.2);
+        g.hud.toast(tr('המארחים כבר בדרך עם הבקבוקים', 'The hosts are already on their way with the bottles'), 'info', 2.2);
         return true;
       }
       if (g.money && !g.money.pay(150, 'VIP')) {
@@ -1091,11 +1092,11 @@ export class ClubNight {
       this.servedYou = false;
       this.service(true);
       g.audio.play('coins', 0.6);
-      g.hud.toast('הזמנתם שירות בקבוקים! המארחים יוצאים מהבר העליון עם הזיקוקים', 'good', 3);
+      g.hud.toast(tr('הזמנתם שירות בקבוקים! המארחים יוצאים מהבר העליון עם הזיקוקים', 'You ordered bottle service! The hosts are coming out of the top bar with the sparklers'), 'good', 3);
       return true;
     }
     if (tg.kind === 'upbar') {
-      const menu = [['מוקטייל ניאון (+15 חיים)', 9, 15, [0.4, 0.85, 0.9]], ['אנרגיה קרה (+20 חיים)', 12, 20, [0.9, 0.95, 0.3]], ['לימונדה ורודה (+10 חיים)', 6, 10, [1, 0.6, 0.75]]];
+      const menu = [[tr('מוקטייל ניאון (+15 חיים)', 'Neon mocktail (+15 health)'), 9, 15, [0.4, 0.85, 0.9]], [tr('אנרגיה קרה (+20 חיים)', 'Cold energy drink (+20 health)'), 12, 20, [0.9, 0.95, 0.3]], [tr('לימונדה ורודה (+10 חיים)', 'Pink lemonade (+10 health)'), 6, 10, [1, 0.6, 0.75]]];
       g.dialog.show('NEON INK', 'Best view of the floor. What can I get you?', menu.map(([label, price, hp, colr]) => ({
         label: `${label} · $${price}`,
         fn: () => {
@@ -1105,7 +1106,7 @@ export class ClubNight {
             pl.fig.belly = Math.min(1, pl.fig.belly + 0.15);
             pl.fig.bellyColor = colr;
             g.audio.play('coins', 0.5);
-            g.hud.toast(`${label.split(' (')[0]}! +${hp} חיים`, 'good', 2);
+            g.hud.toast(tr(`${label.split(' (')[0]}! +${hp} חיים`, `${label.split(' (')[0]}! +${hp} health`), 'good', 2);
           } else g.money.refuse(F.name, price);
         },
       })));

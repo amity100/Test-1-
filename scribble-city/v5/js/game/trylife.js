@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { fmt } from './money.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 16.5) Trying a pair on in a shoe shop (world/shoestore.js) - a part of the shop's life
 // (game/shoplife.js ShopLife: this.tries).
 //
@@ -738,11 +739,11 @@ export class TryLife {
     const life = this.life;
     if (!life.S || !life.S.c || !life.S.c.alive) return false;
     if (this.mine) return true;
-    const req = { v: null, seat: null, look: s.look, what: s.what, price, heb: life.prof.heb[s.what] || 'נעליים', st: 'wait', box: null };
+    const req = { v: null, seat: null, look: s.look, what: s.what, price, heb: life.prof.heb[s.what] || tr('נעליים', 'Shoes'), st: 'wait', box: null };
     this.queue.unshift(req);
     this.mine = req;
     this.say(life.S.c, pick(SAY.you), 1);
-    this.game.hud.toast('המוכר הולך להביא לכם את המידה מהמחסן', 'info', 2.6);
+    this.game.hud.toast(tr('המוכר הולך להביא לכם את המידה מהמחסן', 'The salesman is going to get your size from the stockroom'), 'info', 2.6);
     return true;
   }
 
@@ -755,7 +756,7 @@ export class TryLife {
     box.price = req.price;
     you.items.push({ it: box, s: null, what: req.what, price: req.price, heb: req.heb, look: req.look });
     you.arrange();
-    this.game.hud.toast(`הקופסה אצלכם (${fmt(req.price)}) — משלמים בקופה`, 'good', 2.6);
+    this.game.hud.toast(tr(`הקופסה אצלכם (${fmt(req.price)}) — משלמים בקופה`, `The box is yours (${fmt(req.price)}) — pay at the till`), 'good', 2.6);
   }
 
   update(dt = 1 / 30) {

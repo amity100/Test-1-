@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { clamp } from '../core/util.js';
 import { boxOf, pathLen, inPoly, straightness, isHeart, halves, isScribble, isLoop, xOf } from './signshape.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.9) Quick signs: a stroke or two drawn in the air that act at once, where they are
 // drawn - no drawing to finish, nothing to make. Each is a thing the city asks for:
 // - a heart: patched up (ink for blood)
@@ -14,11 +15,11 @@ import { boxOf, pathLen, inPoly, straightness, isHeart, halves, isScribble, isLo
 // stays a drawing. Strokes in the drawing's units ([x, y]; U px each), as ui/freedraw.js has them.
 
 export const SIGNS = {
-  heart: { name: 'לב', what: 'ריפוי', cost: 15 },
-  stop: { name: 'איקס על מכונית', what: 'עוצרת', cost: 10 },
-  tie: { name: 'לולאה סביב אנשים', what: 'קשורים', cost: 10 },
-  cloud: { name: 'קשקוש', what: 'ענן דיו', cost: 15 },
-  rope: { name: 'קו מכם לגג', what: 'חבל', cost: 8 },
+  heart: { name: tr('לב', 'A heart'), what: tr('ריפוי', 'Heal'), cost: 15 },
+  stop: { name: tr('איקס על מכונית', 'An X on a car'), what: tr('עוצרת', 'It stops'), cost: 10 },
+  tie: { name: tr('לולאה סביב אנשים', 'A loop round people'), what: tr('קשורים', 'Tied up'), cost: 10 },
+  cloud: { name: tr('קשקוש', 'A scribble'), what: tr('ענן דיו', 'An ink cloud'), cost: 15 },
+  rope: { name: tr('קו מכם לגג', 'A line from you to a roof'), what: tr('חבל', 'A rope'), cost: 8 },
 };
 
 const INK = [0.13, 0.1, 0.22];
@@ -252,7 +253,7 @@ export class Signs {
     const info = SIGNS[sg.id];
     const ink = game.ink;
     if (ink && ink.level < info.cost) {
-      game.hud.toast(`אין מספיק דיו ל${info.what} (צריך ${info.cost})`, 'bad', 2);
+      game.hud.toast(tr(`אין מספיק דיו ל${info.what} (צריך ${info.cost})`, `Not enough ink for ${info.what} (you need ${info.cost})`), 'bad', 2);
       game.audio.play('meh', 0.5);
       return false;
     }
@@ -268,7 +269,7 @@ export class Signs {
       p.lastHurt = Math.min(p.lastHurt || 0, t - 4);
       this.hearts.push({ t0: t });
       game.audio.play('magic', 0.6);
-      game.hud.toast(`❤ ריפוי +${Math.round(p.hp - before)}`, 'good', 1.6);
+      game.hud.toast(tr(`❤ ריפוי +${Math.round(p.hp - before)}`, `❤ Healed +${Math.round(p.hp - before)}`), 'good', 1.6);
     } else if (sg.id === 'stop') {
       const c = sg.car;
       c.stopped = true;
@@ -286,7 +287,7 @@ export class Signs {
       fx.smoke(c.pos.x, 0.8, c.pos.z, 1.6);
       game.audio.play('skid', 0.6);
       game.audio.play('snip', 0.5);
-      game.hud.toast(c.police ? '✕ ניידת המשטרה נעצרה — הצמיגים שטוחים' : '✕ המכונית נעצרה — הצמיגים שטוחים', 'good', 1.8);
+      game.hud.toast(c.police ? tr('✕ ניידת המשטרה נעצרה — הצמיגים שטוחים', '✕ The police car stopped — its tires are flat') : tr('✕ המכונית נעצרה — הצמיגים שטוחים', '✕ The car stopped — its tires are flat'), 'good', 1.8);
     } else if (sg.id === 'tie') {
       for (const e of sg.who) {
         e.tiedT = t + TIE_T;
@@ -302,10 +303,10 @@ export class Signs {
       }
       game.audio.play('whoosh', 0.5);
       game.audio.play('glue', 0.5);
-      game.hud.toast(sg.who.length > 1 ? `◯ ${sg.who.length} קשורים בחבל דיו` : '◯ קשור בחבל דיו', 'good', 1.6);
+      game.hud.toast(sg.who.length > 1 ? tr(`◯ ${sg.who.length} קשורים בחבל דיו`, `◯ ${sg.who.length} tied up with an ink rope`) : tr('◯ קשור בחבל דיו', '◯ Tied up with an ink rope'), 'good', 1.6);
     } else if (sg.id === 'cloud') {
       this.puff(sg.x, sg.z);
-      game.hud.toast('☁ ענן דיו — בתוכו אף אחד לא רואה אתכם', 'good', 2);
+      game.hud.toast(tr('☁ ענן דיו — בתוכו אף אחד לא רואה אתכם', '☁ An ink cloud — inside it nobody can see you'), 'good', 2);
     } else if (sg.id === 'rope') {
       const from = p.pos.clone();
       const to = new THREE.Vector3(sg.x, sg.y, sg.z);

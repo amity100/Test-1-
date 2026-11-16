@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CAR_COLORS } from '../render/cars.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 16.8) The bookshop's, the record shop's, the toy shop's, the florist's and the hardware
 // store's people at work, and what moves in them (game/shoplife.js, the flows 'books', 'records',
 // 'toys', 'florist', 'hardware'):
@@ -332,14 +333,14 @@ export function carCare(game, dt) {
     game.audio.play('paint', 0.8);
     if (!(game.lose && game.lose.repainted(v))) {
       cop.drop(1);
-      game.hud.toast(`ספריי הצבע: הרכב בצבע חדש, כוכב אחד פחות (נשארו ${p.paintCans})`, 'good', 2.6);
+      game.hud.toast(tr(`ספריי הצבע: הרכב בצבע חדש, כוכב אחד פחות (נשארו ${p.paintCans})`, `Spray paint: the car in a new color, one star less (${p.paintCans} left)`), 'good', 2.6);
     }
   }
   if (p.tape > 0 && v.maxHp && v.hp > 0 && v.hp < v.maxHp * 0.3) {
     p.tape--;
     v.hp = Math.min(v.maxHp, v.hp + v.maxHp * 0.5);
     game.audio.play('tippex', 0.6);
-    game.hud.toast(`תיקון זריז בנייר דבק: הרכב חזר לחיים (נשארו ${p.tape})`, 'good', 2.4);
+    game.hud.toast(tr(`תיקון זריז בנייר דבק: הרכב חזר לחיים (נשארו ${p.tape})`, `A quick fix with tape: the car is back to life (${p.tape} left)`), 'good', 2.4);
   }
   void dt;
 }

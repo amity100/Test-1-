@@ -5,6 +5,7 @@ import { fbox, fcol, flowerBox } from './deco.js';
 import { shifted } from './kits.js';
 import { CURB } from './layout.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 11.17) A house to walk into: a family's, a painter's, a grandmother's, a villa's -
 // and the one a drawn friend draws for herself on a plot (world/plot.js, game/friend.js). One
 // floor under a gable roof turned to the street, the way a house is drawn: the door under a
@@ -15,18 +16,18 @@ import { CURB } from './layout.js';
 
 // how each kind of house looks (its colours; how steep its roof)
 export const HOME_STYLES = {
-  beach: { heb: 'בית חוף תכלת', wall: '#bfe4f0', trim: '#ffffff', roof: '#3d6fb4', door: '#f2c14e', shut: '#2f8fb0', pitch: 0.62 },
-  spanish: { heb: 'וילה ספרדית', wall: '#f6e7cd', trim: '#a45c3a', roof: '#c6563b', door: '#5c3a27', shut: '#2f7d5c', pitch: 0.5, tiles: true },
-  cottage: { heb: 'בקתה ורודה', wall: '#f7c9d4', trim: '#fff8ef', roof: '#7c4b73', door: '#62b3a5', shut: '#e48aa6', pitch: 0.78 },
-  modern: { heb: 'בית מודרני לבן', wall: '#f3f2ee', trim: '#2b2d33', roof: '#3b3e46', door: '#e07a5f', shut: null, pitch: 0.26, wide: true },
+  beach: { heb: tr('בית חוף תכלת', 'Light blue beach house'), wall: '#bfe4f0', trim: '#ffffff', roof: '#3d6fb4', door: '#f2c14e', shut: '#2f8fb0', pitch: 0.62 },
+  spanish: { heb: tr('וילה ספרדית', 'Spanish villa'), wall: '#f6e7cd', trim: '#a45c3a', roof: '#c6563b', door: '#5c3a27', shut: '#2f7d5c', pitch: 0.5, tiles: true },
+  cottage: { heb: tr('בקתה ורודה', 'Pink cottage'), wall: '#f7c9d4', trim: '#fff8ef', roof: '#7c4b73', door: '#62b3a5', shut: '#e48aa6', pitch: 0.78 },
+  modern: { heb: tr('בית מודרני לבן', 'White modern house'), wall: '#f3f2ee', trim: '#2b2d33', roof: '#3b3e46', door: '#e07a5f', shut: null, pitch: 0.26, wide: true },
 };
 
 // who lives in the houses of the mainland: [the name the street knows, the name you hear]
 export const RESIDENTS = {
-  homeFamily: [['The Garcias', 'משפחת גרסיה'], ['The Lopezes', 'משפחת לופז'], ['The Chens', 'משפחת צ\'ן'], ['The O\'Connors', 'משפחת אוקונור'], ['The Rossis', 'משפחת רוסי'], ['The Nguyens', 'משפחת נגוין'], ['The Cohens', 'משפחת כהן'], ['The Silvas', 'משפחת סילבה']].map(([name, who]) => ({ name, who, ask: `לדבר עם ${who}` })),
-  homeArtist: [['Lucia', 'לוסיה', true], ['Theo', 'תיאו', false], ['Isabel', 'איזבל', true], ['Noam', 'נועם', false], ['Paloma', 'פלומה', true]].map(([n, h, fem]) => ({ name: `${n}'s Studio`, who: `הסטודיו של ${h}`, ask: `לדבר עם ${h}`, fem })),
-  homeGrandma: [['Rosa', 'רוזה'], ['Amelia', 'אמליה'], ['Carmen', 'כרמן'], ['Hannah', 'חנה'], ['Lola', 'לולה']].map(([n, h]) => ({ name: `Grandma ${n}`, who: `סבתא ${h}`, ask: `לדבר עם סבתא ${h}`, fem: true })),
-  homeLux: [['Sterling', 'סטרלינג'], ['Belmont', 'בלמונט'], ['Monroe', 'מונרו'], ['Ashford', 'אשפורד']].map(([n, h]) => ({ name: `${n} Villa`, who: `וילת ${h}`, ask: 'לדבר עם בעלי הווילה' })),
+  homeFamily: [['The Garcias', tr('משפחת גרסיה', 'The Garcia family')], ['The Lopezes', tr('משפחת לופז', 'The Lopez family')], ['The Chens', tr('משפחת צ\'ן', 'The Chen family')], ['The O\'Connors', tr('משפחת אוקונור', 'The O\'Connor family')], ['The Rossis', tr('משפחת רוסי', 'The Rossi family')], ['The Nguyens', tr('משפחת נגוין', 'The Nguyen family')], ['The Cohens', tr('משפחת כהן', 'The Cohen family')], ['The Silvas', tr('משפחת סילבה', 'The Silva family')]].map(([name, who]) => ({ name, who, ask: tr(`לדבר עם ${who}`, `Talk to ${who}`) })),
+  homeArtist: [['Lucia', tr('לוסיה', 'Lucia'), true], ['Theo', tr('תיאו', 'Theo'), false], ['Isabel', tr('איזבל', 'Isabel'), true], ['Noam', tr('נועם', 'Noam'), false], ['Paloma', tr('פלומה', 'Paloma'), true]].map(([n, h, fem]) => ({ name: `${n}'s Studio`, who: tr(`הסטודיו של ${h}`, `${h}'s studio`), ask: tr(`לדבר עם ${h}`, `Talk to ${h}`), fem })),
+  homeGrandma: [['Rosa', tr('רוזה', 'Rosa')], ['Amelia', tr('אמליה', 'Amelia')], ['Carmen', tr('כרמן', 'Carmen')], ['Hannah', tr('חנה', 'Hannah')], ['Lola', tr('לולה', 'Lola')]].map(([n, h]) => ({ name: `Grandma ${n}`, who: tr(`סבתא ${h}`, `Grandma ${h}`), ask: tr(`לדבר עם סבתא ${h}`, `Talk to Grandma ${h}`), fem: true })),
+  homeLux: [['Sterling', tr('סטרלינג', 'Sterling')], ['Belmont', tr('בלמונט', 'Belmont')], ['Monroe', tr('מונרו', 'Monroe')], ['Ashford', tr('אשפורד', 'Ashford')]].map(([n, h]) => ({ name: `${n} Villa`, who: tr(`וילת ${h}`, `Villa ${h}`), ask: tr('לדבר עם בעלי הווילה', 'Talk to the villa\'s owners') })),
 };
 // who lives where (by the district), and in which kind of house
 const HOME_BY = {

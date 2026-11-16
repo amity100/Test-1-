@@ -5,6 +5,7 @@ import { canopyModel } from './parachute.js';
 import { groundHeight, BOUNDS } from '../world/layout.js';
 import { waterSpot, isWater } from './rides.js';
 
+import { tr } from '../core/lang.js';
 // A drawing turning into the real thing.
 //
 // The strokes drawn in the air fly to where the thing is going to be and stretch over its
@@ -189,7 +190,7 @@ export function planDrawing(game, bp, res, sheet) {
       const p = game.player.pos;
       const w = waterSpot(p.x, p.z, v.halfWid || 1) || { x: 24, z: Math.max(-380, Math.min(300, p.z)) };
       v.pos.set(w.x, -0.8, w.z);
-      if (Math.hypot(w.x - p.x, w.z - p.z) > 15) game.hud.toast(`${bp.the || v.label} מחכה לך במים, ליד החוף`, 'info', 2.6);
+      if (Math.hypot(w.x - p.x, w.z - p.z) > 15) game.hud.toast(tr(`${bp.the || v.label} מחכה לך במים, ליד החוף`, `${bp.the || v.label} is waiting for you in the water, by the shore`), 'info', 2.6);
     } else game.vehicles.placeNear(v);
     v.yaw = so.yaw;
     plan.vehicle = v;

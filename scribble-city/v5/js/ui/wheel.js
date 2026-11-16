@@ -1,3 +1,4 @@
+import { tr } from '../core/lang.js';
 // (ROADMAP 6.6, not with ?classic) The weapon wheel. Hold Tab (on a phone: hold the swap button):
 // every weapon you carry round a ring over the picture, and time slows right down; point at one
 // (the mouse, or a finger) and let go to take it.
@@ -85,7 +86,7 @@ export class Wheel {
 
   ammoOf(s) {
     const A = this.game.arsenal;
-    if (s.ammo === Infinity || s.ammo === undefined) return s.uses !== undefined ? `${s.uses} מחיקות` : '';
+    if (s.ammo === Infinity || s.ammo === undefined) return s.uses !== undefined ? tr(`${s.uses} מחיקות`, `${s.uses} erasures`) : '';
     return (A && A.ammoText(s)) || `${Math.ceil(s.ammo)}`;
   }
 

@@ -18,6 +18,7 @@ import { ShopLife, PROFILES as LIFE_PROFILES } from './shoplife.js';
 import { waitBeat, stopWait } from './waiting.js';
 import { EateryLife } from './eaterylife.js';
 
+import { tr } from '../core/lang.js';
 // The shops are open: a shopkeeper out front (tossing dough, sweeping, cutting someone's hair on
 // the sidewalk, strumming a guitar), people popping in and coming back out with a pizza box or a
 // coffee, and you can walk up to any door: they draw what you ask for, right there in the air.
@@ -536,7 +537,7 @@ export class StreetLife {
               seat = st;
             }
           }
-          if (seat) return { shop: a, sit: seat, label: `E — לשבת ולאכול: ${m.item.heb}` };
+          if (seat) return { shop: a, sit: seat, label: tr(`E — לשבת ולאכול: ${m.item.heb}`, `E — sit down and eat: ${m.item.heb}`) };
           continue;
         }
         if (!m) {
@@ -544,7 +545,7 @@ export class StreetLife {
           const kk = a.keeper;
           const dp = ps ? Math.hypot(ps.x - p.pos.x, ps.z - p.pos.z) : 99;
           const dk = kk && kk.alive ? Math.hypot(kk.pos.x - p.pos.x, kk.pos.z - p.pos.z) : 99;
-          if (dp < 1.6 || dk < 2.2) return { shop: a, order: true, label: 'E — להזמין' };
+          if (dp < 1.6 || dk < 2.2) return { shop: a, order: true, label: tr('E — להזמין', 'E — order') };
         }
         continue;
       }
@@ -554,7 +555,7 @@ export class StreetLife {
         const ps = a.room.pay;
         const dp = ps ? Math.hypot(ps.x - p.pos.x, ps.z - p.pos.z) : 99;
         const dk = k && k.alive ? Math.hypot(k.pos.x - p.pos.x, k.pos.z - p.pos.z) : 99;
-        if (dp < 1.6 || dk < 2.2) return { shop: a, pay: true, label: `E — לשלם בקופה (${you.items.length} · ${fmt(you.total())})` };
+        if (dp < 1.6 || dk < 2.2) return { shop: a, pay: true, label: tr(`E — לשלם בקופה (${you.items.length} · ${fmt(you.total())})`, `E — pay at the till (${you.items.length} · ${fmt(you.total())})`) };
       }
       // (ROADMAP 16.4: the deli's counter, the pharmacy's window, the chair - game/counterlife.js;
       // at the corner shop's till with nothing to pay for, a scratch card)
@@ -565,7 +566,7 @@ export class StreetLife {
         if (ctr.M.scratch && (!you || !you.items.length) && !(you && you.pv)) {
           const ps = a.room.pay;
           const dp = ps ? Math.hypot(ps.x - p.pos.x, ps.z - p.pos.z) : 99;
-          if (dp < 1.3 && k && k.alive) return { shop: a, scratch: true, label: 'E — כרטיס גירוד · $2' };
+          if (dp < 1.3 && k && k.alive) return { shop: a, scratch: true, label: tr('E — כרטיס גירוד · $2', 'E — scratch card · $2') };
         }
       }
       if (k && k.alive && Math.hypot(k.pos.x - p.pos.x, k.pos.z - p.pos.z) < 1.6) break;
@@ -589,7 +590,7 @@ export class StreetLife {
         };
         for (const v of a.visitors) near(v.c);
         for (const c of a.extras) near(c);
-        if (who) return { shop: a, gift: who, label: `E — לתת מתנה: ${gifts[0].heb}` };
+        if (who) return { shop: a, gift: who, label: tr(`E — לתת מתנה: ${gifts[0].heb}`, `E — give a gift: ${gifts[0].heb}`) };
       }
     }
     let best = null;
@@ -626,7 +627,7 @@ export class StreetLife {
     if (!best) return null;
     const info = svc(this.game, best.shop.kind, best.shop);
     if (knock) return { shop: best, knock: true, label: `E — ${info.verb}` };
-    return { shop: best, label: best.open ? `E — ${best.room ? best.shop.ask || info.ask || info.verb : info.verb}` : 'החנות סגורה — המוכר ברח' };
+    return { shop: best, label: best.open ? `E — ${best.room ? best.shop.ask || info.ask || info.verb : info.verb}` : tr('החנות סגורה — המוכר ברח', 'The shop is closed — the shopkeeper ran away') };
   }
 
   // (ROADMAP 16.5) a piece of jewellery given at a bar: their delight, and something drawn for you in
@@ -639,7 +640,7 @@ export class StreetLife {
     c.faceYaw = Math.atan2(p.pos.x - c.pos.x, p.pos.z - c.pos.z);
     if (game.bubbles) game.bubbles.say(c, pick(['For me?! It\'s beautiful!', 'Oh my - you shouldn\'t have!', 'Wow... thank you!']), 'plain', 2.6);
     if (game.audio) game.audio.play('magic', 0.6);
-    game.hud.toast(`נתתם את ה${g.heb} במתנה. בתמורה ציירו לכם משהו:`, 'good', 2.6);
+    game.hud.toast(tr(`נתתם את ה${g.heb} במתנה. בתמורה ציירו לכם משהו:`, `You gave the ${g.heb} as a gift. In return, somebody drew you something:`), 'good', 2.6);
     giftBlueprint(game);
   }
 
@@ -715,126 +716,126 @@ const heal = (n, color, text) => (game) => {
   p.hp = Math.min(p.maxHp, p.hp + n);
   p.fig.belly = Math.min(1, p.fig.belly + 0.4);
   p.fig.bellyColor = color;
-  game.hud.toast(text || `יאמי! +${n} חיים`, 'good', 2.2);
+  game.hud.toast(text || tr(`יאמי! +${n} חיים`, `Yum! +${n} health`), 'good', 2.2);
 };
 
 const SERVICES = {
-  hotdog: { verb: 'לקנות נקניקייה', ask: 'לקנות נקניקייה', who: 'עגלת הנקניקיות', greet: 'חרדל? קטשופ? עם הכל?', offers: [['נקניקייה בלחמנייה (+25 חיים)', 'hotdog', heal(25, [0.82, 0.42, 0.3], 'יאמי! נקניקייה. +25 חיים')]] },
-  pizza: { verb: 'להיכנס לפיצרייה', ask: 'להזמין פרוסה', who: 'השף ג\'ינו', greet: 'בואנה סרה! פרוסה חמה, ישר מהתנור?', offers: [['פרוסת פיצה (+35 חיים)', 'slice', heal(35, [0.95, 0.62, 0.25], 'יאמי! פיצה. +35 חיים')]] },
-  cafe: { verb: 'להזמין קפה', ask: 'להזמין קפה', who: 'הבריסטה', greet: 'אספרסו כפול? יעיר אותך עד מחר בבוקר.', offers: [['אספרסו כפול (ריצה מהירה ל-30 שניות)', 'cup', (game) => {
+  hotdog: { verb: tr('לקנות נקניקייה', 'Buy a hot dog'), ask: tr('לקנות נקניקייה', 'Buy a hot dog'), who: tr('עגלת הנקניקיות', 'The hot dog cart'), greet: tr('חרדל? קטשופ? עם הכל?', 'Mustard? Ketchup? With everything?'), offers: [[tr('נקניקייה בלחמנייה (+25 חיים)', 'A hot dog in a bun (+25 health)'), 'hotdog', heal(25, [0.82, 0.42, 0.3], tr('יאמי! נקניקייה. +25 חיים', 'Yum! A hot dog. +25 health'))]] },
+  pizza: { verb: tr('להיכנס לפיצרייה', 'Go into the pizzeria'), ask: tr('להזמין פרוסה', 'Order a slice'), who: tr('השף ג\'ינו', 'Chef Gino'), greet: tr('בואנה סרה! פרוסה חמה, ישר מהתנור?', 'Buona sera! A hot slice, straight from the oven?'), offers: [[tr('פרוסת פיצה (+35 חיים)', 'A slice of pizza (+35 health)'), 'slice', heal(35, [0.95, 0.62, 0.25], tr('יאמי! פיצה. +35 חיים', 'Yum! Pizza. +35 health'))]] },
+  cafe: { verb: tr('להזמין קפה', 'Order a coffee'), ask: tr('להזמין קפה', 'Order a coffee'), who: tr('הבריסטה', 'The barista'), greet: tr('אספרסו כפול? יעיר אותך עד מחר בבוקר.', 'A double espresso? It\'ll keep you up till tomorrow morning.'), offers: [[tr('אספרסו כפול (ריצה מהירה ל-30 שניות)', 'A double espresso (fast running for 30 seconds)'), 'cup', (game) => {
     const p = game.player;
     p.coffeeT = 30;
     p.fig.belly = Math.min(1, p.fig.belly + 0.3);
     p.fig.bellyColor = [0.42, 0.26, 0.14];
-    game.hud.toast('קפאין! רצים מהר יותר ל-30 שניות', 'good', 2.6);
+    game.hud.toast(tr('קפאין! רצים מהר יותר ל-30 שניות', 'Caffeine! You run faster for 30 seconds'), 'good', 2.6);
   }]] },
-  grocery: { verb: 'לקנות במכולת', ask: 'לקנות משהו', who: 'המוכר במכולת', greet: 'הכל טרי, הכל צבעוני. מה תיקח?', offers: [['תפוח אדום (+15 חיים)', 'apple', heal(15, [0.85, 0.2, 0.2])]] },
-  deli: { verb: 'להזמין סנדוויץ\'', ask: 'להזמין סנדוויץ\'', who: 'המוכר במעדנייה', greet: 'פסטרמה על לחם שיפון — הכי טוב בעיר.', offers: [['סנדוויץ\' פסטרמה (+40 חיים)', 'sandwich', heal(40, [0.8, 0.45, 0.4])]] },
-  bagel: { verb: 'לקנות במאפייה', ask: 'לקנות בייגל', who: 'האופה', greet: 'בייגל חם, יצא עכשיו!', offers: [['בייגל (+20 חיים)', 'bagel', heal(20, [0.86, 0.66, 0.36])]] },
-  icecream: { verb: 'לקנות גלידה', ask: 'לקנות גלידה', who: 'מוכרת הגלידה', greet: 'כדור אחד? שניים? שלושה?!', offers: [['גלידת תות (+15 חיים)', 'cone', (game) => {
+  grocery: { verb: tr('לקנות במכולת', 'Buy at the grocery store'), ask: tr('לקנות משהו', 'Buy something'), who: tr('המוכר במכולת', 'The grocer'), greet: tr('הכל טרי, הכל צבעוני. מה תיקח?', 'Everything\'s fresh, everything\'s colorful. What\'ll you have?'), offers: [[tr('תפוח אדום (+15 חיים)', 'A red apple (+15 health)'), 'apple', heal(15, [0.85, 0.2, 0.2])]] },
+  deli: { verb: tr('להזמין סנדוויץ\'', 'Order a sandwich'), ask: tr('להזמין סנדוויץ\'', 'Order a sandwich'), who: tr('המוכר במעדנייה', 'The deli man'), greet: tr('פסטרמה על לחם שיפון — הכי טוב בעיר.', 'Pastrami on rye — the best in town.'), offers: [[tr('סנדוויץ\' פסטרמה (+40 חיים)', 'A pastrami sandwich (+40 health)'), 'sandwich', heal(40, [0.8, 0.45, 0.4])]] },
+  bagel: { verb: tr('לקנות במאפייה', 'Buy at the bakery'), ask: tr('לקנות בייגל', 'Buy a bagel'), who: tr('האופה', 'The baker'), greet: tr('בייגל חם, יצא עכשיו!', 'A hot bagel, just out!'), offers: [[tr('בייגל (+20 חיים)', 'A bagel (+20 health)'), 'bagel', heal(20, [0.86, 0.66, 0.36])]] },
+  icecream: { verb: tr('לקנות גלידה', 'Buy ice cream'), ask: tr('לקנות גלידה', 'Buy ice cream'), who: tr('מוכרת הגלידה', 'The ice cream seller'), greet: tr('כדור אחד? שניים? שלושה?!', 'One scoop? Two? Three?!'), offers: [[tr('גלידת תות (+15 חיים)', 'Strawberry ice cream (+15 health)'), 'cone', (game) => {
     heal(15, [0.98, 0.66, 0.74])(game);
     game.inkwell.tipsy = Math.max(game.inkwell.tipsy, 0.25);
-    game.hud.toast('מוח קפוא!!', 'info', 1.8);
+    game.hud.toast(tr('מוח קפוא!!', 'Brain freeze!!'), 'info', 1.8);
   }]] },
-  sushi: { verb: 'להזמין סושי', ask: 'להזמין סושי', who: 'השף', greet: 'רולים טריים. דג משורבט, אבל טרי.', offers: [['מגש סושי (+30 חיים)', 'sushi', heal(30, [0.95, 0.5, 0.4])]] },
-  falafel: { verb: 'להזמין פלאפל', ask: 'להזמין פלאפל', who: 'המוכר', greet: 'פלאפל בפיתה, עם הכל?', offers: [['פלאפל בפיתה (+45 חיים)', 'pita', heal(45, [0.55, 0.38, 0.18])]] },
-  shop: { verb: 'להיכנס לחנות', ask: 'לדבר עם המוכר', who: 'המוכר', greet: 'יש לנו הכל. כמעט הכל. מה צריך?', offers: [['מחק חדש לעיפרון', 'eraser', (game) => refillErasers(game)], ['חטיף (+10 חיים)', 'apple', heal(10, [0.6, 0.4, 0.25])], ['שרטוט: פלסטר ענק', 'bandage', (game) => giveBlueprint(game, 'bandage')]] },
-  hardware: { verb: 'להיכנס לחנות כלי העבודה', ask: 'לדבר עם המוכר', who: 'המוכר בחנות', greet: 'מחקים, עפרונות, סרגלים, שדכנים, אקדחי דבק. מה חסר לך?', offers: [['מחק חדש (כל המחקים כמו חדשים)', 'eraser', (game) => refillErasers(game)], ['שרטוט: אקדח שדכן', 'stapler', (game) => giveBlueprint(game, 'stapler')], ['שרטוט: אקדח דבק', 'glue', (game) => giveBlueprint(game, 'glue')]] },
-  pharmacy: { verb: 'להיכנס לבית המרקחת', ask: 'לדבר עם הרוקחת', who: 'הרוקחת', greet: 'נמחקת קצת? יש לי בדיוק את מה שצריך.', offers: [['תחבושת (כל החיים, וממלאת את החורים)', 'bandage', (game) => {
+  sushi: { verb: tr('להזמין סושי', 'Order sushi'), ask: tr('להזמין סושי', 'Order sushi'), who: tr('השף', 'The chef'), greet: tr('רולים טריים. דג משורבט, אבל טרי.', 'Fresh rolls. Scribbled fish, but fresh.'), offers: [[tr('מגש סושי (+30 חיים)', 'A sushi platter (+30 health)'), 'sushi', heal(30, [0.95, 0.5, 0.4])]] },
+  falafel: { verb: tr('להזמין פלאפל', 'Order falafel'), ask: tr('להזמין פלאפל', 'Order falafel'), who: tr('המוכר', 'The vendor'), greet: tr('פלאפל בפיתה, עם הכל?', 'Falafel in a pita, with everything?'), offers: [[tr('פלאפל בפיתה (+45 חיים)', 'Falafel in a pita (+45 health)'), 'pita', heal(45, [0.55, 0.38, 0.18])]] },
+  shop: { verb: tr('להיכנס לחנות', 'Go into the shop'), ask: tr('לדבר עם המוכר', 'Talk to the shopkeeper'), who: tr('המוכר', 'The vendor'), greet: tr('יש לנו הכל. כמעט הכל. מה צריך?', 'We have everything. Almost everything. What do you need?'), offers: [[tr('מחק חדש לעיפרון', 'A new eraser for your pencil'), 'eraser', (game) => refillErasers(game)], [tr('חטיף (+10 חיים)', 'A snack (+10 health)'), 'apple', heal(10, [0.6, 0.4, 0.25])], [tr('שרטוט: פלסטר ענק', 'Blueprint: giant band-aid'), 'bandage', (game) => giveBlueprint(game, 'bandage')]] },
+  hardware: { verb: tr('להיכנס לחנות כלי העבודה', 'Go into the hardware store'), ask: tr('לדבר עם המוכר', 'Talk to the shopkeeper'), who: tr('המוכר בחנות', 'The shopkeeper'), greet: tr('מחקים, עפרונות, סרגלים, שדכנים, אקדחי דבק. מה חסר לך?', 'Erasers, pencils, rulers, staplers, glue guns. What are you missing?'), offers: [[tr('מחק חדש (כל המחקים כמו חדשים)', 'A new eraser (all erasers good as new)'), 'eraser', (game) => refillErasers(game)], [tr('שרטוט: אקדח שדכן', 'Blueprint: stapler pistol'), 'stapler', (game) => giveBlueprint(game, 'stapler')], [tr('שרטוט: אקדח דבק', 'Blueprint: glue gun'), 'glue', (game) => giveBlueprint(game, 'glue')]] },
+  pharmacy: { verb: tr('להיכנס לבית המרקחת', 'Go into the pharmacy'), ask: tr('לדבר עם הרוקחת', 'Talk to the pharmacist'), who: tr('הרוקחת', 'The pharmacist'), greet: tr('נמחקת קצת? יש לי בדיוק את מה שצריך.', 'Got erased a little? I have just the thing.'), offers: [[tr('תחבושת (כל החיים, וממלאת את החורים)', 'A bandage (full health, and it fills the holes)'), 'bandage', (game) => {
     const p = game.player;
     p.hp = p.maxHp;
     p.fig.holes.length = 0;
-    game.hud.toast('כמו חדש!', 'good', 2);
-  }], ['שרטוט: פלסטר ענק (לצייר כשצריך)', 'bandage', (game) => giveBlueprint(game, 'bandage')]] },
-  laundry: { verb: 'להיכנס למכבסה', ask: 'לנקות את הבגדים', who: 'המכבסה', greet: 'כתמי צבע? דיו? מחק? הכל יורד.', offers: [['ניקוי מהיר (מוריד כתמים וחורים, +10 חיים)', 'bandage', (game) => {
+    game.hud.toast(tr('כמו חדש!', 'Good as new!'), 'good', 2);
+  }], [tr('שרטוט: פלסטר ענק (לצייר כשצריך)', 'Blueprint: giant band-aid (draw it when you need it)'), 'bandage', (game) => giveBlueprint(game, 'bandage')]] },
+  laundry: { verb: tr('להיכנס למכבסה', 'Go into the laundromat'), ask: tr('לנקות את הבגדים', 'Clean your clothes'), who: tr('המכבסה', 'The laundromat'), greet: tr('כתמי צבע? דיו? מחק? הכל יורד.', 'Paint stains? Ink? Eraser? It all comes out.'), offers: [[tr('ניקוי מהיר (מוריד כתמים וחורים, +10 חיים)', 'A quick clean (removes stains and holes, +10 health)'), 'bandage', (game) => {
     const p = game.player;
     p.fig.paintT = 0;
     p.fig.holes.length = 0;
     p.hp = Math.min(p.maxHp, p.hp + 10);
-    game.hud.toast('נקי ומגוהץ', 'good', 2);
+    game.hud.toast(tr('נקי ומגוהץ', 'Clean and pressed'), 'good', 2);
   }]] },
-  phones: { verb: 'להיכנס לחנות הטלפונים', ask: 'לדבר עם המוכר', who: 'המוכר', greet: 'רוצה להתקשר למשטרה ולהגיד שזו הייתה אזעקת שווא? אני לא שאלתי כלום.', offers: [['להתקשר (מוריד כוכב משטרה אחד)', 'phone', (game) => {
+  phones: { verb: tr('להיכנס לחנות הטלפונים', 'Go into the phone shop'), ask: tr('לדבר עם המוכר', 'Talk to the shopkeeper'), who: tr('המוכר', 'The vendor'), greet: tr('רוצה להתקשר למשטרה ולהגיד שזו הייתה אזעקת שווא? אני לא שאלתי כלום.', 'Want to call the police and tell them it was a false alarm? I didn\'t ask anything.'), offers: [[tr('להתקשר (מוריד כוכב משטרה אחד)', 'Make the call (removes one police star)'), 'phone', (game) => {
     const pol = game.police;
     if (pol.level <= 0) {
-      game.hud.toast('אף אחד לא מחפש אותך... בינתיים', 'info', 2.2);
+      game.hud.toast(tr('אף אחד לא מחפש אותך... בינתיים', 'Nobody\'s looking for you... for now'), 'info', 2.2);
       return;
     }
     pol.heat = Math.max(0, pol.heat * 0.45 - 0.3);
     pol.level = Math.max(0, pol.level - 1);
     if (pol.level === 0) pol.clear();
     else game.hud.setWanted(pol.level, pol.searching);
-    game.hud.toast('"זו הייתה אזעקת שווא, שוטר." — כוכב אחד פחות', 'good', 2.6);
+    game.hud.toast(tr('"זו הייתה אזעקת שווא, שוטר." — כוכב אחד פחות', '"It was a false alarm, officer." — one star less'), 'good', 2.6);
   }]] },
-  optics: { verb: 'להיכנס לאופטיקה', ask: 'לבחור משקפיים', who: 'האופטיקאית', greet: 'רואים טוב יותר — מציירים טוב יותר. איזה משקפיים?', offers: [
-    ['משקפיים עגולים', 'glasses', (game) => heroLook(game, (L) => (L.face.glasses = 'round'), 'משקפיים חדשים!')],
-    ['משקפי שמש', 'sunglasses', (game) => heroLook(game, (L) => (L.face.glasses = 'shades'), 'קול.')],
-    ['בלי משקפיים', null, (game) => heroLook(game, (L) => (L.face.glasses = null), 'בלי משקפיים')],
+  optics: { verb: tr('להיכנס לאופטיקה', 'Go into the optician'), ask: tr('לבחור משקפיים', 'Pick glasses'), who: tr('האופטיקאית', 'The optician'), greet: tr('רואים טוב יותר — מציירים טוב יותר. איזה משקפיים?', 'See better — draw better. Which glasses?'), offers: [
+    [tr('משקפיים עגולים', 'Round glasses'), 'glasses', (game) => heroLook(game, (L) => (L.face.glasses = 'round'), tr('משקפיים חדשים!', 'New glasses!'))],
+    [tr('משקפי שמש', 'Sunglasses'), 'sunglasses', (game) => heroLook(game, (L) => (L.face.glasses = 'shades'), tr('קול.', 'Cool.'))],
+    [tr('בלי משקפיים', 'No glasses'), null, (game) => heroLook(game, (L) => (L.face.glasses = null), tr('בלי משקפיים', 'No glasses'))],
   ] },
-  gym: { verb: 'להיכנס לחדר הכושר', ask: 'להתאמן', who: 'המאמן', greet: 'עשר חזרות ואתה בנאדם חדש. מוכן?', offers: [['אימון (+10 חיים מקסימליים)', 'dumbbell', (game) => {
+  gym: { verb: tr('להיכנס לחדר הכושר', 'Go into the gym'), ask: tr('להתאמן', 'Work out'), who: tr('המאמן', 'The trainer'), greet: tr('עשר חזרות ואתה בנאדם חדש. מוכן?', 'Ten reps and you\'re a new person. Ready?'), offers: [[tr('אימון (+10 חיים מקסימליים)', 'A workout (+10 max health)'), 'dumbbell', (game) => {
     const p = game.player;
     if (p.maxHp >= 150) {
-      game.hud.toast('כבר שרירי לגמרי. אין לאן יותר', 'info', 2);
+      game.hud.toast(tr('כבר שרירי לגמרי. אין לאן יותר', 'Fully ripped already. Nowhere left to go'), 'info', 2);
       return;
     }
     p.maxHp += 10;
     p.hp = Math.min(p.maxHp, p.hp + 10);
     p.fig.bulk = Math.min(1.35, p.fig.bulk + 0.07);
     game.streetlife.saveHero();
-    game.hud.toast(`שרירים! מקסימום חיים: ${p.maxHp}`, 'good', 2.4);
+    game.hud.toast(tr(`שרירים! מקסימום חיים: ${p.maxHp}`, `Muscles! Max health: ${p.maxHp}`), 'good', 2.4);
   }]] },
-  music: { verb: 'לבקש שיר מהנגן', ask: 'לבקש שיר מהנגן', who: 'הנגן', greet: 'יש לך בקשה?', offers: [['לבקש שיר ולרקוד', 'note', (game, a) => a.serenade(true)], ['רק להקשיב', 'note', (game, a) => a.serenade(false)]] },
-  books: { verb: 'להיכנס לחנות הספרים', ask: 'לדבר עם המוכר', who: 'המוכר בחנות הספרים', greet: 'מחפש משהו? יש לי ספר מפות ישן עם כל השלטים של העיר.', offers: [['לחפש בספר את השרטוט הבא', 'book', (game) => bookHint(game)]] },
-  flowers: { verb: 'להיכנס לחנות הפרחים', ask: 'לקנות פרחים', who: 'המוכרת', greet: 'זר בשביל מישהי מיוחדת?', offers: [['זר פרחים (אולי לבר?)', 'bouquet', (game) => {
+  music: { verb: tr('לבקש שיר מהנגן', 'Request a song from the musician'), ask: tr('לבקש שיר מהנגן', 'Request a song from the musician'), who: tr('הנגן', 'The musician'), greet: tr('יש לך בקשה?', 'Got a request?'), offers: [[tr('לבקש שיר ולרקוד', 'Request a song and dance'), 'note', (game, a) => a.serenade(true)], [tr('רק להקשיב', 'Just listen'), 'note', (game, a) => a.serenade(false)]] },
+  books: { verb: tr('להיכנס לחנות הספרים', 'Go into the bookshop'), ask: tr('לדבר עם המוכר', 'Talk to the shopkeeper'), who: tr('המוכר בחנות הספרים', 'The bookseller'), greet: tr('מחפש משהו? יש לי ספר מפות ישן עם כל השלטים של העיר.', 'Looking for something? I have an old map book with all the signs in the city.'), offers: [[tr('לחפש בספר את השרטוט הבא', 'Look up the next blueprint in the book'), 'book', (game) => bookHint(game)]] },
+  flowers: { verb: tr('להיכנס לחנות הפרחים', 'Go into the flower shop'), ask: tr('לקנות פרחים', 'Buy flowers'), who: tr('המוכרת', 'The florist'), greet: tr('זר בשביל מישהי מיוחדת?', 'A bouquet for someone special?'), offers: [[tr('זר פרחים (אולי לבר?)', 'A bouquet of flowers (for the bar, maybe?)'), 'bouquet', (game) => {
     game.player.fig.carryL = 'bouquet';
-    game.hud.toast('זר ביד. אולי מישהי בבר תשמח לקבל אותו', 'good', 2.8);
+    game.hud.toast(tr('זר ביד. אולי מישהי בבר תשמח לקבל אותו', 'A bouquet in hand. Maybe someone at the bar would be happy to get it'), 'good', 2.8);
   }]] },
-  barber: { verb: 'להסתפר', ask: 'להסתפר', who: 'הספר', greet: 'שב, שב. מה עושים היום?', offers: [
-    ['מוהוק', 'hair:mohawk', (game) => heroHair(game, 'mohawk')],
-    ['אפרו', 'hair:afro', (game) => heroHair(game, 'afro')],
-    ['קוצים', 'hair:spiky', (game) => heroHair(game, 'spiky')],
-    ['פומפדור', 'hair:pompadour', (game) => heroHair(game, 'pompadour')],
-    ['קוקו', 'hair:ponytail', (game) => heroHair(game, 'ponytail')],
-    ['לגלח הכל', 'hair:none', (game) => heroHair(game, 'none')],
+  barber: { verb: tr('להסתפר', 'Get a haircut'), ask: tr('להסתפר', 'Get a haircut'), who: tr('הספר', 'The barber'), greet: tr('שב, שב. מה עושים היום?', 'Sit, sit. What are we doing today?'), offers: [
+    [tr('מוהוק', 'Mohawk'), 'hair:mohawk', (game) => heroHair(game, 'mohawk')],
+    [tr('אפרו', 'Afro'), 'hair:afro', (game) => heroHair(game, 'afro')],
+    [tr('קוצים', 'Spikes'), 'hair:spiky', (game) => heroHair(game, 'spiky')],
+    [tr('פומפדור', 'Pompadour'), 'hair:pompadour', (game) => heroHair(game, 'pompadour')],
+    [tr('קוקו', 'Ponytail'), 'hair:ponytail', (game) => heroHair(game, 'ponytail')],
+    [tr('לגלח הכל', 'Shave it all off'), 'hair:none', (game) => heroHair(game, 'none')],
   ] },
 };
 
 // (ROADMAP 5.7, not with ?classic: the wardrobe, game/wardrobe.js) the boutique's shelves, the
 // barber's tattoos, the hardware store's vest
-const PRAISE = ['מתאים לך!', 'נראה מעולה!', 'וואו, איזה סטייל!', 'כמו מהמגזין!'];
+const PRAISE = [tr('מתאים לך!', 'Suits you!'), tr('נראה מעולה!', 'Looks great!'), tr('וואו, איזה סטייל!', 'Wow, what style!'), tr('כמו מהמגזין!', 'Straight out of a magazine!')];
 const TATTOO_SKETCH = { anchor: 'tattooAnchor', heart: 'tattooHeart', star: 'tattooStar', pencil: 'tattooPencil' };
 const SERVICES_NC = {};
 // (ROADMAP 12.9: BLUE VELVET is a club that is a jazz club - its own service)
 const svc = (game, kind, shop) => (shop && shop.jazz && SERVICES.jazz) || (!game.classic && SERVICES_NC[kind]) || SERVICES[kind];
 
-SERVICES.tacos = { verb: 'להזמין טאקו', ask: 'להזמין טאקו', who: 'הטאקרו', greet: 'טאקו פתוח עשרים וארבע שעות! חריף או חריף מאוד?', offers: [['שלושה טאקו (+35 חיים)', 'pita', heal(35, [0.95, 0.7, 0.3], 'טאקו! +35 חיים')]] };
-SERVICES.diner = { verb: 'להיכנס לדיינר', ask: 'להזמין המבורגר', who: 'המלצרית', greet: 'שב איפה שבא לך, מותק. המבורגר ומילקשייק?', offers: [['המבורגר (+45 חיים)', 'sandwich', heal(45, [0.7, 0.42, 0.25], 'המבורגר! +45 חיים')], ['מילקשייק תות (+20 חיים)', 'cup', heal(20, [0.98, 0.66, 0.74])]] };
-SERVICES.juice = { verb: 'לקנות מיץ', ask: 'לקנות מיץ', who: 'המוכר', greet: 'מנגו, אננס, תות — סחוט עכשיו!', offers: [['מיץ מנגו (+20 חיים, ריצה מהירה קצת)', 'cup', (game) => {
-  heal(20, [1.0, 0.7, 0.2], 'מיץ מנגו! +20 חיים')(game);
+SERVICES.tacos = { verb: tr('להזמין טאקו', 'Order tacos'), ask: tr('להזמין טאקו', 'Order tacos'), who: tr('הטאקרו', 'The taquero'), greet: tr('טאקו פתוח עשרים וארבע שעות! חריף או חריף מאוד?', 'Tacos open twenty-four hours! Spicy or very spicy?'), offers: [[tr('שלושה טאקו (+35 חיים)', 'Three tacos (+35 health)'), 'pita', heal(35, [0.95, 0.7, 0.3], tr('טאקו! +35 חיים', 'Tacos! +35 health'))]] };
+SERVICES.diner = { verb: tr('להיכנס לדיינר', 'Go into the diner'), ask: tr('להזמין המבורגר', 'Order a burger'), who: tr('המלצרית', 'The waitress'), greet: tr('שב איפה שבא לך, מותק. המבורגר ומילקשייק?', 'Sit wherever you like, honey. A burger and a milkshake?'), offers: [[tr('המבורגר (+45 חיים)', 'A burger (+45 health)'), 'sandwich', heal(45, [0.7, 0.42, 0.25], tr('המבורגר! +45 חיים', 'A burger! +45 health'))], [tr('מילקשייק תות (+20 חיים)', 'A strawberry milkshake (+20 health)'), 'cup', heal(20, [0.98, 0.66, 0.74])]] };
+SERVICES.juice = { verb: tr('לקנות מיץ', 'Buy juice'), ask: tr('לקנות מיץ', 'Buy juice'), who: tr('המוכר', 'The vendor'), greet: tr('מנגו, אננס, תות — סחוט עכשיו!', 'Mango, pineapple, strawberry — squeezed right now!'), offers: [[tr('מיץ מנגו (+20 חיים, ריצה מהירה קצת)', 'Mango juice (+20 health, a bit faster running)'), 'cup', (game) => {
+  heal(20, [1.0, 0.7, 0.2], tr('מיץ מנגו! +20 חיים', 'Mango juice! +20 health'))(game);
   game.player.coffeeT = Math.max(game.player.coffeeT || 0, 15);
 }]] };
-SERVICES.surf = { verb: 'להיכנס לחנות הגלישה', ask: 'לדבר עם המוכר', who: 'הגולש', greet: 'אחי, הגלים היום מושלמים. מה צריך?', offers: [['שרטוט: אופנוע (כמו גלשן, רק על כביש)', 'bike', (game) => giveBlueprint(game, 'bike')], ['שרטוט: בומרנג סרגל', 'boomerang', (game) => giveBlueprint(game, 'boomerang')], ['משקפי שמש', 'sunglasses', (game) => heroLook(game, (L) => (L.face.glasses = 'shades'), 'קול.')]] };
-SERVICES.boutique = { verb: 'להיכנס לבוטיק', ask: 'לבחור כובע', who: 'המוכרת', greet: 'הקולקציה החדשה הגיעה! משהו לראש?', offers: [
-  ['כובע מצחייה', 'hat', (game) => heroLook(game, (L) => (L.hat = { kind: 'cap', color: pick([[0.95, 0.3, 0.45], [0.2, 0.62, 0.66], [0.98, 0.78, 0.22]]) }), 'כובע חדש!')],
-  ['כובע רחב שוליים', 'hat', (game) => heroLook(game, (L) => (L.hat = { kind: 'fedora', color: [0.94, 0.9, 0.82] }), 'אלגנטי!')],
-  ['כומתה', 'hat', (game) => heroLook(game, (L) => (L.hat = { kind: 'beret', color: [0.62, 0.42, 0.85] }), 'כמו צייר אמיתי!')],
-  ['בלי כובע', null, (game) => heroLook(game, (L) => (L.hat = null), 'בלי כובע')],
+SERVICES.surf = { verb: tr('להיכנס לחנות הגלישה', 'Go into the surf shop'), ask: tr('לדבר עם המוכר', 'Talk to the shopkeeper'), who: tr('הגולש', 'The surfer'), greet: tr('אחי, הגלים היום מושלמים. מה צריך?', 'Dude, the waves are perfect today. What do you need?'), offers: [[tr('שרטוט: אופנוע (כמו גלשן, רק על כביש)', 'Blueprint: motorbike (like a surfboard, only on the road)'), 'bike', (game) => giveBlueprint(game, 'bike')], [tr('שרטוט: בומרנג סרגל', 'Blueprint: ruler boomerang'), 'boomerang', (game) => giveBlueprint(game, 'boomerang')], [tr('משקפי שמש', 'Sunglasses'), 'sunglasses', (game) => heroLook(game, (L) => (L.face.glasses = 'shades'), tr('קול.', 'Cool.'))]] };
+SERVICES.boutique = { verb: tr('להיכנס לבוטיק', 'Go into the boutique'), ask: tr('לבחור כובע', 'Pick a hat'), who: tr('המוכרת', 'The florist'), greet: tr('הקולקציה החדשה הגיעה! משהו לראש?', 'The new collection is in! Something for your head?'), offers: [
+  [tr('כובע מצחייה', 'A cap'), 'hat', (game) => heroLook(game, (L) => (L.hat = { kind: 'cap', color: pick([[0.95, 0.3, 0.45], [0.2, 0.62, 0.66], [0.98, 0.78, 0.22]]) }), tr('כובע חדש!', 'A new hat!'))],
+  [tr('כובע רחב שוליים', 'A wide-brimmed hat'), 'hat', (game) => heroLook(game, (L) => (L.hat = { kind: 'fedora', color: [0.94, 0.9, 0.82] }), tr('אלגנטי!', 'Elegant!'))],
+  [tr('כומתה', 'A beret'), 'hat', (game) => heroLook(game, (L) => (L.hat = { kind: 'beret', color: [0.62, 0.42, 0.85] }), tr('כמו צייר אמיתי!', 'Like a real painter!'))],
+  [tr('בלי כובע', 'No hat'), null, (game) => heroLook(game, (L) => (L.hat = null), tr('בלי כובע', 'No hat'))],
 ] };
-SERVICES_NC.boutique = { ...SERVICES.boutique, ask: 'למדוד בגדים', greet: 'הקולקציה החדשה הגיעה! מה מודדים היום?', offers: [
-  ['חולצות', 'menu', (game, a) => a.shelf('איזו חולצה?', 'top', TOPS, 'shirt')],
-  ['מכנסיים', 'menu', (game, a) => a.shelf('אילו מכנסיים?', 'bottom', BOTTOMS, 'pants')],
-  ['נעליים', 'menu', (game, a) => a.shelf('אילו נעליים?', 'shoes', SHOES, 'shoe')],
-  ['כובעים', 'menu', (game, a) => a.shelf('איזה כובע?', 'hat', HATS, 'hat')],
-  ['אביזרים', 'menu', (game, a) => a.shelf('משהו קטן לסיום?', 'acc', ACCS, 'chain')],
+SERVICES_NC.boutique = { ...SERVICES.boutique, ask: tr('למדוד בגדים', 'Try on clothes'), greet: tr('הקולקציה החדשה הגיעה! מה מודדים היום?', 'The new collection is in! What are we trying on today?'), offers: [
+  [tr('חולצות', 'Shirts'), 'menu', (game, a) => a.shelf(tr('איזו חולצה?', 'Which shirt?'), 'top', TOPS, 'shirt')],
+  [tr('מכנסיים', 'Pants'), 'menu', (game, a) => a.shelf(tr('אילו מכנסיים?', 'Which pants?'), 'bottom', BOTTOMS, 'pants')],
+  [tr('נעליים', 'Shoes'), 'menu', (game, a) => a.shelf(tr('אילו נעליים?', 'Which shoes?'), 'shoes', SHOES, 'shoe')],
+  [tr('כובעים', 'Hats'), 'menu', (game, a) => a.shelf(tr('איזה כובע?', 'Which hat?'), 'hat', HATS, 'hat')],
+  [tr('אביזרים', 'Accessories'), 'menu', (game, a) => a.shelf(tr('משהו קטן לסיום?', 'Something small to finish?'), 'acc', ACCS, 'chain')],
 ] };
-SERVICES_NC.barber = { ...SERVICES.barber, offers: [...SERVICES.barber.offers, ['קעקוע מצויר', 'menu', (game, a) => a.shelf('איזה קעקוע לצייר לך על היד?', 'tattoo', TATTOOS, (it) => TATTOO_SKETCH[it.tattoo])], ['לצייר קעקוע משלכם', 'menu', (game, a) => drawTattoo(game, a)]] };
+SERVICES_NC.barber = { ...SERVICES.barber, offers: [...SERVICES.barber.offers, [tr('קעקוע מצויר', 'A drawn tattoo'), 'menu', (game, a) => a.shelf(tr('איזה קעקוע לצייר לך על היד?', 'Which tattoo should I draw on your arm?'), 'tattoo', TATTOOS, (it) => TATTOO_SKETCH[it.tattoo])], [tr('לצייר קעקוע משלכם', 'Draw your own tattoo'), 'menu', (game, a) => drawTattoo(game, a)]] };
 
 // (ROADMAP 9.3) a tattoo of your own: you draw it, the barber puts it on your forearm
-const TATTOO_PEN = [{ css: '#29407f', c: [0.16, 0.24, 0.5], name: 'דיו של קעקועים', px: 9 }];
+const TATTOO_PEN = [{ css: '#29407f', c: [0.16, 0.24, 0.5], name: tr('דיו של קעקועים', 'Tattoo ink'), px: 9 }];
 function drawTattoo(game, a) {
   game.sketchpad.show({
-    title: 'קעקוע משלכם',
-    hint: 'מה שמציירים כאן יעלה על האמה הימנית (בשרוולים קצרים רואים אותו)',
-    done: 'לקעקע!',
+    title: tr('קעקוע משלכם', 'Your own tattoo'),
+    hint: tr('מה שמציירים כאן יעלה על האמה הימנית (בשרוולים קצרים רואים אותו)', 'What you draw here goes on your right forearm (you see it in short sleeves)'),
+    done: tr('לקעקע!', 'Ink it!'),
     aspect: 2.8,
     pens: TATTOO_PEN,
     bg: (c, w, h) => {
@@ -847,17 +848,17 @@ function drawTattoo(game, a) {
   }, (strokes) => {
     if (!strokes) return a.talk();
     const n = game.money ? SHELF_PRICES.tattoo || 0 : 0;
-    a.buy(n, 'קעקוע משלכם', () => a.serve(null, (g) => {
+    a.buy(n, tr('קעקוע משלכם', 'Your own tattoo'), () => a.serve(null, (g) => {
       ownTattoo(g, strokes);
-      g.hud.toast('קעקוע חדש, משלכם!', 'good', 2.2);
+      g.hud.toast(tr('קעקוע חדש, משלכם!', 'A new tattoo, your own!'), 'good', 2.2);
     }));
   });
 }
 // (ROADMAP 6.6) the stationery shops: ink, lead and rubber for every weapon you drew
-SERVICES_NC.books = { ...SERVICES.books, greet: 'דיו, עופרת, מחקים ושרטוטים. מה צריך?', offers: [...SERVICES.books.offers, ['מילוי דיו, עופרת ומחקים לכל הנשק', 'book', (game) => {
+SERVICES_NC.books = { ...SERVICES.books, greet: tr('דיו, עופרת, מחקים ושרטוטים. מה צריך?', 'Ink, lead, erasers and blueprints. What do you need?'), offers: [...SERVICES.books.offers, [tr('מילוי דיו, עופרת ומחקים לכל הנשק', 'A refill of ink, lead and erasers for every weapon'), 'book', (game) => {
   const n = game.arsenal ? game.arsenal.refill() : 0;
-  game.hud.toast(n ? 'כל הנשק שציירתם מלא שוב!' : 'הכול כבר מלא. בואו כשייגמר', n ? 'good' : 'info', 2.6);
-}], ['דיו לעט, ועפרונות וטושים טובים יותר', 'menu', (game, a) => inkShelf(game, a)]] };
+  game.hud.toast(n ? tr('כל הנשק שציירתם מלא שוב!', 'Every weapon you drew is full again!') : tr('הכול כבר מלא. בואו כשייגמר', 'Everything\'s full already. Come back when it runs out'), n ? 'good' : 'info', 2.6);
+}], [tr('דיו לעט, ועפרונות וטושים טובים יותר', 'Ink for the pen, and better pencils and markers'), 'menu', (game, a) => inkShelf(game, a)]] };
 
 // (ROADMAP 9.4) the ink for drawing: a bottle fills the pen up; a better tool holds more ink and
 // makes every drawing better
@@ -866,16 +867,16 @@ function inkShelf(game, a) {
   const info = svc(game, a.shop.kind, a.shop);
   const choices = [];
   const full = I.level >= I.cap - 0.5;
-  choices.push({ label: full ? 'בקבוק דיו (העט מלא)' : `בקבוק דיו: העט מלא שוב · ${fmt(BOTTLE)}`, fn: full ? () => inkShelf(game, a) : () => a.buy(BOTTLE, 'בקבוק דיו', () => I.refill(), () => inkShelf(game, a)) });
+  choices.push({ label: full ? tr('בקבוק דיו (העט מלא)', 'An ink bottle (the pen is full)') : tr(`בקבוק דיו: העט מלא שוב · ${fmt(BOTTLE)}`, `An ink bottle: the pen is full again · ${fmt(BOTTLE)}`), fn: full ? () => inkShelf(game, a) : () => a.buy(BOTTLE, tr('בקבוק דיו', 'Ink bottle'), () => I.refill(), () => inkShelf(game, a)) });
   const next = TOOLS[I.tool + 1];
-  if (next) choices.push({ label: `${next.name}: עד ${next.cap} דיו, ו־${next.bonus}+ לכל ציור · ${fmt(next.price)}`, fn: () => a.buy(next.price, next.name, () => I.upgrade(I.tool + 1), () => inkShelf(game, a)) });
-  choices.push({ label: 'משהו אחר', fn: () => a.talk() });
-  game.dialog.show(info.who, `בעט שלכם: ${I.toolName}, ${Math.round(I.level)} מתוך ${I.cap} דיו.`, choices);
+  if (next) choices.push({ label: tr(`${next.name}: עד ${next.cap} דיו, ו־${next.bonus}+ לכל ציור · ${fmt(next.price)}`, `${next.name}: up to ${next.cap} ink, and +${next.bonus} for every drawing · ${fmt(next.price)}`), fn: () => a.buy(next.price, next.name, () => I.upgrade(I.tool + 1), () => inkShelf(game, a)) });
+  choices.push({ label: tr('משהו אחר', 'Something else'), fn: () => a.talk() });
+  game.dialog.show(info.who, tr(`בעט שלכם: ${I.toolName}, ${Math.round(I.level)} מתוך ${I.cap} דיו.`, `In your pen: ${I.toolName}, ${Math.round(I.level)} of ${I.cap} ink.`), choices);
 }
-SERVICES_NC.hardware = { ...SERVICES.hardware, offers: [...SERVICES.hardware.offers, ['אפוד מגן מכריכות של מחברות', 'vest', (game) => {
+SERVICES_NC.hardware = { ...SERVICES.hardware, offers: [...SERVICES.hardware.offers, [tr('אפוד מגן מכריכות של מחברות', 'A protective vest made of notebook covers'), 'vest', (game) => {
   armorUp(game);
-  game.hud.toast('אפוד מגן! הוא סופג את רוב המכות והיריות עד שהוא נקרע', 'good', 3.2);
-}], ['שרטוטים: סולם, רמפה, גשר, מפתח', 'menu', (game, a) => toolShelf(game, a)]] };
+  game.hud.toast(tr('אפוד מגן! הוא סופג את רוב המכות והיריות עד שהוא נקרע', 'A protective vest! It soaks up most hits and shots until it tears'), 'good', 3.2);
+}], [tr('שרטוטים: סולם, רמפה, גשר, מפתח', 'Blueprints: ladder, ramp, bridge, key'), 'menu', (game, a) => toolShelf(game, a)]] };
 
 // (ROADMAP 9.2) the blueprints of the things that solve problems on the way
 const TOOL_PRICES = { ladder: 30, ramp: 40, bridge: 55, key: 70 };
@@ -884,32 +885,32 @@ function toolShelf(game, a) {
   const choices = [];
   for (const [id, price] of Object.entries(TOOL_PRICES)) {
     const bp = BLUEPRINTS[id];
-    if (game.album.has(id)) choices.push({ label: `${bp.name} (כבר באלבום)`, fn: () => toolShelf(game, a) });
-    else choices.push({ label: `שרטוט: ${bp.name} · ${fmt(price)}`, fn: () => a.buy(price, `שרטוט: ${bp.name}`, () => giveBlueprint(game, id)) });
+    if (game.album.has(id)) choices.push({ label: tr(`${bp.name} (כבר באלבום)`, `${bp.name} (already in the album)`), fn: () => toolShelf(game, a) });
+    else choices.push({ label: tr(`שרטוט: ${bp.name} · ${fmt(price)}`, `Blueprint: ${bp.name} · ${fmt(price)}`), fn: () => a.buy(price, tr(`שרטוט: ${bp.name}`, `Blueprint: ${bp.name}`), () => giveBlueprint(game, id)) });
   }
-  choices.push({ label: 'משהו אחר', fn: () => a.talk() });
-  game.dialog.show(info.who, 'סולם לגג, רמפה לקפיצות, גשר מעל מה שבאמצע, ומפתח שמתאים לכל מנעול.', choices);
+  choices.push({ label: tr('משהו אחר', 'Something else'), fn: () => a.talk() });
+  game.dialog.show(info.who, tr('סולם לגג, רמפה לקפיצות, גשר מעל מה שבאמצע, ומפתח שמתאים לכל מנעול.', 'A ladder to the roof, a ramp for jumps, a bridge over whatever\'s in the way, and a key that fits every lock.'), choices);
 }
 
-SERVICES.arcade = { verb: 'להיכנס לארקייד', ask: 'לשחק במכונה', who: 'המכונה', greet: 'INSERT COIN — מכה אחת במכונה וקורה משהו...', offers: [['לשחק (אולי זוכים בשרטוט)', 'note', (game) => {
+SERVICES.arcade = { verb: tr('להיכנס לארקייד', 'Go into the arcade'), ask: tr('לשחק במכונה', 'Play a machine'), who: tr('המכונה', 'The machine'), greet: tr('INSERT COIN — מכה אחת במכונה וקורה משהו...', 'INSERT COIN — one bang on the machine and something happens...'), offers: [[tr('לשחק (אולי זוכים בשרטוט)', 'Play (maybe you\'ll win a blueprint)'), 'note', (game) => {
   const left = Object.keys(BLUEPRINTS).filter((id) => !game.album.has(id) && id !== 'tank' && id !== 'copter' && id !== 'minigun' && (!game.classic || (!BLUEPRINT_MORE.includes(id) && !BLUEPRINT_TOOLS.includes(id) && !BLUEPRINT_CARS.includes(id))));
   if (left.length && Math.random() < 0.5) giveBlueprint(game, left[Math.floor(Math.random() * left.length)]);
   else {
-    heal(10, [0.4, 0.8, 0.95], 'כמעט! לפחות קיבלת סוכרייה. +10 חיים')(game);
+    heal(10, [0.4, 0.8, 0.95], tr('כמעט! לפחות קיבלת סוכרייה. +10 חיים', 'Almost! At least you got a candy. +10 health'))(game);
   }
 }]] };
-SERVICES.bar = { verb: 'להיכנס לבר', ask: 'להזמין משקה', who: 'הברמן', greet: 'ערב טוב! משהו זוהר בכוס?', offers: [['קוקטייל ניאון (+20 חיים, הדף קצת מתנדנד)', 'cup', (game) => {
-  heal(20, [0.85, 0.35, 0.85], 'קוקטייל ניאון! +20 חיים')(game);
+SERVICES.bar = { verb: tr('להיכנס לבר', 'Go into the bar'), ask: tr('להזמין משקה', 'Order a drink'), who: tr('הברמן', 'The bartender'), greet: tr('ערב טוב! משהו זוהר בכוס?', 'Good evening! Something glowing in a glass?'), offers: [[tr('קוקטייל ניאון (+20 חיים, הדף קצת מתנדנד)', 'A neon cocktail (+20 health, the page wobbles a little)'), 'cup', (game) => {
+  heal(20, [0.85, 0.35, 0.85], tr('קוקטייל ניאון! +20 חיים', 'A neon cocktail! +20 health'))(game);
   game.inkwell.tipsy = Math.min(1, game.inkwell.tipsy + 0.45);
-}], ['כוס מים (+5 חיים)', 'cup', heal(5, [0.6, 0.8, 0.95], 'מים קרים. +5 חיים')]] };
-SERVICES.cinema = { verb: 'להיכנס לקולנוע', ask: 'לקנות פופקורן', who: 'הקופאית', greet: 'הערב: "המחק" — סרט אימה. פופקורן?', offers: [['פופקורן (+15 חיים)', 'cup', heal(15, [0.98, 0.9, 0.6], 'פופקורן! +15 חיים')]] };
+}], [tr('כוס מים (+5 חיים)', 'A glass of water (+5 health)'), 'cup', heal(5, [0.6, 0.8, 0.95], tr('מים קרים. +5 חיים', 'Cold water. +5 health'))]] };
+SERVICES.cinema = { verb: tr('להיכנס לקולנוע', 'Go into the cinema'), ask: tr('לקנות פופקורן', 'Buy popcorn'), who: tr('הקופאית', 'The cashier'), greet: tr('הערב: "המחק" — סרט אימה. פופקורן?', 'Tonight: "The Eraser" — a horror movie. Popcorn?'), offers: [[tr('פופקורן (+15 חיים)', 'Popcorn (+15 health)'), 'cup', heal(15, [0.98, 0.9, 0.6], tr('פופקורן! +15 חיים', 'Popcorn! +15 health'))]] };
 
-SERVICES.friends = { verb: 'לצייר לעצמך חברה', ask: 'לצייר לעצמך חברה', who: 'המוכרת בדוכן', greet: 'ציירו לעצמכם חברה! עיפרון קסם אחד — ומה שמציירים בו קם לחיים. רק לצייר בעדינות, כן?', offers: [['עיפרון קסם — לצייר חברה (היא תלך איתך)', null, (game, a) => a.heroFriend()]] };
-SERVICES.lobby = { verb: 'להיכנס ללובי', ask: 'לדבר עם השומר', who: 'השומר בלובי', greet: 'ערב טוב. אתה לא גר פה, נכון? ...טוב, מה צריך?', offers: [['לשאול איפה יש שרטוט בסביבה', null, (game) => bookHint(game)], ['כוס מים (+10 חיים)', 'cup', heal(10, [0.6, 0.8, 0.95], 'מים קרים. +10 חיים')]] };
+SERVICES.friends = { verb: tr('לצייר לעצמך חברה', 'Draw yourself a friend'), ask: tr('לצייר לעצמך חברה', 'Draw yourself a friend'), who: tr('המוכרת בדוכן', 'The woman at the stand'), greet: tr('ציירו לעצמכם חברה! עיפרון קסם אחד — ומה שמציירים בו קם לחיים. רק לצייר בעדינות, כן?', 'Draw yourself a friend! One magic pencil — and whatever you draw with it comes to life. Just draw gently, OK?'), offers: [[tr('עיפרון קסם — לצייר חברה (היא תלך איתך)', 'A magic pencil — draw a friend (she\'ll come with you)'), null, (game, a) => a.heroFriend()]] };
+SERVICES.lobby = { verb: tr('להיכנס ללובי', 'Go into the lobby'), ask: tr('לדבר עם השומר', 'Talk to the guard'), who: tr('השומר בלובי', 'The lobby guard'), greet: tr('ערב טוב. אתה לא גר פה, נכון? ...טוב, מה צריך?', 'Good evening. You don\'t live here, do you? ...OK, what do you need?'), offers: [[tr('לשאול איפה יש שרטוט בסביבה', 'Ask where there\'s a blueprint nearby'), null, (game) => bookHint(game)], [tr('כוס מים (+10 חיים)', 'A glass of water (+10 health)'), 'cup', heal(10, [0.6, 0.8, 0.95], tr('מים קרים. +10 חיים', 'Cold water. +10 health'))]] };
 
 // (ROADMAP 8.1) the ATMs: in the convenience stores and the hotels' lobbies
-const ATM = ['כספומט PAPERTRUST', 'menu', (game, a) => game.money && game.money.atm(() => a.talk())];
-SERVICES_NC.shop = { ...SERVICES.shop, offers: [...SERVICES.shop.offers, ATM, ['שרטוט: מטריה (לגשם, ולנפילות)', 'umbrella', (game) => giveBlueprint(game, 'umbrella')]] };
+const ATM = [tr('כספומט PAPERTRUST', 'PAPERTRUST cash machine'), 'menu', (game, a) => game.money && game.money.atm(() => a.talk())];
+SERVICES_NC.shop = { ...SERVICES.shop, offers: [...SERVICES.shop.offers, ATM, [tr('שרטוט: מטריה (לגשם, ולנפילות)', 'Blueprint: umbrella (for the rain, and for falls)'), 'umbrella', (game) => giveBlueprint(game, 'umbrella')]] };
 SERVICES_NC.lobby = { ...SERVICES.lobby, offers: [...SERVICES.lobby.offers, ATM] };
 
 const HERO_HAIR_COLORS = [[0.12, 0.1, 0.09], [0.42, 0.28, 0.16], [0.86, 0.72, 0.45], [0.75, 0.2, 0.22], [0.3, 0.45, 0.85], [0.55, 0.3, 0.75]];
@@ -918,7 +919,7 @@ function heroHair(game, style, color = null) {
   const L = game.player.fig.look;
   L.hair = { style, color: style === 'none' ? L.skin : color || pick(HERO_HAIR_COLORS) };
   game.streetlife.saveHero();
-  game.hud.toast(style === 'none' ? 'קרחת מבריקה' : 'תספורת חדשה!', 'good', 2.2);
+  game.hud.toast(style === 'none' ? tr('קרחת מבריקה', 'Shiny bald') : tr('תספורת חדשה!', 'A new haircut!'), 'good', 2.2);
 }
 
 function heroLook(game, fn, text) {
@@ -931,11 +932,11 @@ function heroLook(game, fn, text) {
 function giveBlueprint(game, id) {
   const bp = BLUEPRINTS[id];
   if (game.album.has(id)) {
-    game.hud.toast(`ה${bp.name} כבר באלבום — לחצו ${game.touch ? `על ${game.drawTap}` : game.drawKey} כדי לצייר`, 'info', 2.6);
+    game.hud.toast(tr(`ה${bp.name} כבר באלבום — לחצו ${game.touch ? `על ${game.drawTap}` : game.drawKey} כדי לצייר`, `The ${bp.name} is already in the album — press ${game.touch ? tr(`על ${game.drawTap}`, `on ${game.drawTap}`) : game.drawKey} to draw it`), 'info', 2.6);
     return;
   }
   game.album.add(id);
-  game.hud.toast(`שרטוט חדש באלבום: ${bp.name}! ${game.touch ? game.drawTap : game.drawKey} — לצייר אותו באוויר`, 'good', 3.4);
+  game.hud.toast(tr(`שרטוט חדש באלבום: ${bp.name}! ${game.touch ? game.drawTap : game.drawKey} — לצייר אותו באוויר`, `New blueprint in the album: ${bp.name}! ${game.touch ? game.drawTap : game.drawKey} — draw it in the air`), 'good', 3.4);
   game.audio.play('pageflip');
 }
 
@@ -948,7 +949,7 @@ function refillErasers(game) {
     }
   }
   game.hud.updateWeapon();
-  game.hud.toast(n ? 'המחקים כמו חדשים' : 'מחק חדש בכיס — לפעם הבאה', 'good', 2.2);
+  game.hud.toast(n ? tr('המחקים כמו חדשים', 'The erasers are good as new') : tr('מחק חדש בכיס — לפעם הבאה', 'A new eraser in your pocket — for next time'), 'good', 2.2);
 }
 
 function bookHint(game) {
@@ -964,15 +965,15 @@ function bookHint(game) {
     }
   }
   if (!best) {
-    game.hud.toast('כבר צילמת את כל השרטוטים בעיר!', 'good', 2.6);
+    game.hud.toast(tr('כבר צילמת את כל השרטוטים בעיר!', 'You\'ve already photographed every blueprint in the city!'), 'good', 2.6);
     return;
   }
   const dx = best.x - p.x;
   const dz = best.z - p.z;
-  const dir = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'מזרחה' : 'מערבה') : dz > 0 ? 'דרומה' : 'צפונה';
+  const dir = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? tr('מזרחה', 'east') : tr('מערבה', 'west')) : dz > 0 ? tr('דרומה', 'south') : tr('צפונה', 'north');
   const blk = blockAt(best.x, best.z);
-  const where = blk ? DISTRICT_NAMES[blk.type] : 'קצה העיר';
-  game.hud.toast(`השרטוט של ה${BLUEPRINTS[best.id].name}: ${where}, בערך ${Math.round(bd / 10) * 10} מטר ${dir}`, 'info', 5);
+  const where = blk ? DISTRICT_NAMES[blk.type] : tr('קצה העיר', 'The edge of the city');
+  game.hud.toast(tr(`השרטוט של ה${BLUEPRINTS[best.id].name}: ${where}, בערך ${Math.round(bd / 10) * 10} מטר ${dir}`, `The ${BLUEPRINTS[best.id].name} blueprint: ${where}, about ${Math.round(bd / 10) * 10} meters ${dir}`), 'info', 5);
 }
 
 // ------------------------------------------------------------------ the mainland's stores
@@ -982,47 +983,47 @@ const meal = (n, color, text) => (game) => {
   heal(n, color, text)(game);
   game.player.fig.carry = null;
 };
-SERVICES.fashion = { verb: 'להיכנס לחנות הבגדים', ask: 'לדבר עם המוכרת', who: 'המוכרת בחנות', greet: 'הקולקציה של העונה הגיעה! תמדדו, תא המדידה פנוי.', offers: [
-  ['כובע מצחייה', 'hat', (game) => heroLook(game, (L) => (L.hat = { kind: 'cap', color: pick([[0.09, 0.09, 0.11], [0.95, 0.3, 0.45], [0.2, 0.62, 0.66]]) }), 'כובע חדש!')],
-  ['כובע רחב שוליים', 'hat', (game) => heroLook(game, (L) => (L.hat = { kind: 'fedora', color: [0.94, 0.9, 0.82] }), 'אלגנטי!')],
-  ['בלי כובע', null, (game) => heroLook(game, (L) => (L.hat = null), 'בלי כובע')],
+SERVICES.fashion = { verb: tr('להיכנס לחנות הבגדים', 'Go into the clothes shop'), ask: tr('לדבר עם המוכרת', 'Talk to the saleswoman'), who: tr('המוכרת בחנות', 'The saleswoman'), greet: tr('הקולקציה של העונה הגיעה! תמדדו, תא המדידה פנוי.', 'The season\'s collection is in! Try it on, the fitting room is free.'), offers: [
+  [tr('כובע מצחייה', 'A cap'), 'hat', (game) => heroLook(game, (L) => (L.hat = { kind: 'cap', color: pick([[0.09, 0.09, 0.11], [0.95, 0.3, 0.45], [0.2, 0.62, 0.66]]) }), tr('כובע חדש!', 'A new hat!'))],
+  [tr('כובע רחב שוליים', 'A wide-brimmed hat'), 'hat', (game) => heroLook(game, (L) => (L.hat = { kind: 'fedora', color: [0.94, 0.9, 0.82] }), tr('אלגנטי!', 'Elegant!'))],
+  [tr('בלי כובע', 'No hat'), null, (game) => heroLook(game, (L) => (L.hat = null), tr('בלי כובע', 'No hat'))],
 ] };
-SERVICES_NC.fashion = { ...SERVICES.fashion, ask: 'למדוד בגדים', offers: [
-  ['חולצות, מעילים וחליפות', 'menu', (game, a) => a.shelf('מה מודדים? (הכול מתאים, התא פנוי)', 'top', FASHION_TOPS, (it) => (it.top.kind === 'suit' || it.top.kind === 'blazer' || it.top.kind === 'trench' || it.top.kind === 'puffer' || it.top.kind === 'bomber' ? 'jacket' : 'shirt'))],
-  ['מכנסיים', 'menu', (game, a) => a.shelf('אילו מכנסיים?', 'bottom', FASHION_BOTTOMS, 'pants')],
-  ['כובעים', 'menu', (game, a) => a.shelf('משהו לראש?', 'hat', HATS, 'hat')],
+SERVICES_NC.fashion = { ...SERVICES.fashion, ask: tr('למדוד בגדים', 'Try on clothes'), offers: [
+  [tr('חולצות, מעילים וחליפות', 'Shirts, jackets and suits'), 'menu', (game, a) => a.shelf(tr('מה מודדים? (הכול מתאים, התא פנוי)', 'What are we trying on? (everything fits, the fitting room is free)'), 'top', FASHION_TOPS, (it) => (it.top.kind === 'suit' || it.top.kind === 'blazer' || it.top.kind === 'trench' || it.top.kind === 'puffer' || it.top.kind === 'bomber' ? 'jacket' : 'shirt'))],
+  [tr('מכנסיים', 'Pants'), 'menu', (game, a) => a.shelf(tr('אילו מכנסיים?', 'Which pants?'), 'bottom', FASHION_BOTTOMS, 'pants')],
+  [tr('כובעים', 'Hats'), 'menu', (game, a) => a.shelf(tr('משהו לראש?', 'Something for your head?'), 'hat', HATS, 'hat')],
 ] };
-SERVICES.shoes = { verb: 'להיכנס לחנות הנעליים', ask: 'למדוד נעליים', who: 'המוכר בחנות הנעליים', greet: 'איזו מידה? יש לנו הכול, מסניקרס ועד נעלי ערב.', offers: [
-  ['סניקרס לבנות', 'shoe', (game) => { wear(game, 'shoes', SHOES[0]); game.hud.toast('נוחות!', 'good', 2); }],
-  ['נעלי עור שחורות', 'shoe', (game) => { wear(game, 'shoes', SHOES[2]); game.hud.toast('אלגנטי!', 'good', 2); }],
+SERVICES.shoes = { verb: tr('להיכנס לחנות הנעליים', 'Go into the shoe store'), ask: tr('למדוד נעליים', 'Try on shoes'), who: tr('המוכר בחנות הנעליים', 'The shoe salesman'), greet: tr('איזו מידה? יש לנו הכול, מסניקרס ועד נעלי ערב.', 'What size? We have everything, from sneakers to evening shoes.'), offers: [
+  [tr('סניקרס לבנות', 'White sneakers'), 'shoe', (game) => { wear(game, 'shoes', SHOES[0]); game.hud.toast(tr('נוחות!', 'Comfy!'), 'good', 2); }],
+  [tr('נעלי עור שחורות', 'Black leather shoes'), 'shoe', (game) => { wear(game, 'shoes', SHOES[2]); game.hud.toast(tr('אלגנטי!', 'Elegant!'), 'good', 2); }],
 ] };
-SERVICES_NC.shoes = { ...SERVICES.shoes, offers: [['כל הקיר: לבחור זוג', 'menu', (game, a) => a.shelf('איזה זוג מודדים?', 'shoes', SHOE_WALL, 'shoe')]] };
-SERVICES.electronics = { verb: 'להיכנס לחנות האלקטרוניקה', ask: 'לדבר עם המוכר', who: 'המוכר באלקטרוניקה', greet: 'המסכים הכי חדשים, הטלפונים הכי מהירים. מה מחפשים?', offers: [
-  ['אוזניות אלחוטיות', 'headphones', (game) => { wear(game, 'acc', ACCS[2]); game.hud.toast('מוזיקה באוזניים!', 'good', 2.2); }],
-  ['אפליקציית מפות: איפה השרטוט הקרוב', 'phone', (game) => bookHint(game)],
-  ['טלפון חדש: "אזעקת שווא, שוטר" (כוכב משטרה אחד פחות)', 'phone', (game) => SERVICES.phones.offers[0][2](game)],
+SERVICES_NC.shoes = { ...SERVICES.shoes, offers: [[tr('כל הקיר: לבחור זוג', 'The whole wall: pick a pair'), 'menu', (game, a) => a.shelf(tr('איזה זוג מודדים?', 'Which pair are we trying on?'), 'shoes', SHOE_WALL, 'shoe')]] };
+SERVICES.electronics = { verb: tr('להיכנס לחנות האלקטרוניקה', 'Go into the electronics store'), ask: tr('לדבר עם המוכר', 'Talk to the shopkeeper'), who: tr('המוכר באלקטרוניקה', 'The electronics salesman'), greet: tr('המסכים הכי חדשים, הטלפונים הכי מהירים. מה מחפשים?', 'The newest screens, the fastest phones. What are you looking for?'), offers: [
+  [tr('אוזניות אלחוטיות', 'Wireless headphones'), 'headphones', (game) => { wear(game, 'acc', ACCS[2]); game.hud.toast(tr('מוזיקה באוזניים!', 'Music in your ears!'), 'good', 2.2); }],
+  [tr('אפליקציית מפות: איפה השרטוט הקרוב', 'A maps app: where the nearest blueprint is'), 'phone', (game) => bookHint(game)],
+  [tr('טלפון חדש: "אזעקת שווא, שוטר" (כוכב משטרה אחד פחות)', 'A new phone: "False alarm, officer" (one police star less)'), 'phone', (game) => SERVICES.phones.offers[0][2](game)],
 ] };
 // (v5, ROADMAP 16.6) an electronics shop of the new kind, a phone shop: from the seller at the till -
 // a police scanner (the police on your map ten minutes), the map that shows every blueprint's page,
 // the call that tells the police it was all a false alarm (each with its own price)
-SERVICES_NC.electronics = { ...SERVICES.electronics, greet: 'המסכים הכי חדשים, הטלפונים הכי מהירים. ויש לי גם כמה דברים... שימושיים. מה מחפשים?', offers: [
-  ['סורק משטרתי (הניידות והשוטרים על המפה ל־10 דקות)', 'phone', (game) => policeScanner(game), 150],
-  ['MAP PRO: כל דפי השרטוט על המפה', 'phone', (game) => mapPro(game), (g) => (g.player.mapPages ? 0 : 60)],
-  ['טלפון חדש: "אזעקת שווא, שוטר" (כוכב משטרה אחד פחות)', 'phone', (game) => SERVICES.phones.offers[0][2](game), (g) => (g.police.level > 0 ? 60 * g.police.level : 0)],
+SERVICES_NC.electronics = { ...SERVICES.electronics, greet: tr('המסכים הכי חדשים, הטלפונים הכי מהירים. ויש לי גם כמה דברים... שימושיים. מה מחפשים?', 'The newest screens, the fastest phones. And I\'ve got a few things... handy ones. What are you looking for?'), offers: [
+  [tr('סורק משטרתי (הניידות והשוטרים על המפה ל־10 דקות)', 'A police scanner (the police cars and cops on the map for 10 minutes)'), 'phone', (game) => policeScanner(game), 150],
+  [tr('MAP PRO: כל דפי השרטוט על המפה', 'MAP PRO: every blueprint page on the map'), 'phone', (game) => mapPro(game), (g) => (g.player.mapPages ? 0 : 60)],
+  [tr('טלפון חדש: "אזעקת שווא, שוטר" (כוכב משטרה אחד פחות)', 'A new phone: "False alarm, officer" (one police star less)'), 'phone', (game) => SERVICES.phones.offers[0][2](game), (g) => (g.police.level > 0 ? 60 * g.police.level : 0)],
 ] };
 SERVICES_NC.phones = { ...SERVICES.phones, offers: SERVICES_NC.electronics.offers };
 // (ROADMAP 16.9) the gym's trainer: the strength as before, and a session on the treadmill, one at the
 // bag - a level of running, of fighting (game/skills.js)
-SERVICES_NC.gym = { ...SERVICES.gym, greet: 'עשר חזרות ואתה בנאדם חדש. מה עושים היום?', offers: [
+SERVICES_NC.gym = { ...SERVICES.gym, greet: tr('עשר חזרות ואתה בנאדם חדש. מה עושים היום?', 'Ten reps and you\'re a new person. What are we doing today?'), offers: [
   SERVICES.gym.offers[0],
-  ['אימון ריצה על ההליכון (ריצה: רמה אחת למעלה)', 'dumbbell', (game) => gymSkill(game, 'run', 'הרגליים מרגישות את זה'), (g) => (g.skills && g.skills.level('run') < 5 ? 40 : 0)],
-  ['אימון אגרוף על השק (קרב: רמה אחת למעלה)', 'dumbbell', (game) => gymSkill(game, 'fight', 'האגרופים מהירים יותר'), (g) => (g.skills && g.skills.level('fight') < 5 ? 40 : 0)],
+  [tr('אימון ריצה על ההליכון (ריצה: רמה אחת למעלה)', 'A run on the treadmill (running: up one level)'), 'dumbbell', (game) => gymSkill(game, 'run', tr('הרגליים מרגישות את זה', 'Your legs feel it')), (g) => (g.skills && g.skills.level('run') < 5 ? 40 : 0)],
+  [tr('אימון אגרוף על השק (קרב: רמה אחת למעלה)', 'Punching the bag (fighting: up one level)'), 'dumbbell', (game) => gymSkill(game, 'fight', tr('האגרופים מהירים יותר', 'Your punches are faster')), (g) => (g.skills && g.skills.level('fight') < 5 ? 40 : 0)],
 ] };
 
 function gymSkill(game, id, text) {
   const S = game.skills;
   if (!S || S.level(id) >= 5) {
-    game.hud.toast('כבר ברמה הכי גבוהה', 'info', 2);
+    game.hud.toast(tr('כבר ברמה הכי גבוהה', 'Already at the highest level'), 'info', 2);
     return;
   }
   const want = (S.level(id) + 1) * 20 - S.points[id];
@@ -1033,80 +1034,80 @@ function gymSkill(game, id, text) {
 function policeScanner(game) {
   const P = game.player;
   P.scannerT = Math.max(P.scannerT || 0, 600);
-  game.hud.toast('סורק משטרתי: הניידות והשוטרים על המפה ל־10 דקות', 'good', 3);
+  game.hud.toast(tr('סורק משטרתי: הניידות והשוטרים על המפה ל־10 דקות', 'Police scanner: the police cars and cops on the map for 10 minutes'), 'good', 3);
 }
 
 function mapPro(game) {
   const P = game.player;
   if (P.mapPages) {
-    game.hud.toast('MAP PRO כבר אצלכם', 'info', 2);
+    game.hud.toast(tr('MAP PRO כבר אצלכם', 'You already have MAP PRO'), 'info', 2);
     return;
   }
   P.mapPages = true;
-  game.hud.toast('MAP PRO: כל דפי השרטוט שעוד לא מצאתם על המפה ועל מפת העיר', 'good', 3.2);
+  game.hud.toast(tr('MAP PRO: כל דפי השרטוט שעוד לא מצאתם על המפה ועל מפת העיר', 'MAP PRO: every blueprint page you haven\'t found yet, on the map and the city map'), 'good', 3.2);
 }
-SERVICES.jewelry = { verb: 'להיכנס לחנות התכשיטים', ask: 'לראות את התכשיטים', who: 'הצורפת', greet: 'זהב, כסף, ויהלום מצויר אחד שנוצץ באמת. במה אפשר לעזור?', offers: [
-  ['שרשרת זהב', 'chain', (game) => { wear(game, 'acc', JEWELS[0]); game.hud.toast('נוצץ!', 'good', 2); }],
-  ['משקפי שמש מעוצבים', 'sunglasses', (game) => heroLook(game, (L) => (L.face.glasses = 'shades'), 'קול.')],
-  ['טבעת: מתנה לחברה שציירת', 'ring', (game) => {
+SERVICES.jewelry = { verb: tr('להיכנס לחנות התכשיטים', 'Go into the jewelry store'), ask: tr('לראות את התכשיטים', 'See the jewelry'), who: tr('הצורפת', 'The jeweler'), greet: tr('זהב, כסף, ויהלום מצויר אחד שנוצץ באמת. במה אפשר לעזור?', 'Gold, silver, and one drawn diamond that really sparkles. How can I help?'), offers: [
+  [tr('שרשרת זהב', 'A gold chain'), 'chain', (game) => { wear(game, 'acc', JEWELS[0]); game.hud.toast(tr('נוצץ!', 'Sparkly!'), 'good', 2); }],
+  [tr('משקפי שמש מעוצבים', 'Designer sunglasses'), 'sunglasses', (game) => heroLook(game, (L) => (L.face.glasses = 'shades'), tr('קול.', 'Cool.'))],
+  [tr('טבעת: מתנה לחברה שציירת', 'A ring: a gift for the friend you drew'), 'ring', (game) => {
     const fr = game.streetlife.companion;
     if (fr && fr.alive) {
       game.bubbles.say(fr.c, pick(['For me? I love it!', 'It sparkles!', 'You\'re so sweet!']));
       fr.hearts && fr.hearts(3);
-      game.hud.toast('היא שמחה מאוד!', 'good', 2.6);
-    } else game.hud.toast('טבעת בכיס. אולי לחברה שתציירו?', 'info', 2.6);
+      game.hud.toast(tr('היא שמחה מאוד!', 'She\'s very happy!'), 'good', 2.6);
+    } else game.hud.toast(tr('טבעת בכיס. אולי לחברה שתציירו?', 'A ring in your pocket. Maybe for a friend you\'ll draw?'), 'info', 2.6);
   }],
 ] };
-SERVICES_NC.jewelry = { ...SERVICES.jewelry, offers: [['שרשראות, צעיפים ותיקים', 'menu', (game, a) => a.shelf('משהו קטן ויפה?', 'acc', JEWELS, 'chain')], ...SERVICES.jewelry.offers.slice(1)] };
-SERVICES.toys = { verb: 'להיכנס לחנות הצעצועים', ask: 'לדבר עם המוכר', who: 'המוכר בחנות הצעצועים', greet: 'כל מה שחלמתם עליו כשהייתם בני שבע! וגם מה שתחלמו בשבעים.', offers: [
-  ['דובי רך', 'teddy', (game) => { game.player.fig.carry = 'teddy'; game.hud.toast('דובי! (יורד מהיד כשמחזיקים נשק)', 'good', 2.4); }],
-  ['בלון אדום', 'balloon', (game) => { game.player.fig.carryL = 'balloon'; game.hud.toast('בלון!', 'good', 2); }],
-  ['שרטוט: בומרנג סרגל', 'boomerang', (game) => giveBlueprint(game, 'boomerang')],
+SERVICES_NC.jewelry = { ...SERVICES.jewelry, offers: [[tr('שרשראות, צעיפים ותיקים', 'Necklaces, scarves and bags'), 'menu', (game, a) => a.shelf(tr('משהו קטן ויפה?', 'Something small and pretty?'), 'acc', JEWELS, 'chain')], ...SERVICES.jewelry.offers.slice(1)] };
+SERVICES.toys = { verb: tr('להיכנס לחנות הצעצועים', 'Go into the toy store'), ask: tr('לדבר עם המוכר', 'Talk to the shopkeeper'), who: tr('המוכר בחנות הצעצועים', 'The toy seller'), greet: tr('כל מה שחלמתם עליו כשהייתם בני שבע! וגם מה שתחלמו בשבעים.', 'Everything you dreamed of when you were seven! And what you\'ll dream of at seventy.'), offers: [
+  [tr('דובי רך', 'A soft teddy bear'), 'teddy', (game) => { game.player.fig.carry = 'teddy'; game.hud.toast(tr('דובי! (יורד מהיד כשמחזיקים נשק)', 'A teddy bear! (it leaves your hand when you hold a weapon)'), 'good', 2.4); }],
+  [tr('בלון אדום', 'A red balloon'), 'balloon', (game) => { game.player.fig.carryL = 'balloon'; game.hud.toast(tr('בלון!', 'A balloon!'), 'good', 2); }],
+  [tr('שרטוט: בומרנג סרגל', 'Blueprint: ruler boomerang'), 'boomerang', (game) => giveBlueprint(game, 'boomerang')],
 ] };
-SERVICES.perfume = { verb: 'להיכנס לחנות הבשמים', ask: 'לנסות בושם', who: 'המוכרת', greet: 'ריח של גן אחרי גשם? של ים? של עיפרון חדש?', offers: [
-  ['בושם פרחים (+10 חיים, וכולם מסתובבים)', 'perfume', (game) => {
-    heal(10, [0.95, 0.7, 0.85], 'ריח של פרחים... +10 חיים')(game);
+SERVICES.perfume = { verb: tr('להיכנס לחנות הבשמים', 'Go into the perfume shop'), ask: tr('לנסות בושם', 'Try a perfume'), who: tr('המוכרת', 'The florist'), greet: tr('ריח של גן אחרי גשם? של ים? של עיפרון חדש?', 'The smell of a garden after rain? Of the sea? Of a new pencil?'), offers: [
+  [tr('בושם פרחים (+10 חיים, וכולם מסתובבים)', 'Flower perfume (+10 health, and everybody turns around)'), 'perfume', (game) => {
+    heal(10, [0.95, 0.7, 0.85], tr('ריח של פרחים... +10 חיים', 'The smell of flowers... +10 health'))(game);
     game.player.perfumeT = 90;
   }],
-  ['בושם ים (ריצה קלה ל-20 שניות)', 'perfume', (game) => {
+  [tr('בושם ים (ריצה קלה ל-20 שניות)', 'Sea perfume (light running for 20 seconds)'), 'perfume', (game) => {
     game.player.coffeeT = Math.max(game.player.coffeeT || 0, 20);
     game.player.perfumeT = 90;
-    game.hud.toast('רענן כמו בריזה מהים!', 'good', 2.4);
+    game.hud.toast(tr('רענן כמו בריזה מהים!', 'Fresh as a sea breeze!'), 'good', 2.4);
   }],
 ] };
-SERVICES.sports = { verb: 'להיכנס לחנות הספורט', ask: 'לדבר עם המוכר', who: 'המוכר בחנות הספורט', greet: 'מוכנים לזוז? חליפות, נעלי ריצה, ואופניים מצוירים.', offers: [
-  ['נעלי ריצה צהובות (ריצה מהירה ל-40 שניות)', 'shoe', (game) => {
+SERVICES.sports = { verb: tr('להיכנס לחנות הספורט', 'Go into the sports store'), ask: tr('לדבר עם המוכר', 'Talk to the shopkeeper'), who: tr('המוכר בחנות הספורט', 'The sports salesman'), greet: tr('מוכנים לזוז? חליפות, נעלי ריצה, ואופניים מצוירים.', 'Ready to move? Tracksuits, running shoes, and drawn bicycles.'), offers: [
+  [tr('נעלי ריצה צהובות (ריצה מהירה ל-40 שניות)', 'Yellow running shoes (fast running for 40 seconds)'), 'shoe', (game) => {
     wear(game, 'shoes', SHOE_WALL[SHOES.length + 1]);
     game.player.coffeeT = Math.max(game.player.coffeeT || 0, 40);
-    game.hud.toast('קלים כמו נוצה!', 'good', 2.4);
+    game.hud.toast(tr('קלים כמו נוצה!', 'Light as a feather!'), 'good', 2.4);
   }],
-  ['שרטוט: אופניים', 'bicycle', (game) => giveBlueprint(game, 'bicycle')],
-  ['כדורגל (לבעוט ברחוב)', 'ball', (game) => game.hud.toast('כדור ביד! אפשר לצייר אותו גם באוויר', 'good', 2.4)],
+  [tr('שרטוט: אופניים', 'Blueprint: bicycle'), 'bicycle', (game) => giveBlueprint(game, 'bicycle')],
+  [tr('כדורגל (לבעוט ברחוב)', 'A soccer ball (to kick in the street)'), 'ball', (game) => game.hud.toast(tr('כדור ביד! אפשר לצייר אותו גם באוויר', 'A ball in hand! You can draw it in the air too'), 'good', 2.4)],
 ] };
-SERVICES_NC.sports = { ...SERVICES.sports, offers: [...SERVICES.sports.offers, ['חליפות ספורט וגופיות', 'menu', (game, a) => a.shelf('איזו חליפה?', 'top', SPORT_TOPS, 'shirt')]] };
-SERVICES.burger = { verb: 'להזמין המבורגר', ask: 'להזמין המבורגר', who: 'הטבח בדוכן', greet: 'המבורגר על הגריל, צ\'יפס בשמן, שייק בבלנדר. מה בא לכם?', offers: [
-  ['המבורגר כפול (+45 חיים)', 'burger', meal(45, [0.7, 0.42, 0.25], 'המבורגר! +45 חיים')],
-  ['צ\'יפס (+15 חיים)', 'fries', meal(15, [0.98, 0.82, 0.3], 'צ\'יפס פריך! +15 חיים')],
-  ['שייק וניל (+20 חיים)', 'soda', meal(20, [0.98, 0.94, 0.82], 'שייק! +20 חיים')],
+SERVICES_NC.sports = { ...SERVICES.sports, offers: [...SERVICES.sports.offers, [tr('חליפות ספורט וגופיות', 'Tracksuits and tank tops'), 'menu', (game, a) => a.shelf(tr('איזו חליפה?', 'Which tracksuit?'), 'top', SPORT_TOPS, 'shirt')]] };
+SERVICES.burger = { verb: tr('להזמין המבורגר', 'Order a burger'), ask: tr('להזמין המבורגר', 'Order a burger'), who: tr('הטבח בדוכן', 'The cook at the stand'), greet: tr('המבורגר על הגריל, צ\'יפס בשמן, שייק בבלנדר. מה בא לכם?', 'Burgers on the grill, fries in the oil, shakes in the blender. What do you feel like?'), offers: [
+  [tr('המבורגר כפול (+45 חיים)', 'A double burger (+45 health)'), 'burger', meal(45, [0.7, 0.42, 0.25], tr('המבורגר! +45 חיים', 'A burger! +45 health'))],
+  [tr('צ\'יפס (+15 חיים)', 'Fries (+15 health)'), 'fries', meal(15, [0.98, 0.82, 0.3], tr('צ\'יפס פריך! +15 חיים', 'Crispy fries! +15 health'))],
+  [tr('שייק וניל (+20 חיים)', 'A vanilla shake (+20 health)'), 'soda', meal(20, [0.98, 0.94, 0.82], tr('שייק! +20 חיים', 'A shake! +20 health'))],
 ] };
-SERVICES.noodles = { verb: 'להזמין נודלס', ask: 'להזמין נודלס', who: 'הטבחית בווק', greet: 'נודלס מהווק, חריף או עדין? שתי דקות וזה אצלכם.', offers: [
-  ['נודלס מוקפצים (+40 חיים)', 'noodles', meal(40, [0.95, 0.78, 0.4], 'נודלס! +40 חיים')],
-  ['באן מאודה (+20 חיים)', 'bagel', meal(20, [0.97, 0.95, 0.9], 'רך וחם. +20 חיים')],
+SERVICES.noodles = { verb: tr('להזמין נודלס', 'Order noodles'), ask: tr('להזמין נודלס', 'Order noodles'), who: tr('הטבחית בווק', 'The wok cook'), greet: tr('נודלס מהווק, חריף או עדין? שתי דקות וזה אצלכם.', 'Noodles from the wok, spicy or mild? Two minutes and they\'re yours.'), offers: [
+  [tr('נודלס מוקפצים (+40 חיים)', 'Stir-fried noodles (+40 health)'), 'noodles', meal(40, [0.95, 0.78, 0.4], tr('נודלס! +40 חיים', 'Noodles! +40 health'))],
+  [tr('באן מאודה (+20 חיים)', 'A steamed bun (+20 health)'), 'bagel', meal(20, [0.97, 0.95, 0.9], tr('רך וחם. +20 חיים', 'Soft and warm. +20 health'))],
 ] };
-SERVICES.gourmet = { verb: 'להיכנס למסעדה', ask: 'להזמין מהשף', who: 'השף', greet: 'ערב טוב. הערב התפריט שלי: כל מנה מצוירת ביד, ברגע, רק בשבילכם.', offers: [
-  ['מנת פתיחה של השף (+30 חיים)', 'gourmet', meal(30, [0.92, 0.72, 0.42], 'מעדן. +30 חיים')],
-  ['פילה בקר ברוטב יין (+60 חיים)', 'steak', meal(60, [0.5, 0.3, 0.18], 'נמס בפה. +60 חיים')],
-  ['פסטה טרייה (+40 חיים)', 'pasta', meal(40, [0.95, 0.82, 0.4], 'כמו באיטליה. +40 חיים')],
-  ['קינוח: עוגת תותים (+25 חיים)', 'dessert', meal(25, [0.95, 0.6, 0.7], 'מתוק! +25 חיים')],
+SERVICES.gourmet = { verb: tr('להיכנס למסעדה', 'Go into the restaurant'), ask: tr('להזמין מהשף', 'Order from the chef'), who: tr('השף', 'The chef'), greet: tr('ערב טוב. הערב התפריט שלי: כל מנה מצוירת ביד, ברגע, רק בשבילכם.', 'Good evening. Tonight\'s menu is mine: every dish drawn by hand, on the spot, just for you.'), offers: [
+  [tr('מנת פתיחה של השף (+30 חיים)', 'The chef\'s starter (+30 health)'), 'gourmet', meal(30, [0.92, 0.72, 0.42], tr('מעדן. +30 חיים', 'Delicious. +30 health'))],
+  [tr('פילה בקר ברוטב יין (+60 חיים)', 'Beef fillet in wine sauce (+60 health)'), 'steak', meal(60, [0.5, 0.3, 0.18], tr('נמס בפה. +60 חיים', 'Melts in your mouth. +60 health'))],
+  [tr('פסטה טרייה (+40 חיים)', 'Fresh pasta (+40 health)'), 'pasta', meal(40, [0.95, 0.82, 0.4], tr('כמו באיטליה. +40 חיים', 'Like in Italy. +40 health'))],
+  [tr('קינוח: עוגת תותים (+25 חיים)', 'Dessert: strawberry cake (+25 health)'), 'dessert', meal(25, [0.95, 0.6, 0.7], tr('מתוק! +25 חיים', 'Sweet! +25 health'))],
 ] };
-SERVICES.theatre = { verb: 'להיכנס לתיאטרון', ask: 'לקנות כרטיס', who: 'הקופאית', greet: 'ההצגה של הערב: סרט מצויר, כל פריים בעיפרון! כרטיס? פופקורן?', offers: [
-  ['כרטיס להצגה (לשבת ולצפות)', null, (game, a) => a.watchShow()],
-  ['פופקורן (+15 חיים)', 'cup', heal(15, [0.98, 0.9, 0.6], 'פופקורן! +15 חיים')],
+SERVICES.theatre = { verb: tr('להיכנס לתיאטרון', 'Go into the theater'), ask: tr('לקנות כרטיס', 'Buy a ticket'), who: tr('הקופאית', 'The cashier'), greet: tr('ההצגה של הערב: סרט מצויר, כל פריים בעיפרון! כרטיס? פופקורן?', 'Tonight\'s show: a cartoon, every frame in pencil! A ticket? Popcorn?'), offers: [
+  [tr('כרטיס להצגה (לשבת ולצפות)', 'A ticket to the show (sit and watch)'), null, (game, a) => a.watchShow()],
+  [tr('פופקורן (+15 חיים)', 'Popcorn (+15 health)'), 'cup', heal(15, [0.98, 0.9, 0.6], tr('פופקורן! +15 חיים', 'Popcorn! +15 health'))],
 ] };
-SERVICES.club = { verb: 'להיכנס למועדון', ask: 'לדבר עם הברמן', who: 'הברמן', greet: 'ברוכים הבאים! הדי ג\'יי בוער הלילה. משהו לשתות? (בלי אלכוהול, רק צבעים)', offers: [
-  ['מוקטייל ניאון (+15 חיים)', 'mocktail', (game) => heal(15, [0.4, 0.85, 0.9], 'מוקטייל! +15 חיים')(game)],
-  ['לימונדה קרה (+10 חיים)', 'lemonade', heal(10, [0.98, 0.9, 0.4], 'לימונדה. +10 חיים')],
-  ['לרקוד על הרחבה', null, (game, a) => {
+SERVICES.club = { verb: tr('להיכנס למועדון', 'Go into the club'), ask: tr('לדבר עם הברמן', 'Talk to the bartender'), who: tr('הברמן', 'The bartender'), greet: tr('ברוכים הבאים! הדי ג\'יי בוער הלילה. משהו לשתות? (בלי אלכוהול, רק צבעים)', 'Welcome! The DJ is on fire tonight. Something to drink? (no alcohol, just colors)'), offers: [
+  [tr('מוקטייל ניאון (+15 חיים)', 'Neon mocktail (+15 health)'), 'mocktail', (game) => heal(15, [0.4, 0.85, 0.9], tr('מוקטייל! +15 חיים', 'A mocktail! +15 health'))(game)],
+  [tr('לימונדה קרה (+10 חיים)', 'Cold lemonade (+10 health)'), 'lemonade', heal(10, [0.98, 0.9, 0.4], tr('לימונדה. +10 חיים', 'Lemonade. +10 health'))],
+  [tr('לרקוד על הרחבה', 'Dance on the floor'), null, (game, a) => {
     const p = game.player;
     p.fig.dance = 1;
     // (ROADMAP 12.2) the floor is a game: Ink Beat, to the club's own music
@@ -1114,19 +1115,19 @@ SERVICES.club = { verb: 'להיכנס למועדון', ask: 'לדבר עם הב�
       const venue = (a && a.shop && a.shop.name) || 'NEON INK';
       game.minigames.play(new DanceGame({ venue: venue.toUpperCase(), style: 'disco', tips: true }), (r) => {
         p.fig.dance = 0;
-        if (r && r.grade) game.hud.toast(r.grade === 'S' || r.grade === 'A' ? 'הרחבה כולה הסתכלה עליכם!' : 'רקדתם! הרחבה מחאה כפיים', 'good', 2.4);
+        if (r && r.grade) game.hud.toast(r.grade === 'S' || r.grade === 'A' ? tr('הרחבה כולה הסתכלה עליכם!', 'The whole dance floor was watching you!') : tr('רקדתם! הרחבה מחאה כפיים', 'You danced! The floor applauded'), 'good', 2.4);
       }, { world: clubScreen(game, a) });
       return;
     }
     game.inkwell.after(9, () => (p.fig.dance = 0));
-    game.hud.toast('רוקדים! כל הרחבה איתכם', 'good', 2.4);
+    game.hud.toast(tr('רוקדים! כל הרחבה איתכם', 'Dancing! The whole floor is with you'), 'good', 2.4);
   }],
 ] };
 
-SERVICES.jazz = { verb: 'להיכנס לבר הג׳אז', ask: 'לדבר עם הברמן', who: 'הברמן', greet: 'ערב טוב וברוכים הבאים ל־BLUE VELVET. הלהקה מנגנת עד הבוקר. קוקטייל? (בלי אלכוהול, רק טעם)', offers: [
-  ['קוקטייל בלו ולווט (+15 חיים)', 'mocktail', heal(15, [0.3, 0.45, 0.95], 'כחול כמו קטיפה. +15 חיים')],
-  ['ספריצר תפוזים עם נענע (+10 חיים)', 'lemonade', heal(10, [1, 0.62, 0.2], 'מרענן. +10 חיים')],
-  ['לרקוד סווינג על הרחבה', null, (game, a) => SERVICES.club.offers[2][2](game, a)],
+SERVICES.jazz = { verb: tr('להיכנס לבר הג׳אז', 'Go into the jazz bar'), ask: tr('לדבר עם הברמן', 'Talk to the bartender'), who: tr('הברמן', 'The bartender'), greet: tr('ערב טוב וברוכים הבאים ל־BLUE VELVET. הלהקה מנגנת עד הבוקר. קוקטייל? (בלי אלכוהול, רק טעם)', 'Good evening and welcome to BLUE VELVET. The band plays till morning. A cocktail? (no alcohol, just taste)'), offers: [
+  [tr('קוקטייל בלו ולווט (+15 חיים)', 'A Blue Velvet cocktail (+15 health)'), 'mocktail', heal(15, [0.3, 0.45, 0.95], tr('כחול כמו קטיפה. +15 חיים', 'Blue as velvet. +15 health'))],
+  [tr('ספריצר תפוזים עם נענע (+10 חיים)', 'An orange spritzer with mint (+10 health)'), 'lemonade', heal(10, [1, 0.62, 0.2], tr('מרענן. +10 חיים', 'Refreshing. +10 health'))],
+  [tr('לרקוד סווינג על הרחבה', 'Swing dance on the floor'), null, (game, a) => SERVICES.club.offers[2][2](game, a)],
 ] };
 
 // (ROADMAP 12.6) the club's floor in the world: the arrows on a screen over the back wall, you on
@@ -1155,25 +1156,25 @@ function clubScreen(game, a) {
 // the houses of the mainland where people live (world/home.js): you knock, they let you in, and
 // there is something to do with them - the family's dinner and its television, the painter's
 // wall, grandmother's cookies and her dominoes, the villa's piano (who: the household's own name)
-SERVICES.homeFamily = { verb: 'לדפוק בדלת', ask: 'לדבר עם המשפחה', who: 'המשפחה', greet: 'שלום שלום! בדיוק מתיישבים לאכול. מצטרפים?', offers: [
-  ['ארוחת ערב עם המשפחה (+40 חיים)', null, (game, a) => a.homeMeal(pick(['pasta', 'pizza', 'burger', 'noodles']), 40, [0.95, 0.82, 0.4], 'ארוחה ביתית. +40 חיים')],
-  ['לראות טלוויזיה על הספה', null, (game, a) => a.watchTV()],
-  ['לשחק עם הילדים', null, (game, a) => a.playKids()],
+SERVICES.homeFamily = { verb: tr('לדפוק בדלת', 'Knock on the door'), ask: tr('לדבר עם המשפחה', 'Talk to the family'), who: tr('המשפחה', 'The family'), greet: tr('שלום שלום! בדיוק מתיישבים לאכול. מצטרפים?', 'Hello hello! We\'re just sitting down to eat. Join us?'), offers: [
+  [tr('ארוחת ערב עם המשפחה (+40 חיים)', 'Dinner with the family (+40 health)'), null, (game, a) => a.homeMeal(pick(['pasta', 'pizza', 'burger', 'noodles']), 40, [0.95, 0.82, 0.4], tr('ארוחה ביתית. +40 חיים', 'A home-cooked meal. +40 health'))],
+  [tr('לראות טלוויזיה על הספה', 'Watch TV on the couch'), null, (game, a) => a.watchTV()],
+  [tr('לשחק עם הילדים', 'Play with the kids'), null, (game, a) => a.playKids()],
 ] };
-SERVICES.homeArtist = { verb: 'לדפוק בדלת', ask: 'לדבר עם האמן', who: 'הסטודיו', greet: 'היי! סליחה על הבלגן, יש צבע בכל מקום. רוצים לצייר משהו ביחד?', offers: [
-  ['לצייר ביחד על הקיר (העט מתמלא דיו)', null, (game, a) => a.paintTogether()],
-  ['ציור במתנה: שרטוט חדש לאלבום', 'flower', (game) => giftBlueprint(game)],
-  ['לשים תקליט ולרקוד', null, (game, a) => a.homeDance()],
+SERVICES.homeArtist = { verb: tr('לדפוק בדלת', 'Knock on the door'), ask: tr('לדבר עם האמן', 'Talk to the artist'), who: tr('הסטודיו', 'The studio'), greet: tr('היי! סליחה על הבלגן, יש צבע בכל מקום. רוצים לצייר משהו ביחד?', 'Hi! Sorry about the mess, there\'s paint everywhere. Want to paint something together?'), offers: [
+  [tr('לצייר ביחד על הקיר (העט מתמלא דיו)', 'Paint on the wall together (the pen fills with ink)'), null, (game, a) => a.paintTogether()],
+  [tr('ציור במתנה: שרטוט חדש לאלבום', 'A painting as a gift: a new blueprint for the album'), 'flower', (game) => giftBlueprint(game)],
+  [tr('לשים תקליט ולרקוד', 'Put on a record and dance'), null, (game, a) => a.homeDance()],
 ] };
-SERVICES.homeGrandma = { verb: 'לדפוק בדלת', ask: 'לדבר עם סבתא', who: 'סבתא', greet: 'אוי, איזו שמחה, אורחים! שבו, שבו. אכלתם משהו היום?', offers: [
-  ['עוגיות של סבתא (+30 חיים)', 'donut', meal(30, [0.86, 0.66, 0.36], 'עוגיות חמות מהתנור. +30 חיים')],
-  ['משחק דומינו', null, (game, a) => a.dominoes()],
-  ['לשמוע סיפור מפעם', null, (game, a) => a.story()],
+SERVICES.homeGrandma = { verb: tr('לדפוק בדלת', 'Knock on the door'), ask: tr('לדבר עם סבתא', 'Talk to Grandma'), who: tr('סבתא', 'Grandma'), greet: tr('אוי, איזו שמחה, אורחים! שבו, שבו. אכלתם משהו היום?', 'Oh, what a joy, guests! Sit, sit. Have you eaten anything today?'), offers: [
+  [tr('עוגיות של סבתא (+30 חיים)', 'Grandma\'s cookies (+30 health)'), 'donut', meal(30, [0.86, 0.66, 0.36], tr('עוגיות חמות מהתנור. +30 חיים', 'Warm cookies from the oven. +30 health'))],
+  [tr('משחק דומינו', 'A game of dominoes'), null, (game, a) => a.dominoes()],
+  [tr('לשמוע סיפור מפעם', 'Hear a story from the old days'), null, (game, a) => a.story()],
 ] };
-SERVICES.homeLux = { verb: 'לצלצל בפעמון', ask: 'לדבר עם בעלי הבית', who: 'הווילה', greet: 'ערב טוב, ברוכים הבאים לווילה. הפסנתר מכוון, המיץ קר.', offers: [
-  ['לנגן בפסנתר', null, (game, a) => a.piano()],
-  ['מיץ טרי מהבר (+20 חיים)', 'smoothie', meal(20, [1, 0.7, 0.3], 'מיץ טרי. +20 חיים')],
-  ['להתארח בחדר האורחים (לישון עד הבוקר)', null, (game) => game.props && game.props.sleep()],
+SERVICES.homeLux = { verb: tr('לצלצל בפעמון', 'Ring the bell'), ask: tr('לדבר עם בעלי הבית', 'Talk to the owners'), who: tr('הווילה', 'The villa'), greet: tr('ערב טוב, ברוכים הבאים לווילה. הפסנתר מכוון, המיץ קר.', 'Good evening, welcome to the villa. The piano is tuned, the juice is cold.'), offers: [
+  [tr('לנגן בפסנתר', 'Play the piano'), null, (game, a) => a.piano()],
+  [tr('מיץ טרי מהבר (+20 חיים)', 'Fresh juice from the bar (+20 health)'), 'smoothie', meal(20, [1, 0.7, 0.3], tr('מיץ טרי. +20 חיים', 'Fresh juice. +20 health'))],
+  [tr('להתארח בחדר האורחים (לישון עד הבוקר)', 'Stay in the guest room (sleep till morning)'), null, (game) => game.props && game.props.sleep()],
 ] };
 const HOME_KINDS = new Set(['homeFamily', 'homeArtist', 'homeGrandma', 'homeLux']);
 // who else is at home (the visitors of a house: game/streetlife.js addVisitor)
@@ -1185,18 +1186,18 @@ const HOME_GUESTS = {
 };
 // grandmother's stories of the drawn city
 const STORIES = [
-  'כשהייתי צעירה, כל העיר הייתה דף ריק. ציירנו את הרחובות בעיפרון אחד, ומחקנו כשטעינו. והים? הוא נשפך פעם מבקבוק דיו, ומאז אף אחד לא הצליח לנגב אותו.',
-  'הטיילת הייתה פעם קו ישר אחד. ואז ילד אחד צייר דקל, ואחריו עוד אחד, ועוד אחד... עד שהגיע הבוקר, והיו שם מאה דקלים.',
-  'סבא צייר לי פרח כל בוקר, חמישים שנה. כל הפרחים על הקיר הזה, תסתכלו. אף אחד מהם לא נמחק.',
-  'פעם ירד פה גשם של צבעי מים. כל העיר נהייתה סגולה לשבוע שלם. הכי יפה שהיה.',
-  'השלט על הגבעה? שלושה חברים כתבו אותו בטוש, באמצע הלילה. בבוקר כולם כבר חשבו שהוא תמיד היה שם.',
-  'פעם המחקים השתלטו על השכונה. מחקו את המכולת, את הספסל, את המדרכה. ואז כל השכנים יצאו עם עפרונות, וציירו הכול מחדש, יפה יותר.',
+  tr('כשהייתי צעירה, כל העיר הייתה דף ריק. ציירנו את הרחובות בעיפרון אחד, ומחקנו כשטעינו. והים? הוא נשפך פעם מבקבוק דיו, ומאז אף אחד לא הצליח לנגב אותו.', 'When I was young, the whole city was a blank page. We drew the streets with one pencil, and erased when we got it wrong. And the sea? It spilled out of an ink bottle once, and nobody\'s managed to wipe it up since.'),
+  tr('הטיילת הייתה פעם קו ישר אחד. ואז ילד אחד צייר דקל, ואחריו עוד אחד, ועוד אחד... עד שהגיע הבוקר, והיו שם מאה דקלים.', 'The boardwalk used to be one straight line. Then a boy drew a palm tree, and another, and another... until morning came, and there were a hundred palms there.'),
+  tr('סבא צייר לי פרח כל בוקר, חמישים שנה. כל הפרחים על הקיר הזה, תסתכלו. אף אחד מהם לא נמחק.', 'Grandpa drew me a flower every morning, for fifty years. All the flowers on this wall, look. Not one of them was erased.'),
+  tr('פעם ירד פה גשם של צבעי מים. כל העיר נהייתה סגולה לשבוע שלם. הכי יפה שהיה.', 'Once it rained watercolors here. The whole city turned purple for a whole week. The prettiest it ever was.'),
+  tr('השלט על הגבעה? שלושה חברים כתבו אותו בטוש, באמצע הלילה. בבוקר כולם כבר חשבו שהוא תמיד היה שם.', 'The sign on the hill? Three friends wrote it in marker, in the middle of the night. By morning everyone already thought it had always been there.'),
+  tr('פעם המחקים השתלטו על השכונה. מחקו את המכולת, את הספסל, את המדרכה. ואז כל השכנים יצאו עם עפרונות, וציירו הכול מחדש, יפה יותר.', 'Once the erasers took over the neighborhood. They erased the grocery store, the bench, the sidewalk. Then all the neighbors came out with pencils, and drew everything again, prettier.'),
 ];
 // a blueprint the album does not have yet (the painter's present)
 function giftBlueprint(game) {
   const ids = Object.keys(BLUEPRINTS).filter((id) => !game.album.has(id));
   if (!ids.length) {
-    game.hud.toast('כבר יש לכם את כל השרטוטים!', 'good', 2.4);
+    game.hud.toast(tr('כבר יש לכם את כל השרטוטים!', 'You already have every blueprint!'), 'good', 2.4);
     return;
   }
   giveBlueprint(game, pick(ids));
@@ -1222,13 +1223,13 @@ const ORDERS = {
 const CHEF_SAYS = ['Voilà!', 'Bon appétit!', 'Service!', 'Here you go!', 'Fresh!', 'Enjoy!'];
 // (the theatre's film: drawn on its screen a frame at a time, its words under it)
 const FILM = [
-  ['house', 'פעם, בעיר מצוירת אחת...'],
-  ['friend', '...גרה ילדה שציירה לעצמה חברים.'],
-  ['dog', 'יום אחד היא ציירה כלב קטן.'],
-  ['balloon', 'הכלב רצה לעוף, אז היא ציירה לו בלון.'],
-  ['umbrella', 'ירד גשם - והיא ציירה מטריה.'],
-  ['heart', 'והם היו חברים לתמיד.'],
-  ['flower', 'הסוף.'],
+  ['house', tr('פעם, בעיר מצוירת אחת...', 'Once upon a time, in a drawn city...')],
+  ['friend', tr('...גרה ילדה שציירה לעצמה חברים.', '...there lived a girl who drew herself friends.')],
+  ['dog', tr('יום אחד היא ציירה כלב קטן.', 'One day she drew a little dog.')],
+  ['balloon', tr('הכלב רצה לעוף, אז היא ציירה לו בלון.', 'The dog wanted to fly, so she drew him a balloon.')],
+  ['umbrella', tr('ירד גשם - והיא ציירה מטריה.', 'It rained - so she drew an umbrella.')],
+  ['heart', tr('והם היו חברים לתמיד.', 'And they were friends forever.')],
+  ['flower', tr('הסוף.', 'The end.')],
 ];
 // (v5, ROADMAP 11.35) what the stores of things draw at the counter for whoever buys there: the
 // thing itself, in the air between them, then into the bag - every store of the drawn city draws
@@ -2868,16 +2869,16 @@ class OpenShop {
     const life = this.life;
     const p = game.player;
     if (life.companion && life.companion.alive) {
-      game.hud.toast('כבר יש לך חברה מצוירת — היא כאן לידך', 'info', 2.4);
+      game.hud.toast(tr('כבר יש לך חברה מצוירת — היא כאן לידך', 'You already have a drawn friend — she\'s right here with you'), 'info', 2.4);
       return;
     }
     // (v5: the friend you had - drawn again, she remembers you; or a new one: game/friend.js)
     const F = game.friend;
     if (F && F.data && !this.askedAgain) {
       this.askedAgain = true;
-      game.dialog.show('צייר לך חברה', `לצייר שוב את ${F.data.heb}? היא זוכרת אתכם${F.data.homeKey ? ', והבית שלה מחכה' : ''}.`, [
-        { label: `לצייר את ${F.data.heb}`, fn: () => ((F.redraw = true), this.heroFriend()) },
-        { label: 'חברה חדשה', fn: () => ((F.redraw = false), this.heroFriend()) },
+      game.dialog.show(tr('צייר לך חברה', 'Draw Yourself a Friend'), tr(`לצייר שוב את ${F.data.heb}? היא זוכרת אתכם${F.data.homeKey ? ', והבית שלה מחכה' : ''}.`, `Draw ${F.data.heb} again? She remembers you${F.data.homeKey ? tr(', והבית שלה מחכה', ', and her house is waiting') : ''}.`), [
+        { label: tr(`לצייר את ${F.data.heb}`, `Draw ${F.data.heb}`), fn: () => ((F.redraw = true), this.heroFriend()) },
+        { label: tr('חברה חדשה', 'A new friend'), fn: () => ((F.redraw = false), this.heroFriend()) },
       ]);
       return;
     }
@@ -2894,7 +2895,7 @@ class OpenShop {
     this.drawing = true;
     this.talking = true;
     p.seat = { x: p.pos.x, z: p.pos.z, yaw, lock: true, stand: true };
-    game.hud.toast('מציירים... בעדינות!', 'info', 2.2);
+    game.hud.toast(tr('מציירים... בעדינות!', 'Drawing... gently!'), 'info', 2.2);
     game.airsketch.draw({
       shape: 'friend',
       at,
@@ -2915,7 +2916,7 @@ class OpenShop {
         this.game.fx.confetti(at.x, at.y + 0.6, at.z, 30, 3);
         this.hearts(at.x, at.y + 1.0, at.z, 6);
         this.sound('cheer', 0.7, 20);
-        game.hud.toast('ציירת לעצמך חברה! היא תלך איתך, ותצייר לך לב כשקשה', 'good', 3.6);
+        game.hud.toast(tr('ציירת לעצמך חברה! היא תלך איתך, ותצייר לך לב כשקשה', 'You drew yourself a friend! She\'ll come with you, and draw you a heart when things get hard'), 'good', 3.6);
         this.say(c, pick(['Hi! I\'m yours truly.', 'Hello, artist!', 'Nice drawing. Me, I mean.']));
       },
     });
@@ -2926,7 +2927,7 @@ class OpenShop {
     const game = this.game;
     const info = svc(game, this.shop.kind, this.shop);
     if (game.time < this.cool || this.heroJob) {
-      game.dialog.show(info.who, 'רגע, רגע — עוד לא סיימתי עם ההזמנה הקודמת. תחזור עוד מעט?', null);
+      game.dialog.show(info.who, tr('רגע, רגע — עוד לא סיימתי עם ההזמנה הקודמת. תחזור עוד מעט?', 'Wait, wait — I haven\'t finished the last order yet. Come back in a bit?'), null);
       return;
     }
     this.talking = true;
@@ -2941,17 +2942,17 @@ class OpenShop {
       // (an offer with its own price - ROADMAP 16.6 - or the shop's list's, by its place in it)
       const p = M ? charmed(game, M.priceOf(price !== undefined ? price : prices[i])) : 0;
       const n = own ? 0 : p;
-      return { label: n ? `${label} · ${fmt(n)}` : p ? `${label} · על חשבון הבית` : label, fn: () => this.buy(n, label, () => this.serve(sketch, fn)) };
+      return { label: n ? `${label} · ${fmt(n)}` : p ? tr(`${label} · על חשבון הבית`, `${label} · on the house`) : label, fn: () => this.buy(n, label, () => this.serve(sketch, fn)) };
     });
     // (ROADMAP 8.2) the place itself, for sale; for its owner, the motel's room
     if (PR) {
       const deal = PR.offer(this.shop, () => this.talk());
       if (deal) choices.push(deal);
-      if (own && PR.of(this.shop).id === 'motel') choices.push({ label: 'לישון בחדר עד הבוקר', fn: () => PR.sleep() });
+      if (own && PR.of(this.shop).id === 'motel') choices.push({ label: tr('לישון בחדר עד הבוקר', 'Sleep in a room till morning'), fn: () => PR.sleep() });
       if (own) this.say(this.keeper, BOSS[Math.floor(Math.random() * BOSS.length)]);
     }
-    choices.push({ label: 'רק מסתכל, תודה', fn: null });
-    game.dialog.show(this.shop.who || info.who, own ? 'הבוס הגיע! הכול על חשבון הבית. מה תרצו?' : info.greet, choices);
+    choices.push({ label: tr('רק מסתכל, תודה', 'Just looking, thanks'), fn: null });
+    game.dialog.show(this.shop.who || info.who, own ? tr('הבוס הגיע! הכול על חשבון הבית. מה תרצו?', 'The boss is here! Everything\'s on the house. What would you like?') : info.greet, choices);
   }
 
   // (ROADMAP 5.7) a shelf: each thing on it drawn in the air for you, and put on
@@ -2970,7 +2971,7 @@ class OpenShop {
         }), () => this.shelf(text, part, items, sketch)),
       };
     });
-    choices.push({ label: 'משהו אחר', fn: () => this.talk() });
+    choices.push({ label: tr('משהו אחר', 'Something else'), fn: () => this.talk() });
     game.dialog.show(info.who, text, choices);
     this.trying = true;
   }
@@ -3051,7 +3052,7 @@ class OpenShop {
     this.resHold = { name: 'door', until: game.time + 7 };
     this.resPts = null;
     this.say(this.keeper, pick(['Come in, it\'s open!', 'Who is it? Oh, come in!', 'Welcome, come in!', 'Door\'s open, come on in!']));
-    game.hud.toast(`${s.who || 'בעלי הבית'}: נכנסים, הדלת פתוחה`, 'info', 2.4);
+    game.hud.toast(tr(`${s.who || 'בעלי הבית'}: נכנסים, הדלת פתוחה`, `${s.who || tr('בעלי הבית', 'The owners')}: come in, the door's open`), 'info', 2.4);
   }
 
   // where in the room someone stands, sits or works at a mark: { x, z, yaw, sit } (or null)
@@ -3214,7 +3215,7 @@ class OpenShop {
       this.heroSeat = sp.seat;
     }
     this.tv = { k: -1, t: 0 };
-    game.hud.toast('על הספה. בטלוויזיה: סרט מצויר', 'info', 2.4);
+    game.hud.toast(tr('על הספה. בטלוויזיה: סרט מצויר', 'On the couch. On TV: a cartoon'), 'info', 2.4);
     // (the family comes to watch too)
     this.resHold = { name: 'sofa', until: game.time + 30 };
   }
@@ -3251,7 +3252,7 @@ class OpenShop {
       n++;
       this.say(v.c, pick(['Yay!', 'Again! Again!', 'Catch me!', 'Wheee!']));
     }
-    game.hud.toast(n ? 'משחקים ביחד! כולם צוחקים' : 'הילדים יצאו לשחק בחצר...', n ? 'good' : 'info', 2.4);
+    game.hud.toast(n ? tr('משחקים ביחד! כולם צוחקים', 'Playing together! Everyone\'s laughing') : tr('הילדים יצאו לשחק בחצר...', 'The kids went out to play in the yard...'), n ? 'good' : 'info', 2.4);
     if (n) {
       const p = game.player;
       p.fig.dance = 1;
@@ -3281,8 +3282,8 @@ class OpenShop {
     const s2 = game.airsketch.draw({ shape: shapes[1], at: b, size: 0.8, author: me, keep: true, dur: 2.6, width: 3.0, wall, pen: 'magicPencil' });
     game.inkwell.after(3, () => {
       this.drawing = false;
-      if (game.ink) game.ink.fill(game.ink.cap, 'מהסטודיו');
-      game.hud.toast('ציור משותף על הקיר! העט מלא דיו', 'good', 2.6);
+      if (game.ink) game.ink.fill(game.ink.cap, tr('מהסטודיו', 'From the studio'));
+      game.hud.toast(tr('ציור משותף על הקיר! העט מלא דיו', 'A painting together on the wall! The pen is full of ink'), 'good', 2.6);
       this.hearts(p.pos.x, p.pos.y + 1.9, p.pos.z, 3);
     });
     game.inkwell.after(40, () => {
@@ -3300,7 +3301,7 @@ class OpenShop {
     for (const v of this.visitors) if (v.phase === 'at') v.playT = 10;
     for (let i = 0; i < 8; i++) this.life.notes.push({ x: this.keeper.pos.x + (Math.random() - 0.5) * 2, y: this.keeper.pos.y + 1.4 + Math.random() * 0.6, z: this.keeper.pos.z + (Math.random() - 0.5) * 2, t: -i * 0.35, s: Math.random() * 100 });
     for (let i = 0; i < 5; i++) setTimeout(() => game.audio.play('strum', 0.8), i * 420);
-    game.hud.toast('התקליט מסתובב, כולם רוקדים!', 'good', 2.4);
+    game.hud.toast(tr('התקליט מסתובב, כולם רוקדים!', 'The record is spinning, everyone\'s dancing!'), 'good', 2.4);
     game.inkwell.after(10, () => {
       p.fig.dance = 0;
       if (this.keeper) this.keeper.fig.dance = 0;
@@ -3313,21 +3314,21 @@ class OpenShop {
     const p = game.player;
     const sp = this.spotOf('domino2');
     if (!sp) {
-      game.hud.toast('השולחן תפוס. אולי אחר כך', 'info', 2);
+      game.hud.toast(tr('השולחן תפוס. אולי אחר כך', 'The table\'s taken. Maybe later'), 'info', 2);
       return;
     }
     p.seat = { x: sp.x, z: sp.z, yaw: sp.yaw };
     this.resHold = { name: 'domino', until: game.time + 13 };
     this.say(this.keeper, pick(['I warn you, I never lose.', 'Double six! Your turn.', 'Let\'s see what you\'ve got.']));
-    game.hud.toast('משחקים דומינו עם סבתא...', 'info', 2.4);
+    game.hud.toast(tr('משחקים דומינו עם סבתא...', 'Playing dominoes with Grandma...'), 'info', 2.4);
     game.inkwell.after(11, () => {
       if (!p.seat) return;
       if (Math.random() < 0.55) {
-        if (game.money) game.money.earn(15, 'ניצחון בדומינו');
-        game.hud.toast('ניצחתם את סבתא בדומינו! (+15 בכיס)', 'good', 2.8);
+        if (game.money) game.money.earn(15, tr('ניצחון בדומינו', 'A dominoes win'));
+        game.hud.toast(tr('ניצחתם את סבתא בדומינו! (+15 בכיס)', 'You beat Grandma at dominoes! (+15 in your pocket)'), 'good', 2.8);
         this.say(this.keeper, pick(['Beginner\'s luck!', 'Again tomorrow!', 'Ay, you\'re good!']));
       } else {
-        game.hud.toast('סבתא ניצחה. היא תמיד מנצחת', 'info', 2.8);
+        game.hud.toast(tr('סבתא ניצחה. היא תמיד מנצחת', 'Grandma won. She always wins'), 'info', 2.8);
         this.say(this.keeper, pick(['Domino!', 'Hah! Another round?', 'Don\'t feel bad, sweetie.']));
       }
       this.hearts(p.pos.x, p.pos.y + 1.6, p.pos.z, 2);
@@ -3340,7 +3341,7 @@ class OpenShop {
     const s = this.shop;
     this.talking = true;
     const k = (this.storyK = ((this.storyK === undefined ? Math.floor(Math.random() * STORIES.length) : this.storyK) + 1) % STORIES.length);
-    game.dialog.show(s.who || 'סבתא', STORIES[k], [{ label: 'עוד סיפור', fn: () => this.story() }, { label: 'תודה, סבתא', fn: null }]);
+    game.dialog.show(s.who || tr('סבתא', 'Grandma'), STORIES[k], [{ label: tr('עוד סיפור', 'Another story'), fn: () => this.story() }, { label: tr('תודה, סבתא', 'Thanks, Grandma'), fn: null }]);
   }
 
   // the villa's piano: you play, the notes fly up, everyone listens
@@ -3352,7 +3353,7 @@ class OpenShop {
     p.seat = { x: sp.x, z: sp.z, yaw: sp.yaw };
     this.pianoT = 12;
     this.resHold = { name: 'sofa', until: game.time + 14 };
-    game.hud.toast('מנגנים... כולם מקשיבים', 'good', 2.4);
+    game.hud.toast(tr('מנגנים... כולם מקשיבים', 'Playing... everyone\'s listening'), 'good', 2.4);
   }
 
   // the hero in the barber's chair
@@ -3395,7 +3396,7 @@ class OpenShop {
       const p = game.player;
       p.fig.dance = 1;
       game.inkwell.after(5, () => (p.fig.dance = 0));
-      game.hud.toast('רוקדים ברחוב!', 'good', 2);
+      game.hud.toast(tr('רוקדים ברחוב!', 'Dancing in the street!'), 'good', 2);
     }
   }
 
@@ -3494,7 +3495,7 @@ class OpenShop {
         this.notesAt(p, dt, 3);
         if (this.pianoT <= 0) {
           p.fig.reachR = null;
-          this.game.hud.toast('מחיאות כפיים!', 'good', 2);
+          this.game.hud.toast(tr('מחיאות כפיים!', 'Applause!'), 'good', 2);
           this.hearts(p.pos.x, p.pos.y + 1.8, p.pos.z, 4);
         }
       }
@@ -3538,7 +3539,7 @@ class OpenShop {
     const used = new Set(this.visitors.map((v) => v.spot));
     const free = R.seats.filter((x) => !used.has(x));
     if (!free.length) {
-      game.hud.toast('כל המקומות תפוסים! אולי בהצגה הבאה', 'info', 2.6);
+      game.hud.toast(tr('כל המקומות תפוסים! אולי בהצגה הבאה', 'Every seat\'s taken! Maybe the next show'), 'info', 2.6);
       return;
     }
     const scr = this.shop.screen;
@@ -3565,7 +3566,7 @@ class OpenShop {
     this.filmT = 1.2;
     if (this.filmSk) game.airsketch.erase(this.filmSk);
     this.filmSk = null;
-    game.hud.toast('האורות כבים... ההצגה מתחילה! (צעד אחד - וקמים)', 'info', 3.2);
+    game.hud.toast(tr('האורות כבים... ההצגה מתחילה! (צעד אחד - וקמים)', 'The lights go down... the show begins! (one step - and you get up)'), 'info', 3.2);
   }
 
   // ------------------------------------------------------------------ the lifts
@@ -3956,7 +3957,7 @@ class Companion {
         this.drawing = false;
         p.hp = Math.min(p.maxHp, p.hp + 25);
         if (p.fig.holes.length) p.fig.holes.pop();
-        game.hud.toast('החברה שלך ציירה לך לב: +25 חיים', 'good', 2.2);
+        game.hud.toast(tr('החברה שלך ציירה לך לב: +25 חיים', 'Your friend drew you a heart: +25 health'), 'good', 2.2);
         const at2 = p.fig.center;
         for (let i = 0; i < 3; i++) game.fx.sprite('fx_heart', at2.x + (Math.random() - 0.5) * 0.5, at2.y + 0.6 + Math.random() * 0.3, at2.z + (Math.random() - 0.5) * 0.5, { size: 0.3, grow: 0.25, life: 1.3, vy: 0.6, fadeIn: 0.1 });
       },

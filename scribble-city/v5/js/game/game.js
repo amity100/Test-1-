@@ -111,6 +111,7 @@ import { drawLandmarks } from '../world/mainland/landmarks.js';
 import { Fairground } from './fairground.js';
 import { ArenaGame } from './arenagame.js';
 
+import { tr } from '../core/lang.js';
 // (the police helicopter's searchlight on the ground: ROADMAP 6.2)
 const HELI_LIGHT = [1.0, 0.95, 0.8];
 // (your headlights' colour on the road at night: ROADMAP 4.3)
@@ -127,19 +128,19 @@ const BOARD_SAMPLES = [[0, 0], [-0.38, -0.32], [0.38, -0.32], [-0.38, 0.32], [0.
 const $ = (id) => document.getElementById(id);
 
 const GRADE_TEXT = {
-  perfect: (n) => `ציור מושלם! ה${n} חזק במיוחד`,
-  good: (n) => `ציור טוב — ה${n} מוכן`,
-  wonky: (n) => `יצא עקום… ה${n} יעבוד רק חלקית`,
-  fail: (n) => `ציירת לא טוב — יצא ${n} מקולקל`,
+  perfect: (n) => tr(`ציור מושלם! ה${n} חזק במיוחד`, `Perfect drawing! The ${n} is extra strong`),
+  good: (n) => tr(`ציור טוב — ה${n} מוכן`, `Good drawing — the ${n} is ready`),
+  wonky: (n) => tr(`יצא עקום… ה${n} יעבוד רק חלקית`, `It came out crooked… the ${n} will only partly work`),
+  fail: (n) => tr(`ציירת לא טוב — יצא ${n} מקולקל`, `Not a good drawing — you got a broken ${n}`),
 };
 // (the new pages, ROADMAP 4.8, say it the way Hebrew does: the name made definite (bp.the), the
 // words agreeing with it (bp.g: m, f, or p for plural))
-const AGREE = { m: ['חזק', 'מוכן', 'יעבוד', 'יצא', 'מקולקל'], f: ['חזקה', 'מוכנה', 'תעבוד', 'יצאה', 'מקולקלת'], p: ['חזקים', 'מוכנים', 'יעבדו', 'יצאו', 'מקולקלים'] };
+const AGREE = { m: [tr('חזק', 'strong'), tr('מוכן', 'ready'), tr('יעבוד', 'will work'), tr('יצא', 'came out'), tr('מקולקל', 'broken')], f: [tr('חזקה', 'strong'), tr('מוכנה', 'ready'), tr('תעבוד', 'will work'), tr('יצאה', 'came out'), tr('מקולקלת', 'broken')], p: [tr('חזקים', 'strong'), tr('מוכנים', 'ready'), tr('יעבדו', 'will work'), tr('יצאו', 'came out'), tr('מקולקלים', 'broken')] };
 const GRADE_THE = {
-  perfect: (bp, a) => `ציור מושלם! ${bp.the} ${a[0]} במיוחד`,
-  good: (bp, a) => `ציור טוב — ${bp.the} ${a[1]}`,
-  wonky: (bp, a) => `יצא עקום… ${bp.the} ${a[2]} רק חלקית`,
-  fail: (bp, a) => `ציירת לא טוב — ${a[3]} ${bp.name} ${a[4]}`,
+  perfect: (bp, a) => tr(`ציור מושלם! ${bp.the} ${a[0]} במיוחד`, `Perfect drawing — ${bp.the} is extra strong!`),
+  good: (bp, a) => tr(`ציור טוב — ${bp.the} ${a[1]}`, `Good drawing — ${bp.the} is ready`),
+  wonky: (bp, a) => tr(`יצא עקום… ${bp.the} ${a[2]} רק חלקית`, `It came out crooked… ${bp.the} will only partly work`),
+  fail: (bp, a) => tr(`ציירת לא טוב — ${a[3]} ${bp.name} ${a[4]}`, `Not a good drawing — the ${bp.name} came out broken`),
 };
 
 export class Game {
@@ -347,7 +348,7 @@ export class Game {
     // (ROADMAP 12.1) the games inside the game: a sheet of their own over the city
     this.minigames = this.classic ? null : new MiniGames(this);
     this.graffiti = this.classic ? null : new Graffiti(this);
-    if (this.graffiti) this.phone.addApp({ id: 'graffiti', name: 'גרפיטי', glyph: 'spray', fill: '#ffd0a6' });
+    if (this.graffiti) this.phone.addApp({ id: 'graffiti', name: tr('גרפיטי', 'Graffiti'), glyph: 'spray', fill: '#ffd0a6' });
     // (fire that spreads, and the fire engine that comes: ROADMAP 8.4)
     this.fire = this.classic ? null : new Fire(this);
     // (drawings that solve problems: a ladder, a ramp, a bridge, an umbrella, a key - ROADMAP 9.2)
@@ -368,9 +369,9 @@ export class Game {
     // (ROADMAP 11.23) the lab's first mission: the broken bridge - drawing on your car to get over
     this.mission = this.lab ? new BrokenBridge(this) : null;
     this.freedraw = this.classic ? null : new FreeDraw(this);
-    if (this.skills) this.phone.addApp({ id: 'skills', name: 'כישורים', glyph: 'skills', fill: '#bfe7a6' });
-    if (this.money) this.phone.addApp({ id: 'bank', name: 'בנק', glyph: 'bank', fill: '#fff3c4' });
-    if (this.props) this.phone.addApp({ id: 'props', name: 'נכסים', glyph: 'deed', fill: '#c8f0b0' });
+    if (this.skills) this.phone.addApp({ id: 'skills', name: tr('כישורים', 'Skills'), glyph: 'skills', fill: '#bfe7a6' });
+    if (this.money) this.phone.addApp({ id: 'bank', name: tr('בנק', 'Bank'), glyph: 'bank', fill: '#fff3c4' });
+    if (this.props) this.phone.addApp({ id: 'props', name: tr('נכסים', 'Property'), glyph: 'deed', fill: '#c8f0b0' });
     // (ROADMAP 12.3, 12.4) the city's week of events, and the festival on the water
     this.calendar = this.classic ? null : new Calendar(this);
     this.festival = this.classic ? null : new Festival(this);
@@ -394,7 +395,7 @@ export class Game {
     this.casino = this.classic ? null : new Casino(this);
     // (ROADMAP 12.9) the parties: NEON INK's big night
     this.parties = this.classic ? null : new Parties(this);
-    if (this.calendar) this.phone.addApp({ id: 'events', name: 'אירועים', glyph: 'music', fill: '#ffb3d9' });
+    if (this.calendar) this.phone.addApp({ id: 'events', name: tr('אירועים', 'Events'), glyph: 'music', fill: '#ffb3d9' });
     // (not with ?classic: the phone's buttons where the new ones fit, css/style.css)
     document.body.classList.toggle('nc', !this.classic);
     this.drawPick = null; // the photo the pencil opens with
@@ -596,7 +597,7 @@ export class Game {
       S.reset();
       apply();
       show();
-      this.hud.toast('ההגדרות חזרו להתחלה', 'info', 1.8);
+      this.hud.toast(tr('ההגדרות חזרו להתחלה', 'Settings reset to default'), 'info', 1.8);
     });
     apply();
     show();
@@ -645,22 +646,22 @@ export class Game {
       return;
     }
     const welcome = () => {
-      this.hud.toast('ברוכים הבאים ל־Beyond the Outline', 'info', 2.4);
+      this.hud.toast(tr('ברוכים הבאים ל־Beyond the Outline', 'Welcome to Beyond the Outline'), 'info', 2.4);
       setTimeout(() => {
         // (ROADMAP 11.6) the free drawing first: anything at all, on the run
         if (this.freedraw) {
-          this.hud.toast(this.touch ? 'העיפרון ✏ — ציירו באוויר נשק או רכב: כל המסך הוא הדף' : 'Q — ציירו באוויר נשק או רכב, גם תוך כדי ריצה', 'info', 4.2);
+          this.hud.toast(this.touch ? tr('העיפרון ✏ — ציירו באוויר נשק או רכב: כל המסך הוא הדף', 'The pencil ✏ — draw a weapon or a ride in the air: the whole screen is your page') : tr('Q — ציירו באוויר נשק או רכב, גם תוך כדי ריצה', 'Q — draw a weapon or a ride in the air, even on the run'), 'info', 4.2);
           // (v5, ROADMAP 11.36) and the library of the drawn city's own weapons, as at the start of
           // the game it always was: picked, then drawn in the air
-          setTimeout(() => this.hud.toast(this.touch ? 'ובעיפרון ← 📒 שרטוטים: אקדח צבע, רובה עפרונות, בזוקת מחקים, חרב סרגל — בוחרים ומציירים' : 'T — ספריית השרטוטים: אקדח צבע, רובה עפרונות, בזוקת מחקים, חרב סרגל — בוחרים ומציירים', 'info', 5), 4600);
+          setTimeout(() => this.hud.toast(this.touch ? tr('ובעיפרון ← 📒 שרטוטים: אקדח צבע, רובה עפרונות, בזוקת מחקים, חרב סרגל — בוחרים ומציירים', 'And in the pencil → 📒 Blueprints: paint gun, pencil rifle, eraser bazooka, ruler sword — pick one and draw it') : tr('T — ספריית השרטוטים: אקדח צבע, רובה עפרונות, בזוקת מחקים, חרב סרגל — בוחרים ומציירים', 'T — the blueprint library: paint gun, pencil rifle, eraser bazooka, ruler sword — pick one and draw it'), 'info', 5), 4600);
         }
-        else if (this.album.allOpen) this.hud.toast(this.touch ? `כל השרטוטים פתוחים: לוחצים על ${this.drawTap} ובוחרים מה לצייר` : `כל השרטוטים פתוחים: ${this.drawKey} — בוחרים מה לצייר`, 'info', 4);
-        else if (!this.album.has('paint')) this.hud.toast(this.touch ? 'צלמו את השרטוט שממול (כפתור המצלמה)' : 'צלמו את השרטוט שממול (F)', 'info', 3.5);
+        else if (this.album.allOpen) this.hud.toast(this.touch ? tr(`כל השרטוטים פתוחים: לוחצים על ${this.drawTap} ובוחרים מה לצייר`, `All blueprints are open: tap ${this.drawTap} and pick what to draw`) : tr(`כל השרטוטים פתוחים: ${this.drawKey} — בוחרים מה לצייר`, `All blueprints are open: ${this.drawKey} — pick what to draw`), 'info', 4);
+        else if (!this.album.has('paint')) this.hud.toast(this.touch ? tr('צלמו את השרטוט שממול (כפתור המצלמה)', 'Photograph the blueprint in front of you (the camera button)') : tr('צלמו את השרטוט שממול (F)', 'Photograph the blueprint in front of you (F)'), 'info', 3.5);
       }, 2600);
     };
     welcome();
     // (drawn in software, main.js: said once more, in play)
-    if (this.pipe.software && !this.params.has('test')) setTimeout(() => this.hud.toast('המשחק מצויר בלי כרטיס מסך, ולכן הוא איטי: מדליקים "האצת חומרה" בהגדרות הדפדפן', 'warn', 10), 7000);
+    if (this.pipe.software && !this.params.has('test')) setTimeout(() => this.hud.toast(tr('המשחק מצויר בלי כרטיס מסך, ולכן הוא איטי: מדליקים "האצת חומרה" בהגדרות הדפדפן', 'The game is drawn without the graphics card, so it is slow: turn on "hardware acceleration" in your browser\'s settings'), 'warn', 10), 7000);
   }
 
   // (ROADMAP 9.3) the sheet for a graffiti over the wall in front of you: the game waits under it
@@ -714,7 +715,7 @@ export class Game {
     $('continue-btn').classList.remove('hidden');
     const sb = $('start-btn');
     sb.classList.remove('primary');
-    sb.textContent = 'משחק חדש';
+    sb.textContent = tr('משחק חדש', 'New game');
   }
 
   async continueGame() {
@@ -737,17 +738,17 @@ export class Game {
       row.className = 'save-row';
       const name = document.createElement('div');
       name.className = 'save-name';
-      name.innerHTML = `<b>${SLOT_NAMES[slot]}</b><span>${h ? h.text : 'ריקה'}</span>`;
+      name.innerHTML = `<b>${SLOT_NAMES[slot]}</b><span>${h ? h.text : tr('ריקה', 'Empty')}</span>`;
       row.appendChild(name);
       // (a slot's buttons are always in the same places: what it cannot do is only not seen)
       {
         const sv = document.createElement('button');
         sv.className = 'btn mini';
-        sv.textContent = 'שמירה';
+        sv.textContent = tr('שמירה', 'Save');
         if (slot === 'auto') sv.style.visibility = 'hidden';
         sv.addEventListener('click', async () => {
           if (!this.saves.canSave()) {
-            this.hud.toast(this.police.level > 0 ? 'אי אפשר לשמור כשהמשטרה מחפשת אתכם' : 'אי אפשר לשמור עכשיו', 'bad', 2.2);
+            this.hud.toast(this.police.level > 0 ? tr('אי אפשר לשמור כשהמשטרה מחפשת אתכם', 'You can\'t save while the police are after you') : tr('אי אפשר לשמור עכשיו', 'You can\'t save right now'), 'bad', 2.2);
             return;
           }
           await this.saves.save(slot);
@@ -758,12 +759,12 @@ export class Game {
       {
         const ld = document.createElement('button');
         ld.className = 'btn mini';
-        ld.textContent = 'טעינה';
+        ld.textContent = tr('טעינה', 'Load');
         if (!h) ld.style.visibility = 'hidden';
         ld.addEventListener('click', () => {
           if (!ld.classList.contains('sure')) {
             ld.classList.add('sure');
-            ld.textContent = 'בטוח? שוב';
+            ld.textContent = tr('בטוח? שוב', 'Sure? Again');
             return;
           }
           this.saves.loadFresh(slot);
@@ -845,7 +846,7 @@ export class Game {
     this.respawn();
     this.state = 'play';
     if (!this.touch) this.input.requestLock(true);
-    this.hud.toast('צוירת מחדש במחבוא', 'info');
+    this.hud.toast(tr('צוירת מחדש במחבוא', 'Redrawn at the hideout'), 'info');
   }
 
   onPlayerDeath() {
@@ -854,7 +855,7 @@ export class Game {
     // (ROADMAP 8.1) half the cash in your pockets is erased with you; the bank keeps the rest
     if (this.money) {
       const lost = this.money.onDeath();
-      $('death-money').textContent = lost ? `חצי מהמזומן שבכיס נמחק: ${fmt(lost)}. הכסף בבנק שמור.` : '';
+      $('death-money').textContent = lost ? tr(`חצי מהמזומן שבכיס נמחק: ${fmt(lost)}. הכסף בבנק שמור.`, `Half the cash in your pocket was erased: ${fmt(lost)}. The money in the bank is safe.`) : '';
     }
     if (this.airdraw.open) this.airdraw.close(false, true);
     this.state = 'dead';
@@ -936,17 +937,18 @@ export class Game {
     if (now - F.t0 < 1000) return;
     if (!F.el) {
       F.el = document.createElement('div');
-      F.el.style.cssText = 'position:fixed;left:50%;top:6px;transform:translateX(-50%);z-index:9999;background:rgba(0,0,0,.62);color:#fff;font:600 14px system-ui,sans-serif;padding:3px 10px;border-radius:8px;pointer-events:none;direction:rtl';
+      F.el.style.cssText = 'position:fixed;left:50%;top:6px;transform:translateX(-50%);z-index:9999;background:rgba(0,0,0,.62);color:#fff;font:600 14px system-ui,sans-serif;padding:3px 10px;border-radius:8px;pointer-events:none';
       document.body.appendChild(F.el);
     }
-    F.el.textContent = `${Math.round((F.n * 1000) / (now - F.t0))} פריימים בשנייה`;
+    F.el.textContent = tr(`${Math.round((F.n * 1000) / (now - F.t0))} פריימים בשנייה`, `${Math.round((F.n * 1000) / (now - F.t0))} frames per second`);
     // (?fps=2: and under it what the pace has chosen and why, and the processor's and the card's share of a frame - one picture of the
     // screen tells where the time goes)
     if (this.params.get('fps') === '2' && this.pace) {
       const c = this.pace.ctl;
       let extra = '';
       try {
-        extra = `${this.pace.line()}\nמעבד ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · פריים ${c && c.ema ? c.ema.toFixed(1) : '?'}ms · אנשים ${this.civilians ? this.civilians.list.length : '?'}`;
+        extra = tr(`${this.pace.line()}\nמעבד ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · פריים ${c && c.ema ? c.ema.toFixed(1) : '?'}ms · אנשים ${this.civilians ? this.civilians.list.length : '?'}`, `${this.pace.line()}
+CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toFixed(1) : '?'}ms · people ${this.civilians ? this.civilians.list.length : '?'}`);
       } catch (e) {
         extra = String(e && e.message);
       }
@@ -1346,7 +1348,7 @@ export class Game {
             this.fuse.justAdded = null;
             this.fuse.popDelay = 0;
           });
-          if (iv.invName) this.hud.toast(`✦ ${iv.invName} — מוכנה`, 'good', 2.6);
+          if (iv.invName) this.hud.toast(tr(`✦ ${iv.invName} — מוכנה`, `✦ ${iv.invName} — ready`), 'good', 2.6);
         }
         iv.pendingParts = null;
       }
@@ -1703,7 +1705,7 @@ export class Game {
     // the view from the car, or from behind it (ROADMAP 4.3)
     if (input.wasPressed('KeyV') && !this.classic && p.inVehicle && (p.inVehicle.kind === 'car' || p.inVehicle.kind === 'bike')) {
       this.hoodCam = !this.hoodCam;
-      this.hud.toast(this.hoodCam ? 'מבט מהרכב (V)' : 'מבט מאחור (V)', 'info', 1.4);
+      this.hud.toast(this.hoodCam ? tr('מבט מהרכב (V)', 'View from the car (V)') : tr('מבט מאחור (V)', 'View from behind (V)'), 'info', 1.4);
     }
   }
 
@@ -1718,7 +1720,7 @@ export class Game {
       if (this.barRoom && !p.inVehicle && this.barRoom.inside(p.pos.x, p.pos.z, 0)) {
         this.goalFlags.bar = true;
         this.updateGoals();
-        this.hud.toast('ברוכים הבאים ל-Neon Bar!', 'good', 2.2);
+        this.hud.toast(tr('ברוכים הבאים ל-Neon Bar!', 'Welcome to the Neon Bar!'), 'good', 2.2);
       }
     }
     let spot = null;
@@ -1814,7 +1816,7 @@ export class Game {
     this.audio.play('shutter');
     const b = this.photoTarget();
     if (!b) {
-      this.hud.toast('אין פה שרטוט לצלם — כוונו אל שלט שרטוט', 'info');
+      this.hud.toast(tr('אין פה שרטוט לצלם — כוונו אל שלט שרטוט', 'No blueprint to photograph here — aim at a blueprint sign'), 'info');
       return;
     }
     const bp = BLUEPRINTS[b.id];
@@ -1842,12 +1844,12 @@ export class Game {
       pol.style.setProperty('--fly-y', `${r.top + r.height / 2 - window.innerHeight / 2}px`);
     }
     if (isNew) {
-      this.hud.toast(this.touch ? `שרטוט חדש באלבום: ${bp.name}! לחצו על ${this.drawTap} כדי לצייר אותו באוויר` : `שרטוט חדש באלבום: ${bp.name}! לחצו ${this.drawKey} כדי לצייר`, 'good', 3.8);
+      this.hud.toast(this.touch ? tr(`שרטוט חדש באלבום: ${bp.name}! לחצו על ${this.drawTap} כדי לצייר אותו באוויר`, `New blueprint in the album: ${bp.name}! Tap ${this.drawTap} to draw it in the air`) : tr(`שרטוט חדש באלבום: ${bp.name}! לחצו ${this.drawKey} כדי לצייר`, `New blueprint in the album: ${bp.name}! Press ${this.drawKey} to draw it`), 'good', 3.8);
       if (b.id === 'paint') this.goalFlags.photo = true;
       if (b.id === 'car') this.goalFlags.car = true;
       if (b.id === 'tank' || b.id === 'copter') this.goalFlags.heavy = true;
       this.updateGoals();
-    } else this.hud.toast(`${bp.name} כבר באלבום`, 'info');
+    } else this.hud.toast(tr(`${bp.name} כבר באלבום`, `${bp.name} is already in the album`), 'info');
   }
 
   // ------------------------------------------------------------------ drawing
@@ -1858,13 +1860,13 @@ export class Game {
   }
 
   get drawTap() {
-    return this.freedraw ? 'העיפרון ✏ ואז "שרטוטים"' : 'העיפרון ✏';
+    return this.freedraw ? tr('העיפרון ✏ ואז "שרטוטים"', 'The pencil ✏, then "Blueprints"') : tr('העיפרון ✏', 'The pencil ✏');
   }
 
   openDraw() {
     const p = this.player;
     if (p.inVehicle) {
-      this.hud.toast('צריך לצאת מהרכב כדי לצייר', 'info');
+      this.hud.toast(tr('צריך לצאת מהרכב כדי לצייר', 'You have to get out of the car to draw'), 'info');
       return;
     }
     // (round 15, game/drawlock.js: a new player's short list is the pen's own - drawn in the air)
@@ -1874,7 +1876,7 @@ export class Game {
     }
     if (p.mode !== 'foot') return;
     if (this.album.size === 0) {
-      this.hud.toast(this.touch ? 'האלבום ריק — קודם מצלמים שלט עם שרטוט (כפתור המצלמה ליד שלט)' : 'האלבום ריק — קודם מצלמים שלט עם שרטוט (F)', 'info', 3);
+      this.hud.toast(this.touch ? tr('האלבום ריק — קודם מצלמים שלט עם שרטוט (כפתור המצלמה ליד שלט)', 'The album is empty — first photograph a sign with a blueprint (the camera button by a sign)') : tr('האלבום ריק — קודם מצלמים שלט עם שרטוט (F)', 'The album is empty — first photograph a sign with a blueprint (F)'), 'info', 3);
       // (not with ?classic: the album all the same, with where each one is - ROADMAP 9.1)
       if (this.classic) return;
     }
@@ -1899,7 +1901,7 @@ export class Game {
     this.nudgeDraw = true;
     if (this.touch && !this.drewOnce) {
       const hint = $('draw-hint');
-      if (this.freedraw) hint.querySelector('span').textContent = 'העיפרון ← "שרטוטים": לצייר אותו באוויר!';
+      if (this.freedraw) hint.querySelector('span').textContent = tr('העיפרון ← "שרטוטים": לצייר אותו באוויר!', 'The pencil → "Blueprints": draw it in the air!');
       hint.classList.remove('hidden');
       clearTimeout(this.hintT);
       this.hintT = setTimeout(() => hint.classList.add('hidden'), 9000);
@@ -1931,7 +1933,7 @@ export class Game {
     $('draw-hint').classList.add('hidden');
     // (ROADMAP 15.2: found, not learned yet - the first time is drawn over its lines, the learning)
     this.airdraw.show(id, { learn: !this.classic && this.album.toLearn(id) });
-    if (!p.hidden) this.hud.toast('זהירות — לא מוסתרים! האויבים ימשיכו לתקוף', 'bad', 2.2);
+    if (!p.hidden) this.hud.toast(tr('זהירות — לא מוסתרים! האויבים ימשיכו לתקוף', 'Careful — you\'re not hidden! The enemies will keep attacking'), 'bad', 2.2);
   }
 
   onDrawClosed() {
@@ -1959,7 +1961,7 @@ export class Game {
     };
     say(msg, grade === 'fail' ? 'bad' : grade === 'wonky' ? 'info' : 'good', 3.2);
     if (learned) {
-      say(`✦ למדתם לצייר ${bp.the || bp.name}! מעכשיו — ${this.touch ? 'העיפרון ונגיעה בו' : 'Q ונגיעה בו (או המספר שלו)'}: מוכן תוך שנייה`, 'good', 4.2);
+      say(tr(`✦ למדתם לצייר ${bp.the || bp.name}! מעכשיו — ${this.touch ? 'העיפרון ונגיעה בו' : 'Q ונגיעה בו (או המספר שלו)'}: מוכן תוך שנייה`, `✦ You've learned to draw ${bp.the || bp.name}! From now on — ${this.touch ? tr('העיפרון ונגיעה בו', 'the pencil and tap it') : tr('Q ונגיעה בו (או המספר שלו)', 'Q and tap it (or its number)')}: ready in a second`), 'good', 4.2);
       this.audio.play('cheer', 0.7);
     }
     // a thing that flies to the hero once it is real (the plaster, the parachute)
@@ -1979,14 +1981,14 @@ export class Game {
         p.hp = Math.min(p.maxHp, Math.max(p.hp, p.maxHp * q));
         if (q >= 1) p.fig.holes.length = 0;
         else p.fig.holes.length = Math.floor(p.fig.holes.length * 0.5);
-        this.hud.toast(q >= 1 ? 'הפלסטר הענק סגר את כל החורים — חיים מלאים!' : 'הפלסטר עקום… אבל עזר קצת', q >= 1 ? 'good' : 'info', 2.8);
+        this.hud.toast(q >= 1 ? tr('הפלסטר הענק סגר את כל החורים — חיים מלאים!', 'The giant band-aid closed every hole — full health!') : tr('הפלסטר עקום… אבל עזר קצת', 'The band-aid is crooked… but it helped a little'), q >= 1 ? 'good' : 'info', 2.8);
         this.audio.play('cheer');
       });
     } else if (bp.kind === 'gear') {
       toHero('back', () => {
         // the parachute: on your back from now on
         p.parachute = { grade };
-        this.hud.toast(this.touch ? 'יש לכם מצנח! קפצו מהמסוק בגובה — הוא ייפתח לבד, או לחצו על כפתור הקפיצה' : 'יש לכם מצנח! קפצו מהמסוק בגובה — הוא ייפתח לבד, או לחצו רווח', 'good', 4);
+        this.hud.toast(this.touch ? tr('יש לכם מצנח! קפצו מהמסוק בגובה — הוא ייפתח לבד, או לחצו על כפתור הקפיצה', 'You\'ve got a parachute! Jump from the helicopter up high — it opens by itself, or tap the jump button') : tr('יש לכם מצנח! קפצו מהמסוק בגובה — הוא ייפתח לבד, או לחצו רווח', 'You\'ve got a parachute! Jump from the helicopter up high — it opens by itself, or press Space'), 'good', 4);
         this.audio.play('cheer');
       });
     } else if (bp.kind === 'tool' && this.gadgets) {
@@ -2033,8 +2035,8 @@ export class Game {
         // (ROADMAP 15.2: summoned with a touch - you are in it the moment it is real)
         if (plan.autoEnter) this.autoEnterV = v;
       } else v = this.vehicles.spawn(bp.id, grade, res.score);
-      const getIn = bp.the ? `לעלות על ${bp.the}` : `להיכנס ל${bp.name}`;
-      if (!(plan && plan.autoEnter)) say(this.touch ? `לחצו על כפתור הרכב הירוק כדי ${getIn}` : `לחצו E כדי ${getIn}`, 'info', 3);
+      const getIn = bp.the ? tr(`לעלות על ${bp.the}`, `get on the ${bp.the}`) : tr(`להיכנס ל${bp.name}`, `get into the ${bp.name}`);
+      if (!(plan && plan.autoEnter)) say(this.touch ? tr(`לחצו על כפתור הרכב הירוק כדי ${getIn}`, `Tap the green car button to ${getIn}`) : tr(`לחצו E כדי ${getIn}`, `Press E to ${getIn}`), 'info', 3);
       v.strokes = strokes;
       if (bp.id === 'car') this.goalFlags.car = true;
     }
@@ -2059,7 +2061,7 @@ export class Game {
     const c = this.traffic.nearestDoor(p.pos, 1.7);
     if (c && !c.wrecked) {
       const s = c.spec;
-      return { kind: c.parkedCar ? 'parked' : 'carjack', target: c, label: s.police ? 'ניידת' : s.taxi ? 'מונית' : s.kind === 'van' ? 'טנדר' : 'מכונית' };
+      return { kind: c.parkedCar ? 'parked' : 'carjack', target: c, label: s.police ? tr('ניידת', 'police car') : s.taxi ? tr('מונית', 'taxi') : s.kind === 'van' ? tr('טנדר', 'pickup truck') : tr('מכונית', 'car') };
     }
     return null;
   }
@@ -2081,7 +2083,7 @@ export class Game {
     if (t.kind === 'vehicle') this.enterVehicle(t.target);
     // (round 15, the player's word: into a car as GTA has it - beginEntry)
     else if (t.kind === 'carjack') {
-      if (Math.abs(t.target.speed) > 7.5) this.hud.toast('המכונית נוסעת מהר מדי — עמדו מולה כדי שתעצור', 'info', 2.2);
+      if (Math.abs(t.target.speed) > 7.5) this.hud.toast(tr('המכונית נוסעת מהר מדי — עמדו מולה כדי שתעצור', 'The car is going too fast — stand in front of it so it stops'), 'info', 2.2);
       else this.beginEntry('carjack', t.target);
     } else this.beginEntry('parked', t.target);
   }
@@ -2154,7 +2156,7 @@ export class Game {
         }
         if (Math.random() < 0.45) {
           this.audio.play('alarm', 0.7);
-          this.hud.toast('אזעקה! מישהו בטח שמע…', 'bad', 1.8);
+          this.hud.toast(tr('אזעקה! מישהו בטח שמע…', 'Alarm! Somebody must have heard…'), 'bad', 1.8);
           this.enemies.noise(v.pos, 35, 'alarm');
         }
       }
@@ -2202,7 +2204,7 @@ export class Game {
       if (E.t.police) this.onCrime('copcar', E.t.pos.x, E.t.pos.z);
       else this.onCrime('carjack', E.t.pos.x, E.t.pos.z);
     } else {
-      if (E.quiet) this.hud.toast('המפתח נכנס, הדלת נפתחת. אף אחד לא חושד', 'good', 2);
+      if (E.quiet) this.hud.toast(tr('המפתח נכנס, הדלת נפתחת. אף אחד לא חושד', 'The key goes in, the door opens. Nobody suspects a thing'), 'good', 2);
       if (this.onCrime) this.onCrime(E.t.spec && E.t.spec.police && !this.classic ? 'copcar' : E.quiet ? 'quietSteal' : 'steal', E.t.pos.x, E.t.pos.z);
     }
   }
@@ -2210,7 +2212,7 @@ export class Game {
   // pull the driver out of a car in traffic and drive off with it
   carjack(c) {
     if (Math.abs(c.speed) > 7.5) {
-      this.hud.toast('המכונית נוסעת מהר מדי — עמדו מולה כדי שתעצור', 'info', 2.2);
+      this.hud.toast(tr('המכונית נוסעת מהר מדי — עמדו מולה כדי שתעצור', 'The car is going too fast — stand in front of it so it stops'), 'info', 2.2);
       return;
     }
     const t = this.traffic.take(c);
@@ -2251,10 +2253,10 @@ export class Game {
     this.enterVehicle(v);
     // (the drawn key: no alarm, and nobody who sees it thinks twice - ROADMAP 9.2)
     const quiet = this.gadgets ? this.gadgets.useKey() : false;
-    if (quiet) this.hud.toast('המפתח נכנס, הדלת נפתחת. אף אחד לא חושד', 'good', 2);
+    if (quiet) this.hud.toast(tr('המפתח נכנס, הדלת נפתחת. אף אחד לא חושד', 'The key goes in, the door opens. Nobody suspects a thing'), 'good', 2);
     else if (Math.random() < 0.45) {
       this.audio.play('alarm', 0.7);
-      this.hud.toast('אזעקה! מישהו בטח שמע…', 'bad', 1.8);
+      this.hud.toast(tr('אזעקה! מישהו בטח שמע…', 'Alarm! Somebody must have heard…'), 'bad', 1.8);
       this.enemies.noise(v.pos, 35, 'alarm');
     }
     // (one of the police station's own cars: ROADMAP 6.3)
@@ -2302,11 +2304,11 @@ export class Game {
     if (v.drawn && this.freedraw) this.freedraw.onEnter(v);
     else if (!this.classic && !this.touch && !this.driveHint && (v.kind === 'car' || v.kind === 'bike')) {
       this.driveHint = true;
-      this.hud.toast('V — מבט מהרכב · רווח — בלם יד', 'info', 3.2);
+      this.hud.toast(tr('V — מבט מהרכב · רווח — בלם יד', 'V — view from the car · Space — handbrake'), 'info', 3.2);
     } else if (!this.classic && this.touch && !this.driveHint && this.settings.get('touchDrive') !== 'stick') {
       // (a phone: the driving buttons, and where the stick is for whoever misses it)
       this.driveHint = true;
-      this.hud.toast('נוהגים בכפתורים: החיצים משמאל, גז ובלם מימין · ג׳ויסטיק — בהגדרות', 'info', 4);
+      this.hud.toast(tr('נוהגים בכפתורים: החיצים משמאל, גז ובלם מימין · ג׳ויסטיק — בהגדרות', 'Driving with buttons: arrows on the left, gas and brake on the right · joystick — in the settings'), 'info', 4);
     }
   }
 
@@ -2320,7 +2322,7 @@ export class Game {
       shore = shoreNear(v);
       // (far from the shore: with swimming, ROADMAP 5.2, you jump in)
       if (!shore && !force && !this.swim) {
-        this.hud.toast('אין לאן לרדת כאן — שוטים לטיילת או למזח', 'info', 2.2);
+        this.hud.toast(tr('אין לאן לרדת כאן — שוטים לטיילת או למזח', 'Nowhere to land here — fly to the boardwalk or the pier'), 'info', 2.2);
         return;
       }
     }
@@ -2360,7 +2362,7 @@ export class Game {
     if (v.flies && v.alt > 3) {
       p.vel.y = 0;
       // out of the helicopter high over the city
-      if (v.alt > 9) this.hud.toast(p.parachute ? 'קופצים! המצנח ייפתח בעוד רגע' : 'קפצתם בלי מצנח! (יש שלט של מצנח ליד המסוק)', p.parachute ? 'info' : 'bad', 2.6);
+      if (v.alt > 9) this.hud.toast(p.parachute ? tr('קופצים! המצנח ייפתח בעוד רגע', 'Jumping! The parachute will open in a moment') : tr('קפצתם בלי מצנח! (יש שלט של מצנח ליד המסוק)', 'You jumped without a parachute! (There\'s a parachute sign by the helicopter)'), p.parachute ? 'info' : 'bad', 2.6);
     }
     $('btn-up').classList.add('hidden');
     $('btn-down').classList.add('hidden');
@@ -2461,7 +2463,7 @@ export class Game {
     if (box && box.tag === 'roomwall' && spot && openWall(this.world.collision, this.world.nav, box, spot)) {
       if (!this.wallTip) {
         this.wallTip = true;
-        this.hud.toast('מחקת חור בקיר — אפשר להיכנס פנימה!', 'good', 2.6);
+        this.hud.toast(tr('מחקת חור בקיר — אפשר להיכנס פנימה!', 'You erased a hole in the wall — you can go in!'), 'good', 2.6);
       }
       this.audio.play('crumble', 0.7);
     }
@@ -2561,25 +2563,25 @@ export class Game {
       // (round 20: down on the ground after the flight, its button is there - on a phone too)
       const held = !!(this.prologue && this.prologue.active && (this.prologue.sceneN || 0) >= 5 && !this.prologue.canOut);
       enter = !held;
-      prompt = touch || held ? '' : p.inVehicle.kind === 'copter' ? 'רווח/C — למעלה/למטה · קליק — מטוסי נייר · E — לצאת' : p.inVehicle.kind === 'tank' ? 'קליק — ירי · E — לצאת' : 'E — לצאת';
+      prompt = touch || held ? '' : p.inVehicle.kind === 'copter' ? tr('רווח/C — למעלה/למטה · קליק — מטוסי נייר · E — לצאת', 'Space/C — up/down · click — paper planes · E — get out') : p.inVehicle.kind === 'tank' ? tr('קליק — ירי · E — לצאת', 'Click — fire · E — get out') : tr('E — לצאת', 'E — get out');
       // (ROADMAP 4.8: the plane's controls; out of a boat only by the shore; the bicycle's bell)
       const pv = p.inVehicle;
-      if (!touch && pv.kind === 'plane') prompt = pv.flying ? 'W/S — מצערת · A/D — הטיה · רווח/C — האף למעלה/למטה · E — לקפוץ' : 'W — מצערת (מסלול ישר!) · במהירות: רווח להמראה · E — לצאת';
-      else if (!touch && pv.kind === 'boat') prompt = pv.dive ? 'C — לצלול · רווח — לעלות · E — לצאת (ליד החוף)' : 'E — לצאת (ליד החוף או המזח)';
-      else if (!touch && pv.kind === 'balloon') prompt = 'רווח — המבער (למעלה) · C — למטה · WASD — להטות · E — לצאת';
-      else if (!touch && pv.model === 'bicycle') prompt = 'H — פעמון · E — לצאת';
+      if (!touch && pv.kind === 'plane') prompt = pv.flying ? tr('W/S — מצערת · A/D — הטיה · רווח/C — האף למעלה/למטה · E — לקפוץ', 'W/S — throttle · A/D — bank · Space/C — nose up/down · E — jump out') : tr('W — מצערת (מסלול ישר!) · במהירות: רווח להמראה · E — לצאת', 'W — throttle (straight runway!) · at speed: Space to take off · E — get out');
+      else if (!touch && pv.kind === 'boat') prompt = pv.dive ? tr('C — לצלול · רווח — לעלות · E — לצאת (ליד החוף)', 'C — dive · Space — surface · E — get out (near the shore)') : tr('E — לצאת (ליד החוף או המזח)', 'E — get out (near the shore or the pier)');
+      else if (!touch && pv.kind === 'balloon') prompt = tr('רווח — המבער (למעלה) · C — למטה · WASD — להטות · E — לצאת', 'Space — the burner (up) · C — down · WASD — tilt · E — get out');
+      else if (!touch && pv.model === 'bicycle') prompt = tr('H — פעמון · E — לצאת', 'H — bell · E — get out');
       // (ROADMAP 11.8: one drawn to go more than one way, a gun on it, a spring under it)
       if (!touch && pv.drawn) {
         const more = [];
-        if (pv.canLift && (pv.kind === 'bike' || pv.kind === 'boat')) more.push(pv.modes.plane && !pv.modes.copter && !pv.modes.balloon ? 'במהירות: רווח — המראה' : 'רווח — המראה');
-        else if (pv.canLift && pv.kind === 'copter') more.push('C למטה עד הסוף — נחיתה');
-        if (pv.spring && !pv.canLift && pv.kind === 'bike') more.push('רווח — קפיצה');
-        if (pv.turret) more.push(pv.gunType === 'mg' ? 'קליק — מקלע' : 'קליק — תותח');
-        if (more.length && pv.kind === 'copter') more.unshift('רווח/C — למעלה/למטה');
-        if (more.length && pv.kind !== 'plane' && pv.kind !== 'balloon') prompt = `${more.join(' · ')} · E — לצאת`;
+        if (pv.canLift && (pv.kind === 'bike' || pv.kind === 'boat')) more.push(pv.modes.plane && !pv.modes.copter && !pv.modes.balloon ? tr('במהירות: רווח — המראה', 'At speed: Space — take off') : tr('רווח — המראה', 'Space — take off'));
+        else if (pv.canLift && pv.kind === 'copter') more.push(tr('C למטה עד הסוף — נחיתה', 'C all the way down — land'));
+        if (pv.spring && !pv.canLift && pv.kind === 'bike') more.push(tr('רווח — קפיצה', 'Space — jump'));
+        if (pv.turret) more.push(pv.gunType === 'mg' ? tr('קליק — מקלע', 'Click — machine gun') : tr('קליק — תותח', 'Click — cannon'));
+        if (more.length && pv.kind === 'copter') more.unshift(tr('רווח/C — למעלה/למטה', 'Space/C — up/down'));
+        if (more.length && pv.kind !== 'plane' && pv.kind !== 'balloon') prompt = tr(`${more.join(' · ')} · E — לצאת`, `${more.join(' · ')} · E — get out`);
       }
       // (a gun in hand: out of the window, ROADMAP 4.7)
-      if (!touch && !this.classic && (pv.kind === 'car' || pv.kind === 'bike') && !pv.turret && this.weapons.current.def.kind === 'gun') prompt = 'קליק — ירי מהחלון · E — לצאת';
+      if (!touch && !this.classic && (pv.kind === 'car' || pv.kind === 'bike') && !pv.turret && this.weapons.current.def.kind === 'gun') prompt = tr('קליק — ירי מהחלון · E — לצאת', 'Click — shoot from the window · E — get out');
       // (at the service station: what stopping here does, game/garage.js)
       const gp = this.garage.prompt();
       if (gp) prompt = gp;
@@ -2587,7 +2589,7 @@ export class Game {
       // (ROADMAP 14.1: Sal, come over to be looked at close - game/facelab.js)
       enter = true;
       const ft = this.facelab.target();
-      const label = ft ? ft.label : 'E — חזרה למשחק';
+      const label = ft ? ft.label : tr('E — חזרה למשחק', 'E — back to the game');
       prompt = touch ? label.replace('E — ', '') : label;
     } else if (p.mode === 'foot' && this.events.prompt()) {
       // somebody near you needs a hand (game/events.js)
@@ -2664,26 +2666,26 @@ export class Game {
       if (notYours) prompt = notYours;
       else if (et) {
         enter = true;
-        const verb = et.kind === 'carjack' ? 'לחטוף את ה' : et.kind === 'parked' ? (this.gadgets && this.gadgets.key ? 'לפתוח במפתח את ה' : 'לגנוב את ה') : 'להיכנס ל';
+        const verb = et.kind === 'carjack' ? tr('לחטוף את ה', 'hijack the ') : et.kind === 'parked' ? (this.gadgets && this.gadgets.key ? tr('לפתוח במפתח את ה', 'unlock the ') : tr('לגנוב את ה', 'steal the ')) : tr('להיכנס ל', 'get into the ');
         // (onto the new rides, ROADMAP 4.8: you get on them)
         // (one drawn freehand: by its own name, ROADMAP 11.6)
-        const on = et.kind === 'vehicle' && et.target.drawn ? `ה${et.target.label}` : et.kind === 'vehicle' && et.target.model && BLUEPRINTS[et.target.model] ? BLUEPRINTS[et.target.model].the : null;
-        prompt = touch ? '' : on ? `E — לעלות על ${on}` : `E — ${verb}${et.label}`;
+        const on = et.kind === 'vehicle' && et.target.drawn ? tr(`ה${et.target.label}`, `the ${et.target.label}`) : et.kind === 'vehicle' && et.target.model && BLUEPRINTS[et.target.model] ? BLUEPRINTS[et.target.model].the : null;
+        prompt = touch ? '' : on ? tr(`E — לעלות על ${on}`, `E — get on ${on}`) : `E — ${verb}${et.label}`;
       } else if (!(this.prologue && this.prologue.noHello) && this.voices && this.voices.helloTarget && this.voices.helloTarget()) {
         // (intelligence round) somebody right in front of you: E to say hello (game/voices.js hello)
         enter = true;
-        prompt = touch ? 'להגיד שלום' : 'E — להגיד שלום';
+        prompt = touch ? tr('להגיד שלום', 'Say hello') : tr('E — להגיד שלום', 'E — say hello');
       } else {
         const b = this.photoTarget();
         if (b) {
           photo = true;
-          prompt = this.album.has(b.id) ? `${BLUEPRINTS[b.id].name} כבר באלבום` : touch ? 'לצלם את השרטוט' : 'F — לצלם את השרטוט';
+          prompt = this.album.has(b.id) ? tr(`${BLUEPRINTS[b.id].name} כבר באלבום`, `${BLUEPRINTS[b.id].name} is already in the album`) : touch ? tr('לצלם את השרטוט', 'Photograph the blueprint') : tr('F — לצלם את השרטוט', 'F — photograph the blueprint');
         } else if (p.hidden && this.album.size) {
-          prompt = touch ? 'מוסתרים — זה הזמן לצייר' : `מוסתרים — ${this.drawKey} כדי לצייר`;
+          prompt = touch ? tr('מוסתרים — זה הזמן לצייר', 'Hidden — now\'s the time to draw') : tr(`מוסתרים — ${this.drawKey} כדי לצייר`, `Hidden — ${this.drawKey} to draw`);
         } else if (p.crouched) {
           // (down low: behind cover, or sneaking - ROADMAP 5.3)
-          if (p.coverBox) prompt = touch ? 'במחסה — כוונו כדי להתרומם ולירות' : 'במחסה · קליק ימני — להתרומם ולירות · C — לקום';
-          else prompt = touch ? 'כפופים — קשה יותר לראות ולשמוע אתכם' : 'כפופים — קשה יותר לראות ולשמוע אתכם · C — לקום';
+          if (p.coverBox) prompt = touch ? tr('במחסה — כוונו כדי להתרומם ולירות', 'In cover — aim to rise and shoot') : tr('במחסה · קליק ימני — להתרומם ולירות · C — לקום', 'In cover · right-click — rise and shoot · C — stand up');
+          else prompt = touch ? tr('כפופים — קשה יותר לראות ולשמוע אתכם', 'Crouching — it\'s harder to see and hear you') : tr('כפופים — קשה יותר לראות ולשמוע אתכם · C — לקום', 'Crouching — it\'s harder to see and hear you · C — stand up');
         } else if (this.climb && this.climb.hint) {
           // (something you could climb, right in front of you: ROADMAP 5.1)
           prompt = this.climb.hint;
@@ -2757,24 +2759,24 @@ export class Game {
     // (ROADMAP 11.6: with the free drawing, drawing comes first; ROADMAP 11.40: from the catalog by
     // the pen - and one drawn just as it is there)
     const all = this.freedraw ? [
-      { text: this.touch ? 'לצייר נשק מהמקרא שליד העט — אקדח צבע, בזוקה... (עיפרון), גם בריצה' : 'לצייר נשק מהמקרא שליד העט — אקדח צבע, בזוקה... (Q), גם בריצה', done: f.drew },
-      { text: 'לצייר נשק "מושלם" — בדיוק כמו במקרא, עם כל החלקים', done: f.perfect },
-      { text: 'להתחבא ליד תא טלפון, פח אשפה או שיח', done: f.hidden },
-      { text: 'לקפוץ ל-Neon Bar (בשדרה הראשונה, כמה דלתות צפונה)', done: f.bar },
-      { text: `למחוק 5 עבריינים — הם מסתובבים בסמטה מאחורי החנויות (${Math.min(5, f.kills)}/5)`, done: f.kills >= 5 },
-      { text: this.touch ? 'לצייר רכב מהמקרא (לשונית רכבים) ולנהוג בו' : 'לצייר רכב מהמקרא (לשונית רכבים, 2) ולנהוג בו (E)', done: f.drove },
-      { text: 'לצייר טנק או מסוק מהמקרא', done: f.heavyDrawn },
-      { text: this.touch ? 'לצלם שרטוט על שלט ולצייר אותו באוויר' : 'לצלם שרטוט על שלט (F) ולצייר אותו באוויר (T)', done: f.photo },
+      { text: this.touch ? tr('לצייר נשק מהמקרא שליד העט — אקדח צבע, בזוקה... (עיפרון), גם בריצה', 'Draw a weapon from the guide next to the pen — paint gun, bazooka... (pencil), even on the run') : tr('לצייר נשק מהמקרא שליד העט — אקדח צבע, בזוקה... (Q), גם בריצה', 'Draw a weapon from the guide next to the pen — paint gun, bazooka... (Q), even on the run'), done: f.drew },
+      { text: tr('לצייר נשק "מושלם" — בדיוק כמו במקרא, עם כל החלקים', 'Draw a "perfect" weapon — exactly like the guide, with every part'), done: f.perfect },
+      { text: tr('להתחבא ליד תא טלפון, פח אשפה או שיח', 'Hide next to a phone booth, a trash can or a bush'), done: f.hidden },
+      { text: tr('לקפוץ ל-Neon Bar (בשדרה הראשונה, כמה דלתות צפונה)', 'Drop in at the Neon Bar (on the first avenue, a few doors north)'), done: f.bar },
+      { text: tr(`למחוק 5 עבריינים — הם מסתובבים בסמטה מאחורי החנויות (${Math.min(5, f.kills)}/5)`, `Erase 5 crooks — they hang around the alley behind the shops (${Math.min(5, f.kills)}/5)`), done: f.kills >= 5 },
+      { text: this.touch ? tr('לצייר רכב מהמקרא (לשונית רכבים) ולנהוג בו', 'Draw a ride from the guide (the rides tab) and drive it') : tr('לצייר רכב מהמקרא (לשונית רכבים, 2) ולנהוג בו (E)', 'Draw a ride from the guide (the rides tab, 2) and drive it (E)'), done: f.drove },
+      { text: tr('לצייר טנק או מסוק מהמקרא', 'Draw a tank or a helicopter from the guide'), done: f.heavyDrawn },
+      { text: this.touch ? tr('לצלם שרטוט על שלט ולצייר אותו באוויר', 'Photograph a blueprint on a sign and draw it in the air') : tr('לצלם שרטוט על שלט (F) ולצייר אותו באוויר (T)', 'Photograph a blueprint on a sign (F) and draw it in the air (T)'), done: f.photo },
     ] : [
-      { text: this.touch ? 'לצלם את השרטוט של אקדח הצבע בטיילת, ממול (מצלמה)' : 'לצלם את השרטוט של אקדח הצבע בטיילת, ממול (F)', done: f.photo },
-      { text: 'להתחבא ליד תא טלפון, פח אשפה או שיח', done: f.hidden },
-      { text: this.touch ? 'לצייר את אקדח הצבע (עיפרון)' : 'לצייר את אקדח הצבע (Q)', done: f.drew },
-      { text: 'לקפוץ ל-Neon Bar (בשדרה הראשונה, כמה דלתות צפונה)', done: f.bar },
-      { text: `למחוק 5 עבריינים — הם מסתובבים בסמטה מאחורי החנויות (${Math.min(5, f.kills)}/5)`, done: f.kills >= 5 },
-      { text: 'למצוא את שרטוט המכונית בחניה של מוטל הכוכב (מערבה)', done: f.car },
-      { text: this.touch ? 'לצייר מכונית ולנהוג בה' : 'לצייר מכונית ולנהוג בה (E)', done: f.drove },
-      { text: 'להשיג שרטוט טנק (מרכז העיר) או מסוק (בקצה המזח)', done: f.heavy },
-      { text: 'לצייר טנק או מסוק', done: f.heavyDrawn },
+      { text: this.touch ? tr('לצלם את השרטוט של אקדח הצבע בטיילת, ממול (מצלמה)', 'Photograph the paint gun blueprint on the boardwalk, across the way (camera)') : tr('לצלם את השרטוט של אקדח הצבע בטיילת, ממול (F)', 'Photograph the paint gun blueprint on the boardwalk, across the way (F)'), done: f.photo },
+      { text: tr('להתחבא ליד תא טלפון, פח אשפה או שיח', 'Hide next to a phone booth, a trash can or a bush'), done: f.hidden },
+      { text: this.touch ? tr('לצייר את אקדח הצבע (עיפרון)', 'Draw the paint gun (pencil)') : tr('לצייר את אקדח הצבע (Q)', 'Draw the paint gun (Q)'), done: f.drew },
+      { text: tr('לקפוץ ל-Neon Bar (בשדרה הראשונה, כמה דלתות צפונה)', 'Drop in at the Neon Bar (on the first avenue, a few doors north)'), done: f.bar },
+      { text: tr(`למחוק 5 עבריינים — הם מסתובבים בסמטה מאחורי החנויות (${Math.min(5, f.kills)}/5)`, `Erase 5 crooks — they hang around the alley behind the shops (${Math.min(5, f.kills)}/5)`), done: f.kills >= 5 },
+      { text: tr('למצוא את שרטוט המכונית בחניה של מוטל הכוכב (מערבה)', 'Find the car blueprint in the Star Motel\'s parking lot (to the west)'), done: f.car },
+      { text: this.touch ? tr('לצייר מכונית ולנהוג בה', 'Draw a car and drive it') : tr('לצייר מכונית ולנהוג בה (E)', 'Draw a car and drive it (E)'), done: f.drove },
+      { text: tr('להשיג שרטוט טנק (מרכז העיר) או מסוק (בקצה המזח)', 'Get a tank blueprint (downtown) or a helicopter blueprint (at the end of the pier)'), done: f.heavy },
+      { text: tr('לצייר טנק או מסוק', 'Draw a tank or a helicopter'), done: f.heavyDrawn },
     ];
     const firstOpen = all.findIndex((g) => !g.done);
     const start = Math.max(0, (firstOpen < 0 ? all.length : firstOpen) - 1);

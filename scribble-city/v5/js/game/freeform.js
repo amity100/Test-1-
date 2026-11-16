@@ -4,6 +4,7 @@ import { clamp } from '../core/util.js';
 import { readParts, specOf, shapeOf, thin, shade, inkOn, ribbon, solid, springy, outline, inPoly, KIND_NAME } from './drawncar.js';
 import { look, chances, picture, ready, CLASSES, GROUP_OF, GROUP_NAME, NAME_OF, VEHICLE_GROUPS, CAR_FAMILY, GEAR_GROUPS, CATEGORIES, CATEGORY_OF, groupsOf } from './sketchnet.js';
 import { readGear, GEAR } from './freegear.js';
+import { tr } from '../core/lang.js';
 
 // (ROADMAP 11.6) Drawing freehand, on the move (ui/freedraw.js). Nothing to choose first: what is
 // drawn on the little page is read from its shape alone, and becomes a thing made of the drawing
@@ -27,35 +28,35 @@ import { readGear, GEAR } from './freegear.js';
 // are and what its numbers are. What the network sees nothing in, the shape alone reads, as before.
 
 export const INKS = [
-  { css: '#5b5e6a', c: [0.36, 0.37, 0.42], name: 'עיפרון', pencil: true },
-  { css: '#1d1e26', c: [0.11, 0.11, 0.14], name: 'שחור' },
-  { css: '#e8333d', c: [0.92, 0.2, 0.24], name: 'אדום' },
-  { css: '#ff8a2a', c: [1.0, 0.55, 0.16], name: 'כתום' },
-  { css: '#ffd23f', c: [1.0, 0.84, 0.22], name: 'צהוב' },
-  { css: '#4ee06a', c: [0.3, 0.86, 0.42], name: 'ירוק' },
-  { css: '#33b5ff', c: [0.22, 0.68, 1.0], name: 'כחול' },
-  { css: '#7c5cff', c: [0.5, 0.38, 1.0], name: 'סגול' },
-  { css: '#ff7cc8', c: [1.0, 0.48, 0.78], name: 'ורוד' },
-  { css: '#f4efe4', c: [0.95, 0.93, 0.88], name: 'לבן' },
-  { css: '#a6ff2e', c: [0.66, 1.0, 0.2], name: 'ניאון', neon: true },
+  { css: '#5b5e6a', c: [0.36, 0.37, 0.42], name: tr('עיפרון', 'Pencil'), pencil: true },
+  { css: '#1d1e26', c: [0.11, 0.11, 0.14], name: tr('שחור', 'Black') },
+  { css: '#e8333d', c: [0.92, 0.2, 0.24], name: tr('אדום', 'Red') },
+  { css: '#ff8a2a', c: [1.0, 0.55, 0.16], name: tr('כתום', 'Orange') },
+  { css: '#ffd23f', c: [1.0, 0.84, 0.22], name: tr('צהוב', 'Yellow') },
+  { css: '#4ee06a', c: [0.3, 0.86, 0.42], name: tr('ירוק', 'Green') },
+  { css: '#33b5ff', c: [0.22, 0.68, 1.0], name: tr('כחול', 'Blue') },
+  { css: '#7c5cff', c: [0.5, 0.38, 1.0], name: tr('סגול', 'Purple') },
+  { css: '#ff7cc8', c: [1.0, 0.48, 0.78], name: tr('ורוד', 'Pink') },
+  { css: '#f4efe4', c: [0.95, 0.93, 0.88], name: tr('לבן', 'White') },
+  { css: '#a6ff2e', c: [0.66, 1.0, 0.2], name: tr('ניאון', 'Neon'), neon: true },
 ];
 
 // what each thing is: its name, its length in the hand (m), how thick, its ink
 export const KINDS = {
-  pistol: { name: 'אקדח', len: 0.34, depth: 0.045, cost: 12, glyph: 'gun' },
-  smg: { name: 'תת־מקלע', len: 0.52, depth: 0.05, cost: 16, glyph: 'gun' },
-  assault: { name: 'רובה סער', len: 0.92, depth: 0.055, cost: 20, glyph: 'gun' },
-  rifle: { name: 'רובה', len: 1.08, depth: 0.05, cost: 18, glyph: 'gun' },
-  shotgun: { name: 'רובה ציד', len: 0.95, depth: 0.06, cost: 18, glyph: 'gun' },
-  minigun: { name: 'מיניגאן', len: 0.98, depth: 0.12, cost: 28, glyph: 'gun' },
-  launcher: { name: 'משגר רקטות', len: 1.3, depth: 0.15, cost: 30, glyph: 'gun' },
-  laser: { name: 'רובה לייזר', len: 0.9, depth: 0.07, cost: 26, glyph: 'gun' },
-  sword: { name: 'חרב', len: 1.15, depth: 0.018, cost: 12, glyph: 'blade' },
-  club: { name: 'פטיש', len: 0.95, depth: 0.075, cost: 10, glyph: 'blade' },
-  bomb: { name: 'פצצה', len: 0.26, depth: 0.2, cost: 14, glyph: 'throw' },
-  boomerang: { name: 'בומרנג', len: 0.52, depth: 0.024, cost: 10, glyph: 'throw' },
+  pistol: { name: tr('אקדח', 'Pistol'), len: 0.34, depth: 0.045, cost: 12, glyph: 'gun' },
+  smg: { name: tr('תת־מקלע', 'Submachine gun'), len: 0.52, depth: 0.05, cost: 16, glyph: 'gun' },
+  assault: { name: tr('רובה סער', 'Assault rifle'), len: 0.92, depth: 0.055, cost: 20, glyph: 'gun' },
+  rifle: { name: tr('רובה', 'Rifle'), len: 1.08, depth: 0.05, cost: 18, glyph: 'gun' },
+  shotgun: { name: tr('רובה ציד', 'Shotgun'), len: 0.95, depth: 0.06, cost: 18, glyph: 'gun' },
+  minigun: { name: tr('מיניגאן', 'Minigun'), len: 0.98, depth: 0.12, cost: 28, glyph: 'gun' },
+  launcher: { name: tr('משגר רקטות', 'Rocket launcher'), len: 1.3, depth: 0.15, cost: 30, glyph: 'gun' },
+  laser: { name: tr('רובה לייזר', 'Laser rifle'), len: 0.9, depth: 0.07, cost: 26, glyph: 'gun' },
+  sword: { name: tr('חרב', 'Sword'), len: 1.15, depth: 0.018, cost: 12, glyph: 'blade' },
+  club: { name: tr('פטיש', 'Hammer'), len: 0.95, depth: 0.075, cost: 10, glyph: 'blade' },
+  bomb: { name: tr('פצצה', 'Bomb'), len: 0.26, depth: 0.2, cost: 14, glyph: 'throw' },
+  boomerang: { name: tr('בומרנג', 'Boomerang'), len: 0.52, depth: 0.024, cost: 10, glyph: 'throw' },
   // (ROADMAP 11.8: drawn as gear - held up in front, it blocks)
-  shield: { name: 'מגן', len: 0.8, depth: 0.05, cost: 12, glyph: 'blade' },
+  shield: { name: tr('מגן', 'Shield'), len: 0.8, depth: 0.05, cost: 12, glyph: 'blade' },
 };
 export const WEAPON_ORDER = ['pistol', 'smg', 'assault', 'rifle', 'shotgun', 'minigun', 'launcher', 'laser', 'sword', 'club', 'bomb', 'boomerang'];
 const GUNS = new Set(['pistol', 'smg', 'assault', 'rifle', 'shotgun', 'minigun', 'launcher', 'laser']);
@@ -903,7 +904,7 @@ function makeDef(R) {
   const magK = mag && grip ? clamp(mag.depth / Math.max(1, grip.depth), 0.4, 1.6) : 0;
   const col = INKS[R.main] && !INKS[R.main].pencil ? INKS[R.main].c : null;
   const d = { id: `free_${kind}`, name: K.name, free: kind, hands: 1 };
-  if (kind === 'rifle' && scope) d.name = 'רובה צלפים';
+  if (kind === 'rifle' && scope) d.name = tr('רובה צלפים', 'Sniper rifle');
   if (R.variant) d.name = NAME_OF(R.variant);
   const r = (v) => Math.round(v);
   switch (kind) {
@@ -933,7 +934,7 @@ function makeDef(R) {
     }
     case 'laser':
       Object.assign(d, { kind: 'beam', damage: r(clamp(70 + (bodyT / L) * 120, 70, 120)), range: 70 + bl * 50, ammo: r(10 + bl * 10), hands: A < 2.5 ? 1 : 2 });
-      if (A < 2.5) d.name = 'אקדח לייזר';
+      if (A < 2.5) d.name = tr('אקדח לייזר', 'Laser pistol');
       break;
     case 'sword': {
       // (the blade: how long it is for how thick)
@@ -975,18 +976,18 @@ export function statLine(R) {
   if (R.cat === 'vehicle') {
     const s = R.spec.stats;
     const star = (v) => '★'.repeat(clamp(Math.round(v * 4), 1, 4)) + '☆'.repeat(4 - clamp(Math.round(v * 4), 1, 4));
-    if (R.spec.base === 'car') return `מהירות ${star(s.speed)} · אחיזה ${star(s.grip)}${s.air ? ' · גולש' : ''}${R.spec.cannon ? ' · תותח' : ''}${R.spec.jets.length ? ' · טורבו' : ''}`;
-    return `מהירות ${star(s.speed)} · יציבות ${star(s.steady)}`;
+    if (R.spec.base === 'car') return tr(`מהירות ${star(s.speed)} · אחיזה ${star(s.grip)}${s.air ? ' · גולש' : ''}${R.spec.cannon ? ' · תותח' : ''}${R.spec.jets.length ? ' · טורבו' : ''}`, `Speed ${star(s.speed)} · grip ${star(s.grip)}${s.air ? tr(' · גולש', ' · glider') : ''}${R.spec.cannon ? tr(' · תותח', ' · cannon') : ''}${R.spec.jets.length ? tr(' · טורבו', ' · turbo') : ''}`);
+    return tr(`מהירות ${star(s.speed)} · יציבות ${star(s.steady)}`, `Speed ${star(s.speed)} · stability ${star(s.steady)}`);
   }
   if (R.cat === 'gear') return R.line || '';
   const d = R.def;
   const plus = R.extra ? ` · ${R.extra.name}` : '';
-  if (d.block && d.free === 'shield') return `חוסם ${Math.round(d.block * 100)}% מפגיעה מלפנים · ${d.uses} מכות`;
-  if (d.kind === 'melee') return `נזק ${d.damage} · טווח ${d.range.toFixed(1)} מ׳${d.knock ? ' · הודף' : ''}${d.block ? ' · חוסם' : ''}${plus}`;
-  if (d.kind === 'beam') return `קרן · נזק ${d.damage} · ${d.ammo} שניות${plus}`;
-  if (d.kind === 'throw') return (d.projectile === 'inkbomb' ? `פיצוץ ${d.radius} מ׳ · ${d.ammo} פצצות` : `נזק ${d.damage} · חוזר ליד`) + plus;
+  if (d.block && d.free === 'shield') return tr(`חוסם ${Math.round(d.block * 100)}% מפגיעה מלפנים · ${d.uses} מכות`, `Blocks ${Math.round(d.block * 100)}% of hits from the front · ${d.uses} hits`);
+  if (d.kind === 'melee') return tr(`נזק ${d.damage} · טווח ${d.range.toFixed(1)} מ׳${d.knock ? ' · הודף' : ''}${d.block ? ' · חוסם' : ''}${plus}`, `Damage ${d.damage} · range ${d.range.toFixed(1)} m${d.knock ? tr(' · הודף', ' · knocks back') : ''}${d.block ? tr(' · חוסם', ' · blocks') : ''}${plus}`);
+  if (d.kind === 'beam') return tr(`קרן · נזק ${d.damage} · ${d.ammo} שניות${plus}`, `Beam · damage ${d.damage} · ${d.ammo} seconds${plus}`);
+  if (d.kind === 'throw') return (d.projectile === 'inkbomb' ? tr(`פיצוץ ${d.radius} מ׳ · ${d.ammo} פצצות`, `Blast ${d.radius} m · ${d.ammo} bombs`) : tr(`נזק ${d.damage} · חוזר ליד`, `Damage ${d.damage} · comes back to your hand`)) + plus;
   const rate = d.rate >= 10 ? Math.round(d.rate) : d.rate.toFixed(1).replace(/\.0$/, '');
-  return `נזק ${d.damage}${d.pellets ? `×${d.pellets}` : ''} · ${rate} בשנייה · מחסנית ${d.mag}${d.radius ? ` · פיצוץ ${d.radius.toFixed(1)} מ׳` : ''}${d.block ? ' · חוסם' : ''}${d.bounce ? ' · קליעים קופצים' : ''}${plus}`;
+  return tr(`נזק ${d.damage}${d.pellets ? `×${d.pellets}` : ''} · ${rate} בשנייה · מחסנית ${d.mag}${d.radius ? ` · פיצוץ ${d.radius.toFixed(1)} מ׳` : ''}${d.block ? ' · חוסם' : ''}${d.bounce ? ' · קליעים קופצים' : ''}${plus}`, `Damage ${d.damage}${d.pellets ? `×${d.pellets}` : ''} · ${rate} a second · magazine ${d.mag}${d.radius ? tr(` · פיצוץ ${d.radius.toFixed(1)} מ׳`, ` · blast ${d.radius.toFixed(1)} m`) : ''}${d.block ? tr(' · חוסם', ' · blocks') : ''}${d.bounce ? tr(' · קליעים קופצים', ' · bouncing bullets') : ''}${plus}`);
 }
 
 // ------------------------------------------------------------------ the model in the hand
@@ -1995,7 +1996,7 @@ const BACK_BLADE = 0.5;
 const family = (g) => (CAR_FAMILY.has(g) ? 'car' : g);
 const vehicleFamily = (v) => (v.spec.base === 'copter' ? 'copter' : v.spec.base === 'plane' ? 'plane' : v.spec.cannon ? 'tank' : 'car');
 // what it looks like to the network, when it is nothing for the game (a sad word for each)
-const OTHER_NAME = { house: 'בית', tree: 'עץ', face: 'פרצוף', flower: 'פרח', cat: 'חתול', star: 'כוכב', cloud: 'ענן', fish: 'דג' };
+const OTHER_NAME = { house: tr('בית', 'House'), tree: tr('עץ', 'Tree'), face: tr('פרצוף', 'Face'), flower: tr('פרח', 'Flower'), cat: tr('חתול', 'Cat'), star: tr('כוכב', 'Star'), cloud: tr('ענן', 'Cloud'), fish: tr('דג', 'Fish') };
 // (ROADMAP 11.8) the network's groups by what they are for the player
 const WEAPON_SET = new Set(CATEGORIES.weapon);
 const VEHICLE_CATS = ['car', 'air', 'sea'];
@@ -2128,7 +2129,7 @@ function readOne(S, pk, allowed = null) {
     if (a) named = a.cls;
   }
   // (sure it is something else altogether - a house, a cat: said so; the list still offers all)
-  if (!want && !R && f0 === 'other' && q0 >= 0.6 && OTHER_NAME[c0]) return { cat: null, why: `נראה כמו ${OTHER_NAME[c0]} — ציירו נשק, רכב או ציוד`, alts };
+  if (!want && !R && f0 === 'other' && q0 >= 0.6 && OTHER_NAME[c0]) return { cat: null, why: tr(`נראה כמו ${OTHER_NAME[c0]} — ציירו נשק, רכב או ציוד`, `Looks like ${OTHER_NAME[c0]} — draw a weapon, a ride or gear`), alts };
   const kind = keyKind(want);
   if (kind === 'vehicle') {
     const pv = picks(want).vehicle;
@@ -2136,10 +2137,10 @@ function readOne(S, pk, allowed = null) {
     const cls = pv.cls || (named && GROUP_OF(named) === grp ? named : null);
     const v = readVehicle(S, grp, grp ? (cls && NAME_OF(cls)) || GROUP_NAME[grp] : null, null, cls);
     if (v && v.cat === 'vehicle') R = v;
-    else if (force) return { cat: null, why: v && v.why && v.why !== 'not' ? v.why : 'רכב צריך גוף, ומתחתיו גלגלים, רוטור מעליו, או כנפיים', alts };
+    else if (force) return { cat: null, why: v && v.why && v.why !== 'not' ? v.why : tr('רכב צריך גוף, ומתחתיו גלגלים, רוטור מעליו, או כנפיים', 'A ride needs a body, and wheels under it, a rotor on top, or wings'), alts };
   } else if (kind === 'gear') {
     R = gearOf(S, want.slice(2), named);
-    if (!R || !R.cat) return { cat: null, why: (R && R.why) || 'זה עוד לא נראה כמו כלום — עוד כמה קווים', alts };
+    if (!R || !R.cat) return { cat: null, why: (R && R.why) || tr('זה עוד לא נראה כמו כלום — עוד כמה קווים', 'That doesn\'t look like anything yet — a few more lines'), alts };
   }
   if (!R) {
     const wk = kind === 'weapon' ? want : null;
@@ -2160,7 +2161,7 @@ function readOne(S, pk, allowed = null) {
       if (g) R = gearOf(S, g[0], g[2]);
     }
   }
-  if (!R || !R.cat) return { cat: null, why: f0 === 'other' && OTHER_NAME[c0] ? `נראה כמו ${OTHER_NAME[c0]} — ציירו נשק, רכב או ציוד` : 'זה עוד לא נראה כמו כלום — עוד כמה קווים', alts };
+  if (!R || !R.cat) return { cat: null, why: f0 === 'other' && OTHER_NAME[c0] ? tr(`נראה כמו ${OTHER_NAME[c0]} — ציירו נשק, רכב או ציוד`, `Looks like ${OTHER_NAME[c0]} — draw a weapon, a ride or gear`) : tr('זה עוד לא נראה כמו כלום — עוד כמה קווים', 'That doesn\'t look like anything yet — a few more lines'), alts };
   if (R.cat === 'weapon') {
     R.name = R.def.name;
     R.cost = R.def.cost;
@@ -2183,12 +2184,12 @@ function readOne(S, pk, allowed = null) {
 // (ROADMAP 11.8) how it is called: what it is, and what else it does - by its name's gender
 // (a car: מכונית, she; a plane: מטוס, he; a bicycle: אופניים, they)
 const ADJ = {
-  fly: ['מעופף', 'מעופפת', 'מעופפים'],
-  amphi: ['אמפיבי', 'אמפיבית', 'אמפיביים'],
-  sea: ['ימי', 'ימית', 'ימיים'],
-  armed: ['חמוש', 'חמושה', 'חמושים'],
-  armor: ['משוריין', 'משוריינת', 'משוריינים'],
-  spring: ['קופץ', 'קופצת', 'קופצים'],
+  fly: [tr('מעופף', 'flying'), tr('מעופפת', 'flying'), tr('מעופפים', 'flying')],
+  amphi: [tr('אמפיבי', 'amphibious'), tr('אמפיבית', 'amphibious'), tr('אמפיביים', 'amphibious')],
+  sea: [tr('ימי', 'sea'), tr('ימית', 'sea'), tr('ימיים', 'sea')],
+  armed: [tr('חמוש', 'armed'), tr('חמושה', 'armed'), tr('חמושים', 'armed')],
+  armor: [tr('משוריין', 'armored'), tr('משוריינת', 'armored'), tr('משוריינים', 'armored')],
+  spring: [tr('קופץ', 'jumping'), tr('קופצת', 'jumping'), tr('קופצים', 'jumping')],
 };
 function rideName(baseName, grp, A) {
   const first = baseName.split(' ')[0];
@@ -2200,11 +2201,11 @@ function rideName(baseName, grp, A) {
   if (A.fly && !isAir) words.push(ADJ.fly[gi]);
   if (A.float && !isSea) words.push(A.drive ? ADJ.amphi[gi] : ADJ.sea[gi]);
   else if (A.drive && isSea) words.push(ADJ.amphi[gi]);
-  else if (A.drive && !isCar) words.push('על גלגלים');
+  else if (A.drive && !isCar) words.push(tr('על גלגלים', 'on wheels'));
   if (A.gun && grp !== 'tank') words.push(ADJ.armed[gi]);
   if (A.gear === 'shield') words.push(ADJ.armor[gi]);
   else if (A.gear === 'spring') words.push(ADJ.spring[gi]);
-  else if (A.gear === 'parachute') words.push('עם מצנח');
+  else if (A.gear === 'parachute') words.push(tr('עם מצנח', 'with a parachute'));
   return words.join(' ');
 }
 
@@ -2235,7 +2236,7 @@ function readRide(S, pk, C) {
   }
   const baseName = (cls && NAME_OF(cls)) || GROUP_NAME[grp];
   const v = readVehicle(S, grp, baseName, abil, cls);
-  if (!v || v.cat !== 'vehicle') return { cat: null, why: v && v.why && v.why !== 'not' ? v.why : 'ציירו אותו מהצד, עם גוף: צורה סגורה גדולה', alts };
+  if (!v || v.cat !== 'vehicle') return { cat: null, why: v && v.why && v.why !== 'not' ? v.why : tr('ציירו אותו מהצד, עם גוף: צורה סגורה גדולה', 'Draw it from the side, with a body: a big closed shape'), alts };
   if (abil && v.design.abil) {
     const name = rideName(baseName, grp, v.design.abil);
     v.name = name;
@@ -2388,12 +2389,12 @@ function withKnack(w, grp, gS) {
   w.knack = d.knack = grp;
   if (grp === 'shield') {
     d.block = 0.55;
-    w.name = `${d.name} עם מגן`;
+    w.name = tr(`${d.name} עם מגן`, `${d.name} with a shield`);
   } else if (grp === 'spring') {
     if (d.kind === 'melee') d.knock = (d.knock || 4) * 2;
     else if (d.kind === 'gun') d.bounce = 2;
     else d.speed = (d.speed || 20) * 1.35;
-    w.name = `${d.name} עם קפיץ`;
+    w.name = tr(`${d.name} עם קפיץ`, `${d.name} with a spring`);
   } else {
     w.extra = readGear(gS, grp, null, true);
     w.name = `${d.name} + ${GEAR[grp].name}`;
@@ -2435,7 +2436,7 @@ function readArmed(S, pk) {
   if (!w || w.cat !== 'weapon') return w;
   if (pk.gear && HAND_GEAR.has(pk.gear.grp)) return withKnack(w, pk.gear.grp, S);
   // (said on its tag: what was chosen and is not there yet)
-  w.note = pk.gear && GEAR[pk.gear.grp] ? `עוד אין כאן ${GEAR[pk.gear.grp].name} — מציירים ליד הנשק` : 'עוד אין כאן ציוד — מציירים ליד הנשק או עליו';
+  w.note = pk.gear && GEAR[pk.gear.grp] ? tr(`עוד אין כאן ${GEAR[pk.gear.grp].name} — מציירים ליד הנשק`, `There's no ${GEAR[pk.gear.grp].name} here yet — draw it next to the weapon`) : tr('עוד אין כאן ציוד — מציירים ליד הנשק או עליו', 'There\'s no gear here yet — draw it next to the weapon or on it');
   return w;
 }
 

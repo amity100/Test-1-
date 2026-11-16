@@ -7,6 +7,7 @@ import { groundHeight } from '../world/layout.js';
 import { clamp, damp, dampAngle, angleDiff, RNG } from '../core/util.js';
 import { CoverMap, PathFinder, PERSONAS, LINES, pick, pickPersona } from './tactics.js';
 import { downStep, drawStars, KO_T } from './fists.js';
+import { tr } from '../core/lang.js';
 // (ROADMAP 5.5) thrown and fallen: how long the living lie before getting up, and the getting up
 const LIE = 0.6;
 const RISE = 0.8;
@@ -2283,7 +2284,7 @@ export class Enemies {
       fx.smoke(c.x, c.y, c.z, 0.7);
       game.audio.play('erase', 1);
       if (part === 'head') {
-        if (!this.headlessShown) game.hud.toast('נמחק לו הראש! עכשיו הוא לא רואה כלום', 'good', 1.6);
+        if (!this.headlessShown) game.hud.toast(tr('נמחק לו הראש! עכשיו הוא לא רואה כלום', 'His head was erased! Now he can\'t see a thing'), 'good', 1.6);
         this.headlessShown = true;
         e.leaveCover();
         e.tactic = '';

@@ -1,5 +1,6 @@
 import { clamp } from '../core/util.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.15) Parts that work together: more than each of them alone. A ride (game/partsum.js
 // rideSpec) or a weapon (game/handparts.js handSpec) made of parts gets, besides what each part
 // does, what some of them do together - a flying fortress (it flies, it is armoured, it fires: much
@@ -62,36 +63,36 @@ export function rideFeatures(spec) {
 
 // what each needs, as the card says it is missing
 const RIDE_NEED = {
-  fly: ['רוטור, או כנפיים ומנוע', (F) => F.fly],
-  drive: ['גלגלים', (F) => F.drive],
-  float: ['גוף של סירה', (F) => F.float],
-  dive: ['צלילה (צוללת)', (F) => F.dive],
-  armor: ['שריון', (F) => F.armor],
-  gun: ['קנה', (F) => F.guns >= 1],
-  guns2: ['עוד קנה', (F) => F.guns >= 2, (F) => 2 - F.guns],
-  guns3: ['עוד קנה', (F) => F.guns >= 3, (F) => 3 - F.guns],
-  ram: ['איל מקדימה (להב או ראש פטיש)', (F) => F.ram],
-  quiet: ['משתיק', (F) => F.quiet],
-  hide: ['קנה שיורה ענן דיו, או צלילה', (F) => F.els.has('ink') || F.dive],
-  jump: ['קפיץ מתחת', (F) => F.jump],
-  wings: ['כנפיים', (F) => F.wings],
-  jet: ['סילון מאחור', (F) => F.jets > 0],
-  wheels: ['גלגלים', (F) => F.drive && !F.hover],
-  crush: ['זחלים או גלגלי ענק', (F) => F.crush],
-  chute: ['מצנח', (F) => F.chute],
-  heavy: ['שריון או זחלים', (F) => F.armor || F.heavy],
-  side: ['להבים בצדדים', (F) => F.side],
-  front: ['איל או פגוש קפיץ מקדימה', (F) => F.ram || F.bumper],
-  six: ['עוד יתרונות (שישה לפחות)', (F) => F.adv.length >= 6],
+  fly: [tr('רוטור, או כנפיים ומנוע', 'A rotor, or wings and an engine'), (F) => F.fly],
+  drive: [tr('גלגלים', 'Wheels'), (F) => F.drive],
+  float: [tr('גוף של סירה', 'A boat\'s hull'), (F) => F.float],
+  dive: [tr('צלילה (צוללת)', 'Diving (a submarine)'), (F) => F.dive],
+  armor: [tr('שריון', 'Armor'), (F) => F.armor],
+  gun: [tr('קנה', 'Barrel'), (F) => F.guns >= 1],
+  guns2: [tr('עוד קנה', 'Another barrel'), (F) => F.guns >= 2, (F) => 2 - F.guns],
+  guns3: [tr('עוד קנה', 'Another barrel'), (F) => F.guns >= 3, (F) => 3 - F.guns],
+  ram: [tr('איל מקדימה (להב או ראש פטיש)', 'A ram in front (a blade or a hammer head)'), (F) => F.ram],
+  quiet: [tr('משתיק', 'Silencer'), (F) => F.quiet],
+  hide: [tr('קנה שיורה ענן דיו, או צלילה', 'A barrel that fires an ink cloud, or diving'), (F) => F.els.has('ink') || F.dive],
+  jump: [tr('קפיץ מתחת', 'A spring underneath'), (F) => F.jump],
+  wings: [tr('כנפיים', 'Wings'), (F) => F.wings],
+  jet: [tr('סילון מאחור', 'A jet at the back'), (F) => F.jets > 0],
+  wheels: [tr('גלגלים', 'Wheels'), (F) => F.drive && !F.hover],
+  crush: [tr('זחלים או גלגלי ענק', 'Tracks or monster wheels'), (F) => F.crush],
+  chute: [tr('מצנח', 'Parachute'), (F) => F.chute],
+  heavy: [tr('שריון או זחלים', 'Armor or tracks'), (F) => F.armor || F.heavy],
+  side: [tr('להבים בצדדים', 'Blades on the sides'), (F) => F.side],
+  front: [tr('איל או פגוש קפיץ מקדימה', 'A ram or a spring bumper in front'), (F) => F.ram || F.bumper],
+  six: [tr('עוד יתרונות (שישה לפחות)', 'More advantages (at least six)'), (F) => F.adv.length >= 6],
 };
 
 // (each: what it is called, what makes it, what it gives - and what it does to the ride's numbers)
 export const RIDE_COMBOS = [
   {
     k: 'fortress',
-    name: 'מבצר מעופף',
+    name: tr('מבצר מעופף', 'Flying fortress'),
     need: ['fly', 'armor', 'gun'],
-    say: 'שריון +12%, עמידות ×1.25',
+    say: tr('שריון +12%, עמידות ×1.25', 'Armor +12%, toughness ×1.25'),
     fx(s) {
       s.armor = Math.min(0.65, s.armor + 0.12);
       s.hp *= 1.25;
@@ -99,9 +100,9 @@ export const RIDE_COMBOS = [
   },
   {
     k: 'raptor',
-    name: 'ציפור טרף',
+    name: tr('ציפור טרף', 'Bird of prey'),
     need: ['fly', 'guns2'],
-    say: 'הקנים טוענים מהר פי 1.25 ומדויקים יותר',
+    say: tr('הקנים טוענים מהר פי 1.25 ומדויקים יותר', 'The barrels reload 1.25 times faster and are more accurate'),
     fx(s) {
       for (const g of s.guns) {
         g.reload *= 0.8;
@@ -111,9 +112,9 @@ export const RIDE_COMBOS = [
   },
   {
     k: 'ironRam',
-    name: 'איל משוריין',
+    name: tr('איל משוריין', 'Armored ram'),
     need: ['ram', 'armor'],
-    say: 'ניגוח חזק פי 1.4, והוא כמעט לא נפגע ממנו',
+    say: tr('ניגוח חזק פי 1.4, והוא כמעט לא נפגע ממנו', 'A ram 1.4 times stronger, and it hardly gets hurt by it'),
     fx(s) {
       s.ram.k *= 1.4;
       s.ram.shield = true;
@@ -121,36 +122,36 @@ export const RIDE_COMBOS = [
   },
   {
     k: 'anywhere',
-    name: 'לכל מקום',
+    name: tr('לכל מקום', 'Go anywhere'),
     need: ['drive', 'float', 'fly'],
-    say: 'במים ובאוויר המשטרה מאבדת את העקבות מהר פי 1.8',
+    say: tr('במים ובאוויר המשטרה מאבדת את העקבות מהר פי 1.8', 'On water and in the air the police lose your trail 1.8 times faster'),
     fx(s) {
       s.escape = Math.max(s.escape || 1, 1.8);
     },
   },
   {
     k: 'subFly',
-    name: 'צוללת מעופפת',
+    name: tr('צוללת מעופפת', 'Flying submarine'),
     need: ['dive', 'fly'],
-    say: 'מתחת למים ובאוויר המשטרה מאבדת את העקבות מהר פי 2.5',
+    say: tr('מתחת למים ובאוויר המשטרה מאבדת את העקבות מהר פי 2.5', 'Underwater and in the air the police lose your trail 2.5 times faster'),
     fx(s) {
       s.escape = Math.max(s.escape || 1, 2.5);
     },
   },
   {
     k: 'ghost',
-    name: 'רוח רפאים',
+    name: tr('רוח רפאים', 'Ghost'),
     need: ['quiet', 'hide'],
-    say: 'שוטרים וכנופיות רואים אותו רק מחצי המרחק',
+    say: tr('שוטרים וכנופיות רואים אותו רק מחצי המרחק', 'Cops and gangs only see it from half the distance'),
     fx(s) {
       s.stealth = Math.min(s.stealth || 1, 0.5);
     },
   },
   {
     k: 'eagle',
-    name: 'קפיצת נשר',
+    name: tr('קפיצת נשר', 'Eagle leap'),
     need: ['jump', 'wings'],
-    say: 'קופץ גבוה פי 1.25 וגולש רחוק',
+    say: tr('קופץ גבוה פי 1.25 וגולש רחוק', 'Jumps 1.25 times higher and glides far'),
     fx(s) {
       s.spring.jump = Math.min(17, s.spring.jump * 1.25);
       if (s.handling) s.glide = Math.max(s.glide || 0, 0.6);
@@ -158,9 +159,9 @@ export const RIDE_COMBOS = [
   },
   {
     k: 'jetTurbo',
-    name: 'טורבו סילון',
+    name: tr('טורבו סילון', 'Jet turbo'),
     need: ['wheels', 'jet'],
-    say: 'מהירות מרבית +20%, תאוצה +15%',
+    say: tr('מהירות מרבית +20%, תאוצה +15%', 'Top speed +20%, acceleration +15%'),
     ok: (s) => !!s.handling,
     fx(s) {
       s.handling.top = Math.min(62, s.handling.top * 1.2);
@@ -169,18 +170,18 @@ export const RIDE_COMBOS = [
   },
   {
     k: 'firestorm',
-    name: 'סופת אש',
+    name: tr('סופת אש', 'Firestorm'),
     need: ['guns3'],
-    say: 'כל קנה פוגע חזק ב־20%',
+    say: tr('כל קנה פוגע חזק ב־20%', 'Every barrel hits 20% harder'),
     fx(s) {
       for (const g of s.guns) g.dmg = Math.round(g.dmg * 1.2);
     },
   },
   {
     k: 'warship',
-    name: 'ספינת קרב',
+    name: tr('ספינת קרב', 'Battleship'),
     need: ['float', 'guns2'],
-    say: 'טווח הקנים +20%, עמידות ×1.2',
+    say: tr('טווח הקנים +20%, עמידות ×1.2', 'Barrel range +20%, toughness ×1.2'),
     fx(s) {
       for (const g of s.guns) {
         g.speed *= 1.2;
@@ -191,18 +192,18 @@ export const RIDE_COMBOS = [
   },
   {
     k: 'juggernaut',
-    name: 'כוח עליון',
+    name: tr('כוח עליון', 'Superpower'),
     need: ['crush', 'armor', 'gun'],
-    say: 'עמידות ×1.4',
+    say: tr('עמידות ×1.4', 'Toughness ×1.4'),
     fx(s) {
       s.hp *= 1.4;
     },
   },
   {
     k: 'stomp',
-    name: 'נחיתה מועכת',
+    name: tr('נחיתה מועכת', 'Crushing landing'),
     need: ['jump', 'heavy'],
-    say: 'כשהוא נוחת מקפיצה — הודף ומועך את מה שסביבו',
+    say: tr('כשהוא נוחת מקפיצה — הודף ומועך את מה שסביבו', 'When it lands from a jump — it knocks back and crushes what\'s around it'),
     ok: (s) => !!s.handling,
     fx(s) {
       s.stomp = { r: 9, dmg: 70 };
@@ -210,9 +211,9 @@ export const RIDE_COMBOS = [
   },
   {
     k: 'softLand',
-    name: 'נוחת בכל מקום',
+    name: tr('נוחת בכל מקום', 'Lands anywhere'),
     need: ['fly', 'chute'],
-    say: 'נוחת רך מכל גובה, בלי שום נזק',
+    say: tr('נוחת רך מכל גובה, בלי שום נזק', 'Lands softly from any height, without any damage'),
     fx(s) {
       s.safeFall = true;
       if (s.chute) s.chute.sink = Math.max(1.8, s.chute.sink * 0.7);
@@ -220,18 +221,18 @@ export const RIDE_COMBOS = [
   },
   {
     k: 'hedgehog',
-    name: 'קיפוד',
+    name: tr('קיפוד', 'Hedgehog'),
     need: ['side', 'front'],
-    say: 'להבי הצד חותכים חזק פי 1.5',
+    say: tr('להבי הצד חותכים חזק פי 1.5', 'The side blades cut 1.5 times harder'),
     fx(s) {
       s.blades.side = Math.round(s.blades.side * 1.5);
     },
   },
   {
     k: 'allInOne',
-    name: 'המצאת־על',
+    name: tr('המצאת־על', 'Super invention'),
     need: ['six'],
-    say: 'שישה יתרונות ומעלה: עמידות ×1.15, ודיו זול ב־20%',
+    say: tr('שישה יתרונות ומעלה: עמידות ×1.15, ודיו זול ב־20%', 'Six advantages or more: toughness ×1.15, and ink 20% cheaper'),
     fx(s) {
       s.hp *= 1.15;
       s.cost = Math.round(s.cost * 0.8);
@@ -272,35 +273,35 @@ const WAYS = new Set(['fly', 'drive', 'float', 'wheels']);
 // F (game/handparts.js handSpec): what is on it - { gun, scope, long, stock, wing, jet, spin,
 // multi, mag, bayonet, bounce, quiet, prop, chute, guard, edge, saw, head, els (Set) }
 const HAND_NEED = {
-  scope: ['כוונת', (F) => F.scope],
-  long: ['קנה ארוך', (F) => F.long],
-  stock: ['קת', (F) => F.stock],
-  wing: ['כנפיים', (F) => F.wing],
-  jet: ['סילון', (F) => F.jet],
-  spin: ['שלושה קנים לפחות', (F) => F.spin],
-  mag: ['מחסנית', (F) => F.mag],
-  bayonet: ['כידון (להב בקצה)', (F) => F.bayonet],
-  multi: ['עוד קנה', (F) => F.multi],
-  bounce: ['קפיץ (או דיו קופצני)', (F) => F.bounce],
-  blast: ['דיו נפץ', (F) => F.els.has('blast')],
-  quiet: ['משתיק', (F) => F.quiet],
-  prop: ['מדחף', (F) => F.prop],
-  els3: ['עוד צבעי דיו (שלושה לפחות)', (F) => F.els.size >= 3],
-  guard: ['מגן יד או שריון', (F) => F.guard],
-  edge: ['להב', (F) => F.edge],
-  saw: ['להב משונן', (F) => F.saw],
-  fire: ['דיו אש (אדום)', (F) => F.els.has('fire')],
-  head: ['ראש כבד', (F) => F.head],
-  shock: ['דיו חשמל', (F) => F.els.has('shock')],
-  chute: ['מצנח', (F) => F.chute],
+  scope: [tr('כוונת', 'Sight'), (F) => F.scope],
+  long: [tr('קנה ארוך', 'A long barrel'), (F) => F.long],
+  stock: [tr('קת', 'Stock'), (F) => F.stock],
+  wing: [tr('כנפיים', 'Wings'), (F) => F.wing],
+  jet: [tr('סילון', 'Jet'), (F) => F.jet],
+  spin: [tr('שלושה קנים לפחות', 'At least three barrels'), (F) => F.spin],
+  mag: [tr('מחסנית', 'Magazine'), (F) => F.mag],
+  bayonet: [tr('כידון (להב בקצה)', 'A bayonet (a blade on the end)'), (F) => F.bayonet],
+  multi: [tr('עוד קנה', 'Another barrel'), (F) => F.multi],
+  bounce: [tr('קפיץ (או דיו קופצני)', 'A spring (or bouncy ink)'), (F) => F.bounce],
+  blast: [tr('דיו נפץ', 'Explosive ink'), (F) => F.els.has('blast')],
+  quiet: [tr('משתיק', 'Silencer'), (F) => F.quiet],
+  prop: [tr('מדחף', 'Propeller'), (F) => F.prop],
+  els3: [tr('עוד צבעי דיו (שלושה לפחות)', 'More ink colors (at least three)'), (F) => F.els.size >= 3],
+  guard: [tr('מגן יד או שריון', 'A hand guard or armor'), (F) => F.guard],
+  edge: [tr('להב', 'Blade'), (F) => F.edge],
+  saw: [tr('להב משונן', 'A serrated blade'), (F) => F.saw],
+  fire: [tr('דיו אש (אדום)', 'Fire ink (red)'), (F) => F.els.has('fire')],
+  head: [tr('ראש כבד', 'A heavy head'), (F) => F.head],
+  shock: [tr('דיו חשמל', 'Electric ink'), (F) => F.els.has('shock')],
+  chute: [tr('מצנח', 'Parachute'), (F) => F.chute],
 };
 
 export const HAND_COMBOS = [
   {
     k: 'sniper',
-    name: 'צלף',
+    name: tr('צלף', 'Sniper'),
     need: ['scope', 'long', 'stock'],
-    say: 'נזק ×1.3, ודיוק מרבי',
+    say: tr('נזק ×1.3, ודיוק מרבי', 'Damage ×1.3, and top accuracy'),
     fx(d) {
       d.damage = Math.round(d.damage * 1.3);
       d.spread *= 0.6;
@@ -308,9 +309,9 @@ export const HAND_COMBOS = [
   },
   {
     k: 'guided',
-    name: 'טיל מונחה',
+    name: tr('טיל מונחה', 'Guided rocket'),
     need: ['wing', 'jet'],
-    say: 'רודף אחרי המטרה חזק פי 1.6, ונזק ×1.25',
+    say: tr('רודף אחרי המטרה חזק פי 1.6, ונזק ×1.25', 'Homes in on the target 1.6 times harder, and damage ×1.25'),
     fx(d) {
       d.homing = (d.homing || 2.4) * 1.6;
       d.damage = Math.round(d.damage * 1.25);
@@ -318,9 +319,9 @@ export const HAND_COMBOS = [
   },
   {
     k: 'shredder',
-    name: 'מטחנה',
+    name: tr('מטחנה', 'Grinder'),
     need: ['spin', 'mag'],
-    say: 'קצב ×1.2, מחסנית ×1.5',
+    say: tr('קצב ×1.2, מחסנית ×1.5', 'Rate ×1.2, magazine ×1.5'),
     fx(d) {
       d.rate *= 1.2;
       if (d.mag) {
@@ -331,18 +332,18 @@ export const HAND_COMBOS = [
   },
   {
     k: 'charger',
-    name: 'מסתער',
+    name: tr('מסתער', 'Charger'),
     need: ['bayonet', 'multi'],
-    say: 'הכידון דוקר חזק פי 1.5',
+    say: tr('הכידון דוקר חזק פי 1.5', 'The bayonet stabs 1.5 times harder'),
     fx(d) {
       d.bayonet.damage = Math.round(d.bayonet.damage * 1.5);
     },
   },
   {
     k: 'pinball',
-    name: 'פינבול נפיץ',
+    name: tr('פינבול נפיץ', 'Explosive pinball'),
     need: ['bounce', 'blast'],
-    say: 'עוד שתי קפיצות, ונזק ×1.2',
+    say: tr('עוד שתי קפיצות, ונזק ×1.2', 'Two more bounces, and damage ×1.2'),
     fx(d) {
       d.bounce = (d.bounce || 0) + 2;
       d.damage = Math.round(d.damage * 1.2);
@@ -350,36 +351,36 @@ export const HAND_COMBOS = [
   },
   {
     k: 'silent',
-    name: 'צלף שקט',
+    name: tr('צלף שקט', 'Silent sniper'),
     need: ['quiet', 'scope'],
-    say: 'נזק ×1.25, ואף אחד לא שומע',
+    say: tr('נזק ×1.25, ואף אחד לא שומע', 'Damage ×1.25, and nobody hears it'),
     fx(d) {
       d.damage = Math.round(d.damage * 1.25);
     },
   },
   {
     k: 'storm',
-    name: 'סערה',
+    name: tr('סערה', 'Storm'),
     need: ['prop', 'wing'],
-    say: 'משב הרוח חזק פי 1.6',
+    say: tr('משב הרוח חזק פי 1.6', 'The gust of wind is 1.6 times stronger'),
     fx(d) {
       d.wind = clamp((d.wind || 8) * 1.6, 8, 26);
     },
   },
   {
     k: 'rainbow',
-    name: 'קשת יסודות',
+    name: tr('קשת יסודות', 'Elemental bow'),
     need: ['els3'],
-    say: 'שלושה סוגי תחמושת ומעלה: קצב ×1.15',
+    say: tr('שלושה סוגי תחמושת ומעלה: קצב ×1.15', 'Three kinds of ammo or more: rate ×1.15'),
     fx(d) {
       d.rate *= 1.15;
     },
   },
   {
     k: 'spiky',
-    name: 'מגן קוצני',
+    name: tr('מגן קוצני', 'Spiked shield'),
     need: ['guard', 'edge'],
-    say: 'חוסם 45% ממכה מלפנים, ונזק ×1.1',
+    say: tr('חוסם 45% ממכה מלפנים, ונזק ×1.1', 'Blocks 45% of a hit from the front, and damage ×1.1'),
     fx(d) {
       d.parry = Math.max(d.parry || 0, 0.45);
       d.damage = Math.round(d.damage * 1.1);
@@ -387,27 +388,27 @@ export const HAND_COMBOS = [
   },
   {
     k: 'hotSaw',
-    name: 'מסור לוהט',
+    name: tr('מסור לוהט', 'Blazing saw'),
     need: ['saw', 'fire'],
-    say: 'נזק ×1.25',
+    say: tr('נזק ×1.25', 'Damage ×1.25'),
     fx(d) {
       d.damage = Math.round(d.damage * 1.25);
     },
   },
   {
     k: 'thunder',
-    name: 'פטיש רעם',
+    name: tr('פטיש רעם', 'Thunder hammer'),
     need: ['head', 'shock'],
-    say: 'הודף חזק פי 1.5',
+    say: tr('הודף חזק פי 1.5', 'Knocks back 1.5 times harder'),
     fx(d) {
       d.knock = (d.knock || 5) * 1.5;
     },
   },
   {
     k: 'glider',
-    name: 'רחפן',
+    name: tr('רחפן', 'Drone'),
     need: ['chute', 'wing'],
-    say: 'כשמחזיקים אותו נופלים לאט כמעט פי שניים — וגולשים מגג לגג',
+    say: tr('כשמחזיקים אותו נופלים לאט כמעט פי שניים — וגולשים מגג לגג', 'While you hold it you fall almost twice as slowly — and glide from roof to roof'),
     fx(d) {
       d.glider = true;
     },

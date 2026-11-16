@@ -3,6 +3,7 @@ import { clamp, damp } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
 import { parGone } from './drawlock.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 15.3) Parts you choose and then draw onto your car - and the drawing decides what they are.
 //
 // The part is said first (wings, a turbo, a rotor, a propeller, off-road wheels, armour), so nothing
@@ -16,40 +17,40 @@ import { parGone } from './drawlock.js';
 export const PAR_ORDER = ['wing', 'jet', 'rotor', 'prop', 'wheel', 'armor'];
 export const PAR = {
   wing: {
-    name: 'כנפיים',
-    how: 'קו מצד המכונית החוצה: האורך שלו — גודל הכנף, המקום לאורך המכונית — איפה היא',
+    name: tr('כנפיים', 'Wings'),
+    how: tr('קו מצד המכונית החוצה: האורך שלו — גודל הכנף, המקום לאורך המכונית — איפה היא', 'A line from the side of the car outward: its length — the size of the wing, its place along the car — where it goes'),
     icon: '<path d="M2 15 L10 11 L14 11 L22 15 L14 13 L10 13 Z"/>',
   },
   jet: {
-    name: 'טורבו',
-    how: 'קו מהמכונית לאן שהלהבה יוצאת: אחורה — מהירות, למטה — קפיצה וריחוף, הצידה — החלקה, קדימה — בלם',
+    name: tr('טורבו', 'Turbo'),
+    how: tr('קו מהמכונית לאן שהלהבה יוצאת: אחורה — מהירות, למטה — קפיצה וריחוף, הצידה — החלקה, קדימה — בלם', 'A line from the car to where the flame comes out: back — speed, down — a jump and a hover, to the side — a slide, forward — a brake'),
     icon: '<path d="M4 12 h9 l5 -3 v6 l-5 -3"/><path d="M18 12 h4"/>',
   },
   rotor: {
-    name: 'רוטור',
-    how: 'קו מעל הגג: ככל שהוא ארוך יותר — מרים יותר. מעל החרטום — נוטה ומושך קדימה',
+    name: tr('רוטור', 'Rotor'),
+    how: tr('קו מעל הגג: ככל שהוא ארוך יותר — מרים יותר. מעל החרטום — נוטה ומושך קדימה', 'A line over the roof: the longer it is — the more it lifts. Over the nose — it tilts and pulls forward'),
     icon: '<path d="M3 7 h18"/><path d="M12 7 v6"/><rect x="7" y="13" width="10" height="6" rx="2"/>',
   },
   prop: {
-    name: 'מדחף',
-    how: 'קו מהמכונית לאן שהרוח נדחפת: דוחף לאט וכל הזמן, גם באוויר',
+    name: tr('מדחף', 'Propeller'),
+    how: tr('קו מהמכונית לאן שהרוח נדחפת: דוחף לאט וכל הזמן, גם באוויר', 'A line from the car to where the wind is pushed: pushes slowly and all the time, in the air too'),
     icon: '<path d="M12 12 L12 4 M12 12 L19 16 M12 12 L5 16"/><circle cx="12" cy="12" r="2"/>',
   },
   wheel: {
-    name: 'גלגלי שטח',
-    how: 'עיגול סביב גלגל: כמה שהוא גדול — כך הגלגלים. גדולים עולים על מדרגות ומועכים',
+    name: tr('גלגלי שטח', 'Off-road wheels'),
+    how: tr('עיגול סביב גלגל: כמה שהוא גדול — כך הגלגלים. גדולים עולים על מדרגות ומועכים', 'A circle round a wheel: as big as it is — so are the wheels. Big ones climb stairs and crush'),
     icon: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>',
   },
   armor: {
-    name: 'שריון',
-    how: 'קו לאורך הצד, החזית או הגג: כמה שהוא מכסה — כך הוא מגן, וכבד',
+    name: tr('שריון', 'Armor'),
+    how: tr('קו לאורך הצד, החזית או הגג: כמה שהוא מכסה — כך הוא מגן, וכבד', 'A line along the side, the front or the roof: as much as it covers — that\'s how much it protects, and how heavy it is'),
     icon: '<path d="M4 6 L12 3 L20 6 V12 C20 17 12 21 12 21 C12 21 4 17 4 12 Z"/>',
   },
 };
 
 // (ROADMAP 15.4) and from the car's pen, on the road: a ramp ahead, a bridge, a barrier behind
 export const WORLD_PAR = ['ramp', 'bridge', 'barrier'];
-export const WORLD_NAME = { ramp: 'רמפה', bridge: 'גשר', barrier: 'מחסום' };
+export const WORLD_NAME = { ramp: tr('רמפה', 'Ramp'), bridge: tr('גשר', 'Bridge'), barrier: tr('מחסום', 'Roadblock') };
 export const WORLD_ICON = {
   ramp: '<path d="M3 19 L19 9 L21 10 L21 19 Z"/>',
   bridge: '<path d="M2 12 H22"/><path d="M4 12 V18 M20 12 V18"/><path d="M2 8 H22"/>',
@@ -105,7 +106,7 @@ export function readPar(type, caps, ctx, inkI, time) {
         n++;
       }
     }
-    if (out < 0.25) return { why: 'כנף מציירים מהצד של המכונית החוצה — ככל שהקו ארוך, הכנף גדולה' };
+    if (out < 0.25) return { why: tr('כנף מציירים מהצד של המכונית החוצה — ככל שהקו ארוך, הכנף גדולה', 'Draw a wing from the side of the car outward — the longer the line, the bigger the wing') };
     const span = clamp(out, 0.4, 5.5);
     const chord = clamp(Math.max(z1 - z0, span * 0.3), 0.4, 2.2);
     const zc = n ? zs / n : 0;
@@ -268,35 +269,35 @@ export function parSay(p, v) {
   const n = p.n;
   const parts = [];
   if (p.type === 'wing') {
-    parts.push(`${n.span.toFixed(1)} מ' לכל צד`);
-    if (fz.wingFly) parts.push(`ממריאה ב־${kmh(fz.takeoff)} קמ"ש (רווח)`);
-    else parts.push(`דאייה — להמראה צריך ${kmh(fz.takeoff)} קמ"ש: טורבו, רמפה או כנפיים גדולות יותר`);
-    if (n.span > 2.2) parts.push('רחבות: נתקעות בסמטאות');
+    parts.push(tr(`${n.span.toFixed(1)} מ' לכל צד`, `${n.span.toFixed(1)} m each side`));
+    if (fz.wingFly) parts.push(tr(`ממריאה ב־${kmh(fz.takeoff)} קמ"ש (רווח)`, `Takes off at ${kmh(fz.takeoff)} km/h (Space)`));
+    else parts.push(tr(`דאייה — להמראה צריך ${kmh(fz.takeoff)} קמ"ש: טורבו, רמפה או כנפיים גדולות יותר`, `Gliding — to take off you need ${kmh(fz.takeoff)} km/h: turbo, a ramp or bigger wings`));
+    if (n.span > 2.2) parts.push(tr('רחבות: נתקעות בסמטאות', 'Wide: they get stuck in alleys'));
   } else if (p.type === 'rotor') {
-    parts.push(`${n.span.toFixed(1)} מ'`);
-    if (fz.rotor >= 1) parts.push(fz.rotor >= 1.6 ? 'מרים בקלות (רווח למעלה, C למטה)' : 'מרחף (רווח למעלה, C למטה)');
-    else parts.push(`קטן מדי להרים (${Math.round(fz.rotor * 100)}%) — רק מאט נפילה. ציירו ארוך יותר`);
-    if (fz.rotorTilt > 0.35) parts.push('מעל החרטום: מושך קדימה');
-    else if (fz.rotorTilt < -0.35) parts.push('מעל הזנב: יציב ואיטי');
+    parts.push(tr(`${n.span.toFixed(1)} מ'`, `${n.span.toFixed(1)} m`));
+    if (fz.rotor >= 1) parts.push(fz.rotor >= 1.6 ? tr('מרים בקלות (רווח למעלה, C למטה)', 'Lifts easily (Space up, C down)') : tr('מרחף (רווח למעלה, C למטה)', 'Hovers (Space up, C down)'));
+    else parts.push(tr(`קטן מדי להרים (${Math.round(fz.rotor * 100)}%) — רק מאט נפילה. ציירו ארוך יותר`, `Too small to lift (${Math.round(fz.rotor * 100)}%) — it only slows a fall. Draw it longer`));
+    if (fz.rotorTilt > 0.35) parts.push(tr('מעל החרטום: מושך קדימה', 'Over the nose: pulls forward'));
+    else if (fz.rotorTilt < -0.35) parts.push(tr('מעל הזנב: יציב ואיטי', 'Over the tail: steady and slow'));
   } else if (p.type === 'jet') {
-    const w = { back: 'אחורה — Shift: מהירות', under: 'למטה — רווח: קפיצה וריחוף קצר', up: 'למעלה — לוחץ את המכונית לכביש', side: 'הצידה — Shift: החלקה לצד', front: 'קדימה — בלימה חזקה (S עם Shift)' };
+    const w = { back: tr('אחורה — Shift: מהירות', 'Back — Shift: speed'), under: tr('למטה — רווח: קפיצה וריחוף קצר', 'Down — Space: a jump and a short hover'), up: tr('למעלה — לוחץ את המכונית לכביש', 'Up — presses the car to the road'), side: tr('הצידה — Shift: החלקה לצד', 'To the side — Shift: slide sideways'), front: tr('קדימה — בלימה חזקה (S עם Shift)', 'Forward — a hard brake (S with Shift)') };
     parts.push(w[p.v] || w.back);
-    parts.push(`דלק ${Math.round(fz.jetFuelMax || 0)} שנ', מתמלא על הקרקע`);
+    parts.push(tr(`דלק ${Math.round(fz.jetFuelMax || 0)} שנ', מתמלא על הקרקע`, `Fuel ${Math.round(fz.jetFuelMax || 0)} s, refills on the ground`));
   } else if (p.type === 'prop') {
-    const w = { back: 'דוחף קדימה לאט, כל הזמן', front: 'מושך אחורה — מאט', under: 'דוחף למעלה — מאט נפילה', up: 'דוחף למטה', side: 'דוחף הצידה' };
+    const w = { back: tr('דוחף קדימה לאט, כל הזמן', 'Pushes forward slowly, all the time'), front: tr('מושך אחורה — מאט', 'Pulls back — slows down'), under: tr('דוחף למעלה — מאט נפילה', 'Pushes up — slows a fall'), up: tr('דוחף למטה', 'Pushes down'), side: tr('דוחף הצידה', 'Pushes sideways') };
     parts.push(w[p.v] || w.back);
   } else if (p.type === 'wheel') {
-    parts.push(`${(n.r * 2).toFixed(1)} מ'`);
-    if (p.v === 'bigteeth') parts.push(`עולים על מדרגות של ${(fz.step || 0).toFixed(1)} מ' ומועכים מכוניות`);
-    else parts.push('אחיזה בשטח ובמדרגות נמוכות');
+    parts.push(tr(`${(n.r * 2).toFixed(1)} מ'`, `${(n.r * 2).toFixed(1)} m`));
+    if (p.v === 'bigteeth') parts.push(tr(`עולים על מדרגות של ${(fz.step || 0).toFixed(1)} מ' ומועכים מכוניות`, `Climbs ${(fz.step || 0).toFixed(1)} m steps and crushes cars`));
+    else parts.push(tr('אחיזה בשטח ובמדרגות נמוכות', 'Grip off-road and on low steps'));
   } else if (p.type === 'armor') {
-    parts.push(`${Math.round(n.cover * 100)}% מה${n.face === 'front' ? 'חזית' : n.face === 'back' ? 'גב' : n.face === 'top' ? 'גג' : 'צד'}`);
-    parts.push(`${Math.round((v.armor || 0) * 100)}% פחות נזק`);
-    if (n.face === 'front') parts.push('איל: פורץ מחסומים');
-    parts.push('כבד — מאיץ ועף פחות');
+    parts.push(tr(`${Math.round(n.cover * 100)}% מה${n.face === 'front' ? 'חזית' : n.face === 'back' ? 'גב' : n.face === 'top' ? 'גג' : 'צד'}`, `${Math.round(n.cover * 100)}% of the ${n.face === 'front' ? tr('חזית', 'front') : n.face === 'back' ? tr('גב', 'back') : n.face === 'top' ? tr('גג', 'roof') : tr('צד', 'side')}`));
+    parts.push(tr(`${Math.round((v.armor || 0) * 100)}% פחות נזק`, `${Math.round((v.armor || 0) * 100)}% less damage`));
+    if (n.face === 'front') parts.push(tr('איל: פורץ מחסומים', 'Ram: breaks through roadblocks'));
+    parts.push(tr('כבד — מאיץ ועף פחות', 'Heavy — speeds up and flies less'));
   }
   const C = fz.combos || [];
-  const combo = C.includes('vtol') ? 'רוטור + כנפיים: ממריאה במקום וטסה מהר' : C.includes('plane') ? 'כנפיים + טורבו: טיסה ארוכה' : C.includes('jetcopter') ? 'רוטור + טורבו: מסוק מהיר' : C.includes('breaker') ? 'שריון + גלגלי שטח: פורץ מחסומים' : C.includes('harrier') ? 'כנפיים + טורבו למטה: קפיצה ודאייה' : '';
+  const combo = C.includes('vtol') ? tr('רוטור + כנפיים: ממריאה במקום וטסה מהר', 'Rotor + wings: takes off on the spot and flies fast') : C.includes('plane') ? tr('כנפיים + טורבו: טיסה ארוכה', 'Wings + turbo: a long flight') : C.includes('jetcopter') ? tr('רוטור + טורבו: מסוק מהיר', 'Rotor + turbo: a fast helicopter') : C.includes('breaker') ? tr('שריון + גלגלי שטח: פורץ מחסומים', 'Armor + off-road wheels: breaks through roadblocks') : C.includes('harrier') ? tr('כנפיים + טורבו למטה: קפיצה ודאייה', 'Wings + turbo downward: a jump and a glide') : '';
   return { name: PAR[p.type].name, text: parts.join(' · '), combo };
 }
 
@@ -313,7 +314,7 @@ export function preDrivePar(F, v, dt, input) {
     if (!v.air) fz.jetFuel = Math.min(fz.jetFuelMax, fz.jetFuel + dt * 0.55);
     if (boost && (fz.thrust || fz.side || fz.retro) && fz.jetFuel > 0) {
       fz.jetFuel = Math.max(0, fz.jetFuel - dt);
-      if (fz.jetFuel <= 0 && v.driver === g.player) F.say('הטורבו ריק — מתמלא כשנוסעים על הקרקע', 'info');
+      if (fz.jetFuel <= 0 && v.driver === g.player) F.say(tr('הטורבו ריק — מתמלא כשנוסעים על הקרקע', 'The turbo is empty — it refills while you drive on the ground'), 'info');
     }
     // (an empty one does not push - on the ground either)
     if (fz.thrust) v.jets = fz.jetFuel > 0.05 ? Math.max(1, v.fzBase ? v.fzBase.jets || 1 : 1) : (v.fzBase && v.fzBase.jets) || 0;

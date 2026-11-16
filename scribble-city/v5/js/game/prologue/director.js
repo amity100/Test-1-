@@ -59,7 +59,7 @@ export const PROLOGUE_ON = true;
 export const GAME_TITLE = 'BEYOND THE|OUTLINE';
 // (who made it, under the name - in the player's own language, as the rest of what is put over the
 // picture is)
-export const CREDIT = 'יוצר: אמיתי דהן';
+export const CREDIT = tr('יוצר: אמיתי דהן', 'Created by Amity Dahan');
 // (round 16: in an English game)
 export const CREDIT_EN = 'Created by Amity Dahan';
 // (v2, round 13: the prologue told again to everyone who has seen it - it is a new film since; and
@@ -3433,7 +3433,7 @@ export class Prologue {
     if (!document.getElementById('pro-thought-css')) {
       const st = document.createElement('style');
       st.id = 'pro-thought-css';
-      st.textContent = '.pro-thought{position:fixed;z-index:58;left:50%;top:15%;max-width:min(560px,86vw);padding:8px 18px 10px;background:rgba(14,10,26,.72);border:2px solid rgba(255,248,236,.55);border-radius:14px 10px 15px 9px;color:#fff8ec;font:italic 600 clamp(17px,3.2vw,26px)/1.25 "Rubik",system-ui,sans-serif;direction:rtl;text-align:center;pointer-events:none;box-shadow:0 0 0 4px rgba(14,10,26,.25);opacity:0}.pro-thought.film{top:auto;bottom:22%;background:none;border:0;box-shadow:none;border-radius:0;letter-spacing:.02em;text-shadow:0 2px 12px rgba(8,6,16,.95),0 0 4px rgba(8,6,16,.9),0 0 2px rgba(8,6,16,.9)}';
+      st.textContent = '.pro-thought{position:fixed;z-index:58;left:50%;top:15%;max-width:min(560px,86vw);padding:8px 18px 10px;background:rgba(14,10,26,.72);border:2px solid rgba(255,248,236,.55);border-radius:14px 10px 15px 9px;color:#fff8ec;font:italic 600 clamp(17px,3.2vw,26px)/1.25 "Rubik",system-ui,sans-serif;text-align:center;pointer-events:none;box-shadow:0 0 0 4px rgba(14,10,26,.25);opacity:0}.pro-thought.film{top:auto;bottom:22%;background:none;border:0;box-shadow:none;border-radius:0;letter-spacing:.02em;text-shadow:0 2px 12px rgba(8,6,16,.95),0 0 4px rgba(8,6,16,.9),0 0 2px rgba(8,6,16,.9)}';
       document.head.appendChild(st);
     }
     const el = document.createElement('div');
@@ -5296,8 +5296,10 @@ export class Prologue {
       q.t += dt;
       const k0 = Math.min(1, q.t / 0.36);
       const k = k0 * k0 * (3 - 2 * k0);
-      // his body off the line of the shot, the gun's shoulder back (standing: a man walking faces where he walks)
-      const want = yaw - (two ? 0.4 : 0.58);
+      // his body off the line of the shot. One hand: the gun's shoulder forward, the arm straight out from it at the man - as a
+      // man points a gun at somebody (with the shoulder back, the arm went across his chest: the doll the owner saw). Both
+      // hands: squarer to it, the gun's shoulder back a little (standing: a man walking faces where he walks)
+      const want = two ? yaw - 0.4 : yaw + 0.45;
       // (by whether he is walking now: go() leaves its pace on him after he has got there)
       if (!(f.speed > 0.3)) {
         if (q.c.pl) q.c.pl.face = want;

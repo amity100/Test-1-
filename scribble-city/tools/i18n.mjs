@@ -111,12 +111,17 @@ export function scanFile(file) {
       // (its English beside it: en for he, kEn / k_en for k, or an en of the object's own)
       const props = obj && obj.type === 'ObjectExpression' ? obj.properties : [];
       const find = (n) => props.find((q) => keyName(q) === n && q.value && q.value.type === 'Literal' && typeof q.value.value === 'string');
-      const sib = k === 'he' || k === 'heb' ? find('en') : find(k + 'En') || find(k + '_en') || (k === 'name' || k === 'label' || k === 'text' || k === 'title' ? find('en') : null);
+      // (a thing's Hebrew name beside its English one, heb beside name: a café's CAPPUCCINO, a ride's name)
+      const byName = k === 'he' || k === 'heb' ? find('name') : null;
+      const sib = k === 'he' || k === 'heb' ? find('en') || (byName && !HEB.test(byName.value.value) && /[A-Za-z]/.test(byName.value.value) ? byName : null) : find(k + 'En') || find(k + '_en') || (k === 'name' || k === 'label' || k === 'text' || k === 'title' ? find('en') : null);
       if (sib) {
         kind = 'pair';
         en = sib.value.value;
-        // (a name written in capitals for a title: its words' first letters only)
-        if (en.length > 3 && en === en.toUpperCase() && /[A-Z]/.test(en)) en = en.toLowerCase().replace(/(^|[\s-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+        // (a name written in capitals for a title: its words' first letters only - a thing's in a sentence: its first only)
+        if (en.length > 3 && en === en.toUpperCase() && /[A-Z]/.test(en)) {
+          en = en.toLowerCase();
+          en = sib === byName ? en[0].toUpperCase() + en.slice(1) : en.replace(/(^|[\s-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+        }
       } else if (k === 'he' || k === 'heb' || /^he[A-Z_]/.test(k || '')) kind = 'pair';
     }
     // (in a choice by the language - lang() === 'en' ? 'English' : 'עברית' - or a thought, put in English where it is shown)
@@ -132,7 +137,10 @@ export function scanFile(file) {
     else if (parent && parent.type === 'ArrayExpression' && parent.elements.length === 2 && parent.elements[0] === node) {
       const o = parent.elements[1];
       // (not a tag beside it - a gender, m / f / p, a kind: a translation has a space, a capital, or is a word of three letters or more)
-      if (o && o.type === 'Literal' && typeof o.value === 'string' && !HEB.test(o.value) && /[A-Za-z]{3,}|[A-Z ]/.test(o.value)) kind = 'pair';
+      if (o && o.type === 'Literal' && typeof o.value === 'string' && !HEB.test(o.value) && /[A-Za-z]{3,}|[A-Z ]/.test(o.value)) {
+        kind = 'pair';
+        en = o.value;
+      }
     }
     items.push({ kind, text, en, start: node.start, end: node.end, line: node.loc.start.line, node, tpl: node.type === 'TemplateLiteral' });
   });
@@ -192,7 +200,8 @@ if (cmd === 'scan') {
     const r = scanFile(f);
     const keys = rest.includes('--keys');
     for (const i of r.items) if (i.kind === 'pair' && i.en && !T[i.text]) T[i.text] = i.en;
-    const todo = r.items.filter((i) => (i.kind === 'text' || (i.kind === 'pair' && i.en) || (keys && i.kind === 'key' && !i.node.type.startsWith('Prop'))) && T[i.text]);
+    // (a pair's Hebrew with no English beside it - a he: or heb: of its own - wrapped too, when there is a translation for it)
+    const todo = r.items.filter((i) => (i.kind === 'text' || i.kind === 'pair' || (keys && i.kind === 'key' && !i.node.type.startsWith('Prop'))) && T[i.text]);
     miss += r.items.filter((i) => i.kind === 'text' && !T[i.text]).length;
     if (!todo.length) continue;
     let s = r.src;

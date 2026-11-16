@@ -4,6 +4,7 @@ import { damp } from '../core/util.js';
 import { CURB } from '../world/mainland/plan.js';
 import { COURT } from '../world/mainland/arena.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 11.17) Game night at the Bayfront Arena (world/mainland/arena.js). Come in through
 // its doors and there is a game on: the WAVE against the PENS, five a side, a referee running the
 // sideline, the coaches in front of their benches shouting, the stands full. They bring the ball
@@ -1196,7 +1197,7 @@ export class ArenaGame {
     const p = this.game.player.pos;
     for (const s of this.A.courtside) {
       if (s.taken) continue;
-      if (Math.hypot(p.x - s.x, p.z - s.z) < 1.3) return { label: 'E — לשבת בשורה הראשונה ולצפות במשחק ($25)', seat: s };
+      if (Math.hypot(p.x - s.x, p.z - s.z) < 1.3) return { label: tr('E — לשבת בשורה הראשונה ולצפות במשחק ($25)', 'E — sit in the front row and watch the game ($25)'), seat: s };
     }
     return null;
   }
@@ -1205,7 +1206,7 @@ export class ArenaGame {
     const t = this.target();
     if (!t) return false;
     const game = this.game;
-    if (game.money && !game.money.pay(25, 'שורה ראשונה')) {
+    if (game.money && !game.money.pay(25, tr('שורה ראשונה', 'Front row'))) {
       game.hud.toast(game.money.why(25), 'bad', 2.4);
       return true;
     }
@@ -1213,7 +1214,7 @@ export class ArenaGame {
     game.player.seat = { x: s.x, z: s.z, yaw: s.yaw, lock: false, arena: true };
     game.camRig.yaw = s.yaw;
     game.camRig.pitch = 0.05;
-    game.hud.toast('בשורה הראשונה! הכי קרוב שאפשר (צעד אחד - וקמים)', 'good', 3);
+    game.hud.toast(tr('בשורה הראשונה! הכי קרוב שאפשר (צעד אחד - וקמים)', 'In the front row! As close as it gets (one step - and you get up)'), 'good', 3);
     return true;
   }
 

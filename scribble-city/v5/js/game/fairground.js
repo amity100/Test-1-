@@ -4,6 +4,7 @@ import { PIER_M } from '../world/mainland/plan.js';
 import { WHEEL } from '../world/mainland/landmarks.js';
 import { CAROUSEL } from '../world/mainland/pier.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 11.17) The rides on Palisade Pier, to ride: up on the big wheel in a gondola (round
 // once, the whole city under you, the bay and the island across it), the West Coaster from its
 // front car (up the lift hill, the drop, the loop - seen as from the seat), a horse on the
@@ -11,9 +12,9 @@ import { CAROUSEL } from '../world/mainland/pier.js';
 // got on when it has gone round (or with E, when the gondola is down at the platform).
 
 const RIDES = {
-  wheel: { at: [-1436, 721], r: 3.2, price: 5, heb: 'הגלגל הענק' },
-  coaster: { at: [-1431.4, 651.8], r: 3.2, price: 8, heb: 'רכבת ההרים' },
-  carousel: { at: [CAROUSEL.x, CAROUSEL.z], r: CAROUSEL.r + 4, price: 3, heb: 'הקרוסלה' },
+  wheel: { at: [-1436, 721], r: 3.2, price: 5, heb: tr('הגלגל הענק', 'giant wheel') },
+  coaster: { at: [-1431.4, 651.8], r: 3.2, price: 8, heb: tr('רכבת ההרים', 'roller coaster') },
+  carousel: { at: [CAROUSEL.x, CAROUSEL.z], r: CAROUSEL.r + 4, price: 3, heb: tr('הקרוסלה', 'carousel') },
 };
 
 const _m = new THREE.Matrix4();
@@ -46,21 +47,21 @@ export class Fairground {
 
   target() {
     if (this.ride) {
-      if (this.ride.kind === 'wheel') return { label: this.ride.low ? 'E — לרדת מהגלגל' : 'למעלה בגלגל... (יורדים כשהתא למטה)' };
-      return { label: `E — לרדת מ${RIDES[this.ride.kind].heb}` };
+      if (this.ride.kind === 'wheel') return { label: this.ride.low ? tr('E — לרדת מהגלגל', 'E — get off the wheel') : tr('למעלה בגלגל... (יורדים כשהתא למטה)', 'Up on the wheel... (you get off when the car is at the bottom)') };
+      return { label: tr(`E — לרדת מ${RIDES[this.ride.kind].heb}`, `E — get off the ${RIDES[this.ride.kind].heb}`) };
     }
     if (!this.L) return null;
     const k = this.near();
     if (!k) return null;
     const R = RIDES[k];
-    return { label: `E — לעלות על ${R.heb} ($${R.price})`, kind: k };
+    return { label: tr(`E — לעלות על ${R.heb} ($${R.price})`, `E — get on the ${R.heb} (\$${R.price})`), kind: k };
   }
 
   interact() {
     const game = this.game;
     if (this.ride) {
       if (this.ride.kind === 'wheel' && !this.ride.low) {
-        game.hud.toast('מחכים שהתא יגיע למטה...', 'info', 1.6);
+        game.hud.toast(tr('מחכים שהתא יגיע למטה...', 'Waiting for the car to come down...'), 'info', 1.6);
         return true;
       }
       this.off();
@@ -98,14 +99,14 @@ export class Fairground {
       r.k = best;
       r.a0 = W.angle;
       W.fast = true;
-      game.hud.toast('על הגלגל הענק: סיבוב אחד, כל העיר מתחת', 'good', 2.6);
+      game.hud.toast(tr('על הגלגל הענק: סיבוב אחד, כל העיר מתחת', 'On the giant wheel: one turn, the whole city below'), 'good', 2.6);
     } else if (kind === 'coaster') {
       // into the front car: wait in the station for it if it is out on the track
       r.boarded = L.ride.state === 'wait';
       r.lap = false;
       // (in your seat: off in a moment)
       if (r.boarded) L.ride.wait = Math.min(L.ride.wait, 2.5);
-      game.hud.toast(r.boarded ? 'בקרון הראשון! מחזיקים חזק' : 'הרכבת בדרך. מחכים בתחנה...', 'good', 2.4);
+      game.hud.toast(r.boarded ? tr('בקרון הראשון! מחזיקים חזק', 'In the front car! Hold on tight') : tr('הרכבת בדרך. מחכים בתחנה...', 'The train is on its way. Waiting at the station...'), 'good', 2.4);
     } else {
       const C = game.world.carousel;
       // the horse nearest you on the outer ring
@@ -121,7 +122,7 @@ export class Fairground {
       });
       r.k = best;
       r.a0 = C.a;
-      game.hud.toast('על סוס בקרוסלה!', 'good', 2.0);
+      game.hud.toast(tr('על סוס בקרוסלה!', 'On a horse on the carousel!'), 'good', 2.0);
     }
     this.ride = r;
     this.stats.rides++;
@@ -141,7 +142,7 @@ export class Fairground {
     p.pos.copy(r.from);
     p.vel.set(0, 0, 0);
     this.ride = null;
-    game.hud.toast(r.kind === 'coaster' ? 'וואו! עוד סיבוב?' : 'היה כיף!', 'good', 1.8);
+    game.hud.toast(r.kind === 'coaster' ? tr('וואו! עוד סיבוב?', 'Wow! Another round?') : tr('היה כיף!', 'That was fun!'), 'good', 1.8);
   }
 
   // where horse i of the carousel is now, in the world
@@ -225,7 +226,7 @@ export class Fairground {
         if (C.state === 'wait') {
           r.boarded = true;
           C.wait = Math.min(C.wait, 2.5);
-          game.hud.toast('בקרון הראשון! מחזיקים חזק', 'good', 2.0);
+          game.hud.toast(tr('בקרון הראשון! מחזיקים חזק', 'In the front car! Hold on tight'), 'good', 2.0);
         }
         return;
       }

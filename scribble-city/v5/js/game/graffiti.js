@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { groundHeight } from '../world/layout.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 9.3, not with ?classic) Graffiti. Standing in front of a wall, G (or "גרפיטי" in the
 // phone) opens a sheet (ui/sketchpad.js) with the spray cans' colours; what is drawn on it goes
 // up on the wall in front of you, three metres wide, and stays there - in the save too, the last
@@ -8,14 +9,14 @@ import { groundHeight } from '../world/layout.js';
 // the police, if they see it, call it vandalism.
 
 export const SPRAY = [
-  { css: '#1b1622', c: [0.06, 0.05, 0.08], name: 'שחור', px: 10 },
-  { css: '#ffffff', c: [0.98, 0.98, 0.96], name: 'לבן', px: 10 },
-  { css: '#e8333d', c: [0.95, 0.18, 0.22], name: 'אדום', px: 10 },
-  { css: '#ffd23f', c: [1.0, 0.84, 0.22], name: 'צהוב', px: 10 },
-  { css: '#33d6ff', c: [0.25, 0.85, 1.0], name: 'תכלת', px: 10 },
-  { css: '#4ee06a', c: [0.32, 0.9, 0.42], name: 'ירוק', px: 10 },
-  { css: '#ff7cc8', c: [1.0, 0.48, 0.78], name: 'ורוד', px: 10 },
-  { css: '#a35cff', c: [0.62, 0.36, 1.0], name: 'סגול', px: 10 },
+  { css: '#1b1622', c: [0.06, 0.05, 0.08], name: tr('שחור', 'Black'), px: 10 },
+  { css: '#ffffff', c: [0.98, 0.98, 0.96], name: tr('לבן', 'White'), px: 10 },
+  { css: '#e8333d', c: [0.95, 0.18, 0.22], name: tr('אדום', 'Red'), px: 10 },
+  { css: '#ffd23f', c: [1.0, 0.84, 0.22], name: tr('צהוב', 'Yellow'), px: 10 },
+  { css: '#33d6ff', c: [0.25, 0.85, 1.0], name: tr('תכלת', 'Light blue'), px: 10 },
+  { css: '#4ee06a', c: [0.32, 0.9, 0.42], name: tr('ירוק', 'Green'), px: 10 },
+  { css: '#ff7cc8', c: [1.0, 0.48, 0.78], name: tr('ורוד', 'Pink'), px: 10 },
+  { css: '#a35cff', c: [0.62, 0.36, 1.0], name: tr('סגול', 'Purple'), px: 10 },
 ];
 const W = 3; // metres across on the wall
 const H = 1.4; // ...and up
@@ -48,13 +49,13 @@ export class Graffiti {
     const g = this.game;
     const w = this.wallAhead();
     if (!w) {
-      g.hud.toast(g.touch ? 'עומדים מול קיר של בניין, ואז גרפיטי בטלפון' : 'עומדים מול קיר של בניין, ואז G — גרפיטי', 'info', 2.6);
+      g.hud.toast(g.touch ? tr('עומדים מול קיר של בניין, ואז גרפיטי בטלפון', 'Stand facing the wall of a building, then graffiti on the phone') : tr('עומדים מול קיר של בניין, ואז G — גרפיטי', 'Stand facing the wall of a building, then G — graffiti'), 'info', 2.6);
       return false;
     }
     g.sketchpad.show({
-      title: 'גרפיטי',
-      hint: 'מה שמציירים כאן עולה על הקיר שמולכם, בגודל אמיתי',
-      done: 'לרסס על הקיר!',
+      title: tr('גרפיטי', 'Graffiti'),
+      hint: tr('מה שמציירים כאן עולה על הקיר שמולכם, בגודל אמיתי', 'What you draw here goes up on the wall in front of you, at real size'),
+      done: tr('לרסס על הקיר!', 'Spray the wall!'),
       aspect: W / H,
       pens: SPRAY,
       bg: (c, cw, ch) => {
@@ -101,7 +102,7 @@ export class Graffiti {
     while (this.list.length > MAX) this.list.shift();
     this.stats.painted++;
     g.audio.play('paint', 0.8);
-    g.hud.toast('גרפיטי על הקיר!', 'good', 2);
+    g.hud.toast(tr('גרפיטי על הקיר!', 'Graffiti on the wall!'), 'good', 2);
     // (whose wall is it)
     const pos = new THREE.Vector3(cx, 1, cz);
     const turf = (g.gangs ? g.gangs.turfs : []).find((t) => Math.hypot(t.x - cx, t.z - cz) < (t.r || 40));

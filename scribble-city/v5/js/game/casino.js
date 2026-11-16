@@ -15,6 +15,7 @@ import { Blackjack, paintBlackjackIdle } from './minigames/casino/blackjack.js';
 import { Roulette, paintRouletteIdle } from './minigames/casino/roulette.js';
 import { sfx } from './minigames/casino/felt.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 12.8) PALACE OF INK, on the bay: a palace of a casino, the whole block its own. Before
 // it, on Bayfront Boulevard, a forecourt of two long pools whose fountains dance at night, a portico
 // of eight columns under the name in gold, a golden dome on the roof and the hotel's tower rising
@@ -723,7 +724,7 @@ export class Casino {
     if (inside && !this.welcomed) {
       this.welcomed = true;
       g.hud.big('PALACE OF INK', 2200);
-      g.hud.toast('מכונות מזל, בלאק ג׳ק ורולטה. ההימורים בכסף שלכם. בהצלחה!', 'info', 4);
+      g.hud.toast(tr('מכונות מזל, בלאק ג׳ק ורולטה. ההימורים בכסף שלכם. בהצלחה!', 'Slot machines, blackjack and roulette. You bet your own money. Good luck!'), 'info', 4);
     }
     if (!inside && d > 70) this.welcomed = false;
     const cam = g.camera.position;
@@ -896,18 +897,18 @@ export class Casino {
     const p = this.game.player.pos;
     if (!this.inHall(p.x, p.z, p.y)) return null;
     const near = (s, r) => Math.hypot(p.x - s[0], p.z - s[2]) < r;
-    for (const s of this.slots) if (near(s.stand, 0.5)) return { kind: 'slot', s, label: 'E — לשבת ליד מכונת המזל INK FORTUNE' };
+    for (const s of this.slots) if (near(s.stand, 0.5)) return { kind: 'slot', s, label: tr('E — לשבת ליד מכונת המזל INK FORTUNE', 'E — sit at the INK FORTUNE slot machine') };
     for (const t of this.tables) {
       if (near(t.seats[1], t.kind === 'blackjack' ? 0.75 : 1.1)) {
-        if (t.vip && !this.vip) return { kind: 'novip', label: 'E — שולחן VIP: צריך כרטיס VIP מהקופה' };
-        return { kind: t.kind, t, label: t.kind === 'blackjack' ? `E — לשבת לשולחן הבלאק ג׳ק${t.vip ? ' (VIP, מ־$100)' : ' ($5–$100)'}` : `E — לשחק רולטה${t.vip ? ' (VIP, צ׳יפים של $25 ומעלה)' : ''}` };
+        if (t.vip && !this.vip) return { kind: 'novip', label: tr('E — שולחן VIP: צריך כרטיס VIP מהקופה', 'E — VIP table: you need a VIP card from the cashier') };
+        return { kind: t.kind, t, label: t.kind === 'blackjack' ? tr(`E — לשבת לשולחן הבלאק ג׳ק${t.vip ? ' (VIP, מ־$100)' : ' ($5–$100)'}`, `E — sit at the blackjack table${t.vip ? tr(' (VIP, מ־$100)', ' (VIP, from $100)') : ' ($5–$100)'}`) : tr(`E — לשחק רולטה${t.vip ? ' (VIP, צ׳יפים של $25 ומעלה)' : ''}`, `E — play roulette${t.vip ? tr(' (VIP, צ׳יפים של $25 ומעלה)', ' (VIP, $25 chips and up)') : ''}`) };
       }
     }
     const C = PLAN.cage;
-    if (p.x > C.x0 && p.x < C.x1 && p.z > C.z1 && p.z < C.z1 + 1.4) return { kind: 'cage', label: 'E — הקופה (THE CAGE)' };
+    if (p.x > C.x0 && p.x < C.x1 && p.z > C.z1 && p.z < C.z1 + 1.4) return { kind: 'cage', label: tr('E — הקופה (THE CAGE)', 'E — the cashier (THE CAGE)') };
     const B = PLAN.bar;
     if (p.x > B.x0 - 0.2 && p.x < B.x1 + 0.2 && ((p.z > B.z0 - 1.4 && p.z < B.z0) || (p.z > B.z1 && p.z < B.z1 + 1.4))) return { kind: 'bar', label: 'E — THE INKWELL BAR' };
-    if (Math.hypot(p.x - this.ropeAt[0] - 0.6, p.z - this.ropeAt[1]) < 1.6 && !this.vip) return { kind: 'rope', label: 'E — חדר ה־VIP' };
+    if (Math.hypot(p.x - this.ropeAt[0] - 0.6, p.z - this.ropeAt[1]) < 1.6 && !this.vip) return { kind: 'rope', label: tr('E — חדר ה־VIP', 'E — the VIP room') };
     return null;
   }
 
@@ -944,18 +945,18 @@ export class Casino {
       return true;
     }
     if (tg.kind === 'novip') {
-      g.hud.toast('השולחנות האלה ל־VIP בלבד. כרטיס VIP קונים בקופה (THE CAGE) ליד הכניסה', 'info', 3.5);
+      g.hud.toast(tr('השולחנות האלה ל־VIP בלבד. כרטיס VIP קונים בקופה (THE CAGE) ליד הכניסה', 'These tables are for VIPs only. You buy a VIP card at the cashier (THE CAGE) by the entrance'), 'info', 3.5);
       return true;
     }
     if (tg.kind === 'rope') {
-      g.dialog.show('VIP', this.vip ? 'Welcome back.' : 'Members only. A VIP card from the cage, and the rope is yours.', [{ label: 'בסדר', fn: () => {} }]);
+      g.dialog.show('VIP', this.vip ? 'Welcome back.' : 'Members only. A VIP card from the cage, and the rope is yours.', [{ label: tr('בסדר', 'OK'), fn: () => {} }]);
       return true;
     }
     if (tg.kind === 'cage') {
       const opts = [];
       if (!this.vip) {
         opts.push({
-          label: 'כרטיס VIP: כניסה לחדר ה־VIP ולשולחנות ההימורים הגבוהים · $250',
+          label: tr('כרטיס VIP: כניסה לחדר ה־VIP ולשולחנות ההימורים הגבוהים · $250', 'VIP card: entry to the VIP room and the high-stakes tables · $250'),
           fn: () => {
             if (!g.money || g.money.pay(250, 'VIP')) {
               this.vip = true;
@@ -963,18 +964,18 @@ export class Casino {
               if (this.ropeCol !== null && this.ropeCol !== undefined) g.world.collision.remove(this.ropeCol);
               this.ropeCol = null;
               g.audio.play('coins', 0.6);
-              g.hud.toast('יש לכם כרטיס VIP! החבל בכניסה לחדר ה־VIP נפתח בשבילכם', 'good', 3.5);
+              g.hud.toast(tr('יש לכם כרטיס VIP! החבל בכניסה לחדר ה־VIP נפתח בשבילכם', 'You\'ve got a VIP card! The rope at the VIP room\'s entrance opens for you'), 'good', 3.5);
             } else g.money.refuse('THE CAGE', 250);
           },
         });
       }
       const net = this.net || 0;
-      opts.push({ label: net >= 0 ? `הערב אתם ברווח: $${net}` : `הערב אתם בהפסד: $${-net}`, fn: () => {} });
+      opts.push({ label: net >= 0 ? tr(`הערב אתם ברווח: $${net}`, `Tonight you're up: \$${net}`) : tr(`הערב אתם בהפסד: $${-net}`, `Tonight you're down: \$${-net}`), fn: () => {} });
       g.dialog.show('THE CAGE', 'Cash is king here: you play with your own. Anything else?', opts);
       return true;
     }
     if (tg.kind === 'bar') {
-      const menu = [['מרטיני עם זית (+15 חיים)', 12, 15, [0.9, 0.95, 0.8]], ['שמפניה (+15 חיים)', 18, 15, [1, 0.95, 0.7]], ['מוחיטו (+10 חיים)', 9, 10, [0.7, 1, 0.6]], ['מים מינרליים (+5 חיים)', 3, 5, [0.85, 0.95, 1]]];
+      const menu = [[tr('מרטיני עם זית (+15 חיים)', 'Martini with an olive (+15 health)'), 12, 15, [0.9, 0.95, 0.8]], [tr('שמפניה (+15 חיים)', 'Champagne (+15 health)'), 18, 15, [1, 0.95, 0.7]], [tr('מוחיטו (+10 חיים)', 'Mojito (+10 health)'), 9, 10, [0.7, 1, 0.6]], [tr('מים מינרליים (+5 חיים)', 'Mineral water (+5 health)'), 3, 5, [0.85, 0.95, 1]]];
       g.dialog.show('THE INKWELL BAR', 'Feeling lucky tonight? What will it be?', menu.map(([label, price, hp, colr]) => ({
         label: `${label} · $${price}`,
         fn: () => {
@@ -984,7 +985,7 @@ export class Casino {
             pl.fig.belly = Math.min(1, pl.fig.belly + 0.15);
             pl.fig.bellyColor = colr;
             g.audio.play('coins', 0.5);
-            g.hud.toast(`${label.split(' (')[0]}! +${hp} חיים`, 'good', 2);
+            g.hud.toast(tr(`${label.split(' (')[0]}! +${hp} חיים`, `${label.split(' (')[0]}! +${hp} health`), 'good', 2);
           } else g.money.refuse('THE INKWELL BAR', price);
         },
       })));
@@ -1008,9 +1009,9 @@ export class Casino {
     this.net = (this.net || 0) + n;
     if (!r || (!r.spins && !r.hands)) return;
     const g = this.game;
-    if (n > 0) g.hud.toast(`${name}: יצאתם ברווח של $${n}!`, 'good', 3);
-    else if (n < 0) g.hud.toast(`${name}: הפסדתם $${-n}. הבית תמיד מנצח… בסוף`, 'info', 3);
-    else g.hud.toast(`${name}: יצאתם בלי רווח ובלי הפסד`, 'info', 2.5);
+    if (n > 0) g.hud.toast(tr(`${name}: יצאתם ברווח של $${n}!`, `${name}: you came out \$${n} up!`), 'good', 3);
+    else if (n < 0) g.hud.toast(tr(`${name}: הפסדתם $${-n}. הבית תמיד מנצח… בסוף`, `${name}: you lost \$${-n}. The house always wins… in the end`), 'info', 3);
+    else g.hud.toast(tr(`${name}: יצאתם בלי רווח ובלי הפסד`, `${name}: you broke even`), 'info', 2.5);
   }
 }
 

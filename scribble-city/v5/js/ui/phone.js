@@ -3,6 +3,7 @@ import { districtName } from '../world/layout.js';
 import * as store from '../core/store.js';
 import { fmt } from '../game/money.js';
 
+import { tr, lang } from '../core/lang.js';
 // The phone (ROADMAP 2.6): a phone drawn in the notebook's pen, out of your pocket with P (the
 // d-pad's left, or the phone button on a touch screen). Its apps:
 //   the map      the city's map (ui/citymap.js); closing it comes back to the phone
@@ -19,12 +20,12 @@ import { fmt } from '../game/money.js';
 // the camera is up).
 
 const MAX_PHOTOS = 24;
-const SKY = { clear: 'בהיר', cloudy: 'מעונן', drizzle: 'טפטוף', rain: 'גשם', storm: 'סערה', fog: 'ערפל' };
+const SKY = { clear: tr('בהיר', 'Clear'), cloudy: tr('מעונן', 'Cloudy'), drizzle: tr('טפטוף', 'Drizzle'), rain: tr('גשם', 'Rain'), storm: tr('סערה', 'Storm'), fog: tr('ערפל', 'Fog') };
 const APPS = [
-  { id: 'map', name: 'מפה', glyph: 'mapApp', fill: '#a6e5e1' },
-  { id: 'camera', name: 'מצלמה', glyph: 'camera', fill: '#ffc580' },
-  { id: 'photos', name: 'תמונות', glyph: 'photos', fill: '#ff9ccc' },
-  { id: 'settings', name: 'הגדרות', glyph: 'gear', fill: '#d2c0f3' },
+  { id: 'map', name: tr('מפה', 'Map'), glyph: 'mapApp', fill: '#a6e5e1' },
+  { id: 'camera', name: tr('מצלמה', 'Camera'), glyph: 'camera', fill: '#ffc580' },
+  { id: 'photos', name: tr('תמונות', 'Photos'), glyph: 'photos', fill: '#ff9ccc' },
+  { id: 'settings', name: tr('הגדרות', 'Settings'), glyph: 'gear', fill: '#d2c0f3' },
 ];
 
 const $ = (id) => document.getElementById(id);
@@ -194,7 +195,7 @@ export class Phone {
     g.phoneCam = true;
     document.body.classList.add('phone-cam');
     this.vf.classList.remove('hidden');
-    $('vf-hint').textContent = g.pad && g.pad.active ? 'Ⓐ / RT — צילום · Ⓑ — חזרה לטלפון' : g.touch ? '' : 'קליק או רווח — צילום · Esc — חזרה לטלפון';
+    $('vf-hint').textContent = g.pad && g.pad.active ? tr('Ⓐ / RT — צילום · Ⓑ — חזרה לטלפון', 'Ⓐ / RT — take a photo · Ⓑ — back to the phone') : g.touch ? '' : tr('קליק או רווח — צילום · Esc — חזרה לטלפון', 'Click or Space — take a photo · Esc — back to the phone');
     g.state = 'play';
     if (!g.touch) g.input.requestLock(true);
   }
@@ -242,13 +243,13 @@ export class Phone {
     x.lineWidth = 3;
     x.strokeRect(pad, pad, W, H);
     const p = g.player.inVehicle ? g.player.inVehicle.pos : g.player.pos;
-    const where = districtName(p.x, p.z) || 'עיר השרבוטים';
+    const where = districtName(p.x, p.z) || tr('עיר השרבוטים', 'Scribble City');
     const clock = g.daynight ? g.daynight.clock : '';
     x.fillStyle = '#1b1430';
     x.font = '46px "Gveret Levin", "Rubik", sans-serif';
     x.textAlign = 'center';
     x.textBaseline = 'middle';
-    x.direction = 'rtl';
+    x.direction = lang() === 'he' ? 'rtl' : 'ltr';
     x.fillText(`${where} · ${clock}`, c.width / 2, H + pad + cap * 0.52);
     const url = c.toDataURL('image/jpeg', 0.86);
     const at = Date.now();
@@ -261,8 +262,8 @@ export class Phone {
     store
       .put('photos', String(at), { at, where, clock, url })
       .then(() => this.prune())
-      .then(() => g.hud.toast('התמונה נשמרה בתמונות שבטלפון', 'good', 1.8))
-      .catch(() => g.hud.toast('אין מקום לתמונה', 'bad', 1.8))
+      .then(() => g.hud.toast(tr('התמונה נשמרה בתמונות שבטלפון', 'The photo was saved in the phone\'s Photos'), 'good', 1.8))
+      .catch(() => g.hud.toast(tr('אין מקום לתמונה', 'No room for the photo'), 'bad', 1.8))
       .finally(() => (this.shooting = false));
   }
 
@@ -285,7 +286,7 @@ export class Phone {
       const b = document.createElement('b');
       b.textContent = r.name;
       const lv = document.createElement('span');
-      lv.textContent = `רמה ${r.level} מתוך 5`;
+      lv.textContent = tr(`רמה ${r.level} מתוך 5`, `Level ${r.level} of 5`);
       top.append(b, lv);
       const bars = document.createElement('div');
       bars.className = 'skill-lv';
@@ -314,7 +315,7 @@ export class Phone {
     sum.innerHTML = '';
     box.innerHTML = '';
     if (!M) return;
-    for (const [name, n] of [['בבנק', M.bank], ['בכיס', M.cash]]) {
+    for (const [name, n] of [[tr('בבנק', 'In the bank'), M.bank], [tr('בכיס', 'In your pocket'), M.cash]]) {
       const d = document.createElement('div');
       d.className = 'bank-sum';
       const b = document.createElement('b');
@@ -325,7 +326,7 @@ export class Phone {
       sum.appendChild(d);
     }
     if (!M.log.length) {
-      box.innerHTML = '<p class="phone-empty">עוד לא היו תנועות</p>';
+      box.innerHTML = tr('<p class="phone-empty">עוד לא היו תנועות</p>', '<p class="phone-empty">No transactions yet</p>');
       return;
     }
     for (const it of M.log) {
@@ -372,7 +373,7 @@ export class Phone {
       row.className = 'prop-btns';
       const go = document.createElement('button');
       go.className = 'btn mini';
-      go.textContent = 'ניווט לשם';
+      go.textContent = tr('ניווט לשם', 'Navigate there');
       go.addEventListener('click', () => {
         C.go(ev);
         g.audio.play('click', 0.5);
@@ -398,18 +399,18 @@ export class Phone {
       const b = document.createElement('b');
       b.textContent = p.name;
       const s = document.createElement('span');
-      s.textContent = p.owned ? 'שלכם' : fmt(p.price);
+      s.textContent = p.owned ? tr('שלכם', 'Yours') : fmt(p.price);
       top.append(b, s);
       const what = document.createElement('div');
       what.className = 'prop-what';
-      what.textContent = `${p.he} · ${fmt(p.income)} לבנק בכל בוקר`;
+      what.textContent = tr(`${p.he} · ${fmt(p.income)} לבנק בכל בוקר`, `${p.he} · ${fmt(p.income)} to the bank every morning`);
       const row = document.createElement('div');
       row.className = 'prop-btns';
       if (!p.owned) {
         const buy = document.createElement('button');
         buy.className = 'btn mini';
         const can = g.money.can(p.price);
-        buy.textContent = can ? 'לקנות' : `חסרים ${fmt(p.price - g.money.total)}`;
+        buy.textContent = can ? tr('לקנות', 'Buy') : tr(`חסרים ${fmt(p.price - g.money.total)}`, `${fmt(p.price - g.money.total)} short`);
         buy.disabled = !can;
         buy.addEventListener('click', () => {
           if (PR.buy(p)) this.fillProps();
@@ -418,10 +419,10 @@ export class Phone {
       }
       const go = document.createElement('button');
       go.className = 'btn mini';
-      go.textContent = 'לסמן במפה';
+      go.textContent = tr('לסמן במפה', 'Mark on the map');
       go.addEventListener('click', () => {
         g.gps.set(p.x, p.z, p.name);
-        g.hud.toast(`${p.name} מסומן במפה`, 'info', 2);
+        g.hud.toast(tr(`${p.name} מסומן במפה`, `${p.name} is marked on the map`), 'info', 2);
       });
       row.appendChild(go);
       d.append(top, what, row);
@@ -435,7 +436,7 @@ export class Phone {
     box.innerHTML = '';
     const ks = (await store.keys('photos')).reverse();
     if (!ks.length) {
-      box.innerHTML = '<p class="phone-empty">עוד אין תמונות. המצלמה מחכה!</p>';
+      box.innerHTML = tr('<p class="phone-empty">עוד אין תמונות. המצלמה מחכה!</p>', '<p class="phone-empty">No photos yet. The camera is waiting!</p>');
       return;
     }
     for (const k of ks) {
@@ -483,8 +484,8 @@ export class Phone {
     } catch (err) {
       const code = err && err.code;
       if (code === 'declined') return;
-      if (code === 'rate_limited') this.game.hud.toast('רגע, עוד שאלה פתוחה', 'info', 1.6);
-      else if (code === 'too_large' || code === 'bad_request' || code === 'transform_error' || code === 'rejected_extension') this.game.hud.toast('לא הצלחנו לשמור את התמונה', 'bad', 1.8);
+      if (code === 'rate_limited') this.game.hud.toast(tr('רגע, עוד שאלה פתוחה', 'Wait, there\'s still a question open'), 'info', 1.6);
+      else if (code === 'too_large' || code === 'bad_request' || code === 'transform_error' || code === 'rejected_extension') this.game.hud.toast(tr('לא הצלחנו לשמור את התמונה', 'We couldn\'t save the photo'), 'bad', 1.8);
       else {
         // (saving is not possible in this view: the button goes)
         this.dlCap = null;

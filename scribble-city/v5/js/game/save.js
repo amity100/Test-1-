@@ -9,6 +9,7 @@ import { openWall } from '../world/rooms.js';
 import { districtName } from '../world/layout.js';
 import * as store from '../core/store.js';
 
+import { tr } from '../core/lang.js';
 // The full save (ROADMAP 2.5): where you are, what you hold (every drawn weapon, its grade and
 // what is left in it), the vehicles you drew or took and where you left them, your look, and the
 // city as you left it: every prop you rubbed out, every spot rubbed back to paper, the walls you
@@ -24,7 +25,7 @@ import * as store from '../core/store.js';
 const VERSION = 1;
 const PENDING = 'scribble-city-v5-load';
 export const SLOTS = ['auto', 'slot1', 'slot2', 'slot3'];
-export const SLOT_NAMES = { auto: 'שמירה אוטומטית', slot1: 'משבצת 1', slot2: 'משבצת 2', slot3: 'משבצת 3' };
+export const SLOT_NAMES = { auto: tr('שמירה אוטומטית', 'Autosave'), slot1: tr('משבצת 1', 'Slot 1'), slot2: tr('משבצת 2', 'Slot 2'), slot3: tr('משבצת 3', 'Slot 3') };
 const AUTO_EVERY = 120;
 
 const put = (key, value) => store.put('saves', key, value);
@@ -38,12 +39,12 @@ function migrate(s) {
 
 function ago(at) {
   const m = Math.max(0, Math.round((Date.now() - at) / 60000));
-  if (m < 1) return 'עכשיו';
-  if (m < 60) return `לפני ${m} דק׳`;
+  if (m < 1) return tr('עכשיו', 'now');
+  if (m < 60) return tr(`לפני ${m} דק׳`, `${m} min ago`);
   const h = Math.round(m / 60);
-  if (h < 24) return h === 1 ? 'לפני שעה' : `לפני ${h} שעות`;
+  if (h < 24) return h === 1 ? tr('לפני שעה', 'An hour ago') : tr(`לפני ${h} שעות`, `${h} hours ago`);
   const d = Math.round(h / 24);
-  return d === 1 ? 'אתמול' : `לפני ${d} ימים`;
+  return d === 1 ? tr('אתמול', 'Yesterday') : tr(`לפני ${d} ימים`, `${d} days ago`);
 }
 
 export class SaveGame {
@@ -155,7 +156,7 @@ export class SaveGame {
     this.busy = false;
     if (slot === 'auto') this.autoT = AUTO_EVERY;
     const hud = this.game.hud;
-    if (!quiet || !ok) hud.toast(ok ? `נשמר: ${SLOT_NAMES[slot]}` : 'השמירה לא הצליחה', ok ? 'good' : 'bad', 2);
+    if (!quiet || !ok) hud.toast(ok ? tr(`נשמר: ${SLOT_NAMES[slot]}`, `Saved: ${SLOT_NAMES[slot]}`) : tr('השמירה לא הצליחה', 'The save failed'), ok ? 'good' : 'bad', 2);
     else if (hud.saving) hud.saving();
     return ok;
   }
@@ -163,7 +164,7 @@ export class SaveGame {
   async header(slot) {
     const s = migrate(await get(slot));
     if (!s) return null;
-    return { slot, at: s.at, text: `${s.where || 'בעיר'} · ${s.clock} · ${ago(s.at)}` };
+    return { slot, at: s.at, text: `${s.where || tr('בעיר', 'In the city')} · ${s.clock} · ${ago(s.at)}` };
   }
 
   // the newest save there is (for "continue")
@@ -369,7 +370,7 @@ export class SaveGame {
     }
     this.playTime = s.playTime || 0;
     this.autoT = AUTO_EVERY;
-    g.hud.toast(`נטען: ${s.where || 'העיר'} · ${s.clock}`, 'good', 2.4);
+    g.hud.toast(tr(`נטען: ${s.where || 'העיר'} · ${s.clock}`, `Loaded: ${s.where || tr('העיר', 'the city')} · ${s.clock}`), 'good', 2.4);
   }
 }
 

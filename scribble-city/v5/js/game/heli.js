@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { groundHeight } from '../world/layout.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 6.2, not with ?classic) The police helicopter (the one the city's sky already has:
 // game/ambient.js turns it into the police's at three stars) does its job:
 //   - it circles where they think you are, and its searchlight sweeps the ground round that place
@@ -78,7 +79,7 @@ export class Heli {
     P.spotted();
     if (!this.told) {
       this.told = true;
-      game.hud.toast('המסוק רואה אתכם! להיכנס מתחת לגג, או לברוח מהאור', 'bad', 2.8);
+      game.hud.toast(tr('המסוק רואה אתכם! להיכנס מתחת לגג, או לברוח מהאור', 'The helicopter sees you! Get under a roof, or get out of the light'), 'bad', 2.8);
     }
     // the marksman in the door (not at somebody with their hands up: ROADMAP 6.3)
     if (game.arrest && game.arrest.holdFire) return;

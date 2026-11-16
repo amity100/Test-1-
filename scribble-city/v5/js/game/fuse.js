@@ -13,6 +13,7 @@ import { HANDLING } from './vehicles.js';
 import { groundHeight, WATER_X, WEST_EDGE } from '../world/layout.js';
 import { clamp, damp } from '../core/util.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.20) Fusing: a part drawn onto a thing, in one stroke, on the run.
 //
 // What it is, where it goes and its numbers come from the stroke (game/fusemark.js); the part is
@@ -44,28 +45,28 @@ const _jetAxis = new THREE.Vector3(0, 0, -1);
 const _jetDir = new THREE.Vector3();
 
 export const PARTS = {
-  wheel: { name: 'גלגל', mark: 'עיגול, נמוך', cost: 8, col: [0.24, 0.24, 0.28] },
-  wing: { name: 'כנף', mark: 'צורה צרה או קו — לצד', cost: 10, col: [0.95, 0.93, 0.88] },
-  rotor: { name: 'רוטור', mark: 'קו ישר — מעל', cost: 14, col: [0.86, 0.2, 0.18] },
-  jet: { name: 'סילון', mark: 'זיגזג של להבה — מאחור', cost: 12, col: [0.82, 0.83, 0.86] },
-  spring: { name: 'קפיץ', mark: 'סליל של לולאות — מתחת', cost: 8, col: [0.86, 0.84, 0.3] },
-  barrel: { name: 'קנה', mark: 'קו שיוצא ממנו', cost: 12, col: [0.3, 0.33, 0.3] },
-  blade: { name: 'להב', mark: 'קשת', cost: 8, col: [0.85, 0.86, 0.9] },
-  armor: { name: 'שריון', mark: 'קווקוו — עליו', cost: 10, col: [0.5, 0.52, 0.57] },
-  balloon: { name: 'בלון', mark: 'עיגול — מעליו', cost: 10, col: [0.92, 0.2, 0.24] },
-  magnet: { name: 'מגנט', mark: 'U', cost: 10, col: [0.86, 0.12, 0.14] },
-  star: { name: 'כוכב', mark: 'כוכב — מחוץ לה', cost: 24, col: [1, 0.82, 0.18] },
-  bolt: { name: 'ברק', mark: 'ברק (Z) — יוצא ממנה', cost: 14, col: [0.45, 0.78, 1] },
-  smoke: { name: 'עשן', mark: 'ספירלה — מאחור', cost: 10, col: [0.55, 0.56, 0.62] },
-  chute: { name: 'מצנח', mark: 'קשת ∩ — מעליה', cost: 10, col: [0.95, 0.38, 0.32] },
-  float: { name: 'מצופים', mark: 'צורה ארוכה — מתחת, לאורכה', cost: 12, col: [1, 0.55, 0.16] },
-  spike: { name: 'קוצים', mark: '', cost: 10, col: [0.62, 0.64, 0.7] },
+  wheel: { name: tr('גלגל', 'Wheel'), mark: tr('עיגול, נמוך', 'A circle, low'), cost: 8, col: [0.24, 0.24, 0.28] },
+  wing: { name: tr('כנף', 'Wing'), mark: tr('צורה צרה או קו — לצד', 'A narrow shape or a line — to the side'), cost: 10, col: [0.95, 0.93, 0.88] },
+  rotor: { name: tr('רוטור', 'Rotor'), mark: tr('קו ישר — מעל', 'A straight line — above'), cost: 14, col: [0.86, 0.2, 0.18] },
+  jet: { name: tr('סילון', 'Jet'), mark: tr('זיגזג של להבה — מאחור', 'A zigzag of flame — behind'), cost: 12, col: [0.82, 0.83, 0.86] },
+  spring: { name: tr('קפיץ', 'Spring'), mark: tr('סליל של לולאות — מתחת', 'A coil of loops — underneath'), cost: 8, col: [0.86, 0.84, 0.3] },
+  barrel: { name: tr('קנה', 'Barrel'), mark: tr('קו שיוצא ממנו', 'A line coming out of it'), cost: 12, col: [0.3, 0.33, 0.3] },
+  blade: { name: tr('להב', 'Blade'), mark: tr('קשת', 'An arc'), cost: 8, col: [0.85, 0.86, 0.9] },
+  armor: { name: tr('שריון', 'Armor'), mark: tr('קווקוו — עליו', 'A zigzag — on it'), cost: 10, col: [0.5, 0.52, 0.57] },
+  balloon: { name: tr('בלון', 'Balloon'), mark: tr('עיגול — מעליו', 'A circle — above it'), cost: 10, col: [0.92, 0.2, 0.24] },
+  magnet: { name: tr('מגנט', 'Magnet'), mark: 'U', cost: 10, col: [0.86, 0.12, 0.14] },
+  star: { name: tr('כוכב', 'Star'), mark: tr('כוכב — מחוץ לה', 'A star — outside it'), cost: 24, col: [1, 0.82, 0.18] },
+  bolt: { name: tr('ברק', 'Lightning'), mark: tr('ברק (Z) — יוצא ממנה', 'Lightning (Z) — coming out of it'), cost: 14, col: [0.45, 0.78, 1] },
+  smoke: { name: tr('עשן', 'Smoke'), mark: tr('ספירלה — מאחור', 'A spiral — behind'), cost: 10, col: [0.55, 0.56, 0.62] },
+  chute: { name: tr('מצנח', 'Parachute'), mark: tr('קשת ∩ — מעליה', 'An arch ∩ — above it'), cost: 10, col: [0.95, 0.38, 0.32] },
+  float: { name: tr('מצופים', 'Floats'), mark: tr('צורה ארוכה — מתחת, לאורכה', 'A long shape — underneath, along it'), cost: 12, col: [1, 0.55, 0.16] },
+  spike: { name: tr('קוצים', 'Spikes'), mark: '', cost: 10, col: [0.62, 0.64, 0.7] },
   // (ROADMAP 15.3) a propeller drawn on it, pushing the way its wind does not go (game/inkparts.js)
-  prop: { name: 'מדחף', mark: '', cost: 10, col: [0.86, 0.78, 0.5] },
+  prop: { name: tr('מדחף', 'Propeller'), mark: '', cost: 10, col: [0.86, 0.78, 0.5] },
   // (ROADMAP 11.22) anything else drawn out of your car: on it as drawn
-  deco3: { name: 'קישוט', mark: '', cost: 6, col: [0.94, 0.92, 0.86] },
+  deco3: { name: tr('קישוט', 'Decoration'), mark: '', cost: 6, col: [0.94, 0.92, 0.86] },
   // (ROADMAP 11.28) a thing of the pen with its own behaviour (game/gear.js)
-  gear: { name: 'מתקן', mark: '', cost: 10, col: [0.6, 0.62, 0.66] },
+  gear: { name: tr('מתקן', 'Gadget'), mark: '', cost: 10, col: [0.6, 0.62, 0.66] },
 };
 export const PART_ORDER = ['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float', 'spike'];
 
@@ -77,12 +78,12 @@ const ALLOW = {
   car: new Set(['balloon', 'rotor', 'jet', 'spring', 'magnet', 'wheel', 'barrel', 'wing']),
   person: new Set(['balloon', 'rotor', 'jet', 'spring', 'magnet', 'wheel']),
 };
-const MINE = { star: 'כוכב — רק על מה ששלכם', bolt: 'ברק — רק על מה ששלכם', smoke: 'עשן — רק על הרכב שלכם', chute: 'מצנח — רק על מה ששלכם', float: 'מצופים — רק על הרכב שלכם' };
+const MINE = { star: tr('כוכב — רק על מה ששלכם', 'A star — only on what\'s yours'), bolt: tr('ברק — רק על מה ששלכם', 'Lightning — only on what\'s yours'), smoke: tr('עשן — רק על הרכב שלכם', 'Smoke — only on your vehicle'), chute: tr('מצנח — רק על מה ששלכם', 'A parachute — only on what\'s yours'), float: tr('מצופים — רק על הרכב שלכם', 'Floats — only on your vehicle') };
 const WHY_NOT = {
-  car: { blade: 'להב — רק על מה ששלכם', armor: 'שריון — רק על מה ששלכם', ...MINE },
-  person: { wing: 'כנף על אדם — רק על הגיבור', barrel: 'קנה — רק על מה ששלכם', blade: 'להב — רק על מה ששלכם', armor: 'שריון — רק על מה ששלכם', ...MINE },
-  weapon: { wheel: 'גלגל על נשק לא עושה כלום', balloon: 'בלון על נשק לא עושה כלום' },
-  hero: { smoke: 'עשן — רק על רכב', float: 'מצופים — רק על רכב' },
+  car: { blade: tr('להב — רק על מה ששלכם', 'A blade — only on what\'s yours'), armor: tr('שריון — רק על מה ששלכם', 'Armor — only on what\'s yours'), ...MINE },
+  person: { wing: tr('כנף על אדם — רק על הגיבור', 'A wing on a person — only on the hero'), barrel: tr('קנה — רק על מה ששלכם', 'A barrel — only on what\'s yours'), blade: tr('להב — רק על מה ששלכם', 'A blade — only on what\'s yours'), armor: tr('שריון — רק על מה ששלכם', 'Armor — only on what\'s yours'), ...MINE },
+  weapon: { wheel: tr('גלגל על נשק לא עושה כלום', 'A wheel on a weapon does nothing'), balloon: tr('בלון על נשק לא עושה כלום', 'A balloon on a weapon does nothing') },
+  hero: { smoke: tr('עשן — רק על רכב', 'Smoke — only on a vehicle'), float: tr('מצופים — רק על רכב', 'Floats — only on a vehicle') },
 };
 // (what goes on yours: how many of them)
 const MAX_ON_VEH = 8;
@@ -443,19 +444,19 @@ export class Fuse {
         if (wb) t = { kind: 'weapon', ref: slot, M: wb.M, D: wb.D };
       }
       if (t.kind === 'hero') {
-        this.say('קנה — מציירים אותו על נשק שביד', 'bad');
+        this.say(tr('קנה — מציירים אותו על נשק שביד', 'A barrel — draw it on a weapon in your hand'), 'bad');
         return false;
       }
     }
     if (!ALLOW[t.kind].has(m.type)) {
-      this.say((WHY_NOT[t.kind] && WHY_NOT[t.kind][m.type]) || `${PARTS[m.type].name} לא עושה כאן כלום`, 'bad');
+      this.say((WHY_NOT[t.kind] && WHY_NOT[t.kind][m.type]) || tr(`${PARTS[m.type].name} לא עושה כאן כלום`, `${PARTS[m.type].name} does nothing here`), 'bad');
       return false;
     }
     const info = PARTS[m.type];
     const cost = Math.round(info.cost * clamp(0.8 + (m.sizeM || 1) * 0.12, 0.8, 1.5));
     const ink = game.ink;
     if (ink && ink.level < cost) {
-      game.hud.toast(`אין מספיק דיו ל${info.name} (צריך ${cost})`, 'bad', 2);
+      game.hud.toast(tr(`אין מספיק דיו ל${info.name} (צריך ${cost})`, `Not enough ink for ${info.name} (you need ${cost})`), 'bad', 2);
       game.audio.play('meh', 0.5);
       return false;
     }
@@ -513,7 +514,7 @@ export class Fuse {
       if (L.tk === 'veh' && L.ref.fuse && !L.ref.fuse.parts.length && !list.length) this.buildVeh(L.ref);
     } else return false;
     if (this.game.ink && L.part && L.part.cost) this.game.ink.fill(L.part.cost, 'undo');
-    if (!quiet) this.say(L.kind === 'decor' ? 'הקו נמחק' : `${PARTS[L.part.type].name} הוסר`, 'info');
+    if (!quiet) this.say(L.kind === 'decor' ? tr('הקו נמחק', 'The line was erased') : tr(`${PARTS[L.part.type].name} הוסר`, `${PARTS[L.part.type].name} removed`), 'info');
     if (this.tagEl && quiet !== 'keep') this.tagEl.classList.remove('on');
     return true;
   }
@@ -714,7 +715,7 @@ export class Fuse {
     const { t, F } = best;
     const I = this.inkLine(F, P, inkI, best.r);
     if (g.ink && g.ink.level < I.d.cost) {
-      g.hud.toast(`אין מספיק דיו (צריך ${I.d.cost})`, 'bad', 2);
+      g.hud.toast(tr(`אין מספיק דיו (צריך ${I.d.cost})`, `Not enough ink (you need ${I.d.cost})`), 'bad', 2);
       return false;
     }
     this.putInk(t, F, P, I);
@@ -834,7 +835,7 @@ export class Fuse {
     this.last = { kind: 'decor', ref: t.ref, tk: t.kind, d, ds, part: { type: 'decor', cost, ink: d.c }, t: g.time, M: { t, F, P, m }, ink: I };
     g.audio.play('click', 0.35);
     const sticker = ds.some((o) => o.fill);
-    this.tag({ part: { type: 'decor' }, name: sticker ? 'מדבקה בדיו' : items.length > 1 ? 'ציור בדיו' : 'קו דיו', rule: t.kind === 'veh' ? 'נשאר עליה כמו שציירתם' : 'נשאר עליה, עד שתיעלם', use: 'אפשר להפוך אותו לחלק:' }, t, cost, alts, d.c);
+    this.tag({ part: { type: 'decor' }, name: sticker ? tr('מדבקה בדיו', 'An ink sticker') : items.length > 1 ? tr('ציור בדיו', 'An ink drawing') : tr('קו דיו', 'An ink line'), rule: t.kind === 'veh' ? tr('נשאר עליה כמו שציירתם', 'Stays on it as you drew it') : tr('נשאר עליה, עד שתיעלם', 'Stays on it, until it fades'), use: tr('אפשר להפוך אותו לחלק:', 'You can turn it into a part:') }, t, cost, alts, d.c);
   }
 
   // the part just put on, as the line it was drawn as instead (its tag's "just a drawing"): ink on
@@ -848,7 +849,7 @@ export class Fuse {
     if (!this.undo('keep')) return false;
     const g = this.game;
     if (g.ink && g.ink.level < I.d.cost) {
-      g.hud.toast(`אין מספיק דיו (צריך ${I.d.cost})`, 'bad', 2);
+      g.hud.toast(tr(`אין מספיק דיו (צריך ${I.d.cost})`, `Not enough ink (you need ${I.d.cost})`), 'bad', 2);
       return false;
     }
     this.putInk(t, F, P, I);
@@ -945,7 +946,7 @@ export class Fuse {
     const g = this.game;
     caps = caps.filter(Boolean);
     if (!caps.length) {
-      this.say('ציירו על המכונית, או משהו שיוצא ממנה', 'bad');
+      this.say(tr('ציירו על המכונית, או משהו שיוצא ממנה', 'Draw on the car, or something coming out of it'), 'bad');
       return false;
     }
     const t = caps[caps.length - 1].t;
@@ -997,7 +998,7 @@ export class Fuse {
   inkCaps(t, caps, inkI, alts = []) {
     const items = caps.filter((c) => c.I && (c.I.on > 0.3 || caps.length > 1));
     if (!items.length) {
-      this.say('ציירו על המכונית, או משהו שיוצא ממנה', 'bad');
+      this.say(tr('ציירו על המכונית, או משהו שיוצא ממנה', 'Draw on the car, or something coming out of it'), 'bad');
       return false;
     }
     this.putInks(t, items[0].F, items.map((c) => ({ P: c.P, I: c.I })), alts.filter((a) => PARTS[a] && a !== 'deco3').slice(0, 3));
@@ -1079,13 +1080,13 @@ export class Fuse {
       const list = best.v.fuse.decor;
       list.splice(list.indexOf(best.dc), 1);
       g.fx.crumbs(best.wx, best.wy + 0.2, best.wz, 12, 2);
-      this.say('הקו נמחק', 'info');
+      this.say(tr('הקו נמחק', 'The line was erased'), 'info');
       if (this.last && this.last.d === best.dc) this.last = null;
       return true;
     }
     this.removeVeh(best.v, best.p, true);
     g.fx.crumbs(best.wx, best.wy + 0.3, best.wz, 18, 2.4);
-    this.say(`${PARTS[best.p.type].name} נמחק`, 'info');
+    this.say(tr(`${PARTS[best.p.type].name} נמחק`, `${PARTS[best.p.type].name} erased`), 'info');
     if (this.last && this.last.part === best.p) this.last = null;
     return true;
   }
@@ -1554,7 +1555,7 @@ export class Fuse {
       // (going fast enough to, the first time: how)
       if (fz.wingFly && !fz.toldOff && (v.speed || 0) >= fz.takeoff && v.driver === this.game.player) {
         fz.toldOff = true;
-        if (!v.air) this.say(this.game.touch ? 'מהירות המראה — ▲ להמריא' : 'מהירות המראה — רווח להמריא', 'good');
+        if (!v.air) this.say(this.game.touch ? tr('מהירות המראה — ▲ להמריא', 'Takeoff speed — ▲ to take off') : tr('מהירות המראה — רווח להמריא', 'Takeoff speed — Space to take off'), 'good');
       }
     }
     if (fz.vtol && !v.air) fz.vtol.fuel = Math.min(fz.vtol.max, fz.vtol.fuel + dt * 0.8);
@@ -1731,7 +1732,7 @@ export class Fuse {
     if (!loose.length) return;
     const p = loose[Math.floor(Math.random() * loose.length)];
     this.removeVeh(v, p);
-    if (v.driver === this.game.player) this.say(`ה${PARTS[p.type].name} נתלש מהמכה`, 'bad');
+    if (v.driver === this.game.player) this.say(tr(`ה${PARTS[p.type].name} נתלש מהמכה`, `The ${PARTS[p.type].name} was torn off by the hit`), 'bad');
   }
 
   // ------------------------------------------------------------------ on the hero
@@ -2020,39 +2021,39 @@ export class Fuse {
     const t = g.time;
     // (one thing at a time on one car)
     if (this.others.some((o) => o.ref === c && o.until > t)) {
-      this.say('כבר יש עליה משהו', 'bad');
+      this.say(tr('כבר יש עליה משהו', 'There\'s already something on it'), 'bad');
       return null;
     }
     const st = { phase: 'go', vy: 0, h0: c.pos.y || 0, spin: 0, yaw0: c.yaw };
     let T = 8;
     let rule = '';
-    const name = c.police ? 'הניידת' : 'המכונית';
+    const name = c.police ? tr('הניידת', 'the police car') : tr('המכונית', 'the car');
     const v = part.v;
     if (part.type === 'wheel') {
       if (v !== 'square' && v !== 'small') {
-        this.say('גלגל רגיל לא משנה לה כלום — ציירו מרובע או קטן', 'bad');
+        this.say(tr('גלגל רגיל לא משנה לה כלום — ציירו מרובע או קטן', 'A normal wheel changes nothing for it — draw a square one or a small one'), 'bad');
         return null;
       }
       T = 15;
-      rule = v === 'square' ? `גלגלים מרובעים: ${name} מקרטעת לאט` : `גלגלים זעירים: ${name} זוחלת`;
+      rule = v === 'square' ? tr(`גלגלים מרובעים: ${name} מקרטעת לאט`, `Square wheels: ${name} hobbles along slowly`) : tr(`גלגלים זעירים: ${name} זוחלת`, `Tiny wheels: ${name} crawls`);
     } else if (part.type === 'balloon') {
       const d = clamp(part.n.d || 1.5, 0.6, 6);
       st.top = clamp(4 + d * 2.4, 5, 16);
       T = 9;
-      rule = `בלון: ${name} עפה למעלה ל־${T} שניות`;
+      rule = tr(`בלון: ${name} עפה למעלה ל־${T} שניות`, `Balloon: ${name} floats up for ${T} seconds`);
     } else if (part.type === 'rotor') {
       st.top = clamp(6 + (part.n.span || 2) * 2, 7, 18);
       T = 6;
-      rule = `רוטור: ${name} מתרוממת ומסתחררת`;
+      rule = tr(`רוטור: ${name} מתרוממת ומסתחררת`, `Rotor: ${name} lifts off and spins`);
     } else if (part.type === 'jet') {
       T = 2.6;
       st.dir = part.v === 'front' ? -1 : 1;
-      rule = `סילון: ${name} נורית ${st.dir > 0 ? 'קדימה' : 'אחורה'} ומתרסקת`;
+      rule = tr(`סילון: ${name} נורית ${st.dir > 0 ? 'קדימה' : 'אחורה'} ומתרסקת`, `Jet: ${name} shoots off ${st.dir > 0 ? tr('קדימה', 'forward') : tr('אחורה', 'back')} and crashes`);
     } else if (part.type === 'spring') {
       st.vy = clamp(9 + (part.n.coils || 4) * 0.9, 10, 17);
       st.phase = 'fall';
       T = 4;
-      rule = `קפיץ: ${name} מוקפצת לאוויר`;
+      rule = tr(`קפיץ: ${name} מוקפצת לאוויר`, `Spring: ${name} is bounced into the air`);
     } else if (part.type === 'magnet') {
       let best = null;
       let bd = 32;
@@ -2066,21 +2067,21 @@ export class Fuse {
       }
       st.other = best;
       T = best ? 4 : 8;
-      rule = best ? `מגנט: ${name} נמשכת אל המכונית הקרובה — בום` : `מגנט: ${name} נדבקת לכביש`;
+      rule = best ? tr(`מגנט: ${name} נמשכת אל המכונית הקרובה — בום`, `Magnet: ${name} is pulled to the nearest car — boom`) : tr(`מגנט: ${name} נדבקת לכביש`, `Magnet: ${name} sticks to the road`);
     } else if (part.type === 'barrel') {
       T = 20;
       st.cool = 0.6;
       st.gun = gunOf({ r: part.n.thick ? 0.12 : 0.06, len: clamp(part.n.len || 1, 0.6, 2.5), el: INK_EL[part.ink] || undefined });
-      rule = `צריח על ${name}: יורה על השוטרים והאויבים ל־${T} שניות`;
+      rule = tr(`צריח על ${name}: יורה על השוטרים והאויבים ל־${T} שניות`, `A turret on ${name}: shoots at the cops and enemies for ${T} seconds`);
     } else if (part.type === 'wing') {
       if (Math.abs(c.speed || 0) < 8) {
-        this.say('כנף צריכה מהירות — המכונית הזאת כמעט עומדת', 'bad');
+        this.say(tr('כנף צריכה מהירות — המכונית הזאת כמעט עומדת', 'A wing needs speed — this car is almost standing still'), 'bad');
         return null;
       }
       T = 4;
       st.vy = 3;
       st.fwd = Math.max(12, Math.abs(c.speed || 0));
-      rule = `כנף: ${name} ממריאה מהכביש`;
+      rule = tr(`כנף: ${name} ממריאה מהכביש`, `Wing: ${name} takes off from the road`);
     }
     // (its own driving stops: it is the part's now - a police car after you gives up the chase)
     if (part.type !== 'barrel' && part.type !== 'wheel') this.hold(c);
@@ -2161,7 +2162,7 @@ export class Fuse {
     const g = this.game;
     const t = g.time;
     if (this.others.some((o) => o.ref === e && o.until > t)) {
-      this.say('כבר יש עליו משהו', 'bad');
+      this.say(tr('כבר יש עליו משהו', 'There\'s already something on him'), 'bad');
       return null;
     }
     const R = g.ragdolls;
@@ -2178,24 +2179,24 @@ export class Fuse {
       st.rise = part.type === 'rotor' ? 3.2 : 1.8;
       st.top = st.anchor.y + (part.type === 'rotor' ? 9 : 7);
       T = part.type === 'rotor' ? 5 : 8;
-      rule = part.type === 'rotor' ? 'רוטור: מתרומם ומסתחרר באוויר' : `בלון: עף למעלה ל־${T} שניות`;
+      rule = part.type === 'rotor' ? tr('רוטור: מתרומם ומסתחרר באוויר', 'Rotor: lifts off and spins in the air') : tr(`בלון: עף למעלה ל־${T} שניות`, `Balloon: floats up for ${T} seconds`);
     } else if (part.type === 'jet') {
       if (!R) return null;
       const dx = part.v === 'front' ? -fx : fx;
       const dz = part.v === 'front' ? -fz : fz;
       R.throw(e, dx * 15, 8, dz * 15, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 3);
       T = 1;
-      rule = 'סילון: נורה מהמקום';
+      rule = tr('סילון: נורה מהמקום', 'Jet: shot off the spot');
     } else if (part.type === 'spring') {
       if (!R) return null;
       R.throw(e, (Math.random() - 0.5) * 2, clamp(11 + (part.n.coils || 4) * 0.8, 12, 17), (Math.random() - 0.5) * 2, 4, 0, 2);
       T = 1;
-      rule = 'קפיץ: מוקפץ גבוה';
+      rule = tr('קפיץ: מוקפץ גבוה', 'Spring: bounced up high');
     } else if (part.type === 'wheel') {
       if (!R) return null;
       R.throw(e, fx * 6, 1.5, fz * 6, -fz * 6, 0, fx * 6);
       T = 1;
-      rule = 'גלגיליות: מחליק ונופל';
+      rule = tr('גלגיליות: מחליק ונופל', 'Roller skates: slips and falls');
     } else if (part.type === 'magnet') {
       if (enemy && e.gunman) {
         e.disarmedT = t + 25;
@@ -2213,11 +2214,11 @@ export class Fuse {
         }
         st.gun = true;
         T = 1.2;
-        rule = 'מגנט: הנשק נתלש לו מהיד — אליכם';
+        rule = tr('מגנט: הנשק נתלש לו מהיד — אליכם', 'Magnet: the weapon is torn out of his hand — to you');
       } else {
         st.pull = true;
         T = 1.6;
-        rule = 'מגנט: נמשך אליכם';
+        rule = tr('מגנט: נמשך אליכם', 'Magnet: pulled to you');
       }
     }
     if (enemy && e.say) e.say('hit', 'alarm');
@@ -2259,7 +2260,7 @@ export class Fuse {
       const q = R.parts.find((o) => o.until && t > o.until);
       if (q) {
         this.removeVeh(v, q);
-        if (v === pv) this.say(`ה${PARTS[q.type].name} נגמר`, 'info');
+        if (v === pv) this.say(tr(`ה${PARTS[q.type].name} נגמר`, `The ${PARTS[q.type].name} ran out`), 'info');
       }
     }
     if (pv) this.sea(pv, dt);
@@ -2377,7 +2378,7 @@ export class Fuse {
     if (!v.fzSink) {
       g.fx.splash(v.pos.x, -0.78, v.pos.z, 26, 4, [0.88, 0.95, 1]);
       g.audio.play('splat', 0.8);
-      this.say(fl ? 'המצופים קטנים מדי בשבילה — היא שוקעת לאט' : 'המכונית שוקעת! ציירו לה מצופים — צורה ארוכה נמוך לאורכה', 'bad');
+      this.say(fl ? tr('המצופים קטנים מדי בשבילה — היא שוקעת לאט', 'The floats are too small for it — it sinks slowly') : tr('המכונית שוקעת! ציירו לה מצופים — צורה ארוכה נמוך לאורכה', 'The car is sinking! Draw floats for it — a long shape low along its side'), 'bad');
     }
     // (floats too small for it: down slower)
     v.fzSink = (v.fzSink || 0) + dt * (fl ? 1 - 0.7 * clamp(fl.k, 0, 1) : 1);
@@ -3107,7 +3108,7 @@ export class Fuse {
     this.tagEl.classList.toggle('mini', t.kind === 'veh');
     if (t.kind === 'veh') {
       const say = [res.rule, res.use].filter(Boolean).join(' · ');
-      this.tagEl.innerHTML = `<b><i style="background:${dot}"></i>${esc(res.name || info.name)}${cost ? `<small>−${cost}</small>` : ''}</b>${say ? `<span>${esc(say)}</span>` : ''}${combo.map((c) => `<strong>✦ ${esc(c)}</strong>`).join('')}<div class="fz-alt">${alts.map((a) => `<button data-a="${a}"><i style="background:${PART_CSS[a]}"></i>${esc(PARTS[a].name)}</button>`).join('')}${canInk ? '<button data-a="ink" class="ink">✎ ציור</button>' : ''}<button data-a="undo" class="x">✕</button></div>`;
+      this.tagEl.innerHTML = `<b><i style="background:${dot}"></i>${esc(res.name || info.name)}${cost ? `<small>−${cost}</small>` : ''}</b>${say ? `<span>${esc(say)}</span>` : ''}${combo.map((c) => `<strong>✦ ${esc(c)}</strong>`).join('')}<div class="fz-alt">${alts.map((a) => `<button data-a="${a}"><i style="background:${PART_CSS[a]}"></i>${esc(PARTS[a].name)}</button>`).join('')}${canInk ? tr('<button data-a="ink" class="ink">✎ ציור</button>', '<button data-a="ink" class="ink">✎ Drawing</button>') : ''}<button data-a="undo" class="x">✕</button></div>`;
       this.tagEl.classList.add('on');
       this.tagT = combo.length ? 5 : 4;
       this.tagAt = t;
@@ -3115,7 +3116,7 @@ export class Fuse {
       if (combo.length) this.game.audio.play('ding', 0.6);
       return;
     }
-    this.tagEl.innerHTML = `<b><i style="background:${dot}"></i>${esc(res.name || info.name)}</b><span>${esc(res.rule || '')}</span>${res.nums ? `<em>${esc(res.nums)}</em>` : ''}${res.use ? `<u>${esc(res.use)}</u>` : ''}${combo.map((c) => `<strong>✦ ${esc(c)}</strong>`).join('')}<small>−${cost} דיו</small>${alts.length || ink || canInk ? `<div class="fz-alt">${ink ? '' : 'לא זה?'}${alts.map((a) => `<button data-a="${a}"><i style="background:${PART_CSS[a]}"></i>${esc(PARTS[a].name)}</button>`).join('')}${canInk ? '<button data-a="ink" class="ink">✎ רק ציור</button>' : ''}${ink ? '<button data-a="undo" class="x">✕ למחוק</button>' : ''}</div>` : ''}`;
+    this.tagEl.innerHTML = tr(`<b><i style="background:${dot}"></i>${esc(res.name || info.name)}</b><span>${esc(res.rule || '')}</span>${res.nums ? `<em>${esc(res.nums)}</em>` : ''}${res.use ? `<u>${esc(res.use)}</u>` : ''}${combo.map((c) => `<strong>✦ ${esc(c)}</strong>`).join('')}<small>−${cost} דיו</small>${alts.length || ink || canInk ? `<div class="fz-alt">${ink ? '' : 'לא זה?'}${alts.map((a) => `<button data-a="${a}"><i style="background:${PART_CSS[a]}"></i>${esc(PARTS[a].name)}</button>`).join('')}${canInk ? '<button data-a="ink" class="ink">✎ רק ציור</button>' : ''}${ink ? '<button data-a="undo" class="x">✕ למחוק</button>' : ''}</div>` : ''}`, `<b><i style="background:${dot}"></i>${esc(res.name || info.name)}</b><span>${esc(res.rule || '')}</span>${res.nums ? `<em>${esc(res.nums)}</em>` : ''}${res.use ? `<u>${esc(res.use)}</u>` : ''}${combo.map((c) => `<strong>✦ ${esc(c)}</strong>`).join('')}<small>−${cost} ink</small>${alts.length || ink || canInk ? `<div class="fz-alt">${ink ? '' : tr('לא זה?', 'Not this?')}${alts.map((a) => `<button data-a="${a}"><i style="background:${PART_CSS[a]}"></i>${esc(PARTS[a].name)}</button>`).join('')}${canInk ? tr('<button data-a="ink" class="ink">✎ רק ציור</button>', '<button data-a="ink" class="ink">✎ Just a drawing</button>') : ''}${ink ? tr('<button data-a="undo" class="x">✕ למחוק</button>', '<button data-a="undo" class="x">✕ Erase</button>') : ''}</div>` : ''}`);
     this.tagEl.classList.add('on');
     this.tagT = combo.length || alts.length || ink || canInk ? 5 : 3.6;
     this.tagAt = t;
@@ -3205,17 +3206,17 @@ export const PART_CSS = {
 };
 
 export const COMBO_NAME = {
-  eagle: 'נשר — קפיצה גבוהה וגלישה ארוכה',
-  plane: 'מטוס — באוויר, Shift שומר על גובה',
-  gunship: 'מסוק קרב — יורה מהר יותר',
-  sniper: 'צלף בשמיים — מדויק פי 2.5',
-  ironRam: 'איל ברזל — בהאצה מעיף הכול',
-  tank: 'טנק — עולה על הכול ומועך',
-  monster: 'מפלצת קופצת — הנחיתה מעיפה את מי שמסביב',
-  rocketman: 'איש רקטה — הדלק נגמר לאט פי 3',
-  eagleH: 'נשר — קפיצת על וגלישה',
-  turbo: 'רולר טורבו — בריצה מהירה פי 1.35',
-  airship: 'ספינת אוויר — מרחפים כמעט בלי הגבלה',
+  eagle: tr('נשר — קפיצה גבוהה וגלישה ארוכה', 'Eagle — a high jump and a long glide'),
+  plane: tr('מטוס — באוויר, Shift שומר על גובה', 'Plane — in the air, Shift keeps your height'),
+  gunship: tr('מסוק קרב — יורה מהר יותר', 'Gunship — fires faster'),
+  sniper: tr('צלף בשמיים — מדויק פי 2.5', 'Sky sniper — 2.5 times as accurate'),
+  ironRam: tr('איל ברזל — בהאצה מעיף הכול', 'Iron ram — sends everything flying when it speeds up'),
+  tank: tr('טנק — עולה על הכול ומועך', 'Tank — drives over everything and crushes it'),
+  monster: tr('מפלצת קופצת — הנחיתה מעיפה את מי שמסביב', 'Jumping monster — the landing sends everyone around flying'),
+  rocketman: tr('איש רקטה — הדלק נגמר לאט פי 3', 'Rocket man — fuel runs out 3 times slower'),
+  eagleH: tr('נשר — קפיצת על וגלישה', 'Eagle — a super jump and a glide'),
+  turbo: tr('רולר טורבו — בריצה מהירה פי 1.35', 'Turbo roller — 1.35 times faster on the run'),
+  airship: tr('ספינת אוויר — מרחפים כמעט בלי הגבלה', 'Airship — hover almost without limit'),
 };
 
 // (ROADMAP 11.21) a line of ink on a car, point to point in its frame M
@@ -3392,70 +3393,70 @@ function vehRule(p, v) {
   const fz = v.fz || {};
   const H = v.handling || {};
   const t = v.game.touch;
-  const SP = t ? '▲' : 'רווח';
+  const SP = t ? '▲' : tr('רווח', 'Space');
   const DN = t ? '▼' : 'C';
   switch (p.type) {
     case 'wheel': {
-      const name = { round: 'גלגלי מרוץ', small: 'גלגלים קטנים', teeth: 'גלגלי שיניים', big: 'גלגלי מפלצת', bigteeth: 'גלגלי מפלצת עם שיניים', square: 'גלגלים מרובעים' }[p.v];
+      const name = { round: tr('גלגלי מרוץ', 'Racing wheels'), small: tr('גלגלים קטנים', 'Small wheels'), teeth: tr('גלגלי שיניים', 'Cog wheels'), big: tr('גלגלי מפלצת', 'Monster wheels'), bigteeth: tr('גלגלי מפלצת עם שיניים', 'Monster wheels with teeth'), square: tr('גלגלים מרובעים', 'Square wheels') }[p.v];
       const rule = {
-        round: 'מהירות סופית +18%',
-        small: 'זינוק חזק וסיבוב חד, מהירות סופית נמוכה',
-        teeth: `עולה על מדרכות ומדרגות (עד ${Math.round((fz.step || 0.68) * 100)} ס״מ), אחיזה בשטח`,
-        big: `קוטר ${fmt((fz.wheelR || 0.6) * 2)} מ׳: עולה על הכול ומועך מכוניות`,
-        bigteeth: 'עולה על הכול, מטפס ומועך',
-        square: 'מקרטע ואיטי — עדיף לצייר אותם על מישהו אחר',
+        round: tr('מהירות סופית +18%', 'Top speed +18%'),
+        small: tr('זינוק חזק וסיבוב חד, מהירות סופית נמוכה', 'A strong launch and a tight turn, a low top speed'),
+        teeth: tr(`עולה על מדרכות ומדרגות (עד ${Math.round((fz.step || 0.68) * 100)} ס״מ), אחיזה בשטח`, `Climbs curbs and stairs (up to ${Math.round((fz.step || 0.68) * 100)} cm), grips off-road`),
+        big: tr(`קוטר ${fmt((fz.wheelR || 0.6) * 2)} מ׳: עולה על הכול ומועך מכוניות`, `${fmt((fz.wheelR || 0.6) * 2)} m across: drives over everything and crushes cars`),
+        bigteeth: tr('עולה על הכול, מטפס ומועך', 'Drives over everything, climbs and crushes'),
+        square: tr('מקרטע ואיטי — עדיף לצייר אותם על מישהו אחר', 'Bumpy and slow — better to draw them on somebody else'),
       }[p.v];
-      return { name, rule, nums: `מהירות סופית ${Math.round(H.top || 0)} מ׳/ש` };
+      return { name, rule, nums: tr(`מהירות סופית ${Math.round(H.top || 0)} מ׳/ש`, `Top speed ${Math.round(H.top || 0)} m/s`) };
     }
     case 'wing':
-      if (p.v === 'spoiler') return { name: 'ספוילר', rule: 'אחיזה בפניות במהירות', nums: `אחיזה ${fmt(H.grip || 0)}` };
+      if (p.v === 'spoiler') return { name: tr('ספוילר', 'Spoiler'), rule: tr('אחיזה בפניות במהירות', 'Grip in fast turns'), nums: tr(`אחיזה ${fmt(H.grip || 0)}`, `Grip ${fmt(H.grip || 0)}`) };
       // (ROADMAP 11.26: big enough for its weight, they lift it off - else they only slow its fall)
-      if (fz.wingFly) return { name: 'כנפיים', rule: `ממריאה ב־${Math.round(fz.takeoff * 3.6)} קמ״ש: ${SP} עולה, ${DN} יורדת`, nums: `מוטה ${fmt((n.span || 1) * 2 + (v.halfWid || 1) * 2)} מ׳`, use: `נוסעים מהר ולוחצים ${SP}` };
-      return { name: 'כנפיים', rule: `קטנות מדי להמריא — רק גולשת אחרי קפיצה (פי ${fmt(1 / Math.max(0.1, 1 - v.glide))} לאט)`, nums: `מוטה ${fmt((n.span || 1) * 2 + (v.halfWid || 1) * 2)} מ׳`, use: 'ציירו כנפיים גדולות יותר כדי לטוס' };
+      if (fz.wingFly) return { name: tr('כנפיים', 'Wings'), rule: tr(`ממריאה ב־${Math.round(fz.takeoff * 3.6)} קמ״ש: ${SP} עולה, ${DN} יורדת`, `Takes off at ${Math.round(fz.takeoff * 3.6)} km/h: ${SP} up, ${DN} down`), nums: tr(`מוטה ${fmt((n.span || 1) * 2 + (v.halfWid || 1) * 2)} מ׳`, `Wingspan ${fmt((n.span || 1) * 2 + (v.halfWid || 1) * 2)} m`), use: tr(`נוסעים מהר ולוחצים ${SP}`, `Drive fast and press ${SP}`) };
+      return { name: tr('כנפיים', 'Wings'), rule: tr(`קטנות מדי להמריא — רק גולשת אחרי קפיצה (פי ${fmt(1 / Math.max(0.1, 1 - v.glide))} לאט)`, `Too small to take off — it only glides after a jump (${fmt(1 / Math.max(0.1, 1 - v.glide))} times slower)`), nums: tr(`מוטה ${fmt((n.span || 1) * 2 + (v.halfWid || 1) * 2)} מ׳`, `Wingspan ${fmt((n.span || 1) * 2 + (v.halfWid || 1) * 2)} m`), use: tr('ציירו כנפיים גדולות יותר כדי לטוס', 'Draw bigger wings to fly') };
     case 'rotor':
       return fz.rotor >= 1
-        ? { name: 'רוטור', rule: 'טסה מעל הפקקים והגגות', nums: `קוטר ${fmt(fz.rotorSpan || 2)} מ׳ · הרמה ×${fmt(fz.rotor)}`, use: `${SP} — למעלה · ${DN} — למטה` }
-        : { name: 'רוטור קטן', rule: `קטן מדי בשביל המשקל — רק מאט נפילה. צריך קוטר של ${fmt(Math.sqrt((H.mass || 1) / 0.42))} מ׳`, nums: `קוטר ${fmt(fz.rotorSpan || 1)} מ׳` };
+        ? { name: tr('רוטור', 'Rotor'), rule: tr('טסה מעל הפקקים והגגות', 'Flies over the traffic jams and the rooftops'), nums: tr(`קוטר ${fmt(fz.rotorSpan || 2)} מ׳ · הרמה ×${fmt(fz.rotor)}`, `${fmt(fz.rotorSpan || 2)} m across · lift ×${fmt(fz.rotor)}`), use: tr(`${SP} — למעלה · ${DN} — למטה`, `${SP} — up · ${DN} — down`) }
+        : { name: tr('רוטור קטן', 'Small rotor'), rule: tr(`קטן מדי בשביל המשקל — רק מאט נפילה. צריך קוטר של ${fmt(Math.sqrt((H.mass || 1) / 0.42))} מ׳`, `Too small for the weight — it only slows a fall. It needs to be ${fmt(Math.sqrt((H.mass || 1) / 0.42))} m across`), nums: tr(`קוטר ${fmt(fz.rotorSpan || 1)} מ׳`, `${fmt(fz.rotorSpan || 1)} m across`) };
     case 'jet':
-      if (p.v === 'front') return { name: 'מבער להבות', rule: 'קליק — אש קדימה', nums: `טווח ${Math.round(fz.flame ? fz.flame.range : 8)} מ׳` };
-      if (p.v === 'under') return { name: 'סילון מתחת', rule: 'זינוק אנכי', nums: '2.5 שניות דלק', use: `${SP} — למעלה` };
+      if (p.v === 'front') return { name: tr('מבער להבות', 'Flame burner'), rule: tr('קליק — אש קדימה', 'Click — fire forward'), nums: tr(`טווח ${Math.round(fz.flame ? fz.flame.range : 8)} מ׳`, `Range ${Math.round(fz.flame ? fz.flame.range : 8)} m`) };
+      if (p.v === 'under') return { name: tr('סילון מתחת', 'Jet underneath'), rule: tr('זינוק אנכי', 'A vertical leap'), nums: tr('2.5 שניות דלק', '2.5 seconds of fuel'), use: tr(`${SP} — למעלה`, `${SP} — up`) };
       // (a phone: its turbo button - or the stick all the way, with the stick in the settings)
-      return { name: 'סילון', rule: `האצה: מהירות +${Math.round(40 * (fz.jetK || 1))}%, ובאוויר דוחף קדימה`, nums: `כוח ×${fmt(fz.jetK || 1)}`, use: !t ? 'Shift' : v.game.settings.get('touchDrive') !== 'stick' ? 'כפתור הטורבו' : 'הג׳ויסטיק עד הסוף' };
+      return { name: tr('סילון', 'Jet'), rule: tr(`האצה: מהירות +${Math.round(40 * (fz.jetK || 1))}%, ובאוויר דוחף קדימה`, `Boost: speed +${Math.round(40 * (fz.jetK || 1))}%, and in the air it pushes forward`), nums: tr(`כוח ×${fmt(fz.jetK || 1)}`, `Power ×${fmt(fz.jetK || 1)}`), use: !t ? 'Shift' : v.game.settings.get('touchDrive') !== 'stick' ? tr('כפתור הטורבו', 'The turbo button') : tr('הג׳ויסטיק עד הסוף', 'The joystick all the way') };
     case 'spring':
-      if (p.v === 'bumper') return { name: 'פגוש קפיץ', rule: 'מי שנפגע מקדימה עף רחוק', nums: `${p.n.coils || 4} סלילים` };
-      return { name: 'קפיץ', rule: `קפיצה לגובה ${fmt(((fz.jump || 9) ** 2) / 40)} מ׳`, nums: `${p.n.coils || 4} סלילים`, use: SP };
+      if (p.v === 'bumper') return { name: tr('פגוש קפיץ', 'Spring bumper'), rule: tr('מי שנפגע מקדימה עף רחוק', 'Whoever is hit in front flies far'), nums: tr(`${p.n.coils || 4} סלילים`, `${p.n.coils || 4} coils`) };
+      return { name: tr('קפיץ', 'Spring'), rule: tr(`קפיצה לגובה ${fmt(((fz.jump || 9) ** 2) / 40)} מ׳`, `A jump ${fmt(((fz.jump || 9) ** 2) / 40)} m high`), nums: tr(`${p.n.coils || 4} סלילים`, `${p.n.coils || 4} coils`), use: SP };
     case 'barrel': {
       const gun = p.gun;
-      const what = gun.type === 'cannon' ? 'תותח' : 'מקלע';
-      const where = { turret: 'בצריח שמסתובב אחרי המבט', front: 'יורה קדימה', rear: 'יורה אחורה על מי שרודף' }[p.v];
-      return { name: what, rule: where, nums: `טווח ${gun.range} מ׳ · נזק ${gun.dmg}`, use: t ? 'כפתור הירי' : 'קליק' };
+      const what = gun.type === 'cannon' ? tr('תותח', 'Cannon') : tr('מקלע', 'Machine gun');
+      const where = { turret: tr('בצריח שמסתובב אחרי המבט', 'In a turret that turns where you look'), front: tr('יורה קדימה', 'Fires forward'), rear: tr('יורה אחורה על מי שרודף', 'Fires backward at whoever\'s chasing') }[p.v];
+      return { name: what, rule: where, nums: tr(`טווח ${gun.range} מ׳ · נזק ${gun.dmg}`, `Range ${gun.range} m · damage ${gun.dmg}`), use: t ? tr('כפתור הירי', 'The fire button') : tr('קליק', 'Click') };
     }
     case 'blade':
-      return p.v === 'side' ? { name: 'להבי צד', rule: 'חותך את מי שנוסע או עומד לידך', nums: `נזק ${v.blades ? v.blades.side : 40}` } : { name: 'להב חרש', rule: 'מעיף מכוניות ומחסומים מהדרך בלי להיפגע מקדימה', nums: `הדיפה ×${fmt(v.ram ? v.ram.k : 2)}` };
+      return p.v === 'side' ? { name: tr('להבי צד', 'Side blades'), rule: tr('חותך את מי שנוסע או עומד לידך', 'Cuts whoever drives or stands next to you'), nums: tr(`נזק ${v.blades ? v.blades.side : 40}`, `Damage ${v.blades ? v.blades.side : 40}`) } : { name: tr('להב חרש', 'Plow blade'), rule: tr('מעיף מכוניות ומחסומים מהדרך בלי להיפגע מקדימה', 'Knocks cars and roadblocks out of the way without getting hurt in front'), nums: tr(`הדיפה ×${fmt(v.ram ? v.ram.k : 2)}`, `Knockback ×${fmt(v.ram ? v.ram.k : 2)}`) };
     case 'armor':
-      return { name: 'שריון', rule: `סופג ${Math.round((v.armor || 0) * 100)}% מכל פגיעה — וכבד יותר`, nums: `מהירות סופית ${Math.round(H.top || 0)} מ׳/ש` };
+      return { name: tr('שריון', 'Armor'), rule: tr(`סופג ${Math.round((v.armor || 0) * 100)}% מכל פגיעה — וכבד יותר`, `Soaks up ${Math.round((v.armor || 0) * 100)}% of every hit — and it's heavier`), nums: tr(`מהירות סופית ${Math.round(H.top || 0)} מ׳/ש`, `Top speed ${Math.round(H.top || 0)} m/s`) };
     case 'balloon':
-      return fz.balloon >= 1 ? { name: 'בלון', rule: 'המכונית מרחפת ושטה ברוח', nums: `קוטר ${fmt(fz.balloonD || 1.5)} מ׳ · עילוי ×${fmt(fz.balloon)}`, use: `${SP} — למעלה · ${DN} — למטה` } : { name: 'בלון קטן', rule: 'קטן מדי להרים אותה — רק מאט נפילה', nums: `קוטר ${fmt(fz.balloonD || 1)} מ׳ · מרים מ־${fmt(Math.cbrt((v.handling ? v.handling.mass : 1.25) / 0.32))} מ׳` };
+      return fz.balloon >= 1 ? { name: tr('בלון', 'Balloon'), rule: tr('המכונית מרחפת ושטה ברוח', 'The car floats and sails on the wind'), nums: tr(`קוטר ${fmt(fz.balloonD || 1.5)} מ׳ · עילוי ×${fmt(fz.balloon)}`, `${fmt(fz.balloonD || 1.5)} m across · lift ×${fmt(fz.balloon)}`), use: tr(`${SP} — למעלה · ${DN} — למטה`, `${SP} — up · ${DN} — down`) } : { name: tr('בלון קטן', 'Small balloon'), rule: tr('קטן מדי להרים אותה — רק מאט נפילה', 'Too small to lift it — it only slows a fall'), nums: tr(`קוטר ${fmt(fz.balloonD || 1)} מ׳ · מרים מ־${fmt(Math.cbrt((v.handling ? v.handling.mass : 1.25) / 0.32))} מ׳`, `${fmt(fz.balloonD || 1)} m across · lifts from ${fmt(Math.cbrt((v.handling ? v.handling.mass : 1.25) / 0.32))} m`) };
     case 'magnet':
-      return { name: p.v === 'back' ? 'מגנט מאחור' : 'מגנט', rule: p.v === 'back' ? 'מי שנוסע אחריך נדבק ונגרר' : 'מושך מכוניות מקדימה ומדביק אותן לחרטום', nums: `טווח ${Math.round(fz.magnet ? fz.magnet.reach : 12)} מ׳`, use: `${DN} — לשחרר` };
+      return { name: p.v === 'back' ? tr('מגנט מאחור', 'Magnet behind') : tr('מגנט', 'Magnet'), rule: p.v === 'back' ? tr('מי שנוסע אחריך נדבק ונגרר', 'Whoever drives behind you sticks and gets dragged') : tr('מושך מכוניות מקדימה ומדביק אותן לחרטום', 'Pulls cars in front and sticks them to the nose'), nums: tr(`טווח ${Math.round(fz.magnet ? fz.magnet.reach : 12)} מ׳`, `Range ${Math.round(fz.magnet ? fz.magnet.reach : 12)} m`), use: tr(`${DN} — לשחרר`, `${DN} — let go`) };
     case 'star':
-      return { name: 'כוכב', rule: 'כוח כוכב: שום דבר לא פוגע בה, היא מועכת כל מה שבדרך ומהירה יותר', nums: `${STAR_T} שניות`, use: 'נוסעים על כולם' };
+      return { name: tr('כוכב', 'Star'), rule: tr('כוח כוכב: שום דבר לא פוגע בה, היא מועכת כל מה שבדרך ומהירה יותר', 'Star power: nothing hurts it, it crushes everything in its way and goes faster'), nums: tr(`${STAR_T} שניות`, `${STAR_T} seconds`), use: tr('נוסעים על כולם', 'Drive over everyone') };
     case 'bolt':
-      return { name: 'סליל ברקים', rule: 'מי שמתקרב חוטף ברק — אויבים נופלים, ניידות נעצרות', nums: `טווח ${Math.round(fz.zap ? fz.zap.reach : 10)} מ׳` };
+      return { name: tr('סליל ברקים', 'Lightning coil'), rule: tr('מי שמתקרב חוטף ברק — אויבים נופלים, ניידות נעצרות', 'Whoever comes close gets struck — enemies drop, police cars stop'), nums: tr(`טווח ${Math.round(fz.zap ? fz.zap.reach : 10)} מ׳`, `Range ${Math.round(fz.zap ? fz.zap.reach : 10)} m`) };
     case 'smoke':
-      return { name: 'מסך עשן', rule: 'כשהמשטרה רודפת — ענן דיו מאחור, והם לא רואים דרכו', nums: '6 שניות עשן, ונטען לבד' };
+      return { name: tr('מסך עשן', 'Smoke screen'), rule: tr('כשהמשטרה רודפת — ענן דיו מאחור, והם לא רואים דרכו', 'When the police chase you — an ink cloud behind, and they can\'t see through it'), nums: tr('6 שניות עשן, ונטען לבד', '6 seconds of smoke, and it recharges by itself') };
     case 'chute':
-      return { name: 'מצנח', rule: 'בנפילה הוא נפתח — יורדים לאט וגולשים', use: 'קופצים מגג, מרמפה או בקפיץ' };
+      return { name: tr('מצנח', 'Parachute'), rule: tr('בנפילה הוא נפתח — יורדים לאט וגולשים', 'It opens as you fall — float down slowly and glide'), use: tr('קופצים מגג, מרמפה או בקפיץ', 'Jump off a roof, a ramp or with a spring') };
     case 'float':
-      if (p.v === 'prop') return { name: 'מדחף', rule: 'נוסעים לתוך הים — והיא שטה כמו סירה', nums: 'במים עד 14 מ׳/ש' };
+      if (p.v === 'prop') return { name: tr('מדחף', 'Propeller'), rule: tr('נוסעים לתוך הים — והיא שטה כמו סירה', 'Drive into the sea — and it sails like a boat'), nums: tr('במים עד 14 מ׳/ש', 'Up to 14 m/s on water') };
       // (ROADMAP 11.23: too small for its weight, it sinks - slower)
       return fz.float && fz.float.k < 1
-        ? { name: 'מצופים קטנים', rule: 'קטנים מדי בשבילה — במים היא שוקעת לאט. צריך ארוכים ועבים יותר' }
-        : { name: 'מצופים', rule: 'נוסעים לתוך הים — והיא צפה ושטה', nums: 'במים עד 14 מ׳/ש' };
+        ? { name: tr('מצופים קטנים', 'Small floats'), rule: tr('קטנים מדי בשבילה — במים היא שוקעת לאט. צריך ארוכים ועבים יותר', 'Too small for it — on water it sinks slowly. It needs longer, thicker ones') }
+        : { name: tr('מצופים', 'Floats'), rule: tr('נוסעים לתוך הים — והיא צפה ושטה', 'Drive into the sea — and it floats and sails'), nums: tr('במים עד 14 מ׳/ש', 'Up to 14 m/s on water') };
     case 'spike':
-      return { name: 'קוצים', rule: 'ניידת שנצמדת אליכם נהרסת, ומי שנוגע בצד נחתך', nums: `נזק ${v.spikes ? v.spikes.dmg : 40}` };
+      return { name: tr('קוצים', 'Spikes'), rule: tr('ניידת שנצמדת אליכם נהרסת, ומי שנוגע בצד נחתך', 'A police car that rams you gets wrecked, and whoever touches the side gets cut'), nums: tr(`נזק ${v.spikes ? v.spikes.dmg : 40}`, `Damage ${v.spikes ? v.spikes.dmg : 40}`) };
     case 'deco3':
-      return { name: 'קישוט', rule: 'עליה כמו שציירתם' };
+      return { name: tr('קישוט', 'Decoration'), rule: tr('עליה כמו שציירתם', 'On it as you drew it') };
     default:
       return { rule: '' };
   }
@@ -3464,32 +3465,32 @@ function vehRule(p, v) {
 function heroRule(p, touch) {
   const n = p.n;
   // (the jump: Space, or the phone's jump button)
-  const SP = touch ? 'קפיצה' : 'רווח';
+  const SP = touch ? tr('קפיצה', 'Jump') : tr('רווח', 'Space');
   switch (p.type) {
     case 'wheel':
-      return { name: p.v === 'square' ? 'גלגיליות מרובעות' : 'רולר', rule: p.v === 'square' ? 'מקרטע — דווקא איטי יותר' : `רצים מהר פי ${fmt(p.v === 'big' ? 1.4 : p.v === 'small' ? 1.7 : 1.55)}`, nums: `${HERO_T} שניות` };
+      return { name: p.v === 'square' ? tr('גלגיליות מרובעות', 'Square roller skates') : tr('רולר', 'Roller skates'), rule: p.v === 'square' ? tr('מקרטע — דווקא איטי יותר', 'Bumpy — actually slower') : tr(`רצים מהר פי ${fmt(p.v === 'big' ? 1.4 : p.v === 'small' ? 1.7 : 1.55)}`, `Run ${fmt(p.v === 'big' ? 1.4 : p.v === 'small' ? 1.7 : 1.55)} times faster`), nums: tr(`${HERO_T} שניות`, `${HERO_T} seconds`) };
     case 'wing':
-      return { name: 'כנפיים', rule: 'בנפילה ובקפיצה — גולשים', nums: `שקיעה ${fmt(clamp(4.4 - (n.span || 1) * 1.1, 1.6, 4))} מ׳/ש`, use: 'קופצים מגובה' };
+      return { name: tr('כנפיים', 'Wings'), rule: tr('בנפילה ובקפיצה — גולשים', 'Falling and jumping — you glide'), nums: tr(`שקיעה ${fmt(clamp(4.4 - (n.span || 1) * 1.1, 1.6, 4))} מ׳/ש`, `Sink ${fmt(clamp(4.4 - (n.span || 1) * 1.1, 1.6, 4))} m/s`), use: tr('קופצים מגובה', 'Jump from up high') };
     case 'rotor':
-      return { name: 'כובע רוטור', rule: 'עולים באוויר — 5 שניות, ונטען על הקרקע', use: `מחזיקים ${SP} באוויר` };
+      return { name: tr('כובע רוטור', 'Rotor hat'), rule: tr('עולים באוויר — 5 שניות, ונטען על הקרקע', 'Rise into the air — 5 seconds, and it recharges on the ground'), use: tr(`מחזיקים ${SP} באוויר`, `Hold ${SP} in the air`) };
     case 'jet':
-      return { name: 'תרמיל סילון', rule: 'טסים — 3 שניות דלק, ונטען על הקרקע', use: `קופצים, ומחזיקים ${SP}` };
+      return { name: tr('תרמיל סילון', 'Jetpack'), rule: tr('טסים — 3 שניות דלק, ונטען על הקרקע', 'Fly — 3 seconds of fuel, and it recharges on the ground'), use: tr(`קופצים, ומחזיקים ${SP}`, `Jump, and hold ${SP}`) };
     case 'spring':
-      return { name: 'קפיצים בנעליים', rule: `קפיצה גבוהה פי ${fmt(clamp(1.45 + (n.coils || 4) * 0.11, 1.5, 2.4))} ונחיתה רכה`, nums: `${n.coils || 4} סלילים` };
+      return { name: tr('קפיצים בנעליים', 'Spring shoes'), rule: tr(`קפיצה גבוהה פי ${fmt(clamp(1.45 + (n.coils || 4) * 0.11, 1.5, 2.4))} ונחיתה רכה`, `A jump ${fmt(clamp(1.45 + (n.coils || 4) * 0.11, 1.5, 2.4))} times higher and a soft landing`), nums: tr(`${n.coils || 4} סלילים`, `${n.coils || 4} coils`) };
     case 'blade':
-      return { name: 'להב על היד', rule: 'אגרופים חותכים — נזק פי 2.5' };
+      return { name: tr('להב על היד', 'A blade on the arm'), rule: tr('אגרופים חותכים — נזק פי 2.5', 'Cutting punches — 2.5 times the damage') };
     case 'armor':
-      return { name: 'שריון', rule: `+${p.armorAdd || 60} שריון`, nums: `כיסוי ${Math.round((n.cover || 0.4) * 100)}%` };
+      return { name: tr('שריון', 'Armor'), rule: tr(`+${p.armorAdd || 60} שריון`, `+${p.armorAdd || 60} armor`), nums: tr(`כיסוי ${Math.round((n.cover || 0.4) * 100)}%`, `${Math.round((n.cover || 0.4) * 100)}% covered`) };
     case 'balloon':
-      return (n.d || 0.9) >= 1.1 ? { name: 'בלון', rule: 'מרים אתכם — ובנפילה מרחפים', use: `${SP} — למעלה · ${touch ? '▼' : 'C'} — לשחרר` } : { name: 'בלון קטן', rule: 'נופלים לאט כמו נוצה' };
+      return (n.d || 0.9) >= 1.1 ? { name: tr('בלון', 'Balloon'), rule: tr('מרים אתכם — ובנפילה מרחפים', 'Lifts you up — and when you fall you float'), use: tr(`${SP} — למעלה · ${touch ? '▼' : 'C'} — לשחרר`, `${SP} — up · ${touch ? '▼' : 'C'} — let go`) } : { name: tr('בלון קטן', 'Small balloon'), rule: tr('נופלים לאט כמו נוצה', 'Fall slowly like a feather') };
     case 'magnet':
-      return { name: 'מגנט ביד', rule: 'כסף, תחמושת ונשקים שנפלו — נמשכים אליכם' };
+      return { name: tr('מגנט ביד', 'A magnet in the hand'), rule: tr('כסף, תחמושת ונשקים שנפלו — נמשכים אליכם', 'Money, ammo and dropped weapons — pulled to you') };
     case 'star':
-      return { name: 'כוכב', rule: 'שום דבר לא פוגע בכם, ורצים מהר יותר', nums: `${STAR_T} שניות` };
+      return { name: tr('כוכב', 'Star'), rule: tr('שום דבר לא פוגע בכם, ורצים מהר יותר', 'Nothing hurts you, and you run faster'), nums: tr(`${STAR_T} שניות`, `${STAR_T} seconds`) };
     case 'bolt':
-      return { name: 'ברק', rule: 'אויב שמתקרב חוטף ברק ונופל', nums: 'טווח 7 מ׳' };
+      return { name: tr('ברק', 'Lightning'), rule: tr('אויב שמתקרב חוטף ברק ונופל', 'An enemy who comes close gets struck and drops'), nums: tr('טווח 7 מ׳', 'Range 7 m') };
     case 'chute':
-      return { name: 'מצנח', rule: 'בנפילה הוא נפתח — נוחתים רך', use: 'קופצים מגובה' };
+      return { name: tr('מצנח', 'Parachute'), rule: tr('בנפילה הוא נפתח — נוחתים רך', 'It opens as you fall — a soft landing'), use: tr('קופצים מגובה', 'Jump from up high') };
     default:
       return { rule: '' };
   }
@@ -3498,21 +3499,21 @@ function heroRule(p, touch) {
 function weaponRule(p, def) {
   switch (p.type) {
     case 'barrel':
-      return def.spin ? { name: 'קנים נוספים', rule: 'מסתובב כמו מיניגאן' } : { name: 'קנה נוסף', rule: 'שני כדורים בכל לחיצה', nums: (p.n.len || 0) > 0.45 ? 'ארוך: רחוק ומדויק יותר' : '' };
+      return def.spin ? { name: tr('קנים נוספים', 'More barrels'), rule: tr('מסתובב כמו מיניגאן', 'Spins like a minigun') } : { name: tr('קנה נוסף', 'An extra barrel'), rule: tr('שני כדורים בכל לחיצה', 'Two bullets per click'), nums: (p.n.len || 0) > 0.45 ? tr('ארוך: רחוק ומדויק יותר', 'Long: further and more accurate') : '' };
     case 'blade':
-      return { name: 'כידון', rule: `דקירה מקרוב: נזק ${def.bayonet ? def.bayonet.damage : 40}` };
+      return { name: tr('כידון', 'Bayonet'), rule: tr(`דקירה מקרוב: נזק ${def.bayonet ? def.bayonet.damage : 40}`, `A stab up close: damage ${def.bayonet ? def.bayonet.damage : 40}`) };
     case 'spring':
-      return { name: 'קפיץ בקנה', rule: `הקליעים קופצים מהקירות ${def.bounce || 2} פעמים` };
+      return { name: tr('קפיץ בקנה', 'A spring in the barrel'), rule: tr(`הקליעים קופצים מהקירות ${def.bounce || 2} פעמים`, `The bullets bounce off walls ${def.bounce || 2} times`) };
     case 'magnet':
-      return { name: 'מגנט על הקנה', rule: 'הקליעים מתכופפים אל האויב' };
+      return { name: tr('מגנט על הקנה', 'A magnet on the barrel'), rule: tr('הקליעים מתכופפים אל האויב', 'The bullets bend toward the enemy') };
     case 'jet':
-      return { name: 'קליעי רקטה', rule: 'מהירים פי 1.45 ומתפוצצים' };
+      return { name: tr('קליעי רקטה', 'Rocket bullets'), rule: tr('מהירים פי 1.45 ומתפוצצים', '1.45 times faster and they explode') };
     case 'wing':
-      return { name: 'כנפיים לקליעים', rule: 'מטוסי נייר שגולשים אל המטרה' };
+      return { name: tr('כנפיים לקליעים', 'Wings for the bullets'), rule: tr('מטוסי נייר שגולשים אל המטרה', 'Paper planes that glide to the target') };
     case 'armor':
-      return { name: 'מגן על הנשק', rule: 'חוסם חצי מכל מכה' };
+      return { name: tr('מגן על הנשק', 'A shield on the weapon'), rule: tr('חוסם חצי מכל מכה', 'Blocks half of every hit') };
     case 'rotor':
-      return { name: 'מאוורר', rule: 'הודף אויבים אחורה' };
+      return { name: tr('מאוורר', 'A fan'), rule: tr('הודף אויבים אחורה', 'Blows enemies back') };
     default:
       return { rule: '' };
   }

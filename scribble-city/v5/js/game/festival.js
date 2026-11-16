@@ -8,6 +8,7 @@ import { flashLight } from '../render/materials.js';
 import { DanceGame } from './minigames/dance.js';
 import { worldAt } from '../ui/minigame.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 12.4) INK FEST: the festival on the water. On its nights (game/calendar.js) a stage
 // stands on a floating deck off the island's beach, south of the pier: its trusses and roof, a wall
 // of LED tiles playing to the beat, moving heads on the truss throwing their beams into the night,
@@ -466,10 +467,10 @@ export class Festival {
   target() {
     if (!this.set || !this.on) return null;
     const p = this.game.player;
-    for (const t of this.trucks) if (Math.hypot(p.pos.x - t.x, p.pos.z - t.z) < 3.2) return { kind: t.kind, label: t.kind === 'bar' ? 'E — NEON BAR: מוקטיילים' : 'E — TACO LOCO: טאקו וצ׳ורוס', t };
+    for (const t of this.trucks) if (Math.hypot(p.pos.x - t.x, p.pos.z - t.z) < 3.2) return { kind: t.kind, label: t.kind === 'bar' ? tr('E — NEON BAR: מוקטיילים', 'E — NEON BAR: mocktails') : tr('E — TACO LOCO: טאקו וצ׳ורוס', 'E — TACO LOCO: tacos and churros'), t };
     const dx = p.pos.x - 92;
     const dz = p.pos.z - CZ;
-    if (p.pos.x < 99 && p.pos.x > 70 && Math.hypot(dx * 0.8, dz) < 18) return { kind: 'dance', label: 'E — לרקוד בקהל (Ink Beat)' };
+    if (p.pos.x < 99 && p.pos.x > 70 && Math.hypot(dx * 0.8, dz) < 18) return { kind: 'dance', label: tr('E — לרקוד בקהל (Ink Beat)', 'E — dance in the crowd (Ink Beat)') };
     return null;
   }
 
@@ -489,16 +490,16 @@ export class Festival {
         g.player.fig.dance = 0;
         if (r && (r.grade === 'S' || r.grade === 'A')) {
           this.cheer = 1;
-          g.hud.toast('הקהל סביבכם השתגע! מחיאות כפיים מכל הכיוונים', 'good', 3);
-        } else if (r && r.grade) g.hud.toast('רקדתם עם כל החוף', 'good', 2.4);
+          g.hud.toast(tr('הקהל סביבכם השתגע! מחיאות כפיים מכל הכיוונים', 'The crowd around you went wild! Applause from every side'), 'good', 3);
+        } else if (r && r.grade) g.hud.toast(tr('רקדתם עם כל החוף', 'You danced with the whole beach'), 'good', 2.4);
       }, { world });
       return true;
     }
     const menu = tg.kind === 'bar'
-      ? [['מוקטייל ניאון', 7, 20, [0.4, 0.9, 1]], ['לימונדה קפואה', 4, 10, [1, 0.9, 0.4]]]
-      : [['טאקו כפול', 9, 35, [0.95, 0.6, 0.25]], ['צ׳ורוס בשוקולד', 5, 15, [0.6, 0.35, 0.2]]];
-    g.dialog.show(tg.t.name, tg.kind === 'bar' ? 'הכי קר בפסטיבל! מה לשים לכם?' : 'טאקו חם, ישר מהגריל! מה בא לכם?', menu.map(([label, price, hp, colr]) => ({
-      label: `${label} (+${hp} חיים) · $${price}`,
+      ? [[tr('מוקטייל ניאון', 'Neon mocktail'), 7, 20, [0.4, 0.9, 1]], [tr('לימונדה קפואה', 'Frozen lemonade'), 4, 10, [1, 0.9, 0.4]]]
+      : [[tr('טאקו כפול', 'Double taco'), 9, 35, [0.95, 0.6, 0.25]], [tr('צ׳ורוס בשוקולד', 'Chocolate churros'), 5, 15, [0.6, 0.35, 0.2]]];
+    g.dialog.show(tg.t.name, tg.kind === 'bar' ? tr('הכי קר בפסטיבל! מה לשים לכם?', 'The coolest thing at the festival! What can I get you?') : tr('טאקו חם, ישר מהגריל! מה בא לכם?', 'Hot tacos, straight off the grill! What would you like?'), menu.map(([label, price, hp, colr]) => ({
+      label: tr(`${label} (+${hp} חיים) · $${price}`, `${label} (+${hp} health) · \$${price}`),
       fn: () => {
         if (!g.money || g.money.pay(price, label)) {
           const p = g.player;
@@ -506,7 +507,7 @@ export class Festival {
           p.fig.belly = Math.min(1, p.fig.belly + 0.3);
           p.fig.bellyColor = colr;
           g.audio.play('coins', 0.5);
-          g.hud.toast(`${label}! +${hp} חיים`, 'good', 2);
+          g.hud.toast(tr(`${label}! +${hp} חיים`, `${label}! +${hp} health`), 'good', 2);
         } else g.money.refuse(tg.t.name, price);
       },
     })));

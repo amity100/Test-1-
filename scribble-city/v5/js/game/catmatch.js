@@ -1,6 +1,7 @@
 import { look, picture, ready } from './sketchnet.js';
 import { BLUEPRINTS } from './blueprints.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 11.40) Drawing from the catalog. On foot the pen no longer makes whatever a sketch
 // looks like: what is drawn is one of the catalog's things (the blueprints, game/blueprints.js), the
 // ones shown by the pen as they are drawn (ui/freedraw.js, the legend) - weapons, vehicles, gear.
@@ -14,7 +15,7 @@ const H = 16;
 
 // the categories, in the legend's order; and their things, in theirs
 export const SHELVES = ['weapon', 'vehicle', 'gear'];
-export const SHELF_NAME = { weapon: 'נשק', vehicle: 'רכבים', gear: 'ציוד' };
+export const SHELF_NAME = { weapon: tr('נשק', 'Weapons'), vehicle: tr('רכבים', 'Rides'), gear: tr('ציוד', 'Gear') };
 export const shelfOf = (bp) => (bp.kind === 'weapon' ? 'weapon' : bp.kind === 'vehicle' ? 'vehicle' : 'gear');
 export function shelfIds(shelf) {
   return Object.values(BLUEPRINTS)

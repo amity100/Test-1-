@@ -1,3 +1,4 @@
+import { tr } from '../core/lang.js';
 // (ROADMAP 5.7, not with ?classic) The wardrobe. The boutique dresses the hero: shirts, trousers,
 // shoes, hats and the little things; the barber draws a tattoo on his forearm; the hardware store
 // sells a vest of old notebook covers that takes most of a blow until it is worn through. Modest
@@ -6,87 +7,87 @@
 
 // what goes where on the body, and the sketch the shopkeeper draws of it (game/airsketch.js)
 export const TOPS = [
-  { name: 'טישרט לבנה', top: { kind: 'tee', color: [0.97, 0.96, 0.93], sleeves: 'short' } },
-  { name: 'טישרט שחורה', top: { kind: 'tee', color: [0.13, 0.13, 0.15], sleeves: 'short' } },
-  { name: 'טישרט אדומה', top: { kind: 'tee', color: [0.82, 0.2, 0.22], sleeves: 'short' } },
-  { name: 'קפוצ\'ון אפור', top: { kind: 'hoodie', color: [0.55, 0.56, 0.6], sleeves: 'long' } },
-  { name: 'סוודר ירוק', top: { kind: 'sweater', color: [0.3, 0.52, 0.38], sleeves: 'long' } },
-  { name: 'ז\'קט ג\'ינס', top: { kind: 'jacket', color: [0.3, 0.42, 0.62], sleeves: 'long', inner: [0.95, 0.94, 0.9] } },
-  { name: 'בלייזר כחול', top: { kind: 'blazer', color: [0.2, 0.22, 0.32], sleeves: 'long', inner: [0.96, 0.95, 0.92] } },
+  { name: tr('טישרט לבנה', 'A white T-shirt'), top: { kind: 'tee', color: [0.97, 0.96, 0.93], sleeves: 'short' } },
+  { name: tr('טישרט שחורה', 'A black T-shirt'), top: { kind: 'tee', color: [0.13, 0.13, 0.15], sleeves: 'short' } },
+  { name: tr('טישרט אדומה', 'A red T-shirt'), top: { kind: 'tee', color: [0.82, 0.2, 0.22], sleeves: 'short' } },
+  { name: tr('קפוצ\'ון אפור', 'A gray hoodie'), top: { kind: 'hoodie', color: [0.55, 0.56, 0.6], sleeves: 'long' } },
+  { name: tr('סוודר ירוק', 'A green sweater'), top: { kind: 'sweater', color: [0.3, 0.52, 0.38], sleeves: 'long' } },
+  { name: tr('ז\'קט ג\'ינס', 'A denim jacket'), top: { kind: 'jacket', color: [0.3, 0.42, 0.62], sleeves: 'long', inner: [0.95, 0.94, 0.9] } },
+  { name: tr('בלייזר כחול', 'A navy blazer'), top: { kind: 'blazer', color: [0.2, 0.22, 0.32], sleeves: 'long', inner: [0.96, 0.95, 0.92] } },
 ];
 export const BOTTOMS = [
-  { name: 'מכנסי דגמ"ח אפורים', bottom: { kind: 'baggy', color: [0.36, 0.36, 0.39] } },
-  { name: 'ג\'ינס כחול', bottom: { kind: 'pants', color: [0.24, 0.33, 0.52] } },
-  { name: 'מכנסיים שחורים', bottom: { kind: 'pants', color: [0.12, 0.12, 0.14] } },
-  { name: 'צ\'ינו בז\'', bottom: { kind: 'pants', color: [0.78, 0.68, 0.5] } },
-  { name: 'ג\'ינס רחב', bottom: { kind: 'baggy', color: [0.3, 0.4, 0.6] } },
+  { name: tr('מכנסי דגמ"ח אפורים', 'Gray cargo pants'), bottom: { kind: 'baggy', color: [0.36, 0.36, 0.39] } },
+  { name: tr('ג\'ינס כחול', 'Blue jeans'), bottom: { kind: 'pants', color: [0.24, 0.33, 0.52] } },
+  { name: tr('מכנסיים שחורים', 'Black pants'), bottom: { kind: 'pants', color: [0.12, 0.12, 0.14] } },
+  { name: tr('צ\'ינו בז\'', 'Beige chinos'), bottom: { kind: 'pants', color: [0.78, 0.68, 0.5] } },
+  { name: tr('ג\'ינס רחב', 'Wide jeans'), bottom: { kind: 'baggy', color: [0.3, 0.4, 0.6] } },
 ];
 export const SHOES = [
-  { name: 'סניקרס לבנות', shoes: [0.96, 0.96, 0.95] },
-  { name: 'סניקרס אדומות', shoes: [0.85, 0.2, 0.22] },
-  { name: 'נעלי עור שחורות', shoes: [0.1, 0.08, 0.07] },
-  { name: 'מגפיים חומים', shoes: [0.42, 0.28, 0.16] },
+  { name: tr('סניקרס לבנות', 'White sneakers'), shoes: [0.96, 0.96, 0.95] },
+  { name: tr('סניקרס אדומות', 'Red sneakers'), shoes: [0.85, 0.2, 0.22] },
+  { name: tr('נעלי עור שחורות', 'Black leather shoes'), shoes: [0.1, 0.08, 0.07] },
+  { name: tr('מגפיים חומים', 'Brown boots'), shoes: [0.42, 0.28, 0.16] },
 ];
 export const HATS = [
-  { name: 'כובע מצחייה שחור', hat: { kind: 'cap', color: [0.09, 0.09, 0.11] } },
-  { name: 'כובע מצחייה הפוך', hat: { kind: 'capBack', color: [0.95, 0.3, 0.45] } },
-  { name: 'כובע גרב', hat: { kind: 'beanie', color: [0.85, 0.55, 0.2] } },
-  { name: 'כובע רחב שוליים', hat: { kind: 'fedora', color: [0.94, 0.9, 0.82] } },
-  { name: 'כומתה', hat: { kind: 'beret', color: [0.62, 0.42, 0.85] } },
-  { name: 'בלי כובע', hat: null },
+  { name: tr('כובע מצחייה שחור', 'A black cap'), hat: { kind: 'cap', color: [0.09, 0.09, 0.11] } },
+  { name: tr('כובע מצחייה הפוך', 'A backwards cap'), hat: { kind: 'capBack', color: [0.95, 0.3, 0.45] } },
+  { name: tr('כובע גרב', 'A beanie'), hat: { kind: 'beanie', color: [0.85, 0.55, 0.2] } },
+  { name: tr('כובע רחב שוליים', 'A wide-brimmed hat'), hat: { kind: 'fedora', color: [0.94, 0.9, 0.82] } },
+  { name: tr('כומתה', 'A beret'), hat: { kind: 'beret', color: [0.62, 0.42, 0.85] } },
+  { name: tr('בלי כובע', 'No hat'), hat: null },
 ];
 export const ACCS = [
-  { name: 'שרשרת זהב', acc: 'chain' },
-  { name: 'תיק צד', acc: 'crossbody' },
-  { name: 'אוזניות', acc: 'headphones' },
-  { name: 'צעיף', acc: 'scarf' },
-  { name: 'בלי אביזרים', acc: null },
+  { name: tr('שרשרת זהב', 'A gold chain'), acc: 'chain' },
+  { name: tr('תיק צד', 'A shoulder bag'), acc: 'crossbody' },
+  { name: tr('אוזניות', 'Headphones'), acc: 'headphones' },
+  { name: tr('צעיף', 'A scarf'), acc: 'scarf' },
+  { name: tr('בלי אביזרים', 'No accessories'), acc: null },
 ];
 // (v5, ROADMAP 11.17) the mainland's stores: a whole floor of clothes (a store of fashion), a wall
 // of shoes, the sports store's tracksuits, the jeweller's counter
 export const FASHION_TOPS = [
-  { name: 'טרנץ\' בז\'', top: { kind: 'trench', color: [0.8, 0.68, 0.5], sleeves: 'long', inner: [0.96, 0.95, 0.92] } },
-  { name: 'מעיל פוך שחור', top: { kind: 'puffer', color: [0.12, 0.12, 0.14], sleeves: 'long' } },
-  { name: 'ג\'קט בומבר זית', top: { kind: 'bomber', color: [0.36, 0.4, 0.3], sleeves: 'long', inner: [0.96, 0.95, 0.92] } },
-  { name: 'חולצה מכופתרת תכלת', top: { kind: 'overshirt', color: [0.72, 0.84, 0.96], sleeves: 'long', inner: [0.96, 0.95, 0.92] } },
-  { name: 'פולו לבנה', top: { kind: 'polo', color: [0.97, 0.96, 0.93], sleeves: 'short' } },
-  { name: 'קרדיגן ורוד', top: { kind: 'cardigan', color: [0.95, 0.72, 0.78], sleeves: 'long', inner: [0.96, 0.95, 0.92] } },
-  { name: 'סווטשירט אוברסייז', top: { kind: 'oversized', color: [0.62, 0.72, 0.88], sleeves: 'long' } },
-  { name: 'חליפה כחולה', top: { kind: 'suit', color: [0.18, 0.22, 0.34], sleeves: 'long', shirt: [0.95, 0.95, 0.94], tie: [0.62, 0.12, 0.14] } },
+  { name: tr('טרנץ\' בז\'', 'A beige trench coat'), top: { kind: 'trench', color: [0.8, 0.68, 0.5], sleeves: 'long', inner: [0.96, 0.95, 0.92] } },
+  { name: tr('מעיל פוך שחור', 'A black puffer jacket'), top: { kind: 'puffer', color: [0.12, 0.12, 0.14], sleeves: 'long' } },
+  { name: tr('ג\'קט בומבר זית', 'An olive bomber jacket'), top: { kind: 'bomber', color: [0.36, 0.4, 0.3], sleeves: 'long', inner: [0.96, 0.95, 0.92] } },
+  { name: tr('חולצה מכופתרת תכלת', 'A light blue button-down shirt'), top: { kind: 'overshirt', color: [0.72, 0.84, 0.96], sleeves: 'long', inner: [0.96, 0.95, 0.92] } },
+  { name: tr('פולו לבנה', 'A white polo'), top: { kind: 'polo', color: [0.97, 0.96, 0.93], sleeves: 'short' } },
+  { name: tr('קרדיגן ורוד', 'A pink cardigan'), top: { kind: 'cardigan', color: [0.95, 0.72, 0.78], sleeves: 'long', inner: [0.96, 0.95, 0.92] } },
+  { name: tr('סווטשירט אוברסייז', 'An oversized sweatshirt'), top: { kind: 'oversized', color: [0.62, 0.72, 0.88], sleeves: 'long' } },
+  { name: tr('חליפה כחולה', 'A blue suit'), top: { kind: 'suit', color: [0.18, 0.22, 0.34], sleeves: 'long', shirt: [0.95, 0.95, 0.94], tie: [0.62, 0.12, 0.14] } },
   ...TOPS,
 ];
 export const FASHION_BOTTOMS = [
-  { name: 'מכנסיים רחבים שמנת', bottom: { kind: 'wide', color: [0.92, 0.9, 0.84] } },
-  { name: 'מכנסי דגמ"ח זית', bottom: { kind: 'cargo', color: [0.36, 0.4, 0.3] } },
-  { name: 'מכנסי חליפה כחולים', bottom: { kind: 'pants', color: [0.18, 0.22, 0.34] } },
+  { name: tr('מכנסיים רחבים שמנת', 'Wide cream pants'), bottom: { kind: 'wide', color: [0.92, 0.9, 0.84] } },
+  { name: tr('מכנסי דגמ"ח זית', 'Olive cargo pants'), bottom: { kind: 'cargo', color: [0.36, 0.4, 0.3] } },
+  { name: tr('מכנסי חליפה כחולים', 'Blue suit pants'), bottom: { kind: 'pants', color: [0.18, 0.22, 0.34] } },
   ...BOTTOMS,
 ];
 export const SHOE_WALL = [
   ...SHOES,
-  { name: 'סניקרס כחולות', shoes: [0.3, 0.45, 0.85] },
-  { name: 'נעלי ריצה צהובות', shoes: [0.98, 0.82, 0.25] },
-  { name: 'מוקסינים חומים', shoes: [0.55, 0.36, 0.22] },
-  { name: 'נעלי בד ורודות', shoes: [0.95, 0.6, 0.72] },
+  { name: tr('סניקרס כחולות', 'Blue sneakers'), shoes: [0.3, 0.45, 0.85] },
+  { name: tr('נעלי ריצה צהובות', 'Yellow running shoes'), shoes: [0.98, 0.82, 0.25] },
+  { name: tr('מוקסינים חומים', 'Brown moccasins'), shoes: [0.55, 0.36, 0.22] },
+  { name: tr('נעלי בד ורודות', 'Pink canvas shoes'), shoes: [0.95, 0.6, 0.72] },
 ];
 export const SPORT_TOPS = [
-  { name: 'חליפת ספורט אדומה', top: { kind: 'track', color: [0.84, 0.22, 0.24], sleeves: 'long' } },
-  { name: 'חליפת ספורט כחולה', top: { kind: 'track', color: [0.22, 0.36, 0.72], sleeves: 'long' } },
-  { name: 'גופיית ריצה', top: { kind: 'tank', color: [0.3, 0.7, 0.45], sleeves: 'none' } },
-  { name: 'קפוצ\'ון ספורט שחור', top: { kind: 'hoodie', color: [0.12, 0.12, 0.14], sleeves: 'long' } },
+  { name: tr('חליפת ספורט אדומה', 'A red tracksuit'), top: { kind: 'track', color: [0.84, 0.22, 0.24], sleeves: 'long' } },
+  { name: tr('חליפת ספורט כחולה', 'A blue tracksuit'), top: { kind: 'track', color: [0.22, 0.36, 0.72], sleeves: 'long' } },
+  { name: tr('גופיית ריצה', 'A running tank top'), top: { kind: 'tank', color: [0.3, 0.7, 0.45], sleeves: 'none' } },
+  { name: tr('קפוצ\'ון ספורט שחור', 'A black sports hoodie'), top: { kind: 'hoodie', color: [0.12, 0.12, 0.14], sleeves: 'long' } },
 ];
 export const JEWELS = [
-  { name: 'שרשרת זהב', acc: 'chain' },
-  { name: 'צעיף משי', acc: 'scarf' },
-  { name: 'תיק צד מעור', acc: 'crossbody' },
-  { name: 'בלי אביזרים', acc: null },
+  { name: tr('שרשרת זהב', 'A gold chain'), acc: 'chain' },
+  { name: tr('צעיף משי', 'A silk scarf'), acc: 'scarf' },
+  { name: tr('תיק צד מעור', 'A leather shoulder bag'), acc: 'crossbody' },
+  { name: tr('בלי אביזרים', 'No accessories'), acc: null },
 ];
 // tattoos: a little drawing on the right forearm (game/doodle.js); the sketch the barber draws
 export const TATTOOS = [
-  { name: 'עוגן', tattoo: 'anchor' },
-  { name: 'לב', tattoo: 'heart' },
-  { name: 'כוכב', tattoo: 'star' },
-  { name: 'עיפרון', tattoo: 'pencil' },
-  { name: 'להסיר את הקעקוע', tattoo: null },
+  { name: tr('עוגן', 'An anchor'), tattoo: 'anchor' },
+  { name: tr('לב', 'A heart'), tattoo: 'heart' },
+  { name: tr('כוכב', 'Star'), tattoo: 'star' },
+  { name: tr('עיפרון', 'Pencil'), tattoo: 'pencil' },
+  { name: tr('להסיר את הקעקוע', 'Remove the tattoo'), tattoo: null },
 ];
 // the strokes of each tattoo, across (u: from the elbow to the wrist, 0..1) and around (v: -1..1)
 export const TATTOO_LINES = {

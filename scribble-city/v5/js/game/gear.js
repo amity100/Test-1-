@@ -6,6 +6,7 @@ import { wreck } from './gearfx.js';
 import { decoyOf, shields } from './gearguard2.js';
 import { clamp, damp } from '../core/util.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.28) What the things of the pen do on your car, beyond what game/fuse.js already makes of
 // a part (its lift, its glide, its gun): each thing's own behaviour (game/gearkit.js and the kits it
 // gathers: what moves - game/gearmove.js, what fires - game/gearweap.js, what keeps it whole -
@@ -78,7 +79,7 @@ export class Gear {
     const ink = this.game.ink;
     const cost = this.play.costs() ? it.ink || 0 : 0;
     if (cost && ink && ink.level < cost) {
-      if (!quiet) this.game.hud.toast('אין מספיק דיו', 'bad', 1.4);
+      if (!quiet) this.game.hud.toast(tr('אין מספיק דיו', 'Not enough ink'), 'bad', 1.4);
       return false;
     }
     if (cost && ink) ink.spend(cost);
@@ -241,8 +242,8 @@ export class Gear {
       (touch || document.body).appendChild(b);
       return b;
     };
-    this.rewindBtn = mk('btn-rewind', 'אחורה', '<circle cx="12" cy="13" r="7.5"/><path d="M12 9v4h-3.5M3.6 8.6A9.2 9.2 0 0 1 9 3.9M3.6 8.6 3 5.2M3.6 8.6 7 8.2"/>');
-    this.guardBtn = mk('btn-gear', 'הגנה', '<path d="M12 2.8l7.5 3v5.4c0 4.9-3.2 8.4-7.5 10-4.3-1.6-7.5-5.1-7.5-10V5.8z"/>');
+    this.rewindBtn = mk('btn-rewind', tr('אחורה', 'Rewind'), '<circle cx="12" cy="13" r="7.5"/><path d="M12 9v4h-3.5M3.6 8.6A9.2 9.2 0 0 1 9 3.9M3.6 8.6 3 5.2M3.6 8.6 7 8.2"/>');
+    this.guardBtn = mk('btn-gear', tr('הגנה', 'Guard'), '<path d="M12 2.8l7.5 3v5.4c0 4.9-3.2 8.4-7.5 10-4.3-1.6-7.5-5.1-7.5-10V5.8z"/>');
     const hold = (el, set) => {
       el.addEventListener('touchstart', (e) => {
         e.preventDefault();

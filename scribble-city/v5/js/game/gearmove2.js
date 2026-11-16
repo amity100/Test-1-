@@ -5,6 +5,7 @@ import { isWater } from './rides.js';
 import { Kit, itemMats, linC } from './items.js';
 import { onCar } from './gearfx.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.28) More of what moves your car (game/gearmove.js has the turbo, the jump, the rewind, the
 // wings and the rotor): the grappling hook, monster wheels, tank tracks, the water kit, the parachute, the
 // balloon's levels, the folding bridge - kits for game/gear.js.
@@ -101,7 +102,7 @@ export const MOVE2 = {
           v.vx += ux * 3;
           v.vz += uz * 3;
           s.line = null;
-          g.hud.toast('על הגג', 'good', 1.4);
+          g.hud.toast(tr('על הגג', 'On the roof'), 'good', 1.4);
         }
         if (g.time - L.t1 > 4) s.line = null;
       } else if (L.state === 'swing') {
@@ -242,7 +243,7 @@ export const MOVE2 = {
         s.under = under;
         g.audio.play(under ? 'pour' : 'splat', 0.6);
         this.tint(under);
-        if (under) g.hud.toast('מתחת למים — המשטרה לא רואה אתכם', 'good', 2.2);
+        if (under) g.hud.toast(tr('מתחת למים — המשטרה לא רואה אתכם', 'Underwater — the police can\'t see you'), 'good', 2.2);
       }
     },
     tint(on) {
@@ -356,7 +357,7 @@ export const MOVE2 = {
       if (far === null) {
         if (!s.told || g.time - s.told > 4) {
           s.told = g.time;
-          g.hud.toast(`הצד השני רחוק מ־${Lmax} מטר`, 'bad', 1.8);
+          g.hud.toast(tr(`הצד השני רחוק מ־${Lmax} מטר`, `The other side is more than ${Lmax} meters away`), 'bad', 1.8);
         }
         return;
       }

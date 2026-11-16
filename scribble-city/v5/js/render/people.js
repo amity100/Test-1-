@@ -358,7 +358,7 @@ const byteOf = (a) => Math.round(Math.max(-1, Math.min(1, a)) * 127) + 128;
 const lite = (sh, lv) => (lv > 0 && sh.lods ? sh.lods[lv < sh.lods.length ? lv : sh.lods.length - 1] : sh);
 // (what of the city's people may have lighter versions: their own parts, and the hands and soles of the hero's
 // kind they wear - drawFolk)
-const LIGHTABLE = /^folk\d+_|^(heroHandR|heroHandL|heroGripR|heroGripL|heroPinchR|heroSole|heroArm)$/;
+const LIGHTABLE = /^folk\d+_|^(heroHandR|heroHandL|heroGripR|heroGunR|heroGripL|heroPinchR|heroSole|heroArm)$/;
 
 class DrawClass {
   // index: the shared layout of triangles of the shapes drawn by their corners (or none); aux: the
@@ -1143,6 +1143,10 @@ export class PersonRenderer {
       heroHandR: P(HERO.heroHandGeo(false), M.skin, 192),
       // (round 17: his right hand closed round what he holds - fig.grip, game/weapons.js)
       heroGripR: P(HERO.heroHandGeo(false, 0.05), M.skin, 8),
+      // (ROADMAP 23.22: a fist shut round a pistol's grip - a thing as thick as two fingers, not a pencil as thick as a broom's
+      // handle: round that, the fingers barely bent and stood off it, an open hand held up beside the gun. fig.gripGun,
+      // game/prologue/pistol.js)
+      heroGunR: P(HERO.heroHandGeo(false, HERO.GUN_GRIP), M.skin, 8),
       // (ROADMAP 23.11: a hand that writes - render/heroshapes.js PINCH)
       heroPinchR: P(HERO.heroHandGeo(false, 0, true), M.skin, 4),
       heroHandL: P(HERO.heroHandGeo(true), M.skin, 192),
@@ -2404,7 +2408,7 @@ export class PersonRenderer {
       const hF = fig.handF && fig.handF[ai];
       const shut = grip || (fig.handGrip && fig.handGrip[ai] > 0.5);
       if (pkA < 0.7) {
-        const hp = ai === 0 ? (shut ? p.heroGripR : p.heroHandR) : shut ? p.heroGripL : p.heroHandL;
+        const hp = ai === 0 ? (shut ? (grip && fig.gripGun ? p.heroGunR : p.heroGripR) : p.heroHandR) : shut ? p.heroGripL : p.heroHandL;
         if (hF && !grip) hp.push(handFrame(hd, hF, fig.handN[ai], _c, ai === 1, k, S), skin, own, handId, ind);
         else if (grip || pkA > 0.01) hp.push(along(hd, _d, 0.19, k, grip || fwd), skin, own, handId, ind);
         // (ROADMAP 23.13: as his arm turns it - restPalm)
@@ -2631,7 +2635,7 @@ export class PersonRenderer {
       // (ROADMAP 23: a hand posed - its own way, as it was asked)
       const hF = fig.handF && fig.handF[ai];
       const shut = grip || (fig.handGrip && fig.handGrip[ai] > 0.5);
-      const hp = lite(ai === 0 ? (shut ? p.heroGripR : p.heroHandR) : shut ? p.heroGripL : p.heroHandL, lvB);
+      const hp = lite(ai === 0 ? (shut ? (grip && fig.gripGun ? p.heroGunR : p.heroGripR) : p.heroHandR) : shut ? p.heroGripL : p.heroHandL, lvB);
       // (ROADMAP 23.11: writing - the hand's own frame given whole, game/prologue/page.js: fig.pinch { x, y, z })
       const pinch = ai === 0 && fig.pinch;
       if (pinch) p.heroPinchR.push(framed(hd, pinch.x, pinch.y, pinch.z, k * (fem ? 0.88 : 1), ((fem ? 0.17 : 0.19) / 0.19) * S, k * (fem ? 0.88 : 1)), skin, own, id(), ind);

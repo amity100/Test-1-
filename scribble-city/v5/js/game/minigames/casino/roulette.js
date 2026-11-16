@@ -7,6 +7,7 @@
 
 import { felt, text, chip, button, inBox, sfx, GOLD, RED, FONT, CHIPS } from './felt.js';
 
+import { tr } from '../../../core/lang.js';
 const ORDER = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
 const REDS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 const WX = 210;
@@ -59,9 +60,9 @@ const CELLS = (() => {
 export class Roulette {
   constructor(o = {}) {
     this.o = o;
-    this.title = `${o.name || 'ROULETTE'} · רולטה`;
-    this.help = 'עכבר: לשים צ׳יפ על המספר · חצים + רווח: אותו דבר · Enter: לסובב · B: להוריד · Esc לצאת';
-    this.helpTouch = 'נוגעים במספר כדי לשים צ׳יפ, ואז SPIN';
+    this.title = tr(`${o.name || 'ROULETTE'} · רולטה`, `${o.name || 'ROULETTE'} · roulette`);
+    this.help = tr('עכבר: לשים צ׳יפ על המספר · חצים + רווח: אותו דבר · Enter: לסובב · B: להוריד · Esc לצאת', 'Mouse: put a chip on the number · arrows + Space: the same · Enter: spin · B: take it back · Esc to leave');
+    this.helpTouch = tr('נוגעים במספר כדי לשים צ׳יפ, ואז SPIN', 'Tap a number to put a chip on it, then SPIN');
     this.pad = 'pad';
     this.pointer = true;
     this.chips = o.vip ? [25, 100, 500, 1000] : [1, 5, 25, 100];

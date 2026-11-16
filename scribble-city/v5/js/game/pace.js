@@ -20,6 +20,7 @@
 // jump of their own (the city already leaves out what is too far to make out).
 
 // the screens' refresh rates (Hz), to snap a measured one to
+import { tr } from '../core/lang.js';
 const SNAP = [24, 30, 48, 50, 60, 72, 75, 85, 90, 100, 120, 144, 165, 180, 240];
 // a steady beat is between these (frames a second: 20 for a card that cannot hold 30 even at the
 // fewest pixels - a steady 20 is smoother than 30 that keeps missing)
@@ -683,8 +684,8 @@ export class Pace {
 
   // the performance panel's line (game/perf.js)
   line() {
-    if (!this.on) return 'קצב: רגיל (כמה שיותר פריימים)';
-    if (!this.engaged) return 'קצב: יציב (עומד בזמן מסלול המבחן)';
+    if (!this.on) return tr('קצב: רגיל (כמה שיותר פריימים)', 'Pace: normal (as many frames as possible)');
+    if (!this.engaged) return tr('קצב: יציב (עומד בזמן מסלול המבחן)', 'Pace: steady (keeps up with the test route)');
     const c = this.ctl;
     // (a tenth only where there is one: 1000 / (2 * 16.67) is 30, not 30.0)
     const f1 = (v) => {
@@ -692,20 +693,20 @@ export class Pace {
       return r % 1 ? r.toFixed(1) : String(r);
     };
     const fps = 1000 / (c.N * c.R);
-    const name = { auto: 'יציב, אוטומטי', 60: 'יציב 60', 30: 'יציב 30' }[this.mode];
+    const name = { auto: tr('יציב, אוטומטי', 'Steady, automatic'), 60: tr('יציב 60', 'Steady 60'), 30: tr('יציב 30', 'Steady 30') }[this.mode];
     const ot = this.otN ? Math.round((this.otSum / this.otN) * 100) : 100;
     const hz = Math.round(1000 / c.R);
     // (a beat that was chosen, and a slower one kept: it did not hold here)
     const top = 1000 / (c.choices[0] * c.R);
-    const held = this.mode !== 'auto' && c.level > 0 ? ` (${f1(top)} לא מחזיק במחשב הזה)` : '';
+    const held = this.mode !== 'auto' && c.level > 0 ? tr(` (${f1(top)} לא מחזיק במחשב הזה)`, ` (${f1(top)} doesn't hold on this computer)`) : '';
     // (how many frames a second there really are)
-    const real = this.ivE > 0 ? ` · בפועל ${(1000 / this.ivE).toFixed(1)}` : '';
+    const real = this.ivE > 0 ? tr(` · בפועל ${(1000 / this.ivE).toFixed(1)}`, ` · actually ${(1000 / this.ivE).toFixed(1)}`) : '';
     // (the card not enough: the slowest beat, the fewest pixels and the lightest frames, frames late)
     const floor = !c.cpuBound && c.level >= c.choices.length - 1 && c.want <= c.floorLo + 1e-3 && c.lite >= c.liteMost && c.ema > HI * c.N * c.R && ot < 90;
-    const why = c.cpuBound ? ' · המעבד מגביל' : floor ? ` · כרטיס המסך לא מספיק ל-${Math.round(fps)} גם ברזולוציה הנמוכה ביותר` : '';
-    const lite = c.lite >= 2 ? ' · השתקפות ברזולוציה נמוכה מאוד' : c.lite >= 1 ? ' · השתקפות ברזולוציה נמוכה' : '';
+    const why = c.cpuBound ? tr(' · המעבד מגביל', ' · the CPU is the limit') : floor ? tr(` · כרטיס המסך לא מספיק ל-${Math.round(fps)} גם ברזולוציה הנמוכה ביותר`, ` · the graphics card isn't enough for ${Math.round(fps)} even at the lowest resolution`) : '';
+    const lite = c.lite >= 2 ? tr(' · השתקפות ברזולוציה נמוכה מאוד', ' · reflections at very low resolution') : c.lite >= 1 ? tr(' · השתקפות ברזולוציה נמוכה', ' · reflections at low resolution') : '';
     // (the trials of the faster beat, a phone: how many, and how the last one went)
-    const tr = c.trials ? ` · ניסיונות לקצב מהיר: ${c.trials}${c.onTrial ? ' (בניסיון עכשיו)' : c.trialHeld > 0 ? ` (האחרון החזיק ${(c.trialHeld / 1000).toFixed(0)} שנ׳)` : ' (מחזיק)'}` : '';
-    return `קצב: ${name} · ${f1(fps)} בשנייה${held}${real} · מסך ${hz}Hz · בזמן ${ot}% · רזולוציה ${Math.round(this.pipe.dyn * 100)}%${lite} · פריים עד סוף הציור ${c.ema.toFixed(1)}ms (מעבד ${c.cpuE.toFixed(1)})${why}${tr}${this.calib > 0 ? ' · מודד את המסך' : ''}`;
+    const tries = c.trials ? tr(` · ניסיונות לקצב מהיר: ${c.trials}${c.onTrial ? ' (בניסיון עכשיו)' : c.trialHeld > 0 ? ` (האחרון החזיק ${(c.trialHeld / 1000).toFixed(0)} שנ׳)` : ' (מחזיק)'}`, ` · tries at a faster pace: ${c.trials}${c.onTrial ? tr(' (בניסיון עכשיו)', ' (trying it now)') : c.trialHeld > 0 ? tr(` (האחרון החזיק ${(c.trialHeld / 1000).toFixed(0)} שנ׳)`, ` (the last one held ${(c.trialHeld / 1000).toFixed(0)} s)`) : tr(' (מחזיק)', ' (holding)')}`) : '';
+    return tr(`קצב: ${name} · ${f1(fps)} בשנייה${held}${real} · מסך ${hz}Hz · בזמן ${ot}% · רזולוציה ${Math.round(this.pipe.dyn * 100)}%${lite} · פריים עד סוף הציור ${c.ema.toFixed(1)}ms (מעבד ${c.cpuE.toFixed(1)})${why}${tries}${this.calib > 0 ? ' · מודד את המסך' : ''}`, `Pace: ${name} · ${f1(fps)} a second${held}${real} · screen ${hz}Hz · on time ${ot}% · resolution ${Math.round(this.pipe.dyn * 100)}%${lite} · frame to end of drawing ${c.ema.toFixed(1)}ms (CPU ${c.cpuE.toFixed(1)})${why}${tries}${this.calib > 0 ? tr(' · מודד את המסך', ' · measuring the screen') : ''}`);
   }
 }

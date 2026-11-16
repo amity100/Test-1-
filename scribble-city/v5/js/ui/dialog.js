@@ -1,3 +1,4 @@
+import { tr } from '../core/lang.js';
 // Conversation box (Hebrew UI): who is talking, what they say, numbered answers.
 // Pick with the mouse or the number keys.
 
@@ -22,7 +23,7 @@ export class Dialog {
   // choices: [{ label, fn }]; with none, a single "continue" closes it
   show(who, text, choices = null) {
     const game = this.game;
-    this.choices = choices && choices.length ? choices : [{ label: 'המשך', fn: null }];
+    this.choices = choices && choices.length ? choices : [{ label: tr('המשך', 'Continue'), fn: null }];
     this.whoEl.textContent = who || '';
     this.textEl.textContent = text;
     this.choicesEl.innerHTML = '';

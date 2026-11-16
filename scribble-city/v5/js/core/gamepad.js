@@ -1,3 +1,4 @@
+import { tr } from './lang.js';
 // A gamepad (ROADMAP 2.4): the whole game with one, in the standard layout (the Xbox names; a
 // PlayStation pad has the same buttons in the same places). Laid out like GTA:
 //
@@ -21,11 +22,11 @@ const DEAD = 0.2;
 const B = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, VIEW: 8, MENU: 9, L3: 10, R3: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
 // the prompts with the pad's buttons instead of the keys
 const NAMES = [
-  ['רווח/C — למעלה/למטה', 'RT/LT — למעלה/למטה'],
+  [tr('רווח/C — למעלה/למטה', 'Space/C — up/down'), tr('RT/LT — למעלה/למטה', 'RT/LT — up/down')],
   ['קליק — ', 'RB — '],
   ['E — ', 'Ⓨ — '],
   ['F — ', 'Ⓑ — '],
-  ['Q כדי', '⬆ כדי'],
+  [tr('Q כדי', 'Q to'), tr('⬆ כדי', '⬆ to')],
 ];
 
 function dz(v) {
@@ -62,7 +63,7 @@ export class Pad {
     this.crossEl = $('map-cross');
     window.addEventListener('gamepadconnected', () => {
       this.connected = true;
-      if (game.hud && game.state !== 'title') game.hud.toast('שלט משחק מחובר', 'info', 2);
+      if (game.hud && game.state !== 'title') game.hud.toast(tr('שלט משחק מחובר', 'Game controller connected'), 'info', 2);
     });
     window.addEventListener('gamepaddisconnected', () => {
       this.connected = !!this.read();

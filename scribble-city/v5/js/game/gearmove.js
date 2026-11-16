@@ -2,6 +2,7 @@ import { clamp, damp } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
 import { cops, hold, wreck, ring, onCar } from './gearfx.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.28) What moves your car (game/itemcat.js func): the turbo, the jump, the rewind, aeroplane
 // wings and a helicopter's rotor - each a kit for game/gear.js: apply (what it makes of the car, as
 // game/fuse.js applyVeh reads a part), finish (with the others), update (each frame, its buttons),
@@ -67,7 +68,7 @@ export const MOVE = {
         G.live.push({ kit: 'sonic', x: v.pos.x, y: (v.pos.y || 0) + 0.9, z: v.pos.z, yaw: v.yaw + (sg < 0 ? Math.PI : 0), t0: g.time, v });
         g.audio.play('boom', 0.85);
         g.camRig.addShake(0.45);
-        g.hud.toast('בום על־קולי!', 'good', 1.6);
+        g.hud.toast(tr('בום על־קולי!', 'Sonic boom!'), 'good', 1.6);
       }
       if (!on || Math.abs(v.speed || 0) < top * 0.9) s.boomed = s.boomed && on;
     },
@@ -223,7 +224,7 @@ export const MOVE = {
       if (!K || !K.rewind || G.rw) return;
       const T = G.tape || [];
       if (T.length < 8) {
-        G.game.hud.toast('עוד אין מה להחזיר', 'info', 1.4);
+        G.game.hud.toast(tr('עוד אין מה להחזיר', 'There\'s nothing to rewind yet'), 'info', 1.4);
         return;
       }
       if (!G.use(p)) return;
@@ -350,7 +351,7 @@ export const MOVE = {
         document.body.appendChild(el);
       }
       el.classList.toggle('on', on);
-      if (on) el.querySelector('span').textContent = `${Math.round((G.rw.t1 - G.rw.t0) * 10) / 10} שניות אחורה`;
+      if (on) el.querySelector('span').textContent = tr(`${Math.round((G.rw.t1 - G.rw.t0) * 10) / 10} שניות אחורה`, `${Math.round((G.rw.t1 - G.rw.t0) * 10) / 10} seconds back`);
     },
     animate(G, v, o, dt) {
       // (its hands: back as it rewinds, and on, a second a tick, as it records)

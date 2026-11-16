@@ -4,6 +4,7 @@
 
 import { CabGame, NEON, glowLine, glowCircle, glowRect, glowText } from './cab.js';
 
+import { tr } from '../../../core/lang.js';
 const COLS = 13;
 const ROWS = 6;
 const BW = 66;
@@ -24,9 +25,9 @@ export class BrickSketch extends CabGame {
     super(o);
     this.id = 'bricks';
     this.name = 'BRICK SKETCH';
-    this.title = 'BRICK SKETCH · מכונת משחק';
-    this.help = 'חצים להזיז את המחק · רווח לשחרר · Esc לצאת';
-    this.helpTouch = 'אצבע על המסך, או החצים, להזיז את המחק · A לשחרר';
+    this.title = tr('BRICK SKETCH · מכונת משחק', 'BRICK SKETCH · arcade machine');
+    this.help = tr('חצים להזיז את המחק · רווח לשחרר · Esc לצאת', 'Arrows to move the eraser · Space to launch · Esc to leave');
+    this.helpTouch = tr('אצבע על המסך, או החצים, להזיז את המחק · A לשחרר', 'A finger on the screen, or the arrows, to move the eraser · A to launch');
     this.color = NEON.orange;
     this.tint = '#1a0e14';
     this.perTicket = 150;

@@ -1104,6 +1104,9 @@ export function heroSoleGeo() {
 // curled into the palm. In the hand's own frame: ax, the pen's way from its point up its barrel (back over the web of the thumb);
 // q, where it is held; tip, how far below that its point is
 export const PINCH = { ax: [0.1104, 0.6724, 0.7326], q: [0.024, -0.117, -0.064], tip: 0.03 };
+// (ROADMAP 23.22) the round of a pistol's grip a fist shuts on (game/prologue/pistol.js, a little bigger than life): the fingers
+// round it, nearly to the heel of the hand
+export const GUN_GRIP = 0.019;
 export function heroHandGeo(left = false, grip = 0, pinch = false) {
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
   const parts = [];

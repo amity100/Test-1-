@@ -3,6 +3,7 @@ import { groundHeight } from '../world/layout.js';
 import { clamp, damp, dampAngle } from '../core/util.js';
 import { isWater, updateBoat, updatePlane } from './rides.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.8) A drawn vehicle that goes more than one way (game/freeform.js: the player chose
 // more than one kind of thing - a car and something that flies, a boat that drives...), and the
 // new ones: a boat drawn freehand, a hot air balloon, a skateboard. Each way it goes is one of the
@@ -141,7 +142,7 @@ function liftOff(v) {
     if (sp < need) {
       if (!v.toldSpeed) {
         v.toldSpeed = true;
-        v.game.hud.toast(`צריך מהירות כדי להמריא — ${Math.round(need * 3.6)} קמ״ש ומעלה`, 'info', 2.4);
+        v.game.hud.toast(tr(`צריך מהירות כדי להמריא — ${Math.round(need * 3.6)} קמ״ש ומעלה`, `You need speed to take off — ${Math.round(need * 3.6)} km/h or more`), 'info', 2.4);
       }
       return false;
     }
@@ -231,7 +232,7 @@ export function hybridStep(v, dt, input) {
     if (input) chuteButton(v, air);
     if (air && input && !game.toldChute && v.driver) {
       game.toldChute = true;
-      game.hud.toast(game.touch ? 'כפתור המצנח — הוא נפתח' : 'G — המצנח נפתח', 'info', 2.6);
+      game.hud.toast(game.touch ? tr('כפתור המצנח — הוא נפתח', 'The parachute button — it opens') : tr('G — המצנח נפתח', 'G — the parachute opens'), 'info', 2.6);
     }
     const fall = v.mode === 'drive' && v.air && (v.vy || 0) < -9 && v.pos.y - Math.max(0, groundHeight(v.pos.x, v.pos.z)) > 4;
     if (air && ((input && input.wasPressed('KeyG')) || fall)) {

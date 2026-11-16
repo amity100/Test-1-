@@ -6,6 +6,7 @@ import { NIGHT_CLOTHES } from './rhythm.js';
 import { LINES } from './voices.js';
 import { fmt } from './money.js';
 
+import { tr } from '../core/lang.js';
 // (GTA IV pass) The social life of the sidewalk: what makes a street of people walking past each
 // other into a street of people.
 //   groups       two, three, four of them standing on the sidewalk by the buildings, out of the
@@ -1166,7 +1167,7 @@ export class StreetSocial {
     if (Math.hypot(B.caseAt.x - pl.pos.x, B.caseAt.z - pl.pos.z) > 2.3) return null;
     if ((B.youT || 0) > game.time) return null;
     if (game.money && !game.money.can(TIP)) return null;
-    return { label: `E — לזרוק מטבע לנגן (${fmt(TIP)})` };
+    return { label: tr(`E — לזרוק מטבע לנגן (${fmt(TIP)})`, `E — toss a coin to the musician (${fmt(TIP)})`) };
   }
 
   interact() {
@@ -1174,7 +1175,7 @@ export class StreetSocial {
     const game = this.game;
     const B = this.busker;
     const pl = game.player;
-    if (game.money && !game.money.pay(TIP, 'מטבע לנגן רחוב')) return true;
+    if (game.money && !game.money.pay(TIP, tr('מטבע לנגן רחוב', 'A coin for a street musician'))) return true;
     B.youT = game.time + 4;
     // (the coin from your hand into the case)
     const j = pl.fig && pl.fig.j ? pl.fig.j.handR : null;

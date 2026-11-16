@@ -3,6 +3,7 @@ import { civilianLook, cityLook, kidLook, elderLook, painterLook } from './looks
 import { HAIR_SKETCH } from './airsketch.js';
 import { groundHeight } from '../world/layout.js';
 
+import { tr } from '../core/lang.js';
 // Little scenes that could only happen in a drawn city: a mum draws her daughter the hairdo she
 // wants, a grandma draws grandpa a cane, a painter draws a door on a wall and somebody walks out
 // of it, a rain cloud follows a man until he draws himself an umbrella...
@@ -890,7 +891,7 @@ function* rainScene(sc, def) {
     if (Math.hypot(p.pos.x - cloud.x, p.pos.z - cloud.z) < 24 && p.mode === 'foot') {
       cloud.follow = p.pos;
       cloud.chase = true;
-      g.hud.toast('ענן גשם נטפל אליך! תצייר מטריה או תברח', 'info', 3);
+      g.hud.toast(tr('ענן גשם נטפל אליך! תצייר מטריה או תברח', 'A rain cloud has latched onto you! Draw an umbrella or run'), 'info', 3);
       yield 13;
     } else {
       cloud.follow = null;

@@ -1,5 +1,6 @@
 import { groundHeight } from '../world/layout.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 8.1, not with ?classic) Money.
 //   - the wallet and the bank: the cash in your pockets is on the HUD, the bank (PAPERTRUST, "your
 //     savings - never erased") in the phone. You pay with cash, and with the card for what the
@@ -124,7 +125,7 @@ export class Money {
     const card = n - c;
     this.bank -= card;
     this.stats.spent += n;
-    this.note(what, -n, card > 0 ? 'כרטיס' : 'מזומן');
+    this.note(what, -n, card > 0 ? tr('כרטיס', 'Card') : tr('מזומן', 'Cash'));
     this.float(-n);
     this.game.audio.play('till', 0.55);
     return true;
@@ -132,8 +133,8 @@ export class Money {
 
   // why it could not be paid, and what to do (the shop's dialog)
   why(n, cashOnly = false) {
-    if (cashOnly && this.cash < n && this.cash + this.bank >= n) return `רק מזומן! יש לכם ${fmt(this.cash)} בכיס. בכספומט אפשר למשוך מהבנק.`;
-    return `אין לכם מספיק כסף: זה עולה ${fmt(n)}, ויש לכם ${fmt(this.total)}.`;
+    if (cashOnly && this.cash < n && this.cash + this.bank >= n) return tr(`רק מזומן! יש לכם ${fmt(this.cash)} בכיס. בכספומט אפשר למשוך מהבנק.`, `Cash only! You have ${fmt(this.cash)} in your pocket. You can withdraw from the bank at a cash machine.`);
+    return tr(`אין לכם מספיק כסף: זה עולה ${fmt(n)}, ויש לכם ${fmt(this.total)}.`, `You don't have enough money: it costs ${fmt(n)}, and you have ${fmt(this.total)}.`);
   }
 
   // the shop's answer when it cannot be paid: and a way to the nearest ATM
@@ -143,14 +144,14 @@ export class Money {
     const atm = this.nearestATM();
     if (atm && cashOnly && this.cash + this.bank >= n && game.gps) {
       choices.push({
-        label: `לסמן במפה את הכספומט הקרוב (${atm.name}, ${Math.round(atm.d)} מ')`,
+        label: tr(`לסמן במפה את הכספומט הקרוב (${atm.name}, ${Math.round(atm.d)} מ')`, `Mark the nearest cash machine on the map (${atm.name}, ${Math.round(atm.d)} m)`),
         fn: () => {
-          game.gps.set(atm.x, atm.z, `כספומט · ${atm.name}`);
-          game.hud.toast('הכספומט מסומן במפה', 'info', 2);
+          game.gps.set(atm.x, atm.z, tr(`כספומט · ${atm.name}`, `Cash machine · ${atm.name}`));
+          game.hud.toast(tr('הכספומט מסומן במפה', 'The cash machine is marked on the map'), 'info', 2);
         },
       });
     }
-    choices.push({ label: back ? 'משהו אחר' : 'בסדר', fn: back || null });
+    choices.push({ label: back ? tr('משהו אחר', 'Something else') : tr('בסדר', 'OK'), fn: back || null });
     game.dialog.show(who, this.why(n, cashOnly), choices);
   }
 
@@ -160,7 +161,7 @@ export class Money {
     if (n <= 0) return;
     this.cash += n;
     this.stats.earned += n;
-    this.note(what, n, 'מזומן');
+    this.note(what, n, tr('מזומן', 'Cash'));
     this.float(n);
   }
 
@@ -170,7 +171,7 @@ export class Money {
     if (n <= 0) return;
     this.bank += n;
     this.stats.earned += n;
-    this.note(what, n, 'בנק');
+    this.note(what, n, tr('בנק', 'Bank'));
   }
 
   // taken from you: the cash first, then the bank (a fine), as much as there is
@@ -181,14 +182,14 @@ export class Money {
     this.cash -= c;
     this.bank -= n - c;
     this.stats.lost += n;
-    this.note(what, -n, n - c > 0 ? 'בנק' : 'מזומן');
+    this.note(what, -n, n - c > 0 ? tr('בנק', 'Bank') : tr('מזומן', 'Cash'));
     this.float(-n);
     return n;
   }
 
   // erased: half the cash in your pockets with you; the bank keeps the rest
   onDeath() {
-    return this.take(Math.floor(this.cash / 2), 'נמחק איתכם', true);
+    return this.take(Math.floor(this.cash / 2), tr('נמחק איתכם', 'Erased along with you'), true);
   }
 
   withdraw(n) {
@@ -197,7 +198,7 @@ export class Money {
     this.bank -= n;
     this.cash += n;
     this.stats.withdrawn += n;
-    this.note('משיכה בכספומט', n, 'בנק → מזומן', true);
+    this.note(tr('משיכה בכספומט', 'Cash machine withdrawal'), n, tr('בנק → מזומן', 'Bank → cash'), true);
     this.float(n);
     this.game.audio.play('till', 0.4);
     return n;
@@ -209,7 +210,7 @@ export class Money {
     this.cash -= n;
     this.bank += n;
     this.stats.deposited += n;
-    this.note('הפקדה בכספומט', n, 'מזומן → בנק', true);
+    this.note(tr('הפקדה בכספומט', 'Cash machine deposit'), n, tr('מזומן → בנק', 'Cash → bank'), true);
     this.float(-n);
     this.game.audio.play('till', 0.4);
     return n;
@@ -229,7 +230,7 @@ export class Money {
     for (const n of [20, 50, 100, 200]) {
       if (this.bank >= n) {
         choices.push({
-          label: `למשוך ${fmt(n)}`,
+          label: tr(`למשוך ${fmt(n)}`, `Withdraw ${fmt(n)}`),
           fn: () => {
             this.withdraw(n);
             this.atm(back);
@@ -239,15 +240,15 @@ export class Money {
     }
     if (this.cash > 0) {
       choices.push({
-        label: `להפקיד את כל המזומן (${fmt(this.cash)})`,
+        label: tr(`להפקיד את כל המזומן (${fmt(this.cash)})`, `Deposit all the cash (${fmt(this.cash)})`),
         fn: () => {
           this.deposit(this.cash);
           this.atm(back);
         },
       });
     }
-    choices.push({ label: back ? 'חזרה' : 'סיום', fn: back });
-    game.dialog.show('כספומט PAPERTRUST', `בבנק: ${fmt(this.bank)} · בכיס: ${fmt(this.cash)}`, choices);
+    choices.push({ label: back ? tr('חזרה', 'Back') : tr('סיום', 'Done'), fn: back });
+    game.dialog.show(tr('כספומט PAPERTRUST', 'PAPERTRUST cash machine'), tr(`בבנק: ${fmt(this.bank)} · בכיס: ${fmt(this.cash)}`, `In the bank: ${fmt(this.bank)} · in your pocket: ${fmt(this.cash)}`), choices);
   }
 
   nearestATM() {
@@ -316,7 +317,7 @@ export class Money {
         this.drops.splice(i, 1);
         this.cash += d.n;
         this.stats.found += d.n;
-        this.note('מצאתם על הרצפה', d.n, 'מזומן');
+        this.note(tr('מצאתם על הרצפה', 'You found it on the floor'), d.n, tr('מזומן', 'Cash'));
         this.float(d.n);
         this.game.audio.play('coins', 0.6);
         continue;

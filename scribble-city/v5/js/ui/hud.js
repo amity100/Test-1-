@@ -8,6 +8,7 @@ import { drawSight } from '../game/lose.js';
 import { M_AVES, M_STREETS, M_BLOCKS, CAUSEWAYS, SHORE_X, WEST_X, NORTH_Z, BEACH_Z, SEA_Z, PIER_M, JETTY, MARINA } from '../world/mainland/plan.js';
 import { ARENA } from '../world/mainland/landmarks.js';
 
+import { tr } from '../core/lang.js';
 const $ = (id) => document.getElementById(id);
 
 export class HUD {
@@ -350,19 +351,19 @@ export class HUD {
     const d = s.def;
     // (only drawing for now: the pencil is a pencil - game.canErase)
     const drawOnly = d.id === 'pencil' && !this.game.canErase;
-    this.weaponName.textContent = drawOnly ? 'עיפרון' : d.name;
+    this.weaponName.textContent = drawOnly ? tr('עיפרון', 'Pencil') : d.name;
     // (the bare fists, ROADMAP 5.4: how the combo goes)
-    this.weaponAmmo.textContent = d.bare ? (this.game.touch ? 'שלוש מכות ברצף — בעיטה' : 'שלוש ברצף — בעיטה · קליק ימני — הגנה')
-      : d.block && s.uses !== undefined ? `המגן יחזיק עוד ${s.uses} מכות`
-      : s.uses !== undefined ? `נשארו ${s.uses} מחיקות`
-      : d.kind === 'beam' ? `${Math.ceil(s.ammo)} שניות של אור`
-      : d.projectile === 'scissors' ? (s.out ? 'באוויר… חוזרים אליך' : 'זורקים — וחוזרים')
-      : d.projectile === 'inkbomb' ? `${s.ammo} בקבוקי דיו`
-      : drawOnly ? (this.game.touch ? 'לצייר: כפתור העיפרון' : 'לצייר: Q')
-      : s.ammo === Infinity ? 'תמיד איתך' : (this.game.arsenal && this.game.arsenal.ammoText(s)) || `${s.ammo} יריות`;
+    this.weaponAmmo.textContent = d.bare ? (this.game.touch ? tr('שלוש מכות ברצף — בעיטה', 'Three hits in a row — a kick') : tr('שלוש ברצף — בעיטה · קליק ימני — הגנה', 'Three in a row — a kick · right-click — block'))
+      : d.block && s.uses !== undefined ? tr(`המגן יחזיק עוד ${s.uses} מכות`, `The shield will take ${s.uses} more hits`)
+      : s.uses !== undefined ? tr(`נשארו ${s.uses} מחיקות`, `${s.uses} erasures left`)
+      : d.kind === 'beam' ? tr(`${Math.ceil(s.ammo)} שניות של אור`, `${Math.ceil(s.ammo)} seconds of light`)
+      : d.projectile === 'scissors' ? (s.out ? tr('באוויר… חוזרים אליך', 'In the air… coming back to you') : tr('זורקים — וחוזרים', 'Throw it — and it comes back'))
+      : d.projectile === 'inkbomb' ? tr(`${s.ammo} בקבוקי דיו`, `${s.ammo} ink bottles`)
+      : drawOnly ? (this.game.touch ? tr('לצייר: כפתור העיפרון', 'To draw: the pencil button') : tr('לצייר: Q', 'To draw: Q'))
+      : s.ammo === Infinity ? tr('תמיד איתך', 'Always with you') : (this.game.arsenal && this.game.arsenal.ammoText(s)) || tr(`${s.ammo} יריות`, `${s.ammo} shots`);
     this.weaponGrade.className = s.def.id === 'pencil' || s.def.gear || d.bare || d.free ? '' : s.grade;
     // (one drawn freehand, ROADMAP 11.6: no blueprint to measure it by)
-    this.weaponGrade.textContent = s.def.id === 'pencil' || d.bare ? '' : s.def.gear ? 'ציוד משטרה שנאסף' : d.free ? 'ציור חופשי' : `ציור ${GRADE[s.grade].label}${s.score !== undefined ? ` · ${s.score}` : ''}`;
+    this.weaponGrade.textContent = s.def.id === 'pencil' || d.bare ? '' : s.def.gear ? tr('ציוד משטרה שנאסף', 'Police gear, picked up') : d.free ? tr('ציור חופשי', 'Free drawing') : tr(`ציור ${GRADE[s.grade].label}${s.score !== undefined ? ` · ${s.score}` : ''}`, `${GRADE[s.grade].label} drawing${s.score !== undefined ? ` · ${s.score}` : ''}`);
     const c = this.weaponIcon;
     const g = c.getContext('2d');
     g.clearRect(0, 0, c.width, c.height);
@@ -472,7 +473,7 @@ export class HUD {
   }
 
   setGoals(goals) {
-    const html = ['<h4>מה עושים עכשיו?</h4>'];
+    const html = [tr('<h4>מה עושים עכשיו?</h4>', '<h4>What now?</h4>')];
     for (const g of goals) html.push(`<div class="g ${g.done ? 'done' : ''}"><span class="box"></span><span>${g.text}</span></div>`);
     this.goalsEl.innerHTML = html.join('');
   }

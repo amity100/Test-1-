@@ -5,6 +5,7 @@
 
 import { CabGame, NEON, glowLine, glowCircle, glowText } from './cab.js';
 
+import { tr } from '../../../core/lang.js';
 const COLS = 10;
 const ROWS = 5;
 const KIND = ['plane', 'eraser', 'eraser', 'blot', 'blot'];
@@ -16,9 +17,9 @@ export class InkInvaders extends CabGame {
     super(o);
     this.id = 'invaders';
     this.name = 'INK INVADERS';
-    this.title = 'INK INVADERS · מכונת משחק';
-    this.help = 'חצים לזוז · רווח לירות דיו · Esc לצאת';
-    this.helpTouch = 'החצים לזוז · A לירות';
+    this.title = tr('INK INVADERS · מכונת משחק', 'INK INVADERS · arcade machine');
+    this.help = tr('חצים לזוז · רווח לירות דיו · Esc לצאת', 'Arrows to move · Space to shoot ink · Esc to leave');
+    this.helpTouch = tr('החצים לזוז · A לירות', 'The arrows to move · A to shoot');
     this.color = NEON.cyan;
     this.tint = '#0b0a26';
     this.perTicket = 120;

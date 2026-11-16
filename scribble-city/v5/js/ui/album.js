@@ -3,6 +3,7 @@ import { GRADE } from '../game/weapons.js';
 import { AVES, STREETS, nearestRoadInfo, districtName } from '../world/layout.js';
 import { EARLY_IDS } from '../game/drawlock.js';
 
+import { tr } from '../core/lang.js';
 const KEY = 'scribble-city-v5-album';
 
 // For now every blueprint is open to draw from the start (to try them all). Off (ROADMAP 9.1: the
@@ -13,22 +14,22 @@ export const ALL_OPEN = true;
 
 // (ROADMAP 9.1) where the ones not on a board of their own are to be had, besides the boards
 const FOUND_IN = {
-  bandage: 'במכולות שבשדרות',
-  stapler: 'בחנות כלי העבודה',
-  glue: 'בחנות כלי העבודה',
-  bike: 'בחנות הגלישה',
-  boomerang: 'בחנות הגלישה',
-  inkbomb: 'מתנה למי שקונה את INK CLUB',
-  parachute: 'מתנה למי שקונה את Star Motel',
-  laser: 'מתנה למי שקונה את Pixel Arcade',
-  planes: 'מתנה למי שקונה את Bay Cafe',
+  bandage: tr('במכולות שבשדרות', 'In the containers on the avenue'),
+  stapler: tr('בחנות כלי העבודה', 'In the hardware store'),
+  glue: tr('בחנות כלי העבודה', 'In the hardware store'),
+  bike: tr('בחנות הגלישה', 'In the surf shop'),
+  boomerang: tr('בחנות הגלישה', 'In the surf shop'),
+  inkbomb: tr('מתנה למי שקונה את INK CLUB', 'A gift for whoever buys INK CLUB'),
+  parachute: tr('מתנה למי שקונה את Star Motel', 'A gift for whoever buys the Star Motel'),
+  laser: tr('מתנה למי שקונה את Pixel Arcade', 'A gift for whoever buys Pixel Arcade'),
+  planes: tr('מתנה למי שקונה את Bay Cafe', 'A gift for whoever buys Bay Cafe'),
   // (ROADMAP 9.2)
-  ladder: 'בחנות כלי העבודה',
-  ramp: 'בחנות כלי העבודה',
-  barrier: 'בחנות כלי העבודה',
-  bridge: 'בחנות כלי העבודה',
-  key: 'בחנות כלי העבודה',
-  umbrella: 'במכולות שבשדרות',
+  ladder: tr('בחנות כלי העבודה', 'In the hardware store'),
+  ramp: tr('בחנות כלי העבודה', 'In the hardware store'),
+  barrier: tr('בחנות כלי העבודה', 'In the hardware store'),
+  bridge: tr('בחנות כלי העבודה', 'In the hardware store'),
+  key: tr('בחנות כלי העבודה', 'In the hardware store'),
+  umbrella: tr('במכולות שבשדרות', 'In the containers on the avenue'),
 };
 
 // (ROADMAP 15.2) what every new game starts knowing how to draw: a paint gun, a car, a ramp - made
@@ -38,11 +39,11 @@ export const START_KIT = ['paint', 'car', 'ramp', 'barrier'];
 // the library's shelves
 // (v5, ROADMAP 11.36: the weapons first - the paint gun, the pencil rifle, the eraser bazooka...)
 const SHELVES = [
-  ['נשק', (bp) => bp.kind === 'weapon'],
-  ['כלי רכב', (bp) => bp.kind === 'vehicle'],
-  ['ציוד ועזרה ראשונה', (bp) => bp.kind === 'gear' || bp.kind === 'heal'],
+  [tr('נשק', 'Weapons'), (bp) => bp.kind === 'weapon'],
+  [tr('כלי רכב', 'Vehicles'), (bp) => bp.kind === 'vehicle'],
+  [tr('ציוד ועזרה ראשונה', 'Gear and first aid'), (bp) => bp.kind === 'gear' || bp.kind === 'heal'],
   // (ROADMAP 9.2, not with ?classic)
-  ['כלים לבעיות בדרך', (bp) => bp.kind === 'tool'],
+  [tr('כלים לבעיות בדרך', 'Tools for trouble on the way'), (bp) => bp.kind === 'tool'],
 ];
 
 /**
@@ -136,7 +137,7 @@ export class Album {
     const bp = BLUEPRINTS[id];
     if (!bp || !this.add(id)) return false;
     const g = this.game;
-    g.hud.toast(`שרטוט חדש באלבום: ${bp.name}, ${from}! ${g.touch ? g.drawTap : g.drawKey} — לצייר אותו`, 'good', 3.6);
+    g.hud.toast(tr(`שרטוט חדש באלבום: ${bp.name}, ${from}! ${g.touch ? g.drawTap : g.drawKey} — לצייר אותו`, `New blueprint in the album: ${bp.name}, ${from}! ${g.touch ? g.drawTap : g.drawKey} — draw it`), 'good', 3.6);
     g.audio.play('pageflip');
     return true;
   }
@@ -169,10 +170,10 @@ export class Album {
       const r = nearestRoadInfo(best.x, best.z);
       const road = r.aveDist < r.streetDist ? AVES[r.ave].name : STREETS[r.street].name;
       const area = districtName(best.x, best.z);
-      out.push(`${best.roof ? 'על גג' : 'על שלט'} ליד ${road}${area && area !== road ? `, ${area}` : ''}`);
+      out.push(tr(`${best.roof ? 'על גג' : 'על שלט'} ליד ${road}${area && area !== road ? `, ${area}` : ''}`, `${best.roof ? tr('על גג', 'on a roof') : tr('על שלט', 'on a sign')} by ${road}${area && area !== road ? `, ${area}` : ''}`));
     }
     if (FOUND_IN[id]) out.push(FOUND_IN[id]);
-    if (!out.length) out.push('אולי במכונה בארקייד, עם קצת מזל');
+    if (!out.length) out.push(tr('אולי במכונה בארקייד, עם קצת מזל', 'Maybe in a machine at the arcade, with a little luck'));
     return out.join(' · ');
   }
 
@@ -248,7 +249,7 @@ export class Album {
     pol.appendChild(c);
     const cap = document.createElement('div');
     cap.className = 'caption';
-    cap.textContent = got ? bp.name : 'עוד לא צולם';
+    cap.textContent = got ? bp.name : tr('עוד לא צולם', 'Not photographed yet');
     pol.appendChild(cap);
     item.appendChild(pol);
     // (not found yet: where it is - ROADMAP 9.1)
@@ -261,8 +262,8 @@ export class Album {
     const meta = document.createElement('div');
     meta.className = 'meta';
     const rec = this.items.get(id);
-    const best = got && rec && rec.best !== null ? ` · שיא: ${rec.best}` : '';
-    meta.innerHTML = `<span class="stars">${'●'.repeat(bp.difficulty)}${'○'.repeat(5 - bp.difficulty)}</span> ${got ? (bp.kind === 'vehicle' ? 'כלי רכב' : bp.kind === 'gear' ? 'ציוד' : bp.kind === 'heal' ? 'עזרה ראשונה' : bp.kind === 'tool' ? 'כלי' : 'נשק') : ''}${best}`;
+    const best = got && rec && rec.best !== null ? tr(` · שיא: ${rec.best}`, ` · best: ${rec.best}`) : '';
+    meta.innerHTML = `<span class="stars">${'●'.repeat(bp.difficulty)}${'○'.repeat(5 - bp.difficulty)}</span> ${got ? (bp.kind === 'vehicle' ? tr('כלי רכב', 'Vehicles') : bp.kind === 'gear' ? tr('ציוד', 'Gear') : bp.kind === 'heal' ? tr('עזרה ראשונה', 'First aid') : bp.kind === 'tool' ? tr('כלי', 'Tool') : tr('נשק', 'Weapons')) : ''}${best}`;
     item.appendChild(meta);
     if (got) {
       // (ROADMAP 15.2) known: made at once (a pencil beside it to draw it anyway); found, not learned
@@ -270,12 +271,12 @@ export class Album {
       const known = this.game.classic || this.known(id);
       const go = document.createElement('div');
       go.className = `go${known ? ' now' : ' learn'}`;
-      go.textContent = this.game.classic ? '✏ לצייר באוויר' : known ? '⚡ לזמן עכשיו' : '✎ ללמוד: לצייר פעם אחת על הקווים';
+      go.textContent = this.game.classic ? tr('✏ לצייר באוויר', '✏ Draw in the air') : known ? tr('⚡ לזמן עכשיו', '⚡ Summon now') : tr('✎ ללמוד: לצייר פעם אחת על הקווים', '✎ Learn: draw it once over the lines');
       item.appendChild(go);
       if (known && !this.game.classic) {
         const dr = document.createElement('div');
         dr.className = 'go draw';
-        dr.textContent = '✏ לצייר בעצמי';
+        dr.textContent = tr('✏ לצייר בעצמי', '✏ Draw it myself');
         item.appendChild(dr);
       }
       item.addEventListener('click', (e) => {

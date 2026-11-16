@@ -1,3 +1,4 @@
+import { tr } from '../core/lang.js';
 // (ROADMAP 15.5) Your inventions: a car with the parts you drew on it - their sizes, places, ways -
 // kept under a name, every version of it, and made again whole in a moment (ui/freedraw.js: the
 // pen's "inventions" shelf; game/partpen.js: kept from the car's pen). What you know how to draw (the
@@ -43,8 +44,8 @@ export class Inventions {
   // kept under a name - a name it already has: a new version of it, the old ones kept
   store(name, v) {
     const c = this.capture(v);
-    if (!c.parts.length) return { why: 'עוד אין עליה חלקים מצוירים — ציירו טורבו, גלגלי שטח, שריון...' };
-    name = String(name || '').trim().slice(0, 28) || 'המצאה';
+    if (!c.parts.length) return { why: tr('עוד אין עליה חלקים מצוירים — ציירו טורבו, גלגלי שטח, שריון...', 'There are no drawn parts on it yet — draw a turbo, off-road wheels, armor...') };
+    name = String(name || '').trim().slice(0, 28) || tr('המצאה', 'Invention');
     let o = this.list.find((x) => x.name === name);
     if (o) {
       o.versions = (o.versions || []).slice(-5);
@@ -79,17 +80,17 @@ export class Inventions {
   names(v) {
     const t = new Set((v && v.fuse ? v.fuse.parts : []).filter((p) => p.par).map((p) => p.type));
     const out = [];
-    if (t.has('wing') && t.has('rotor') && t.has('jet')) out.push('השד המעופף');
-    if (t.has('wing') && t.has('jet')) out.push('טיל הכביש');
-    if (t.has('wing') && t.has('rotor')) out.push('הדאון המרחף');
-    if (t.has('rotor')) out.push('המסוק של השכונה');
-    if (t.has('armor') && t.has('wheel')) out.push('מפלצת הכביש');
-    if (t.has('armor')) out.push('הטנק הוורוד');
-    if (t.has('wheel')) out.push('קופץ השטח');
-    if (t.has('jet')) out.push('הטורבו המשוגע');
-    if (t.has('prop')) out.push('סירת הכביש');
-    if (t.has('wing')) out.push('הציפור');
-    out.push('ההמצאה שלי');
+    if (t.has('wing') && t.has('rotor') && t.has('jet')) out.push(tr('השד המעופף', 'The Flying Devil'));
+    if (t.has('wing') && t.has('jet')) out.push(tr('טיל הכביש', 'The Road Missile'));
+    if (t.has('wing') && t.has('rotor')) out.push(tr('הדאון המרחף', 'The Hovering Glider'));
+    if (t.has('rotor')) out.push(tr('המסוק של השכונה', 'The Neighborhood Chopper'));
+    if (t.has('armor') && t.has('wheel')) out.push(tr('מפלצת הכביש', 'The Road Monster'));
+    if (t.has('armor')) out.push(tr('הטנק הוורוד', 'The Pink Tank'));
+    if (t.has('wheel')) out.push(tr('קופץ השטח', 'The Off-Road Jumper'));
+    if (t.has('jet')) out.push(tr('הטורבו המשוגע', 'The Crazy Turbo'));
+    if (t.has('prop')) out.push(tr('סירת הכביש', 'The Road Boat'));
+    if (t.has('wing')) out.push(tr('הציפור', 'The Bird'));
+    out.push(tr('ההמצאה שלי', 'My Invention'));
     return [...new Set(out)].filter((n) => !this.list.some((o) => o.name === n)).slice(0, 3);
   }
 }
