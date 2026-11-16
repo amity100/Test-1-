@@ -9,6 +9,8 @@
 //   BURN=1: a review copy - each shot's number and the scene's own clock in the picture's top corner (in the recording only)
 //   THRU=8: on through the scenes after the one asked for, to the end time in scene THRU's own clock (scenes 8 and 9 cannot be
 //   begun at: they need what scene 7 made - the drawn ramp, the flight): node tools/filmclip.mjs out 7 0.5 24  with THRU=8
+//   INIT="<js>": JS run once in the page before the first picture (g: the game, P: the prologue; may be async) - e.g. a gun put
+//   on the car and its trigger held, for a clip of the chase as a player would play it
 //   WATCH="<js>": a line of JS asked after every picture (g: the game, P: the prologue) - its answer printed whenever it changes,
 //   with the scene's time: for finding the moment something goes wrong in the very run that is filmed
 import fs from 'node:fs';
@@ -82,6 +84,17 @@ if (process.env.BURN) {
       d.style.display = P.holdCam ? '' : 'none';
     };
   });
+}
+if (process.env.INIT) {
+  const r = await pg.evaluate(async (code) => {
+    const AsyncF = Object.getPrototypeOf(async () => {}).constructor;
+    try {
+      return await new AsyncF('g', 'P', code)(window.__game, window.__game.prologue);
+    } catch (e) {
+      return 'INIT error: ' + String((e && e.stack) || e).slice(0, 400);
+    }
+  }, process.env.INIT);
+  console.log('INIT:', JSON.stringify(r));
 }
 const steps = Math.round(30 / FPS);
 let n = 0;
