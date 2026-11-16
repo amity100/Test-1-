@@ -292,7 +292,8 @@ export class Player {
         this.vel.set(0, 0, 0);
         this.yaw = dampAngle(this.yaw, st.yaw, 10, dt);
         fig.yaw = this.yaw;
-        fig.speed = 0;
+        // (on a treadmill: walking, going nowhere - game/trylife.js)
+        fig.speed = st.walk || 0;
         fig.air = false;
         fig.sit = damp(fig.sit, st.stand ? 0 : 1, 8, dt);
         fig.update(dt);

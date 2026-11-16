@@ -581,6 +581,12 @@ export class StreetLife {
         const st = svl.target(p);
         if (st) return { shop: a, ...st };
       }
+      // (ROADMAP 26: the treadmill - the gym's, the sports shop's: game/trylife.js)
+      const trl = a.life2.tries;
+      if (trl && trl.target && a.open && !(you && you.items.length)) {
+        const tt = trl.target(p);
+        if (tt) return { shop: a, ...tt };
+      }
       if (k && k.alive && Math.hypot(k.pos.x - p.pos.x, k.pos.z - p.pos.z) < 1.6) break;
       const slot = a.life2.target(p);
       if (slot) return { shop: a, slot, label: a.life2.label(slot) };
@@ -685,6 +691,10 @@ export class StreetLife {
     }
     if (t.svcYou) {
       t.shop.life2.service.act(t);
+      return true;
+    }
+    if (t.tryYou) {
+      t.shop.life2.tries.act(t);
       return true;
     }
     if (t.gift) {
