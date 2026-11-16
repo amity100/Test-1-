@@ -575,6 +575,12 @@ export class StreetLife {
         const at = arc.target(p);
         if (at) return { shop: a, ...at };
       }
+      // (ROADMAP 26: the gym's bags and bars, the laundromat's washers - yours to use: game/servicelife.js)
+      const svl = a.life2.service;
+      if (svl && a.open && !(you && you.items.length)) {
+        const st = svl.target(p);
+        if (st) return { shop: a, ...st };
+      }
       if (k && k.alive && Math.hypot(k.pos.x - p.pos.x, k.pos.z - p.pos.z) < 1.6) break;
       const slot = a.life2.target(p);
       if (slot) return { shop: a, slot, label: a.life2.label(slot) };
@@ -675,6 +681,10 @@ export class StreetLife {
     }
     if (t.arcade) {
       t.shop.life2.arcade.act(t);
+      return true;
+    }
+    if (t.svcYou) {
+      t.shop.life2.service.act(t);
       return true;
     }
     if (t.gift) {

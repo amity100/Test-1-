@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { tr } from '../core/lang.js';
 
 // (v5, ROADMAP 16.9) The laundromat's and the gym's people at their work (game/shoplife.js, the flows
 // 'laundry' and 'gym'):
@@ -10,8 +11,13 @@ import * as THREE from 'three';
 // - The gym: a pair of dumbbells off the rack, curled before the mirror, put back; the barbell off its
 //   hooks, pressed overhead, rep after rep; the punching bag hit - left, right - swinging on its chain
 //   (the treadmill: game/trylife.js).
+// - You (ROADMAP 26): E at a free bag - hit it, left, right, a while (the count at the end); at a free bench's bar - pressed
+//   overhead, rep after rep; at a free washer - your load in, the coins, the drum turning its time, and word when it is done.
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const WASH = 3;
+const _y = new THREE.Vector3();
+const _z = new THREE.Vector3();
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const SAY = {
@@ -437,9 +443,140 @@ export class ServiceLife {
     return null;
   }
 
+  // ---------------------------------------------------------------- you
+  // what is in front of you: a free bag, a free bench's bar, a free washer; while you are at one, E stops
+  target(p) {
+    if (this.you && this.you.held) return { svcYou: true, stop: true, label: tr('E — מספיק', 'E — stop') };
+    if (this.you) return null;
+    const near = (m, r) => m && Math.hypot(p.pos.x - m.x, p.pos.z - m.z) < r;
+    for (const B of this.bags) if (!B.who && near(B.at, 0.75)) return { svcYou: true, bag: B, label: tr('E — להכות בשק האגרוף', 'E — hit the punching bag') };
+    for (const B of this.bars) if (!B.who && near(B.at, 0.75)) return { svcYou: true, bar: B, label: tr('E — להרים את המוט', 'E — lift the barbell') };
+    for (const q of this.machines) if (!q.v && q.left <= 0 && near(q.load, 0.75)) return { svcYou: true, wash: q, label: tr(`E — להפעיל מכונת כביסה ($${WASH})`, `E — run a wash ($${WASH})`) };
+    return null;
+  }
+
+  act(t) {
+    const g = this.game;
+    const p = g.player;
+    if (t.stop) return this.youDone();
+    if (t.wash) {
+      if (g.money && !g.money.pay(WASH, 'WASH')) {
+        g.money.refuse('WASH', WASH);
+        return;
+      }
+      const q = t.wash;
+      q.v = 'you';
+      this.you = { kind: 'load', q, t: 0, held: true };
+      p.seat = { x: q.load.x, z: q.load.z, yaw: Math.atan2(q.m.x - q.load.x, q.m.z - q.load.z), lock: true, stand: true, svc: true };
+      return;
+    }
+    const B = t.bag || t.bar;
+    B.who = 'you';
+    this.you = { kind: t.bag ? 'punch' : 'lift', B, t: 0, n: 0, k: -1, held: true };
+    const yaw = t.bag ? Math.atan2(B.m.x - B.at.x, B.m.z - B.at.z) : B.at.yaw;
+    p.seat = { x: B.at.x, z: B.at.z, yaw, lock: true, stand: true, svc: true };
+    g.hud.toast(t.bag ? tr('שמאל, ימין... (E — מספיק)', 'Left, right... (E — stop)') : tr('למעלה... ולמטה (E — מספיק)', 'Up... and down (E — stop)'), 'info', 2.2);
+  }
+
+  // you at it: the arms, the count; the bag swinging, the bar in your hands; done after a while, or by E
+  youUpdate(dt) {
+    const Y = this.you;
+    if (!Y) return;
+    const g = this.game;
+    const p = g.player;
+    const f = p.fig;
+    Y.t += dt;
+    if (Y.held && (!p.seat || !p.seat.svc)) return this.youDone();
+    if (Y.kind === 'punch') {
+      const B = Y.B;
+      const k = Math.floor(Y.t / 0.34);
+      const ph = (Y.t % 0.34) / 0.34;
+      const out = ph < 0.4 ? ph / 0.4 : 1 - (ph - 0.4) / 0.6;
+      const yaw = p.yaw;
+      const hx = p.pos.x + Math.sin(yaw) * (0.2 + out * 0.32);
+      const hz = p.pos.z + Math.cos(yaw) * (0.2 + out * 0.32);
+      const side = k % 2 ? 1 : -1;
+      const hand = _y.set(hx + Math.cos(yaw) * side * 0.12, f.j.headC.y - 0.2, hz - Math.sin(yaw) * side * 0.12);
+      if (side > 0) {
+        f.reachR = hand;
+        f.reachL = null;
+      } else {
+        f.reachL = hand;
+        f.reachR = null;
+      }
+      if (k !== Y.k) {
+        Y.k = k;
+        Y.n++;
+        B.swingV += 0.9;
+        B.hitYaw = yaw;
+        this.life.open.sound('punch', 0.32, 8);
+      }
+      if (Y.t > 14) this.youDone();
+      return;
+    }
+    if (Y.kind === 'lift') {
+      const B = Y.B;
+      const up = 0.5 - 0.5 * Math.cos(Y.t * 2.2);
+      const y = f.j.headC.y - 0.12 + up * 0.5;
+      const rx = Math.cos(p.yaw);
+      const rz = -Math.sin(p.yaw);
+      f.reachR = _y.set(p.pos.x + rx * 0.3, y, p.pos.z + rz * 0.3);
+      f.reachL = _z.set(p.pos.x - rx * 0.3, y, p.pos.z - rz * 0.3);
+      if (B.mv) B.mv.at = { c: p, how: 'bar' };
+      Y.n = Math.floor((Y.t * 2.2) / (Math.PI * 2));
+      if (Y.t > 16) this.youDone();
+      return;
+    }
+    if (Y.kind === 'load') {
+      // bent to the window, the washing in by the armful; the coins; the drum starts - and you are free to go
+      const m = Y.q.m;
+      f.reachR = _y.set(m.x, m.y, m.z);
+      f.reachL = _z.set(m.x + Math.sin(Y.t * 6) * 0.05, m.y + 0.05, m.z);
+      if (Y.t < 2.6) return;
+      this.loaded(Y);
+      return;
+    }
+    if (Y.kind === 'wash' && Y.q.left <= 0) {
+      Y.q.v = null;
+      this.you = null;
+      g.audio.play('ding', 0.6);
+      g.hud.toast(tr('דינג! הכביסה שלכם יצאה נקייה וריחנית', 'Ding! Your washing is done — clean and fresh'), 'good', 3);
+    }
+  }
+
+  // your load in: the coins, the drum turning (yours: no one else's load goes in it), and you free to go
+  loaded(Y) {
+    const g = this.game;
+    const p = g.player;
+    p.fig.reachR = null;
+    p.fig.reachL = null;
+    if (p.seat && p.seat.svc) p.seat = null;
+    this.life.open.sound('coins', 0.5, 8);
+    Y.q.left = 28;
+    Y.kind = 'wash';
+    Y.held = false;
+    g.hud.toast(tr('הכביסה שלכם בפנים — חצי דקה. אפשר לחכות על כיסא', 'Your washing is in — half a minute. Have a seat while you wait'), 'info', 3);
+  }
+
+  youDone() {
+    const Y = this.you;
+    if (!Y) return;
+    const g = this.game;
+    const p = g.player;
+    if (Y.kind === 'load') return this.loaded(Y);
+    p.fig.reachL = null;
+    p.fig.reachR = null;
+    if (p.seat && p.seat.svc) p.seat = null;
+    if (Y.B) Y.B.who = null;
+    if (Y.kind === 'punch' && Y.n > 2) g.hud.toast(tr(`${Y.n} אגרופים בשק — הכושר משתפר!`, `${Y.n} punches on the bag — getting stronger!`), 'good', 2.6);
+    if (Y.kind === 'lift' && Y.n > 0) g.hud.toast(tr(`${Y.n} חזרות עם המוט — יפה!`, `${Y.n} reps with the barbell — nice!`), 'good', 2.6);
+    this.you = null;
+  }
+
   // ---------------------------------------------------------------- every frame
   update(dt) {
     this.t += dt;
+    this.youUpdate(dt);
     // (the baskets carried out: gone with their people)
     if (this.carried.length) {
       this.carried = this.carried.filter((q) => {
@@ -487,6 +624,7 @@ export class ServiceLife {
       if (!near) continue;
       if (!B.mv) B.mv = this.life.movers.add({ line: 'bar', model: 'barbell', cell: null, tint: [0.12, 0.12, 0.14] }, true);
       if (!B.who) B.mv.at = { x: br.x, y: br.y - 0.22, z: br.z, yaw: br.yaw };
+      else if (B.who === 'you') B.mv.at = { c: this.game.player, how: 'bar' };
     }
   }
 
@@ -505,6 +643,13 @@ export class ServiceLife {
   }
 
   dispose() {
+    if (this.you && this.you.held) {
+      const p = this.game.player;
+      p.fig.reachL = null;
+      p.fig.reachR = null;
+      if (p.seat && p.seat.svc) p.seat = null;
+    }
+    this.you = null;
     for (const q of this.carried) this.life.movers.remove(q.it);
     this.carried = [];
     for (const q of [...this.machines, ...this.dryers]) if (q.drum) this.life.movers.remove(q.drum);
