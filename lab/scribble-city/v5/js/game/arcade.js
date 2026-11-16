@@ -50,7 +50,7 @@ const TICKETS = 'scribble-city-v5-tickets';
 const PRIZES = 'scribble-city-v5-prizes';
 export const ARCADE_AT = { x: XE + 4, z: CZ };
 
-const GAMES = {
+export const GAMES = {
   invaders: { cls: InkInvaders, name: 'INK INVADERS', he: 'INK INVADERS', col: [0.1, 0.55, 0.85] },
   penman: { cls: PenMan, name: 'PEN-MAN', he: 'PEN-MAN', col: [0.95, 0.75, 0.1] },
   inktris: { cls: InkTris, name: 'INKTRIS', he: 'INKTRIS', col: [0.55, 0.25, 0.9] },
@@ -1218,7 +1218,7 @@ export class Arcade {
 }
 
 // a toy in the claw machine: its round body, its ears, its eyes
-function toyParts(K, CM, x, y, z, r, col) {
+export function toyParts(K, CM, x, y, z, r, col) {
   K.sphere(CM.paint, r, x, y, z, col, 1, 0.9, 1, 10);
   K.sphere(CM.paint, r * 0.35, x - r * 0.55, y + r * 0.75, z, col, 1, 1, 1, 6);
   K.sphere(CM.paint, r * 0.35, x + r * 0.55, y + r * 0.75, z, col, 1, 1, 1, 6);
@@ -1227,7 +1227,7 @@ function toyParts(K, CM, x, y, z, r, col) {
 }
 
 // the claw: its hub, three prongs, open or closed (its own origin at the hub)
-function clawGeo(CM, open) {
+export function clawGeo(CM, open) {
   const K = new Kit();
   const STEEL = linC(0.75, 0.78, 0.85);
   K.cyl(CM.metal, 0.03, 0.03, -0.03, 0.06, STEEL, { axis: 'y', x: 0, z: 0, segs: 8 });

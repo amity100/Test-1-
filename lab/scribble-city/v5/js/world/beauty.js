@@ -1,6 +1,6 @@
 import { Run, ceiling } from './stock.js';
 import { roomLight } from './products.js';
-import { rbox, rprint, rcyl, wp, yawOut, put, later, liveOk, frameOf } from './shopkit.js';
+import { rbox, rprint, rcyl, wp, yawOut, put, later, liveOk, frameOf, fillFloor, faces } from './shopkit.js';
 import { cashWrap } from './fashion.js';
 import './beautygear.js';
 
@@ -36,6 +36,7 @@ const BOXES = [[0.1, 0.1, 0.11], [0.96, 0.94, 0.9], [0.92, 0.7, 0.76], [0.2, 0.2
 // the frames' colours (tortoiseshell, black, gold wire, clear, red, navy); the lenses
 const FRAMES = [[0.36, 0.22, 0.12], [0.1, 0.1, 0.11], [0.86, 0.7, 0.36], [0.82, 0.84, 0.86], [0.7, 0.16, 0.2], [0.16, 0.22, 0.4], [0.5, 0.36, 0.2]];
 const CLEAR = [0.86, 0.92, 0.98];
+const pk = (R, a) => a[Math.floor(R.rng.r() * a.length)];
 const SHADE = [0.14, 0.16, 0.2];
 
 export function mark(R, name, run, s, t, y, face) {
@@ -229,7 +230,55 @@ export function opticsStore(R, o = {}) {
   });
   fittingTable(R, fr, front);
   if (!shades) sunTower(R, fr, front);
+  // (ROADMAP 26) the rest of the floor: tables of frames to try (live: picked up, bought), towers of sunglasses
+  fillFloor(R, front, (p, k) => {
+    if (k % 3 === 2) tower(R, new Run(R, (p.u0 + p.u1) / 2, (p.d0 + p.d1) / 2, [1, 0], [0, 1]), k);
+    else frameTable(R, p);
+  }, { len: 1.8, depth: 0.9, aisle: 1.5, edge: 1.3, most: R.low ? 8 : 10 });
   staff(R, fr);
+}
+
+// a table of frames: white, its mirror on a stand at one end, the frames in rows both sides (live: tried on, bought)
+function frameTable(R, p) {
+  const S = R.psoup(false);
+  const y0 = R.y0;
+  const L = p.u1 - p.u0;
+  const [a, b] = faces(R, p);
+  const top = y0 + 0.86;
+  rbox(R, S, a, 0, top - 0.04, -0.42, L, top, 0.42, WHITE, { skip: ['bottom'] });
+  rbox(R, S, a, 0.12, y0, -0.32, L - 0.12, top - 0.04, 0.32, [0.2, 0.22, 0.26], { skip: ['bottom'] });
+  a.solid(0, -0.42, L, 0.42, top);
+  rbox(R, S, a, L - 0.32, top, -0.06, L - 0.12, top + 0.02, 0.06, DARK, {});
+  rbox(R, S, a, L - 0.27, top + 0.02, -0.02, L - 0.17, top + 0.36, 0.0, [0.82, 0.88, 0.94], { pen: 'gloss' });
+  for (const r of [a, b]) {
+    const sp = r.spot(L / 2, 0.85, { shelf: [top + 0.05 - y0], reach: r.at(L / 2, top + 0.05, 0.25), what: 'glasses' });
+    later(R, () => {
+      const yaw = yawOut(R, r);
+      for (let s = 0.18; s < L - 0.4; s += 0.2) put(R, { line: 'glasses', model: 'specs', cell: null, tint: pk(R, FRAMES), cap: CLEAR }, wp(R, r, s, top + 0.012, 0.26), yaw, { live: liveOk(sp, 4), zone: sp, what: 'glasses', lean: -0.15 });
+    });
+  }
+}
+
+// a tower of sunglasses: a round post, rings round it (live, the middle ring), its band on top
+function tower(R, run, k) {
+  const y0 = R.y0;
+  const S = R.psoup(false);
+  rcyl(R, S, run, 0, 0, 0.22, y0, 0.06, DARK, { seg: 12 });
+  rcyl(R, S, run, 0, 0, 0.04, y0, 1.85, [0.82, 0.84, 0.88], { seg: 8 });
+  rprint(R, S, run, -0.18, y0 + 1.86, 0.18, y0 + 2.02, 0.05, 'head.sun');
+  run.solid(-0.25, -0.25, 0.25, 0.25, y0 + 1.9);
+  const sp = run.spot(0, 0.8, { shelf: [1.2], reach: run.at(0, y0 + 1.2, 0.2), what: 'sunglasses' });
+  later(R, () => {
+    for (let ring = 0; ring < 4; ring++) {
+      const y = y0 + 0.9 + ring * 0.24;
+      for (let i = 0; i < 8; i++) {
+        const an = (i / 8) * Math.PI * 2 + ring * 0.4 + k;
+        const px = Math.cos(an) * 0.2;
+        const pz = Math.sin(an) * 0.2;
+        put(R, { line: 'sunglasses', model: 'specs', cell: null, tint: FRAMES[(i + ring) % FRAMES.length], cap: SHADE }, wp(R, run, px, y, pz), Math.atan2(px * run.au + pz * run.ou, px * run.ad + pz * run.od), { lean: -0.2, live: ring === 1 && liveOk(sp, 3), zone: ring === 1 ? sp : null, what: 'sunglasses' });
+      }
+    }
+  });
 }
 
 // a wall of frames: a white panel, the clear rails slanting out one over another, a pair of frames on
@@ -391,13 +440,87 @@ export function barberShop(R, o = {}) {
   if (fr.W > 1.6) careWall(R, new Run(R, R.ua + 0.1, R.db + 0.02, [1, 0], [0, 1]), fr.W - 0.2);
   // the bench by the window, the television over it
   waiting(R, fr, front, doorSide);
+  // (ROADMAP 26) a big one: down the middle, stations back to back under their lit mirrors, a table of what is sold for hair
+  // (live: picked up, bought), leather sofas back to back to wait on
+  fillFloor(R, front, (p, k) => {
+    if (k % 3 === 0) barberIsland(R, p);
+    else if (k % 3 === 1) careTable(R, p);
+    else lounge(R, p);
+  }, { len: 3.2, depth: 2.9, aisle: 1.3, edge: 1.1, edgeBack: 1.2, most: R.low ? 8 : 10 });
   staff(R, fr);
+}
+
+// two stations a side, back to back, the dark wall between their mirrors (their chairs the floor's: the ones the game's cuts
+// use are along the wall - R.spots.chairs)
+function barberIsland(R, p) {
+  const S = R.psoup(false);
+  const y0 = R.y0;
+  const L = p.u1 - p.u0;
+  const [a, b] = faces(R, p);
+  rbox(R, S, a, 0.18, y0, -0.03, L - 0.18, y0 + 2.14, 0.03, LACQUER, {});
+  rbox(R, S, a, 0.1, y0 + 2.14, -0.08, L - 0.1, y0 + 2.24, 0.08, [0.1, 0.12, 0.2], {});
+  for (const r of [a, b]) for (const s of [L * 0.27, L * 0.73]) station(R, r, s, R.spots.isle = (R.spots.isle || 0) + 1, true);
+}
+
+// a table of what is sold for hair: dark wood, the tins and the bottles in rows on it, both sides (live)
+function careTable(R, p) {
+  const S = R.psoup(false);
+  const y0 = R.y0;
+  const L = Math.min(2.4, p.u1 - p.u0);
+  const q = { u0: (p.u0 + p.u1) / 2 - L / 2, u1: (p.u0 + p.u1) / 2 + L / 2, d0: p.d0, d1: p.d1 };
+  const [a, b] = faces(R, q);
+  const top = y0 + 0.88;
+  rbox(R, S, a, 0, top - 0.05, -0.45, L, top, 0.45, OAK, { skip: ['bottom'] });
+  rbox(R, S, a, 0.1, y0, -0.36, L - 0.1, top - 0.05, 0.36, LACQUER, { skip: ['bottom'] });
+  rbox(R, S, a, L * 0.3, top, -0.12, L * 0.7, top + 0.24, 0.12, LACQUER, {});
+  a.solid(0, -0.45, L, 0.45, top);
+  const TINS = [[0.1, 0.1, 0.11], [0.86, 0.7, 0.36], [0.62, 0.12, 0.14], [0.2, 0.36, 0.62]];
+  for (const r of [a, b]) {
+    const sp = r.spot(L / 2, 0.9, { shelf: [top + 0.05 - y0], reach: r.at(L / 2, top + 0.06, 0.3), what: 'pomade' });
+    later(R, () => {
+      const yaw = yawOut(R, r);
+      for (let s = 0.15; s < L - 0.1; s += 0.15) {
+        for (const t of [0.34, 0.2]) {
+          const tall = Math.floor(s * 9 + t * 10) % 3 === 0;
+          put(R, tall ? { line: 'shampoo', model: 'perfumeTall', cell: null, tint: pk(R, TINS), cap: WHITE } : { line: 'pomade', model: 'perfumeBox', cell: null, tint: pk(R, TINS), cap: BRASS }, wp(R, r, s, top, t), yaw, { live: t > 0.3 && liveOk(sp, 5), zone: sp, what: 'pomade', scale: tall ? 1.4 : 0.8 });
+        }
+      }
+      // (on the riser between: a few more, and the jar of combs)
+      put(R, { line: 'barbicide', model: 'barbicide', cell: null, tint: CLEAR }, wp(R, r, L * 0.5, top + 0.24, 0.06), yaw, {});
+    });
+  }
+}
+
+// two leather sofas back to back, a low table before each with its magazines: places to wait (R.spots.seats)
+function lounge(R, p) {
+  const S = R.psoup(false);
+  const y0 = R.y0;
+  const L = Math.min(2.6, p.u1 - p.u0);
+  const q = { u0: (p.u0 + p.u1) / 2 - L / 2, u1: (p.u0 + p.u1) / 2 + L / 2, d0: p.d0, d1: p.d1 };
+  const LEATHER = [0.36, 0.18, 0.1];
+  for (const r of faces(R, q)) {
+    rbox(R, S, r, 0.1, y0, 0.02, L - 0.1, y0 + 0.42, 0.78, LEATHER, {});
+    rbox(R, S, r, 0.1, y0 + 0.42, 0.02, L - 0.1, y0 + 0.9, 0.2, LEATHER, {});
+    for (const s of [0.1, L - 0.28]) rbox(R, S, r, s, y0 + 0.42, 0.02, s + 0.18, y0 + 0.62, 0.78, LEATHER, {});
+    // (its cushions: seams across it)
+    for (let i = 1; i < 3; i++) rbox(R, S, r, 0.28 + ((L - 0.56) * i) / 3 - 0.006, y0 + 0.42, 0.2, 0.28 + ((L - 0.56) * i) / 3 + 0.006, y0 + 0.43, 0.78, [0.24, 0.12, 0.07], {});
+    r.solid(0.1, 0.02, L - 0.1, 0.8, y0 + 0.9);
+    for (let i = 0; i < 3; i++) {
+      const [u, d] = r.ud(0.28 + ((L - 0.56) * (i + 0.5)) / 3, 0.45);
+      R.spots.seats.push({ u, d, face: [r.ou, r.od] });
+    }
+    // the low table before it, its magazines
+    rbox(R, S, r, L * 0.3, y0 + 0.38, 1.05, L * 0.7, y0 + 0.42, 1.4, OAK, {});
+    for (const s of [L * 0.32, L * 0.68]) rbox(R, S, r, s - 0.02, y0, 1.08, s + 0.02, y0 + 0.38, 1.37, DARK, {});
+    for (let i = 0; i < 3; i++) rbox(R, S, r, L * 0.38 + i * 0.12, y0 + 0.42 + i * 0.006, 1.12 + (i % 2) * 0.06, L * 0.38 + i * 0.12 + 0.2, y0 + 0.426 + i * 0.006, 1.38 - (i % 2) * 0.04, [[0.86, 0.2, 0.24], [0.96, 0.94, 0.88], [0.2, 0.36, 0.62]][i], {});
+    r.solid(L * 0.3, 1.05, L * 0.7, 1.4, y0 + 0.42);
+  }
 }
 
 // a station: the mirror with its bulbs round it, the shelf of tools under it (the jar of blue with
 // the combs, the clippers, a spray), the chair before it; the chair's place for those who come in for
 // a cut (game/streetlife.js barber), the barber's place beside it
-function station(R, run, s, k) {
+function station(R, run, s, k, deco = false) {
   const S = R.psoup(false);
   const y0 = R.y0;
   // the mirror, its frame, its bulbs
@@ -419,6 +542,7 @@ function station(R, run, s, k) {
     put(R, { line: 'chair', model: 'barberChair', cell: null, tint: k % 2 ? [0.12, 0.12, 0.13] : [0.62, 0.12, 0.14] }, wp(R, run, s, y0, 1.15), yaw + Math.PI, {});
   });
   run.solid(s - 0.32, 0.85, s + 0.32, 1.45, y0 + 0.5);
+  if (deco) return;
   const [u, d] = run.ud(s, 1.15);
   R.spots.chairs.push({ u, d, face: [-run.ou, -run.od] });
   mark(R, `station.${k}`, run, s, 1.15, y0 + 0.5, [-run.ou, -run.od]);

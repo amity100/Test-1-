@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { tr } from '../core/lang.js';
 
 // (v5, ROADMAP 16.9) The laundromat's and the gym's people at their work (game/shoplife.js, the flows
 // 'laundry' and 'gym'):
@@ -10,8 +11,13 @@ import * as THREE from 'three';
 // - The gym: a pair of dumbbells off the rack, curled before the mirror, put back; the barbell off its
 //   hooks, pressed overhead, rep after rep; the punching bag hit - left, right - swinging on its chain
 //   (the treadmill: game/trylife.js).
+// - You (ROADMAP 26): E at a free bag - hit it, left, right, a while (the count at the end); at a free bench's bar - pressed
+//   overhead, rep after rep; at a free washer - your load in, the coins, the drum turning its time, and word when it is done.
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const WASH = 3;
+const _y = new THREE.Vector3();
+const _z = new THREE.Vector3();
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const SAY = {
@@ -41,15 +47,20 @@ export class ServiceLife {
     for (let k = 0; this.M[`washer.${k}`]; k++) this.machines.push({ m: this.M[`washer.${k}`], load: this.M[`load.${k}`], v: null, left: 0, drum: null });
     // the dryers: turning now and then by themselves (someone's washing in them)
     this.dryers = [];
-    for (let k = 0; this.M[`dryer.${k}`]; k++) this.dryers.push({ m: this.M[`dryer.${k}`], left: Math.random() < 0.4 ? 20 + Math.random() * 60 : 0, drum: null });
-    this.folders = [null, null];
+    // (a big one: as many turning, not four in ten of them)
+    let nd = 0;
+    while (this.M[`dryer.${nd}`]) nd++;
+    const on = Math.min(0.4, 10 / Math.max(1, nd));
+    for (let k = 0; k < nd; k++) this.dryers.push({ m: this.M[`dryer.${k}`], left: Math.random() < on ? 20 + Math.random() * 60 : 0, drum: null });
+    // the folding tables' places (fold.k: two a table, its top foldTop.k/2) - who is at each
+    this.folders = [];
+    for (let k = 0; this.M[`fold.${k}`]; k++) this.folders.push(null);
     this.folded = [];
-    // the gym: the bag (its swing), the barbell, who is at each
-    this.bag = null;
-    this.swing = 0;
-    this.swingV = 0;
-    this.bar = null;
-    this.at = { bag: null, bar: null };
+    // the gym: the bags (each its swing, who is at it), the barbells (who has it) - as many as the room has (ROADMAP 26)
+    this.bags = [];
+    for (let k = 0; this.M[`bag.${k}`]; k++) this.bags.push({ m: this.M[`bag.${k}`], at: this.M[`bagAt.${k}`], who: null, mv: null, swing: 0, swingV: 0 });
+    this.bars = [];
+    for (let k = 0; this.M[`bar.${k}`]; k++) this.bars.push({ m: this.M[`bar.${k}`], at: this.M[`liftAt.${k}`], who: null, mv: null });
     // the baskets carried out of the door (gone with whoever carries them)
     this.carried = [];
   }
@@ -66,8 +77,8 @@ export class ServiceLife {
   plan(v, list) {
     if (this.flow === 'laundry' && this.machines.length && Math.random() < 0.85) list.splice(0, list.length, { svc: 'wash' });
     if (this.flow === 'gym') {
-      if (this.M.bagAt && Math.random() < 0.5) list.splice(0, 0, { svc: 'punch' });
-      if (this.M.liftAt && Math.random() < 0.45) list.push({ svc: 'lift' });
+      if (this.bags.length && Math.random() < 0.5) list.splice(0, 0, { svc: 'punch' });
+      if (this.bars.length && Math.random() < 0.45) list.push({ svc: 'lift' });
     }
   }
 
@@ -218,8 +229,17 @@ export class ServiceLife {
         S.extra = life.movers.add({ line: 'basket', model: 'laundryBasket', cell: null, tint: [0.96, 0.96, 0.94], cap: pick([[0.24, 0.5, 0.92], [0.92, 0.26, 0.3], [0.96, 0.96, 0.94]]) }, true);
         S.extra.at = { c, how: 'box' };
         f.carry = 'held';
-        // to the folding table, at a free place
-        const k = this.folders[0] ? (this.folders[1] ? -1 : 1) : 0;
+        // to a folding table, at a free place (the nearest of the free ones)
+        let k = -1;
+        let kd = Infinity;
+        this.folders.forEach((w, i) => {
+          const m = this.M[`fold.${i}`];
+          const dd = m ? Math.hypot(m.x - c.pos.x, m.z - c.pos.z) : Infinity;
+          if (!w && dd < kd) {
+            kd = dd;
+            k = i;
+          }
+        });
         const fm = k >= 0 ? this.M[`fold.${k}`] : null;
         if (!fm) {
           S.st = 'out';
@@ -236,14 +256,16 @@ export class ServiceLife {
         if (mv) return mv;
         S.st = 'fold';
         S.t = 0;
-        if (S.extra) S.extra.at = { x: c.pos.x + Math.sin(c.yaw) * 0.45, y: this.M.foldTop ? this.M.foldTop.y : c.pos.y + 0.9, z: c.pos.z + Math.cos(c.yaw) * 0.45, yaw: c.yaw };
+        const ft = this.M[`foldTop.${S.fk >> 1}`];
+        if (S.extra) S.extra.at = { x: c.pos.x + Math.sin(c.yaw) * 0.45, y: ft ? ft.y : c.pos.y + 0.9, z: c.pos.z + Math.cos(c.yaw) * 0.45, yaw: c.yaw };
         return null;
       }
       case 'fold': {
         // shirt after shirt folded, laid one on another
         const fm = this.M[`fold.${S.fk}`];
         c.faceYaw = fm.yaw;
-        const top = this.M.foldTop ? this.M.foldTop.y : c.pos.y + 0.9;
+        const ftop = this.M[`foldTop.${S.fk >> 1}`];
+        const top = ftop ? ftop.y : c.pos.y + 0.9;
         const ph = S.t % 2.2;
         const tx = c.pos.x + Math.sin(c.yaw) * 0.35;
         const tz = c.pos.z + Math.cos(c.yaw) * 0.35;
@@ -288,10 +310,17 @@ export class ServiceLife {
     const c = v.c;
     const f = c.fig;
     const life = this.life;
-    const m = this.M.bagAt;
-    const b = this.M.bag;
-    if (!m || !b || (this.at.bag && this.at.bag !== v)) return this.leave(v);
-    this.at.bag = v;
+    // (a free bag: the nearest of them)
+    if (!S.bag) {
+      const free = this.bags.filter((q) => !q.who && q.at);
+      if (!free.length) return this.leave(v);
+      free.sort((p, q) => Math.hypot(p.at.x - c.pos.x, p.at.z - c.pos.z) - Math.hypot(q.at.x - c.pos.x, q.at.z - c.pos.z));
+      S.bag = free[0];
+      S.bag.who = v;
+    }
+    const B = S.bag;
+    const m = B.at;
+    const b = B.m;
     if (S.st === 'go') {
       S.st = 'walk';
       life.go(v, m.x, m.z);
@@ -322,12 +351,13 @@ export class ServiceLife {
     }
     if (k !== S.k) {
       S.k = k;
-      this.swingV += 0.9;
+      B.swingV += 0.9;
       life.open.sound('punch', 0.18, 8);
       if (Math.random() < 0.12) this.say(c, pick(SAY.punch), 0.6);
     }
     if (S.t < 9) return null;
-    this.at.bag = null;
+    B.who = null;
+    S.bag = null;
     return this.leave(v);
   }
 
@@ -335,10 +365,15 @@ export class ServiceLife {
     const c = v.c;
     const f = c.fig;
     const life = this.life;
-    const m = this.M.liftAt;
-    const b = this.M.bar;
-    if (!m || !b || (this.at.bar && this.at.bar !== v)) return this.leave(v);
-    this.at.bar = v;
+    if (!S.bar) {
+      const free = this.bars.filter((q) => !q.who && q.at);
+      if (!free.length) return this.leave(v);
+      free.sort((p, q) => Math.hypot(p.at.x - c.pos.x, p.at.z - c.pos.z) - Math.hypot(q.at.x - c.pos.x, q.at.z - c.pos.z));
+      S.bar = free[0];
+      S.bar.who = v;
+    }
+    const B = S.bar;
+    const m = B.at;
     if (S.st === 'go') {
       S.st = 'walk';
       life.go(v, m.x, m.z);
@@ -350,7 +385,7 @@ export class ServiceLife {
       S.st = 'press';
       S.t = 0;
       // the bar off its hooks, into both hands
-      if (this.bar) this.bar.at = { c, how: 'bar' };
+      if (B.mv) B.mv.at = { c, how: 'bar' };
       return null;
     }
     // pressed overhead, down to the shoulders, again
@@ -362,13 +397,14 @@ export class ServiceLife {
     const rz = -Math.sin(c.yaw);
     f.reachR = _a.set(c.pos.x + rx * 0.3, y, c.pos.z + rz * 0.3);
     f.reachL = _b.set(c.pos.x - rx * 0.3, y, c.pos.z - rz * 0.3);
-    if (this.bar) this.bar.at = { c, how: 'bar' };
+    if (B.mv) B.mv.at = { c, how: 'bar' };
     if (S.t > 3 && !S.said) {
       S.said = true;
       this.say(c, pick(SAY.lift), 0.6);
     }
     if (S.t < 12) return null;
-    this.at.bar = null;
+    B.who = null;
+    S.bar = null;
     return this.leave(v);
   }
 
@@ -407,9 +443,140 @@ export class ServiceLife {
     return null;
   }
 
+  // ---------------------------------------------------------------- you
+  // what is in front of you: a free bag, a free bench's bar, a free washer; while you are at one, E stops
+  target(p) {
+    if (this.you && this.you.held) return { svcYou: true, stop: true, label: tr('E — מספיק', 'E — stop') };
+    if (this.you) return null;
+    const near = (m, r) => m && Math.hypot(p.pos.x - m.x, p.pos.z - m.z) < r;
+    for (const B of this.bags) if (!B.who && near(B.at, 0.75)) return { svcYou: true, bag: B, label: tr('E — להכות בשק האגרוף', 'E — hit the punching bag') };
+    for (const B of this.bars) if (!B.who && near(B.at, 0.75)) return { svcYou: true, bar: B, label: tr('E — להרים את המוט', 'E — lift the barbell') };
+    for (const q of this.machines) if (!q.v && q.left <= 0 && near(q.load, 0.75)) return { svcYou: true, wash: q, label: tr(`E — להפעיל מכונת כביסה ($${WASH})`, `E — run a wash ($${WASH})`) };
+    return null;
+  }
+
+  act(t) {
+    const g = this.game;
+    const p = g.player;
+    if (t.stop) return this.youDone();
+    if (t.wash) {
+      if (g.money && !g.money.pay(WASH, 'WASH')) {
+        g.money.refuse('WASH', WASH);
+        return;
+      }
+      const q = t.wash;
+      q.v = 'you';
+      this.you = { kind: 'load', q, t: 0, held: true };
+      p.seat = { x: q.load.x, z: q.load.z, yaw: Math.atan2(q.m.x - q.load.x, q.m.z - q.load.z), lock: true, stand: true, svc: true };
+      return;
+    }
+    const B = t.bag || t.bar;
+    B.who = 'you';
+    this.you = { kind: t.bag ? 'punch' : 'lift', B, t: 0, n: 0, k: -1, held: true };
+    const yaw = t.bag ? Math.atan2(B.m.x - B.at.x, B.m.z - B.at.z) : B.at.yaw;
+    p.seat = { x: B.at.x, z: B.at.z, yaw, lock: true, stand: true, svc: true };
+    g.hud.toast(t.bag ? tr('שמאל, ימין... (E — מספיק)', 'Left, right... (E — stop)') : tr('למעלה... ולמטה (E — מספיק)', 'Up... and down (E — stop)'), 'info', 2.2);
+  }
+
+  // you at it: the arms, the count; the bag swinging, the bar in your hands; done after a while, or by E
+  youUpdate(dt) {
+    const Y = this.you;
+    if (!Y) return;
+    const g = this.game;
+    const p = g.player;
+    const f = p.fig;
+    Y.t += dt;
+    if (Y.held && (!p.seat || !p.seat.svc)) return this.youDone();
+    if (Y.kind === 'punch') {
+      const B = Y.B;
+      const k = Math.floor(Y.t / 0.34);
+      const ph = (Y.t % 0.34) / 0.34;
+      const out = ph < 0.4 ? ph / 0.4 : 1 - (ph - 0.4) / 0.6;
+      const yaw = p.yaw;
+      const hx = p.pos.x + Math.sin(yaw) * (0.2 + out * 0.32);
+      const hz = p.pos.z + Math.cos(yaw) * (0.2 + out * 0.32);
+      const side = k % 2 ? 1 : -1;
+      const hand = _y.set(hx + Math.cos(yaw) * side * 0.12, f.j.headC.y - 0.2, hz - Math.sin(yaw) * side * 0.12);
+      if (side > 0) {
+        f.reachR = hand;
+        f.reachL = null;
+      } else {
+        f.reachL = hand;
+        f.reachR = null;
+      }
+      if (k !== Y.k) {
+        Y.k = k;
+        Y.n++;
+        B.swingV += 0.9;
+        B.hitYaw = yaw;
+        this.life.open.sound('punch', 0.32, 8);
+      }
+      if (Y.t > 14) this.youDone();
+      return;
+    }
+    if (Y.kind === 'lift') {
+      const B = Y.B;
+      const up = 0.5 - 0.5 * Math.cos(Y.t * 2.2);
+      const y = f.j.headC.y - 0.12 + up * 0.5;
+      const rx = Math.cos(p.yaw);
+      const rz = -Math.sin(p.yaw);
+      f.reachR = _y.set(p.pos.x + rx * 0.3, y, p.pos.z + rz * 0.3);
+      f.reachL = _z.set(p.pos.x - rx * 0.3, y, p.pos.z - rz * 0.3);
+      if (B.mv) B.mv.at = { c: p, how: 'bar' };
+      Y.n = Math.floor((Y.t * 2.2) / (Math.PI * 2));
+      if (Y.t > 16) this.youDone();
+      return;
+    }
+    if (Y.kind === 'load') {
+      // bent to the window, the washing in by the armful; the coins; the drum starts - and you are free to go
+      const m = Y.q.m;
+      f.reachR = _y.set(m.x, m.y, m.z);
+      f.reachL = _z.set(m.x + Math.sin(Y.t * 6) * 0.05, m.y + 0.05, m.z);
+      if (Y.t < 2.6) return;
+      this.loaded(Y);
+      return;
+    }
+    if (Y.kind === 'wash' && Y.q.left <= 0) {
+      Y.q.v = null;
+      this.you = null;
+      g.audio.play('ding', 0.6);
+      g.hud.toast(tr('דינג! הכביסה שלכם יצאה נקייה וריחנית', 'Ding! Your washing is done — clean and fresh'), 'good', 3);
+    }
+  }
+
+  // your load in: the coins, the drum turning (yours: no one else's load goes in it), and you free to go
+  loaded(Y) {
+    const g = this.game;
+    const p = g.player;
+    p.fig.reachR = null;
+    p.fig.reachL = null;
+    if (p.seat && p.seat.svc) p.seat = null;
+    this.life.open.sound('coins', 0.5, 8);
+    Y.q.left = 28;
+    Y.kind = 'wash';
+    Y.held = false;
+    g.hud.toast(tr('הכביסה שלכם בפנים — חצי דקה. אפשר לחכות על כיסא', 'Your washing is in — half a minute. Have a seat while you wait'), 'info', 3);
+  }
+
+  youDone() {
+    const Y = this.you;
+    if (!Y) return;
+    const g = this.game;
+    const p = g.player;
+    if (Y.kind === 'load') return this.loaded(Y);
+    p.fig.reachL = null;
+    p.fig.reachR = null;
+    if (p.seat && p.seat.svc) p.seat = null;
+    if (Y.B) Y.B.who = null;
+    if (Y.kind === 'punch' && Y.n > 2) g.hud.toast(tr(`${Y.n} אגרופים בשק — הכושר משתפר!`, `${Y.n} punches on the bag — getting stronger!`), 'good', 2.6);
+    if (Y.kind === 'lift' && Y.n > 0) g.hud.toast(tr(`${Y.n} חזרות עם המוט — יפה!`, `${Y.n} reps with the barbell — nice!`), 'good', 2.6);
+    this.you = null;
+  }
+
   // ---------------------------------------------------------------- every frame
   update(dt) {
     this.t += dt;
+    this.youUpdate(dt);
     // (the baskets carried out: gone with their people)
     if (this.carried.length) {
       this.carried = this.carried.filter((q) => {
@@ -435,34 +602,37 @@ export class ServiceLife {
       if (q.drum) q.drum.at = { x: q.m.x, y: q.m.y, z: q.m.z, yaw: q.m.yaw, roll: this.t * (q === this.dryers.find((d) => d === q) ? 3 : 5) };
     }
     // (the dryers: one starting now and then for nobody we see)
-    for (const q of this.dryers) if (q.left <= 0 && Math.random() < dt * 0.004) q.left = 30 + Math.random() * 40;
-    // the bag on its chain: pushed by the punches, swinging back
-    const bm = this.M.bag;
-    if (bm && near) {
-      if (!this.bag) this.bag = this.life.movers.add({ line: 'bag', model: 'punchBag', cell: null, tint: [0.62, 0.12, 0.14] }, true);
-      this.swingV -= this.swing * 9 * dt;
-      this.swingV *= Math.exp(-dt * 1.4);
-      this.swing += this.swingV * dt;
+    for (const q of this.dryers) if (q.left <= 0 && Math.random() < (dt * 0.04) / Math.max(10, this.dryers.length)) q.left = 30 + Math.random() * 40;
+    // the bags on their chains: pushed by the punches, swinging back
+    this.bags.forEach((B, i) => {
+      const bm = B.m;
+      if (!near) return;
+      if (!B.mv) B.mv = this.life.movers.add({ line: 'bag', model: 'punchBag', cell: null, tint: [[0.62, 0.12, 0.14], [0.12, 0.12, 0.14], [0.16, 0.26, 0.5]][i % 3] }, true);
+      B.swingV -= B.swing * 9 * dt;
+      B.swingV *= Math.exp(-dt * 1.4);
+      B.swing += B.swingV * dt;
       // (swung from its chain at the ceiling: its foot out the way it was hit, the bag tipped back so
       // the top stays where the chain holds it)
-      const by = this.at.bag ? this.at.bag.c.yaw : bm.yaw;
-      const th = this.swing * 0.12;
+      const by = B.who && B.who.c ? B.who.c.yaw : B.hitYaw !== undefined ? B.hitYaw : bm.yaw;
+      const th = B.swing * 0.12;
       const d = 1.6 * Math.sin(th);
-      this.bag.at = { x: bm.x + Math.sin(by) * d, y: bm.y, z: bm.z + Math.cos(by) * d, yaw: by, tilt: th, keepY: true };
-    }
-    // the barbell resting on its hooks when nobody has it
-    const br = this.M.bar;
-    if (br && near) {
-      if (!this.bar) this.bar = this.life.movers.add({ line: 'bar', model: 'barbell', cell: null, tint: [0.12, 0.12, 0.14] }, true);
-      if (!this.at.bar) this.bar.at = { x: br.x, y: br.y - 0.22, z: br.z, yaw: br.yaw };
+      B.mv.at = { x: bm.x + Math.sin(by) * d, y: bm.y, z: bm.z + Math.cos(by) * d, yaw: by, tilt: th, keepY: true };
+    });
+    // the barbells resting on their hooks when nobody has them
+    for (const B of this.bars) {
+      const br = B.m;
+      if (!near) continue;
+      if (!B.mv) B.mv = this.life.movers.add({ line: 'bar', model: 'barbell', cell: null, tint: [0.12, 0.12, 0.14] }, true);
+      if (!B.who) B.mv.at = { x: br.x, y: br.y - 0.22, z: br.z, yaw: br.yaw };
+      else if (B.who === 'you') B.mv.at = { c: this.game.player, how: 'bar' };
     }
   }
 
   release(v) {
     for (const q of this.machines) if (q.v === v) q.v = null;
-    for (let k = 0; k < 2; k++) if (this.folders[k] === v) this.folders[k] = null;
-    if (this.at.bag === v) this.at.bag = null;
-    if (this.at.bar === v) this.at.bar = null;
+    for (let k = 0; k < this.folders.length; k++) if (this.folders[k] === v) this.folders[k] = null;
+    for (const B of this.bags) if (B.who === v) B.who = null;
+    for (const B of this.bars) if (B.who === v) B.who = null;
     const S = v.L && v.L.S;
     if (S) {
       if (S.extra) this.life.movers.remove(S.extra);
@@ -473,12 +643,19 @@ export class ServiceLife {
   }
 
   dispose() {
+    if (this.you && this.you.held) {
+      const p = this.game.player;
+      p.fig.reachL = null;
+      p.fig.reachR = null;
+      if (p.seat && p.seat.svc) p.seat = null;
+    }
+    this.you = null;
     for (const q of this.carried) this.life.movers.remove(q.it);
     this.carried = [];
     for (const q of [...this.machines, ...this.dryers]) if (q.drum) this.life.movers.remove(q.drum);
-    if (this.bag) this.life.movers.remove(this.bag);
-    if (this.bar) this.life.movers.remove(this.bar);
-    this.bag = null;
-    this.bar = null;
+    for (const B of [...this.bags, ...this.bars]) {
+      if (B.mv) this.life.movers.remove(B.mv);
+      B.mv = null;
+    }
   }
 }

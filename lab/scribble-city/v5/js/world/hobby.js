@@ -1,5 +1,5 @@
 import { Run } from './stock.js';
-import { rbox, rprint, rcyl, wp, yawOut, put, later, liveOk } from './shopkit.js';
+import { rbox, rprint, rcyl, wp, yawOut, put, later, liveOk, fillFloor, faces } from './shopkit.js';
 import { mark, begin, sides, staff } from './beauty.js';
 import './hobbygear.js';
 
@@ -45,16 +45,27 @@ export function bookShop(R, o = {}) {
   sides(R, fr, till, front, (run, len) => bookcase(R, run, len, () => SECTIONS[sec++ % SECTIONS.length], false));
   bookTables(R, fr, front);
   readingCorner(R, fr, till);
+  bookFloor(R, front);
   staff(R, fr);
+}
+
+// (ROADMAP 26) the rest of a wide bookshop's floor: bookcases to the chest, double-sided, in rows - FICTION on one face,
+// TRAVEL on the other - and between every two of them a table of new books in piles
+function bookFloor(R, front) {
+  let sec = 2;
+  fillFloor(R, front, (p, k) => {
+    if (k % 3 === 2) bookTable(R, (p.u0 + p.u1) / 2, (p.d0 + p.d1) / 2, Math.min(1.8, p.u1 - p.u0 - 0.4), k);
+    else for (const run of faces(R, p)) bookcase(R, run, p.u1 - p.u0, () => SECTIONS[sec++ % SECTIONS.length], false, 1.55);
+  }, { len: 2.6, depth: 0.7, aisle: 1.35 });
 }
 
 // a wall of books: the dark wood case to near the ceiling, seven shelves; the books on each, spine by
 // spine, now and then one lying or one face out; over each bay its board; the ladder on its rail
-function bookcase(R, run, len, board, ladder) {
+function bookcase(R, run, len, board, ladder, hMax = 2.6) {
   const S = R.psoup(false);
   const G = R.psoup(true);
   const y0 = R.y0;
-  const h = Math.min(2.6, R.y1 - y0 - 0.25);
+  const h = Math.min(hMax, R.y1 - y0 - 0.25);
   const depth = 0.3;
   rbox(R, S, run, 0, y0, 0, len, y0 + h, 0.02, DWOOD, { skip: ['back'] });
   rbox(R, S, run, 0, y0, 0.02, len, y0 + 0.12, depth, DWOOD, { skip: ['back'] });
@@ -141,6 +152,14 @@ function bookTables(R, fr, front) {
   for (let i = 0; i < n; i++) {
     const dm = R.db + 1.6 + i * 2.2;
     if (dm + 0.9 > front - 0.6) break;
+    bookTable(R, um, dm, L, i);
+  }
+}
+
+// a table of new books, its middle at (um, dm), L long: the piles, the top one face up and live, the card NEW or STAFF PICKS
+function bookTable(R, um, dm, L, i) {
+  const y0 = R.y0;
+  {
     const S = R.psoup(false);
     const G = R.psoup(true);
     const run = new Run(R, um - L / 2, dm + 0.4, [1, 0], [0, 1]);
@@ -241,7 +260,6 @@ function sleeveWall(R, run, len, guitars) {
 // the crates down the middle: on their stands, the records standing in them (live at the front of
 // each: flipped through, pulled out, listened to - game/hobbylife.js)
 function crates(R, fr, front) {
-  const y0 = R.y0;
   const L = Math.min(2.4, fr.W - 3.4);
   if (L < 0.9) return;
   const um = (R.ua + R.ub) / 2;
@@ -249,6 +267,16 @@ function crates(R, fr, front) {
   for (let i = 0; i < n; i++) {
     const dm = R.db + 1.7 + i * 2.1;
     if (dm + 0.9 > front - 0.6) break;
+    crateTable(R, um, dm, L);
+  }
+  // (ROADMAP 26) a big one: more of them in rows across the floor
+  fillFloor(R, front, (p) => crateTable(R, (p.u0 + p.u1) / 2, (p.d0 + p.d1) / 2, p.u1 - p.u0), { len: 2.4, depth: 0.8, aisle: 1.4, edge: 1.4, most: R.low ? 8 : 12 });
+}
+
+// a table of crates, the records in them standing in rows (each crate's front one live: flipped through, bought)
+function crateTable(R, um, dm, L) {
+  const y0 = R.y0;
+  {
     const S = R.psoup(false);
     const run = new Run(R, um - L / 2, dm + 0.4, [1, 0], [0, 1]);
     const top = y0 + 0.82;

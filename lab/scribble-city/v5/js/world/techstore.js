@@ -1,6 +1,6 @@
 import { Run, ceiling } from './stock.js';
 import { roomLight } from './products.js';
-import { rbox, rprint, wp, yawOut, put, later, liveOk, frameOf, counterLen } from './shopkit.js';
+import { rbox, rprint, wp, yawOut, put, later, liveOk, frameOf, counterLen, fillFloor } from './shopkit.js';
 import './techgear.js';
 
 // (v5, ROADMAP 14.4) An electronics shop of the new kind, from the same kit (after the market and
@@ -53,6 +53,8 @@ export function techstore(R, o = {}) {
     }
   }
   void till;
+  // (ROADMAP 26) a big one: demo tables in rows across the rest of the floor, the phones on them to pick up (live)
+  fillFloor(R, front, (p) => demoTable(R, new Run(R, p.u0, p.d1, [1, 0], [0, 1]), p.u1 - p.u0), { len: 2.2, depth: 0.9, aisle: 1.5, edge: 1.4, most: R.low ? 10 : 14 });
   const b = R.spots.browse;
   R.spots.staff = [];
   for (let i = 0; i < 3 && b.length; i++) R.spots.staff.push(b[Math.floor(((i + 0.5) * b.length) / 3)]);

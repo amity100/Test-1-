@@ -14,6 +14,7 @@ import { jewels as jeweller } from './jewels.js';
 import { eatery } from './eatery.js';
 import { shoeStore } from './shoestore.js';
 import { sportStore } from './sportstore.js';
+import { arcadeRoom } from './arcaderoom.js';
 
 // (v5, ROADMAP 11.18) The shops, laid out the way real ones are. Each kind has its plan: what
 // stands along its back wall and its side walls, what runs down its middle, where the checkout is
@@ -949,10 +950,12 @@ const PLANS = {
   icecream: (R) => eatery(R, { kind: 'icecream' }),
   sushi: (R) => eatery(R, { kind: 'sushi' }),
   falafel: (R) => eatery(R, { kind: 'falafel' }),
+  // (ROADMAP 26: the arcade of the new kind - world/arcaderoom.js; it was the last shop of the old kind, rooms.js arcade())
+  arcade: (R) => arcadeRoom(R, {}),
 };
 
 // (ROADMAP 14.4: the kinds of the new kind - world/rooms.js buildStock, game/streetlife.js)
-const NEW_KINDS = new Set(['grocery', 'deli', 'shop', 'pharmacy', 'fashion', 'boutique', 'surf', 'electronics', 'phones', 'jewelry', 'shoes', 'sports', 'perfume', 'optics', 'barber', 'books', 'music', 'toys', 'flowers', 'hardware', 'laundry', 'gym', 'cafe', 'bagel', 'pizza', 'burger', 'tacos', 'noodles', 'diner', 'juice', 'icecream', 'sushi', 'falafel']);
+const NEW_KINDS = new Set(['grocery', 'deli', 'shop', 'pharmacy', 'fashion', 'boutique', 'surf', 'electronics', 'phones', 'jewelry', 'shoes', 'sports', 'perfume', 'optics', 'barber', 'books', 'music', 'toys', 'flowers', 'hardware', 'laundry', 'gym', 'cafe', 'bagel', 'pizza', 'burger', 'tacos', 'noodles', 'diner', 'juice', 'icecream', 'sushi', 'falafel', 'arcade']);
 for (const [kind, fn] of Object.entries(PLANS)) {
   const plan = (R) => fn(R);
   plan.stock = true;
