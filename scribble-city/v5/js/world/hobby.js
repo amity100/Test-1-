@@ -343,6 +343,10 @@ export function toyShop(R, o = {}) {
   sides(R, fr, till, front, (run, len) => toyWall(R, run, len, 'head.toys'));
   trainTable(R, fr, front);
   balloons(R, fr);
+  // (ROADMAP 26) a big one: aisles of shelves of toys back to back across the floor
+  fillFloor(R, front, (p) => {
+    for (const r of faces(R, p)) toyWall(R, r, p.u1 - p.u0, 'head.toys');
+  }, { len: 3.0, depth: 0.9, aisle: 1.3, edge: 1.0, most: R.low ? 8 : 12 });
   staff(R, fr);
 }
 
@@ -450,6 +454,10 @@ export function florist(R, o = {}) {
   if (fr.W > 1.4) coolCabinet(R, new Run(R, R.ua + 0.1, R.db + 0.02, [1, 0], [0, 1]), fr.W - 0.2);
   sides(R, fr, till, front, (run, len) => bucketTiers(R, run, len));
   workTable(R, fr, front);
+  // (ROADMAP 26) a big one: stands of buckets back to back across the floor, the bunches in them (live)
+  fillFloor(R, front, (p) => {
+    for (const r of faces(R, p)) bucketTiers(R, r, p.u1 - p.u0);
+  }, { len: 1.6, depth: 1.7, aisle: 1.3, edge: 1.55, edgeBack: 2.0, most: R.low ? 8 : 12 });
   staff(R, fr);
 }
 
@@ -528,6 +536,10 @@ export function hardwareStore(R, o = {}) {
   const { fr, till, front } = begin(R, o, [1, 0.97, 0.9]);
   if (fr.W > 1.4) paintWall(R, new Run(R, R.ua + 0.1, R.db + 0.02, [1, 0], [0, 1]), fr.W - 0.2);
   sides(R, fr, till, front, (run, len, atDoor) => (atDoor ? pegboard(R, run, len) : sundries(R, run, len)));
+  // (ROADMAP 26) the floor: aisles back to back - the tools on their pegboards, the shelves of sundries
+  fillFloor(R, front, (p, k) => {
+    for (const r of faces(R, p)) (k % 2 ? pegboard : sundries)(R, r, p.u1 - p.u0);
+  }, { len: 3.0, depth: 0.95, aisle: 1.5, edge: 1.4, most: R.low ? 8 : 12 });
   staff(R, fr);
 }
 

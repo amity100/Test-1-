@@ -1,6 +1,6 @@
 import { Run, ceiling } from './stock.js';
 import { roomLight } from './products.js';
-import { rbox, rprint, rcyl, wp, yawOut, put, later, liveOk, frameOf } from './shopkit.js';
+import { rbox, rprint, rcyl, wp, yawOut, put, later, liveOk, frameOf, fillFloor } from './shopkit.js';
 import { cashWrap, wallBay } from './fashion.js';
 import { litWall } from './shoestore.js';
 import './sportgear.js';
@@ -65,6 +65,8 @@ export function sportStore(R, o = {}) {
     balls(R, new Run(R, um - Math.min(2.2, inner) / 2, dm - 0.9, [1, 0], [0, 1]), Math.min(2.2, inner));
     treadmill(R, um, dm + 0.9);
   }
+  // (ROADMAP 26) a big one: more bins of balls across the floor, a bench of shoes to try between
+  fillFloor(R, front, (p) => balls(R, new Run(R, p.u0, (p.d0 + p.d1) / 2, [1, 0], [0, 1]), p.u1 - p.u0), { len: 2.2, depth: 0.7, aisle: 1.5, edge: 1.4, most: R.low ? 8 : 12 });
   // a bike on its stand by the window, on the door's other side
   const lo = fr.left ? R.lane[1] + 0.6 : R.ua + 0.5;
   const hi = fr.left ? (till ? till.end - 0.5 : R.ub - 0.5) : R.lane[0] - 0.6;
