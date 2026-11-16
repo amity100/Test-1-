@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { nextId } from './kit.js';
+import { Run } from './stock.js';
 import { model, place, lin, LINES, PRODUCE, PEN_KEYS } from './products.js';
 import { labels } from './labels.js';
 import { LAYERS } from '../render/materials.js';
@@ -241,6 +242,72 @@ export function rcyl(R, S, run, s, t, r, y0, h, col, o = {}) {
 export function later(R, fn) {
   if (R.jobs) R.jobs.push(fn);
   else fn();
+}
+
+// (ROADMAP 26, the owner's word: "the shops that are still empty - fill them like the new ones, every item from small to big")
+// The room's middle filled. A shop of the new kind dressed its walls, its till and a piece or two in the middle - in a room of
+// 8 metres a full shop, in one of 20 or 55 (the island has both) a ring of shelves round a bare floor. The floor still bare
+// after all that (R.solid: what was put there) is cut into places for freestanding fixtures: rows along the back wall, each
+// fixture long along it, an aisle all round; the way in from the door (R.lane) and the front by the window left clear.
+// fn(place, k) builds the k-th: place { u0, u1, d0, d1 } (u along the room, d from the back to the front). o: len, depth,
+// aisle (between them), edge (from the walls' fixtures), most (how many at most). Returns how many were placed.
+export function fillFloor(R, front, fn, o = {}) {
+  const len = o.len || 2.2;
+  const dep = o.depth || 0.8;
+  const aisle = o.aisle || 1.3;
+  const edge = o.edge === undefined ? 1.25 : o.edge;
+  const most = o.most || (R.low ? 10 : 24);
+  const uA = R.ua + 0.45 + edge;
+  const uB = R.ub - 0.45 - edge;
+  const dB = R.db + 0.45 + edge;
+  const dF = front - 0.35;
+  if (uB - uA < len || dF - dB < dep) return 0;
+  const lane = R.lane ? [R.lane[0] - 0.6, R.lane[1] + 0.6] : null;
+  const m = aisle * 0.7;
+  const free = (u0, d0, u1, d1) => {
+    if (lane && u1 > lane[0] && u0 < lane[1] && d1 > dF - 3.5) return false;
+    for (const q of R.solid) if (u1 + m > q[0] && u0 - m < q[2] && d1 + m > q[1] && d0 - m < q[3]) return false;
+    return true;
+  };
+  // the stretches of each row clear of the way in (near the front, where people come in, the lane is kept)
+  const rows = [];
+  for (let d = dB; d + dep <= dF + 1e-6; d += dep + aisle) rows.push(d);
+  const places = [];
+  for (const d0 of rows) {
+    const nearDoor = d0 + dep > dF - 3.5;
+    const segs = lane && nearDoor ? [[uA, Math.min(uB, lane[0])], [Math.max(uA, lane[1]), uB]] : [[uA, uB]];
+    for (const [s0, s1] of segs) {
+      const L = s1 - s0;
+      const n = Math.floor((L + aisle) / (len + aisle));
+      if (n < 1) continue;
+      const tot = n * len + (n - 1) * aisle;
+      const st = s0 + (L - tot) / 2;
+      for (let i = 0; i < n; i++) {
+        const u0 = st + i * (len + aisle);
+        places.push({ u0, u1: u0 + len, d0, d1: d0 + dep });
+      }
+    }
+  }
+  // (the middle of the room first: in a narrow room the few there are where the eye goes)
+  const uc = (R.ua + R.ub) / 2;
+  places.sort((a, b) => Math.abs((a.u0 + a.u1) / 2 - uc) - Math.abs((b.u0 + b.u1) / 2 - uc) || a.d0 - b.d0);
+  let k = 0;
+  for (const p of places) {
+    if (k >= most) break;
+    if (!free(p.u0, p.d0, p.u1, p.d1)) continue;
+    fn(p, k);
+    // (what it took is taken: the next one keeps its aisle from it, whatever fn marked solid)
+    R.solid.push([p.u0, p.d0, p.u1, p.d1, R.y0 + 0.05]);
+    k++;
+  }
+  return k;
+}
+
+// the two faces of a freestanding fixture at a place: [the one to the front, the one to the back] - each a run along it from
+// its middle line out (t), as a wall's run is from its wall
+export function faces(R, p) {
+  const dm = (p.d0 + p.d1) / 2;
+  return [new Run(R, p.u0, dm, [1, 0], [0, 1]), new Run(R, p.u1, dm, [-1, 0], [0, -1])];
 }
 
 // how many live products each place to stand has (the ones a hand reaches for)
