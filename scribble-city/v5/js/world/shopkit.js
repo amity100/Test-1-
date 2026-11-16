@@ -304,6 +304,34 @@ export function fillFloor(R, front, fn, o = {}) {
   return k;
 }
 
+// the stretches along the window, its line 0.25 in and dep deep into the room, free of the way in (R.lane and a margin), the till
+// (on the side away from the door: till.end its inner end) and whatever is there already (R.solid): [[u0, u1], ...], each at
+// least min long - for a row of things along the glass (ROADMAP 26)
+export function windowSegs(R, fr, till, dep, min = 1.0) {
+  const lane = R.lane;
+  const d1 = R.da - 0.25;
+  const d0 = d1 - dep;
+  let segs = !lane
+    ? [[R.ua + 0.35, R.ub - 0.35]]
+    : fr.left
+      ? [[R.ua + 0.35, lane[0] - 0.5], [lane[1] + 0.5, till ? till.end - 0.7 : R.ub - 0.35]]
+      : [[till ? till.end + 0.7 : R.ua + 0.35, lane[0] - 0.5], [lane[1] + 0.5, R.ub - 0.35]];
+  for (const q of R.solid) {
+    if (q[3] < d0 - 0.3 || q[1] > d1 + 0.3) continue;
+    const out = [];
+    for (const [a, b] of segs) {
+      if (q[2] + 0.3 <= a || q[0] - 0.3 >= b) {
+        out.push([a, b]);
+        continue;
+      }
+      if (q[0] - 0.3 > a) out.push([a, q[0] - 0.3]);
+      if (q[2] + 0.3 < b) out.push([q[2] + 0.3, b]);
+    }
+    segs = out;
+  }
+  return segs.filter(([a, b]) => b - a >= min);
+}
+
 // the two faces of a freestanding fixture at a place: [the one to the front, the one to the back] - each a run along it from
 // its middle line out (t), as a wall's run is from its wall
 export function faces(R, p) {

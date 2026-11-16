@@ -58,7 +58,7 @@ export function arcadeRoom(R, o = {}) {
       return;
     }
     for (const run of [a, b]) for (let s = (L - 1.62) / 2; s + 0.8 <= L - (L - 1.62) / 2 + 1e-6; s += 0.82) cabinet(R, run, s, 0);
-  }, { len: 1.8, depth: 1.9, aisle: 1.5, edge: 1.6, edgeBack: 2.3, most: R.low ? 4 : 10 });
+  }, { len: 1.8, depth: 1.9, aisle: 1.5, edge: 1.6, edgeBack: 2.3, most: R.low ? 8 : 10 });
   neon(R, fr);
   staff(R, fr);
 }
