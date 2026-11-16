@@ -260,7 +260,6 @@ function sleeveWall(R, run, len, guitars) {
 // the crates down the middle: on their stands, the records standing in them (live at the front of
 // each: flipped through, pulled out, listened to - game/hobbylife.js)
 function crates(R, fr, front) {
-  const y0 = R.y0;
   const L = Math.min(2.4, fr.W - 3.4);
   if (L < 0.9) return;
   const um = (R.ua + R.ub) / 2;
@@ -268,6 +267,16 @@ function crates(R, fr, front) {
   for (let i = 0; i < n; i++) {
     const dm = R.db + 1.7 + i * 2.1;
     if (dm + 0.9 > front - 0.6) break;
+    crateTable(R, um, dm, L);
+  }
+  // (ROADMAP 26) a big one: more of them in rows across the floor
+  fillFloor(R, front, (p) => crateTable(R, (p.u0 + p.u1) / 2, (p.d0 + p.d1) / 2, p.u1 - p.u0), { len: 2.4, depth: 0.8, aisle: 1.4, edge: 1.4, most: R.low ? 8 : 12 });
+}
+
+// a table of crates, the records in them standing in rows (each crate's front one live: flipped through, bought)
+function crateTable(R, um, dm, L) {
+  const y0 = R.y0;
+  {
     const S = R.psoup(false);
     const run = new Run(R, um - L / 2, dm + 0.4, [1, 0], [0, 1]);
     const top = y0 + 0.82;

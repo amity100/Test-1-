@@ -1,6 +1,6 @@
 import { Run, ceiling } from './stock.js';
 import { model, roomLight } from './products.js';
-import { rbox, rprint, rprintUp, rcyl, wp, yawOut, put, later, liveOk, frameOf, curtain, counterLen } from './shopkit.js';
+import { rbox, rprint, rprintUp, rcyl, wp, yawOut, put, later, liveOk, frameOf, curtain, counterLen, fillFloor } from './shopkit.js';
 
 // (v5, ROADMAP 14.4) A clothes shop of the new kind (after the market, world/market.js): the second
 // business built from the same kit, and laid out as a clothes shop is - not as a grocery.
@@ -69,6 +69,16 @@ export function fashion(R, o = {}) {
   }
   // the mannequins in the window on the door's other side, looking out to the street
   mannequins(R, fr, till, pal);
+  // (ROADMAP 26) a big one: the rest of the floor in rails, tables of folded things and mannequins on their plinths, air
+  // between them - the rails' clothes and the tables' to pick up (live)
+  fillFloor(R, front, (p, k) => {
+    const L = p.u1 - p.u0;
+    const um = (p.u0 + p.u1) / 2;
+    const dm = (p.d0 + p.d1) / 2;
+    if (k % 3 === 1) tables(R, um, dm, Math.min(1.6, L), pal);
+    else if (k % 3 === 2) plinth(R, um, dm, pal);
+    else floorRail(R, new Run(R, p.u0, dm, [1, 0], [0, 1]), L, pal);
+  }, { len: 2.4, depth: 1.0, aisle: 1.5, edge: 1.4, most: R.low ? 10 : 14 });
   R.spots.big = fr.W * fr.D > 70;
   // (the staff's places along the bays: to straighten the hangers, to fold)
   const b = R.spots.browse;
@@ -209,6 +219,24 @@ function tables(R, u, d, w, pal) {
       }
     });
   }
+}
+
+// a round plinth, two mannequins on it back to back, dressed in the season's colours
+function plinth(R, um, dm, pal) {
+  const S = R.psoup(false);
+  const y0 = R.y0;
+  const run = new Run(R, um, dm, [1, 0], [0, 1]);
+  rcyl(R, S, run, 0, 0, 0.62, y0, 0.12, [0.92, 0.9, 0.86], { seg: 20 });
+  rcyl(R, S, run, 0, 0, 0.64, y0 + 0.12, 0.015, [0.74, 0.62, 0.4], { seg: 20 });
+  run.solid(-0.62, -0.62, 0.62, 0.62, y0 + 0.14);
+  later(R, () => {
+    const yaw = yawOut(R, run);
+    for (const [s, t, turn] of [[-0.22, 0, 0.35], [0.24, 0.05, Math.PI - 0.3]]) {
+      const top = pal[Math.floor(R.rng.r() * pal.length)];
+      const bottom = [[0.17, 0.22, 0.33], [0.1, 0.1, 0.11], [0.29, 0.39, 0.52], [0.72, 0.55, 0.36]][Math.floor(R.rng.r() * 4)];
+      put(R, { line: 'mannequin', model: 'mannequin', cell: null, tint: top, cap: bottom }, wp(R, run, s, y0 + 0.135, t), yaw + turn, {});
+    }
+  });
 }
 
 // ------------------------------------------------------------------ the shoes
