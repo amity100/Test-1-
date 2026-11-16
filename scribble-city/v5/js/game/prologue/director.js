@@ -4751,13 +4751,13 @@ export class Prologue {
     // (round 23, the review: from his other side, nearer and lower - the gun and the hand on it clear,
     // where a striped post stood in the middle of the picture)
     this.shot({ from: () => v3(t1.pos.x - ux * 1.7 - uz * 0.85, 1.08, t1.pos.z - uz * 1.7 + ux * 0.85), look: () => { const h = this.headJ(t1) || v3(t1.pos.x, 1.6, t1.pos.z); return v3(h.x - ux * 0.45, h.y - 0.36, h.z - uz * 0.45); }, fov: 38, dur: 2.0, hand: 0.6, shake: 0.08, roll: 0.05 });
-    this.armThug(t1, P);
+    this.armThug(t1, P, { hands: 1 });
     g.audio.play('click', 0.6);
     this.flash(0.12, '#ffffff');
     this.comic.impact(this.headJ(t1) || t1.pos, 0.1);
     yield 0.2;
     yield* this.say('T05', t1.fig, 0.05);
-    this.armThug(t2, P);
+    this.armThug(t2, P, { hands: 2 });
     // him: the car, now
     this.shot({ ...this.single(P, t1, { dist: 1.5, side: 0.4, up: -0.15, drop: 0.12 }), fov: 36, dur: 1.6, hand: 0.8, roll: -0.06 });
     this.feel(P.fig, 'scared', 3);
@@ -5046,15 +5046,25 @@ export class Prologue {
       if (C5 && C5.endPage) C5.endPage(0.08);
       this.airDip = 1;
     }
-    // wrong answer: the gun - from low beside the line of his arm, the gun big in the picture, his face over it
-    this.shot({ from: () => v3(t1.pos.x - ux * 1.55 - uz * 0.85, Y + 1.12, t1.pos.z - uz * 1.55 - 0.8), look: () => { const h = this.headJ(t1) || v3(t1.pos.x, Y + 1.6, t1.pos.z); return v3(h.x - ux * 0.45, h.y - 0.36, h.z - uz * 0.45); }, fov: 38, dur: 2.0, hand: 0.6, shake: 0.08, roll: 0.05, key: 0.75, rim: 1 });
-    this.armThug(t1, P);
+    // wrong answer: the gun.
+    // (ROADMAP 23.22: from before him on the gun's side, off the line of the shot - his body turned to it, the arm out, the gun
+    // across the picture and his face over it. From beside the line of his arm, with the arm straight out from a body that
+    // faced the lens, it was a doll's arm)
+    {
+      const ya = Math.atan2(P.pos.x - t1.pos.x, P.pos.z - t1.pos.z) - 0.84;
+      const at = (r, y) => v3(t1.pos.x + Math.sin(ya) * r, Y + y, t1.pos.z + Math.cos(ya) * r);
+      // (the look a little along his arm: the gun in the picture with his face)
+      const gx = Math.sin(ya + 0.84) * 0.22;
+      const gz = Math.cos(ya + 0.84) * 0.22;
+      this.shot({ from: at(1.85, 1.36), to: at(1.6, 1.38), look: () => { const h = this.headJ(t1) || v3(t1.pos.x, Y + 1.6, t1.pos.z); return v3(h.x + gx, h.y - 0.15, h.z + gz); }, fov: 36, dur: 2.0, ease: 'out', hand: 0.6, shake: 0.06, roll: 0.04, key: 0.75, rim: 1 });
+    }
+    this.armThug(t1, P, { hands: 1 });
     g.audio.play('click', 0.6);
     this.flash(0.12, '#ffffff');
     this.comic.impact(this.headJ(t1) || t1.pos, 0.1);
     yield 0.2;
     yield* this.say('T05', t1.fig, 0.05);
-    this.armThug(t2, P);
+    this.armThug(t2, P, { hands: 2 });
     // him: the car, now
     this.unhold(P.fig, null, 0.15);
     this.shot({ ...this.single(P, t1, { dist: 1.5, side: 0.4, up: -0.15, drop: 0.12 }), fov: 36, dur: 1.6, hand: 0.8, roll: -0.06, key: 0.75 });
@@ -5135,7 +5145,13 @@ export class Prologue {
     this.comic.word('VROOOM!', v3(v.pos.x - 0.4, Y + 1.75, v.pos.z), { fill: '#ff6f3a', burst: '#ffd23f', size: 0.11, life: 1.1 });
     yield 1.25;
     // (4: the big one, his gun up after them)
-    this.shot({ ...this.single(t2, v3(v.pos.x, Y + 1.2, v.pos.z), { dist: 1.7, side: 0.45, up: -0.2, drop: 0.14 }), fov: 36, dur: 2.0, hand: 0.9, shake: 0.06, key: 0.7, rim: 1 });
+    // (ROADMAP 23.22: from before him and to his other side, off the line of his shots: both arms out, the gun and his face
+    // over it across the picture, the evening behind him. From in front, the gun stood before his face)
+    {
+      const yb = Math.atan2(v.pos.x - t2.pos.x, v.pos.z - t2.pos.z) + 0.88;
+      const at = (r, y) => v3(t2.pos.x + Math.sin(yb) * r, Y + y, t2.pos.z + Math.cos(yb) * r);
+      this.shot({ from: () => at(2.25, 1.42), look: () => { const h = this.headJ(t2) || v3(t2.pos.x, Y + 1.6, t2.pos.z); return v3(h.x, h.y - 0.14, h.z); }, fov: 36, dur: 2.0, hand: 0.9, shake: 0.08, key: 0.7, rim: 1 });
+    }
     yield* this.say('T06', t2.fig, 0.1);
     // their car comes after them
     this.firing = null;
@@ -5209,15 +5225,40 @@ export class Prologue {
     }
   }
 
-  // a man drawing his gun: his arm up and out at whoever (by), the gun in his hand drawn each frame
-  armThug(c, by) {
+  // a man drawing his gun on whoever (by), the gun in his hand drawn each frame.
+  // (ROADMAP 23.22, the owner's word: "he holds it like a doll - a robot, not a man".) As a man holds one: his body turned
+  // off the line of the shot, the gun's shoulder back; drawn up his side from his hip and out; pointing it at somebody, one
+  // hand (o.hands 1) - the arm not locked, the gun a little under his eyes so that his face is over it; firing, both (2) - the
+  // other hand under the gun and round it, his knees bent, leaning into it, his head down to it. Each shot kicks: the gun up
+  // and back, and down again. tickGuns
+  armThug(c, by, o = {}) {
     const G = this.gunmen || (this.gunmen = []);
-    if (!G.find((q) => q.c === c)) G.push({ c, by, t: 0, next: 0.3 + Math.random() * 0.4 });
+    const q0 = G.find((q) => q.c === c);
+    if (q0) {
+      if (o.hands) q0.hands = o.hands;
+      return;
+    }
+    G.push({ c, by, t: 0, next: 0.3 + Math.random() * 0.4, hands: o.hands || 0, kick: 0, two: null, vR: v3(0, 0, 0), vL: v3(0, 0, 0), pR: v3(0, -1, 0), pL: v3(0, -1, 0), fL: v3(0, 0, 1), nL: v3(0, 1, 0), look: v3(0, 0, 0), aimV: v3(0, 0, 1) });
   }
 
   disarmThug(c) {
     if (!this.gunmen) return;
-    for (const q of this.gunmen) if (q.c === c && q.gun) q.gun.hide(c.fig);
+    for (const q of this.gunmen) {
+      if (q.c !== c) continue;
+      if (q.gun) q.gun.hide(c.fig);
+      const f = c.fig;
+      if (!f) continue;
+      if (f.reachR === q.vR) f.reachR = null;
+      if (f.reachL === q.vL) f.reachL = null;
+      if (f.poleR === q.pR) f.poleR = null;
+      if (f.poleL === q.pL) f.poleL = null;
+      if (f.handF && f.handF[1] === q.fL) {
+        f.handF[1] = f.handN[1] = null;
+        f.handGrip[1] = 0;
+      }
+      if (f.lookAt === q.look) f.lookAt = null;
+      if (q.two !== null) this.pose(f, { fLean: 0, fHipY: 0, headTilt: 0 }, 0.35);
+    }
     this.gunmen = this.gunmen.filter((q) => q.c !== c);
     if (c.fig) {
       c.fig.aim = 0;
@@ -5237,15 +5278,97 @@ export class Prologue {
       const f = q.c.fig;
       if (!f || !f.j || !q.c.alive) continue;
       const B = q.by.pos || q.by;
-      const yaw = Math.atan2(B.x - q.c.pos.x, B.z - q.c.pos.z);
+      const S = f.scale || 1;
+      // (ROADMAP 23.22: the stance - see armThug.) What the gun is on: the one it was drawn on, his chest; firing, where the
+      // story has them fire
+      const T = this.firing ? this.firing.at() : B;
+      const tgtY = (T.y || 0) + (this.firing ? 1.0 : 1.38);
+      const dx = T.x - q.c.pos.x;
+      const dz = T.z - q.c.pos.z;
+      const dd = Math.hypot(dx, dz) || 1;
+      const ux = dx / dd;
+      const uz = dz / dd;
+      // (the right of the line of the shot: (-uz, ux))
+      const rx = -uz;
+      const rz = ux;
+      const yaw = Math.atan2(dx, dz);
+      const two = q.hands ? q.hands === 2 : !!this.firing;
+      q.t += dt;
+      const k0 = Math.min(1, q.t / 0.36);
+      const k = k0 * k0 * (3 - 2 * k0);
+      // his body off the line of the shot, the gun's shoulder back (standing: a man walking faces where he walks)
+      const want = yaw - (two ? 0.4 : 0.58);
+      // (by whether he is walking now: go() leaves its pace on him after he has got there)
+      if (!(f.speed > 0.3)) {
+        if (q.c.pl) q.c.pl.face = want;
+        q.c.faceYaw = want;
+      }
+      if (q.two !== two) {
+        q.two = two;
+        this.pose(f, { fLean: two ? 0.16 : 0.07, fHipY: two ? -0.06 : -0.025, headTilt: two ? 0.07 : 0.05 }, 0.32, 'out');
+      }
       f.aim = 1;
       let dy = yaw - f.yaw;
       while (dy > Math.PI) dy -= Math.PI * 2;
       while (dy < -Math.PI) dy += Math.PI * 2;
       f.aimYaw = dy;
-      f.aimPitch = Math.atan2((B.y || 0) + 1.0 - f.j.handR.y, Math.hypot(B.x - q.c.pos.x, B.z - q.c.pos.z));
+      f.aimPitch = 0;
+      f.lookAt = q.look.set(T.x, tgtY + 0.22, T.z);
+      // (the shot's kick, dying away in a fifth of a second)
+      q.kick = Math.max(0, (q.kick || 0) - dt / 0.2);
+      const kk = q.kick * q.kick;
+      const nk = f.j.neck;
+      const sR = f.j.shoulderR;
+      const sL = f.j.shoulderL;
+      // the wrist: out along the line of the shot - from under his chin (both hands), from before his shoulder (one) - a little
+      // under his eyes; drawn, from his hip up his side to it
+      // (an arm out, not locked: its wrist nine tenths of the arm's length from its shoulder. With one hand, from the gun's own
+      // shoulder; with both, from between the two - the arms a narrow triangle. At the neck's height: under his eyes)
+      const out = (two ? 0.56 : 0.555) * S;
+      const side = (two ? 0.03 : 0.02) * S;
+      const ox = two ? nk.x : sR.x;
+      const oz = two ? nk.z : sR.z;
+      const ax = ox + ux * (out - 0.035 * kk * S) + rx * side;
+      const ay = nk.y - (two ? 0.02 : 0.0) * S + 0.06 * kk * S;
+      const az = oz + uz * (out - 0.035 * kk * S) + rz * side;
+      const hx0 = sR.x + ux * 0.1 * S;
+      const hy0 = sR.y - 0.42 * S;
+      const hz0 = sR.z + uz * 0.1 * S;
+      q.vR.set(hx0 + (ax - hx0) * k, hy0 + (ay - hy0) * k + Math.sin(k * Math.PI) * 0.05 * S, hz0 + (az - hz0) * k);
+      f.reachR = q.vR;
+      f.poleR = q.pR.set(rx * 0.55, -1, rz * 0.55);
+      if (two) {
+        // (the other hand: under the gun and round the fist that holds it, a moment after)
+        const k20 = clamp((q.t - 0.14) / 0.3, 0, 1);
+        const k2 = k20 * k20 * (3 - 2 * k20);
+        const lx = q.vR.x - rx * 0.05 * S + ux * 0.012 * S;
+        const ly = q.vR.y - 0.038 * S;
+        const lz = q.vR.z - rz * 0.05 * S + uz * 0.012 * S;
+        const lx0 = sL.x;
+        const ly0 = sL.y - 0.5 * S;
+        const lz0 = sL.z;
+        q.vL.set(lx0 + (lx - lx0) * k2, ly0 + (ly - ly0) * k2, lz0 + (lz - lz0) * k2);
+        f.reachL = q.vL;
+        f.poleL = q.pL.set(-rx * 0.6, -1, -rz * 0.6);
+        if (f.handF && k2 > 0.5) {
+          f.handF[1] = q.fL.set(ux * 0.7 + rx * 0.5, 0.5, uz * 0.7 + rz * 0.5).normalize();
+          f.handN[1] = q.nL.set(rx * 0.8, 0.45, rz * 0.8).normalize();
+          f.handGrip[1] = 1;
+        }
+      } else if (f.reachL === q.vL) {
+        f.reachL = null;
+        f.poleL = null;
+        if (f.handF && f.handF[1] === q.fL) {
+          f.handF[1] = f.handN[1] = null;
+          f.handGrip[1] = 0;
+        }
+      }
       const h = f.j.handR;
-      const d = f.aimDir;
+      // (which way it points: from the fist at what it is on, kicked up by a shot; while it is drawn, down before him)
+      const d = q.aimV.set(T.x - h.x, tgtY - h.y, T.z - h.z).normalize();
+      d.y += 0.34 * kk;
+      if (k < 1) d.set(d.x * k + ux * 0.4 * (1 - k), d.y * k - 0.9 * (1 - k), d.z * k + uz * 0.4 * (1 - k));
+      d.normalize();
       // (ROADMAP 23.18: a pistol that is a thing, in a fist closed round its grip - game/prologue/pistol.js. It was three pen
       // lines from his wrist: a slide, a grip, a glint)
       if (!q.gun) q.gun = new HeldPistol(g);
@@ -5255,10 +5378,11 @@ export class Prologue {
         q.lit -= dt;
         flashLight(q.gun.muzzle.x, q.gun.muzzle.y, q.gun.muzzle.z, 9, GUN_LIGHT, 3.2 * Math.max(0.3, q.lit / 0.09));
       }
-      if (!this.firing || !held) continue;
+      if (!this.firing || !held || k < 1) continue;
       q.next -= dt;
       if (q.next > 0) continue;
       q.next = 0.38 + Math.random() * 0.55;
+      q.kick = 1;
       const mx = q.gun.muzzle.x;
       const my = q.gun.muzzle.y;
       const mz = q.gun.muzzle.z;
