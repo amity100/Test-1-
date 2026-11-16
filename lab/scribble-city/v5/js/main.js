@@ -28,6 +28,7 @@ import { setupStartLang, applyStartLang } from './ui/startlang.js';
 window.__gameBase = new URL('../', import.meta.url).href;
 import { browserName } from './game/perf.js';
 
+import { tr } from './core/lang.js';
 // עיר השרבוטים: the first boulevard on the water at sunset, and the whole city around it, drawn
 // with coloured pens. Everything you draw becomes real.
 
@@ -44,7 +45,7 @@ if (params.has('perftest')) {
 function fatal(err) {
   const el = document.getElementById('fatal');
   el.classList.remove('hidden');
-  el.textContent = 'אופס, משהו נשבר:\n' + (err && (err.stack || err.message) ? err.stack || err.message : String(err));
+  el.textContent = tr('אופס, משהו נשבר:\n', 'Oops, something broke:\n') + (err && (err.stack || err.message) ? err.stack || err.message : String(err));
   console.error(err);
 }
 window.addEventListener('error', (e) => {
@@ -205,7 +206,7 @@ async function boot() {
   const lodReady = GFX.folkLod ? initLod() : null;
   // (round 16: the start screen's language choice, and its words in it - ui/startlang.js)
   setupStartLang();
-  setStatus('מחדדים את העטים…');
+  setStatus(tr('מחדדים את העטים…', 'Sharpening the pens…'));
   progress('fonts', 0.2);
   await loadFonts();
   progress('city', 0);
@@ -257,7 +258,7 @@ async function boot() {
   pipe.software = /swiftshader|llvmpipe|softpipe|basic render|software rasterizer/i.test(pipe.gpuName);
   if (pipe.software) {
     const note = document.getElementById('gpu-note');
-    note.textContent = 'הדפדפן מצייר את המשחק בלי כרטיס המסך, ולכן הוא איטי מאוד. כדי שירוץ חלק מדליקים בהגדרות של הדפדפן את "האצת החומרה" (בכרום: הגדרות ← מערכת), ופותחים את הדפדפן מחדש.';
+    note.textContent = tr('הדפדפן מצייר את המשחק בלי כרטיס המסך, ולכן הוא איטי מאוד. כדי שירוץ חלק מדליקים בהגדרות של הדפדפן את "האצת החומרה" (בכרום: הגדרות ← מערכת), ופותחים את הדפדפן מחדש.', 'Your browser is drawing the game without the graphics card, so it is very slow. To make it run smoothly, turn on "hardware acceleration" in the browser\'s settings (in Chrome: Settings → System) and restart the browser.');
     note.classList.remove('hidden');
     const ldNote = document.getElementById('ld-note');
     if (ldNote) {
@@ -314,7 +315,7 @@ async function boot() {
     pipe.setPens(pipe.pensMode === 'two' || (pipe.pensMode === 'auto' && (was !== null ? was : !low || GFX.pens2)));
   }
 
-  setStatus('מציירים את העיר…');
+  setStatus(tr('מציירים את העיר…', 'Drawing the city…'));
   await frame();
   const atlas = buildAtlas();
   const t0 = performance.now();
@@ -355,10 +356,10 @@ async function boot() {
   mark('interiors');
 
   // (ROADMAP 18.9: the city up on the graphics card a little at a time, first)
-  setStatus('מעלים את העיר…');
+  setStatus(tr('מעלים את העיר…', 'Raising the city…'));
   await uploadGradually(renderer, world.group, 'upload');
   mark('upload');
-  setStatus('השמש שוקעת על העיר…');
+  setStatus(tr('השמש שוקעת על העיר…', 'The sun is setting over the city…'));
   progress('shadow', 0.1);
   await frame();
   // the sun's view of the whole city, made once (the long evening shadows across every street)
@@ -371,7 +372,7 @@ async function boot() {
   mark('shadow bake');
   // (ROADMAP 18.9: the city's people's bodies made now, a few at a time - not all at once inside the
   // game's own start: render/folkshapes.js prebuildFolkBodies)
-  setStatus('מציירים את האנשים…');
+  setStatus(tr('מציירים את האנשים…', 'Drawing the people…'));
   {
     const nK = touch ? FOLK_PHONE : FOLK.length;
     let made = 0;
@@ -437,7 +438,7 @@ async function boot() {
   // (render/solid.js; ?nosolid: as it was)
   if (!params.has('nosolid')) pipe.setSolid(world.group, () => world.objects.spots, () => world.objects.fading.length > 0);
   mark('solid');
-  setStatus('מסמנים דרכים…');
+  setStatus(tr('מסמנים דרכים…', 'Marking the roads…'));
   progress('nav', 0);
   await frame();
   world.buildNav();
@@ -448,7 +449,7 @@ async function boot() {
   // (the graphics card compiles them side by side where it can, and the page stays alive): asked
   // for now, while the game's people and cars are made; theirs after, and all of them waited for
   // (11.5: render/pipeline.js precompile - made as the frames draw with them)
-  setStatus('מכינים את העטים…');
+  setStatus(tr('מכינים את העטים…', 'Getting the pens ready…'));
   // (ROADMAP 11.47) and every pen the city may yet draw with - the mainland's blocks, the malls, the
   // shops' goods - as the blocks will wear them (shared, and the still city's twin of each), made
   // now with the rest: a shader first made in play stops the picture while it is made, on a phone
@@ -661,7 +662,7 @@ async function shadersReady(renderer, progs) {
       } catch (e) {
         // (one that will not make: the frame says why, as before)
       }
-      setStatus(`מכינים את העטים… ${i + 1}/${n}`);
+      setStatus(tr(`מכינים את העטים… ${i + 1}/${n}`, `Getting the pens ready… ${i + 1}/${n}`));
       progress('shaders', (i + 1) / n);
       await new Promise((r) => setTimeout(r, 0));
     }
@@ -673,7 +674,7 @@ async function shadersReady(renderer, progs) {
     for (const p of progs) if (!p.isReady()) left++;
     progress('shaders', (n - left) / Math.max(1, n));
     if (!left || performance.now() - t0 > 120000) return;
-    setStatus(`מכינים את העטים… ${n - left}/${n}`);
+    setStatus(tr(`מכינים את העטים… ${n - left}/${n}`, `Getting the pens ready… ${n - left}/${n}`));
     await new Promise((r) => setTimeout(r, 60));
   }
 }

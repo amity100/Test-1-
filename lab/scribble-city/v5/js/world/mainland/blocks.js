@@ -23,6 +23,7 @@ import '../homes2.js';
 import '../venues2.js';
 import { dressSidewalks } from './sidewalks.js';
 
+import { tr } from '../../core/lang.js';
 // (the malls: what is in each - world/mainland/mall.js)
 const MALLS = {
   // (v5, ROADMAP 11.30 - 11.32: the mega mall - three halls of five floors under vaults of glass, on
@@ -33,7 +34,7 @@ const MALLS = {
   // (v5, ROADMAP 13.2: the middle one BAYVIEW MALL's great hall - its oval atrium under the dome,
   // the waterfall, world/mainland/bayview.js; its stores are its own)
   galleria: {
-    name: 'BAYVIEW MALL', heb: 'ביי־ויו מול', font: 'Rubik', bay: true,
+    name: 'BAYVIEW MALL', heb: tr('ביי־ויו מול', 'Bayview Mall'), font: 'Rubik', bay: true,
     mega: true, wing: 'center', floors: 5, inner: [-1, 1], outer: 0, dome: true, portalSign: { '-1': 'WEST HALL', 1: 'EAST HALL' }, bank: true, security: true, helipad: true, court: 'fountain',
     stores: {
       L0w: ['fashion', 'shoes', 'electronics', 'jewelry', 'perfume', 'fashion', 'optics', 'sports'],
@@ -52,7 +53,7 @@ const MALLS = {
     anchor: { name: 'INKWELL & CO', kind: 'fashion', side: 1, floors: 2 },
   },
   galleriaW: {
-    name: 'BAYVIEW MALL', heb: 'ביי־ויו מול', font: 'Rubik', bayStyle: true,
+    name: 'BAYVIEW MALL', heb: tr('ביי־ויו מול', 'Bayview Mall'), font: 'Rubik', bayStyle: true,
     mega: true, wing: 'west', floors: 5, inner: [1], outer: -1, arcade: 1, portalSign: { 1: 'GRAND COURT' }, bank: false, security: false, helipad: false, court: 'palms',
     stores: {
       L0w: ['jewelry', 'perfume', 'shoes', 'fashion'],
@@ -72,7 +73,7 @@ const MALLS = {
     anchor: { name: 'BLOOMWELL\'S', kind: 'fashion', side: -1, floors: 3 },
   },
   galleriaE: {
-    name: 'BAYVIEW MALL', heb: 'ביי־ויו מול', font: 'Rubik', bayStyle: true,
+    name: 'BAYVIEW MALL', heb: tr('ביי־ויו מול', 'Bayview Mall'), font: 'Rubik', bayStyle: true,
     mega: true, wing: 'east', floors: 5, inner: [-1], outer: 1, arcade: -1, portalSign: { '-1': 'GRAND COURT' }, bank: false, security: false, helipad: false, court: 'fountain',
     stores: {
       L0w: ['fashion', 'jewelry', 'perfume', 'shoes', 'optics', 'boutique', 'phones', 'cafe'],
@@ -94,19 +95,19 @@ const MALLS = {
   // in the order they are built: the west wall's from the food hall north, the east wall's from the
   // doors south, the island's; the food hall's counters, east to west - world/mainland/lanes.js)
   lanes: {
-    name: 'VIA INKWELL', heb: 'ויה אינקוול', sign: 'VIA INKWELL', font: 'Rubik',
+    name: 'VIA INKWELL', heb: tr('ויה אינקוול', 'Via Inkwell'), sign: 'VIA INKWELL', font: 'Rubik',
     stores: ['books', 'flowers', 'jewelry', 'perfume', 'boutique', 'shoes', 'optics', 'toys', 'music', 'fashion',
       'icecream', 'cafe', 'fashion', 'books', 'shoes', 'boutique', 'phones', 'sports', 'jewelry', 'flowers',
       'toys', 'perfume', 'boutique', 'fashion', 'music', 'shoes', 'books', 'optics', 'fashion', 'jewelry'],
     food: ['pizza', 'sushi', 'burger', 'tacos', 'noodles', 'icecream'],
   },
   starlight: {
-    name: 'STARLIGHT CENTER', heb: 'מרכז סטארלייט', open: true, wall: '#f6e3d0', trim: '#e0574f', signCol: '#ffe14f', font: 'Permanent Marker',
+    name: 'STARLIGHT CENTER', heb: tr('מרכז סטארלייט', 'Starlight Center'), open: true, wall: '#f6e3d0', trim: '#e0574f', signCol: '#ffe14f', font: 'Permanent Marker',
     stores: ['fashion', 'sports', 'electronics', 'shoes', 'toys', 'perfume', 'fashion', 'jewelry', 'books', 'music', 'arcade', 'fashion', 'boutique', 'cafe'],
     food: ['burger', 'noodles', 'sushi', 'icecream'],
     street: ['diner', 'juice', 'barber', 'pharmacy', 'cafe', 'phones', 'flowers', 'gym'],
   },
-  stripmall: { name: 'VALLEY PLAZA', heb: 'ואלי פלאזה', stores: ['grocery', 'pizza', 'laundry', 'pharmacy', 'barber', 'icecream', 'bagel', 'phones', 'cafe'] },
+  stripmall: { name: 'VALLEY PLAZA', heb: tr('ואלי פלאזה', 'Valley Plaza'), stores: ['grocery', 'pizza', 'laundry', 'pharmacy', 'barber', 'icecream', 'bagel', 'phones', 'cafe'] },
 };
 // (the clubs and the theatre: world/mainland/venues.js)
 export const VENUES = {

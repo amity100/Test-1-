@@ -70,16 +70,16 @@ function howtoHe(key, touch) {
         lines: T
           ? [['כפתור העיפרון', 'פותח את העט'], ['להבה מאחורי המכונית', 'זה טורבו - העיפרון על המסך מראה איך'], ['כפתור הטורבו', 'וטסים קדימה']]
           : [['Q', 'פותח את העט'], ['להבה מאחורי המכונית', 'זה טורבו - העיפרון על המסך מראה איך'], ['Shift', 'וטסים קדימה']],
-        tip: 'במכונית אפשר לצייר גם מקלע ושריון. עוד ציורים ייפתחו בהמשך.',
+        tip: 'במכונית אפשר לצייר עוד המון: מקלע, שריון, כנפיים, רוטור - הכול פתוח מההתחלה.',
       };
     case 'drawFoot':
       return {
         step: 5, of: OF, title: 'מציירים - וזה נהיה אמיתי!',
-        say: 'מה שמציירים קם לחיים. בינתיים יש לכם כמה נשקים וכמה רכבים - בוחרים אחד ומציירים אותו.',
+        say: 'מה שמציירים קם לחיים. כל הנשקים וכל הרכבים פתוחים - בוחרים אחד ומציירים אותו.',
         lines: T
           ? [['כפתור העיפרון', 'פותח את הרשימה'], ['נגיעה בציור', 'ומציירים אותו באוויר, כמו בתמונה'], ['✓', 'והוא נוצר - ונשמר אצלכם לפעם הבאה']]
           : [['Q', 'פותח את הרשימה'], ['לחיצה על ציור', 'ומציירים אותו באוויר, כמו בתמונה'], ['Q', 'שוב: והוא נוצר - ונשמר אצלכם לפעם הבאה']],
-        tip: 'במכונית: טורבו, מקלע ושריון. עוד ציורים ייפתחו בהמשך.',
+        tip: 'וגם במכונית: טורבו, מקלע, שריון, כנפיים, רוטור - הכול פתוח מההתחלה.',
       };
     case 'lily':
       return {
@@ -231,16 +231,16 @@ function howtoEn(key, touch) {
         lines: T
           ? [['Pencil button', 'opens the pen'], ['A flame behind the car', 'is a turbo - the pencil on the screen shows how'], ['Turbo button', 'and off you shoot']]
           : [['Q', 'opens the pen'], ['A flame behind the car', 'is a turbo - the pencil on the screen shows how'], ['Shift', 'and off you shoot']],
-        tip: 'In a car you can also draw a machine gun and armour. More drawings open up later.',
+        tip: 'In a car you can draw much more: a machine gun, armor, wings, a rotor - it\'s all open from the start.',
       };
     case 'drawFoot':
       return {
         step: 5, of: OF, title: 'Draw - and it comes to life!',
-        say: 'What you draw becomes real. For now you have a few weapons and a few rides - pick one and draw it.',
+        say: 'What you draw becomes real. Every weapon and every ride is open - pick one and draw it.',
         lines: T
           ? [['Pencil button', 'opens the list'], ['Touch a drawing', 'and draw it in the air, like the picture'], ['✓', 'and it is made - and kept for next time']]
           : [['Q', 'opens the list'], ['Click a drawing', 'and draw it in the air, like the picture'], ['Q', 'again: it is made - and kept for next time']],
-        tip: 'In a car: turbo, machine gun and armour. More drawings open up later.',
+        tip: 'In a car too: a turbo, a machine gun, armor, wings, a rotor - it\'s all open from the start.',
       };
     case 'lily':
       return {

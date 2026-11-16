@@ -23,7 +23,8 @@ import { matchCatalog, gradeOf, drawnWhole, tooEarly, MATCH_MIN, PICK_SLACK, SHE
 import { BLUEPRINTS, blueprintBounds } from '../game/blueprints.js';
 import { PEN_CATS, PEN_REST, PEN_REST_TOUCH, parList } from '../game/partpen.js';
 import { DRAWN_ON, WORLD_SAY } from '../game/gadgets.js';
-import { EARLY_KIT, isEarly } from '../game/drawlock.js';
+import { EARLY_KIT, isEarly, carParkHold } from '../game/drawlock.js';
+import { tr } from '../core/lang.js';
 
 // (ROADMAP 11.6, 11.7) Drawing freehand in the air, on the run. Q (the pencil on a phone, up on a
 // pad) and whatever is drawn goes straight on the screen, over the street - no page in the way.
@@ -73,11 +74,11 @@ const GROUP_MS = 700;
 const GROUP_TOUCH = 850;
 // (ROADMAP 11.15) the two looks of what is made: as drawn, or each part the game's own
 const LOOKS = [
-  ['faithful', 'כמו שציירתי'],
-  ['polished', 'מלוטש'],
+  ['faithful', tr('כמו שציירתי', 'As I drew it')],
+  ['polished', tr('מלוטש', 'Polished')],
 ];
 // (what the game adds when nothing drawn would do it - why, said by its toggle on the card)
-const IMP_WHY = { rotor: 'רוטור — כדי שיטוס', wing: 'כנף — כדי שיטוס', prop: 'מדחף — כדי שיזוז באוויר', jet: 'מנוע — כדי שימריא', wheel: 'גלגלים בקשתות שצוירו', fin: 'זנב — לייצוב' };
+const IMP_WHY = { rotor: tr('רוטור — כדי שיטוס', 'A rotor — so it flies'), wing: tr('כנף — כדי שיטוס', 'A wing — so it flies'), prop: tr('מדחף — כדי שיזוז באוויר', 'A propeller — so it moves in the air'), jet: tr('מנוע — כדי שימריא', 'An engine — so it takes off'), wheel: tr('גלגלים בקשתות שצוירו', 'Wheels in the arches that were drawn'), fin: tr('זנב — לייצוב', 'A tail — to keep it steady') };
 // (ROADMAP 11.11) the gear whose model the card shows
 const GEAR_VIEW = new Set(['parachute', 'umbrella', 'key', 'ladder', 'ramp', 'bridge', 'spring']);
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -103,10 +104,10 @@ function resample(P, n) {
 // 11.8): the weapons, the vehicles by kind, on the water, in the air, the gear
 const CHOICES = {
   weapon: WEAPON_ORDER.map((k) => [k, KINDS[k].name]),
-  car: [['v:car', 'מכונית'], ['v:truck', 'משאית'], ['v:bus', 'אוטובוס'], ['v:moto', 'אופנוע'], ['v:bicycle', 'אופניים'], ['v:tank', 'טנק'], ['v:skate', 'סקייטבורד']],
-  air: [['v:plane', 'מטוס'], ['v:copter', 'מסוק'], ['v:balloon', 'כדור פורח']],
-  sea: [['v:boat:sailboat', 'סירת מפרש'], ['v:boat:speedboat', 'סירת מנוע'], ['v:boat:canoe', 'קאנו'], ['v:boat:submarine', 'צוללת'], ['v:boat:cruise ship', 'ספינה']],
-  gear: [['g:shield', 'מגן'], ['g:parachute', 'מצנח'], ['g:umbrella', 'מטרייה'], ['g:ladder', 'סולם'], ['g:ramp', 'רמפה'], ['g:bridge', 'גשר'], ['g:key', 'מפתח'], ['g:spring', 'קפיץ']],
+  car: [['v:car', tr('מכונית', 'Car')], ['v:truck', tr('משאית', 'Truck')], ['v:bus', tr('אוטובוס', 'Bus')], ['v:moto', tr('אופנוע', 'Motorbike')], ['v:bicycle', tr('אופניים', 'Bicycle')], ['v:tank', tr('טנק', 'Tank')], ['v:skate', tr('סקייטבורד', 'Skateboard')]],
+  air: [['v:plane', tr('מטוס', 'Plane')], ['v:copter', tr('מסוק', 'Helicopter')], ['v:balloon', tr('כדור פורח', 'Hot-air balloon')]],
+  sea: [['v:boat:sailboat', tr('סירת מפרש', 'Sailboat')], ['v:boat:speedboat', tr('סירת מנוע', 'Motorboat')], ['v:boat:canoe', tr('קאנו', 'Canoe')], ['v:boat:submarine', tr('צוללת', 'Submarine')], ['v:boat:cruise ship', tr('ספינה', 'Ship')]],
+  gear: [['g:shield', tr('מגן', 'Shield')], ['g:parachute', tr('מצנח', 'Parachute')], ['g:umbrella', tr('מטרייה', 'Umbrella')], ['g:ladder', tr('סולם', 'Ladder')], ['g:ramp', tr('רמפה', 'Ramp')], ['g:bridge', tr('גשר', 'Bridge')], ['g:key', tr('מפתח', 'Key')], ['g:spring', tr('קפיץ', 'Spring')]],
 };
 
 // (ROADMAP 11.40) a catalog thing in the legend, as its blueprint is drawn (its lines, nothing filled)
@@ -169,23 +170,23 @@ function frontSpot(game, v, box) {
 }
 
 // (ROADMAP 15.5) an invention's parts, in a word each
-const PART_ABBR = { wing: 'כנפיים', jet: 'טורבו', rotor: 'רוטור', prop: 'מדחף', wheel: 'גלגלי שטח', armor: 'שריון' };
+const PART_ABBR = { wing: tr('כנפיים', 'Wings'), jet: tr('טורבו', 'Turbo'), rotor: tr('רוטור', 'Rotor'), prop: tr('מדחף', 'Propeller'), wheel: tr('גלגלי שטח', 'Off-road wheels'), armor: tr('שריון', 'Armor') };
 
 // (ROADMAP 15.4) a thing drawn on the world, in a few words: what came of the line
 export function worldSay(r) {
   const s = r.s;
   if (r.id === 'ramp') {
     const deg = Math.round((Math.atan2(s.h, s.len) * 180) / Math.PI);
-    return `רמפה: ${s.len.toFixed(1)} מ', ${deg}° — ${deg >= 24 ? 'תלולה: קפיצה גבוהה ורחוקה' : deg >= 14 ? 'קפיצה בינונית' : 'מתונה: קפיצה נמוכה ונחיתה רכה'}`;
+    return tr(`רמפה: ${s.len.toFixed(1)} מ', ${deg}° — ${deg >= 24 ? 'תלולה: קפיצה גבוהה ורחוקה' : deg >= 14 ? 'קפיצה בינונית' : 'מתונה: קפיצה נמוכה ונחיתה רכה'}`, `Ramp: ${s.len.toFixed(1)} m, ${deg}° — ${deg >= 24 ? tr('תלולה: קפיצה גבוהה ורחוקה', 'Steep: a high, long jump') : deg >= 14 ? tr('קפיצה בינונית', 'A medium jump') : tr('מתונה: קפיצה נמוכה ונחיתה רכה', 'Gentle: a low jump and a soft landing')}`);
   }
-  if (r.id === 'dbridge') return `גשר: ${s.len.toFixed(1)} מ'${Math.abs(s.dy) > 0.5 ? `, ${s.dy > 0 ? 'עולה' : 'יורד'} ${Math.abs(s.dy).toFixed(1)} מ'` : ''} — גם למכוניות`;
-  if (r.id === 'barrier') return `מחסום: ${s.len.toFixed(1)} מ' — מכוניות ושוטרים נעצרים בו`;
+  if (r.id === 'dbridge') return tr(`גשר: ${s.len.toFixed(1)} מ'${Math.abs(s.dy) > 0.5 ? `, ${s.dy > 0 ? 'עולה' : 'יורד'} ${Math.abs(s.dy).toFixed(1)} מ'` : ''} — גם למכוניות`, `Bridge: ${s.len.toFixed(1)} m${Math.abs(s.dy) > 0.5 ? tr(`, ${s.dy > 0 ? 'עולה' : 'יורד'} ${Math.abs(s.dy).toFixed(1)} מ'`, `, ${s.dy > 0 ? tr('עולה', 'rising') : tr('יורד', 'falling')} ${Math.abs(s.dy).toFixed(1)} m`) : ''} — cars too`);
+  if (r.id === 'barrier') return tr(`מחסום: ${s.len.toFixed(1)} מ' — מכוניות ושוטרים נעצרים בו`, `Roadblock: ${s.len.toFixed(1)} m — cars and cops stop at it`);
   return '';
 }
 
 // how it came out, in a word
-const GRADE_WORD = { perfect: 'מושלם', good: 'טוב', wonky: 'עקום' };
-const moreLines = (n) => (n === 1 ? 'עוד קו אחד' : `עוד ${n} קווים`);
+const GRADE_WORD = { perfect: tr('מושלם', 'Perfect'), good: tr('טוב', 'Good'), wonky: tr('עקום', 'Crooked') };
+const moreLines = (n) => (n === 1 ? tr('עוד קו אחד', 'One more line') : tr(`עוד ${n} קווים`, `${n} more lines`));
 
 export class FreeDraw {
   constructor(game) {
@@ -260,8 +261,8 @@ export class FreeDraw {
 
   build() {
     const sw = INKS.map((c, i) => `<button class="fd-sw${c.neon ? ' neon' : ''}${c.pencil ? ' pencil' : ''}" data-i="${i}" style="--c:${c.css}" title="${c.name}" aria-label="${c.name}"></button>`).join('');
-    const cats = [['', 'כל דבר'], ...CATEGORY_ORDER.map((c) => [c, CATEGORY_NAME[c]])].map(([c, n], i) => `<button class="fd-cat" data-c="${c}"${i ? ` title="${i}"` : ' title="0"'}>${n}</button>`).join('');
-    this.el.innerHTML = `<canvas id="fd-air"></canvas>
+    const cats = [['', tr('כל דבר', 'Anything')], ...CATEGORY_ORDER.map((c) => [c, CATEGORY_NAME[c]])].map(([c, n], i) => `<button class="fd-cat" data-c="${c}"${i ? ` title="${i}"` : ' title="0"'}>${n}</button>`).join('');
+    this.el.innerHTML = tr(`<canvas id="fd-air"></canvas>
       <div class="fd-cats" id="fd-cats"><span class="fd-cats-t">מה מציירים?</span>${cats}</div>
       <div class="fd-leg" id="fd-leg"></div>
       <div class="fd-ref" id="fd-ref"></div>
@@ -322,7 +323,68 @@ export class FreeDraw {
         <button class="fd-btn fd-album" id="fd-album" title="ספריית השרטוטים: אקדח צבע, רובה עפרונות, בזוקת מחקים... (T)">📒 שרטוטים</button>
         <button class="fd-btn" id="fd-close" title="סגירה, הציור נשמר (Esc)">✕</button>
         <button class="fd-btn primary" id="fd-make">✓ צרו!</button>
-      </div>`;
+      </div>`, `<canvas id="fd-air"></canvas>
+      <div class="fd-cats" id="fd-cats"><span class="fd-cats-t">What are you drawing?</span>${cats}</div>
+      <div class="fd-leg" id="fd-leg"></div>
+      <div class="fd-ref" id="fd-ref"></div>
+      <div class="fd-zone" id="fd-zone-a"></div><div class="fd-zone" id="fd-zone-b"></div>
+      <div class="fd-hint" id="fd-hint"></div>
+      <div class="fd-signs hidden" id="fd-signs"><b>Quick signs</b>
+        <div><svg viewBox="0 0 24 24"><path d="M12 20 C4 14 2.5 8.5 6.2 6 C9 4.2 11.3 6 12 8.2 C12.7 6 15 4.2 17.8 6 C21.5 8.5 20 14 12 20 Z"/></svg>Heart — heal</div>
+        <div><svg viewBox="0 0 24 24"><path d="M3 15 L4 11 L8 10 L10 7 L16 7 L18 10 L21 11 L21 15 Z M7 15.5 a1.8 1.8 0 1 0 0.01 0 M17 15.5 a1.8 1.8 0 1 0 0.01 0"/><path class="red" d="M7 4 L17 20 M17 4 L7 20"/></svg>An X on a car — it stops</div>
+        <div><svg viewBox="0 0 24 24"><path d="M12 5 a1.6 1.6 0 1 0 0.01 0 M12 8 L12 14 M9 10.5 L15 10.5 M12 14 L10 19 M12 14 L14 19"/><ellipse class="red" cx="12" cy="12" rx="7.5" ry="9.5"/></svg>A loop round enemies — tied up</div>
+        <div><svg viewBox="0 0 24 24"><path class="red" d="M6 15 C3 9 10 4 14 7 C18 10 11 18 7 14 C4 10 13 4 17 9 C21 14 13 21 9 17 C6 13 15 7 19 12 C21 16 15 20 12 18"/></svg>A scribble — an ink cloud</div>
+        <div><svg viewBox="0 0 24 24"><path d="M14 4 L21 4 L21 21 M14 4 L14 21"/><path d="M5 17 a1.4 1.4 0 1 0 0.01 0 M5 19 L5 22"/><path class="red" d="M6 18 L15 5"/></svg>A line from you to a roof — a rope</div>
+      </div>
+      <button class="fd-fuse-q hidden" id="fd-fuse-q" title="The signs" aria-label="The signs">?</button>
+      <div class="fd-fuse hidden" id="fd-fuse"><b>Building — one part in one line, on something</b>
+        <div><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/></svg>Wheel — a circle, low</div>
+        <div><svg viewBox="0 0 24 24"><path d="M3 13 L21 9 L21 13 Z"/></svg>Wing — a narrow shape to the side</div>
+        <div><svg viewBox="0 0 24 24"><path d="M3 6 L21 6 M12 6 L12 11"/><rect x="7" y="11" width="10" height="7" rx="2"/></svg>Rotor — a straight line above</div>
+        <div><svg viewBox="0 0 24 24"><path d="M4 12 L8 8 L11 15 L14 7 L17 15 L21 10"/></svg>Jet — a zigzag behind</div>
+        <div><svg viewBox="0 0 24 24"><path d="M6 20 C2 18 7 15 12 16 C17 17 20 14 16 12 C12 10 7 12 6 10 C5 7 11 6 15 7 C19 8 19 4 15 3"/></svg>Spring — a coil of loops underneath</div>
+        <div><svg viewBox="0 0 24 24"><rect x="3" y="13" width="9" height="6" rx="1.5"/><path d="M10 14 L21 9"/></svg>Barrel — a line coming out of it</div>
+        <div><svg viewBox="0 0 24 24"><path d="M4 18 C8 6 16 6 20 18"/></svg>Blade — an arc</div>
+        <div><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="11" rx="2"/><path d="M6 15 L8 10 L10 15 L12 10 L14 15 L16 10 L18 15"/></svg>Armor — a zigzag on it</div>
+        <div><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M12 13 L12 21"/></svg>Balloon — a circle above it</div>
+        <div><svg viewBox="0 0 24 24"><path d="M7 4 L7 13 C7 20 17 20 17 13 L17 4"/></svg>Magnet — a U</div>
+        <div><svg viewBox="0 0 24 24"><path d="M12 3 L14.6 9.2 L21 9.6 L16 13.8 L17.6 20.4 L12 16.8 L6.4 20.4 L8 13.8 L3 9.6 L9.4 9.2 Z"/></svg>Star — above it: invincible</div>
+        <div><svg viewBox="0 0 24 24"><path d="M15 2 L8 12 L15 11 L9 22"/></svg>Lightning — a Z coming out of it</div>
+        <div><svg viewBox="0 0 24 24"><path d="M12 12 C12 10 14 10 14 12 C14 15 10 15 10 12 C10 8 16 8 16 12 C16 17 8 17 8 12 C8 6 19 6 19 12"/></svg>Smoke — a spiral behind</div>
+        <div><svg viewBox="0 0 24 24"><path d="M3 11 C3 2 21 2 21 11 M3 11 L10 17 M21 11 L14 17"/><rect x="9" y="17" width="6" height="4" rx="1"/></svg>Parachute — an arch ∩ above it</div>
+        <div><svg viewBox="0 0 24 24"><rect x="6" y="5" width="12" height="7" rx="2"/><rect x="2" y="15" width="20" height="4" rx="2"/></svg>Floats — long, underneath</div>
+        <em>Drawn inside the car — it stays on it as you drew it · sticking out of it — a part</em>
+      </div>
+      <div class="fd-parts" id="fd-parts"></div>
+      <div class="fd-pmenu hidden" id="fd-pmenu"></div>
+      <div class="fd-card hidden" id="fd-card">
+        <div class="fd-card-top"><b id="fd-cname"></b><button class="fd-face" id="fd-face" title="Which way it faces" aria-label="Which way it faces">⇄</button></div>
+        <canvas id="fd-view"></canvas>
+        <div class="fd-look hidden" id="fd-look"></div>
+        <div class="fd-eng hidden" id="fd-eng"></div>
+        <div class="fd-abil" id="fd-abil"></div>
+        <div class="fd-bars" id="fd-bars"></div>
+        <div class="fd-lines hidden" id="fd-lines"></div>
+        <div class="fd-engn hidden" id="fd-engn"></div>
+        <div class="fd-warn" id="fd-warn"></div>
+        <div class="fd-meta" id="fd-meta"></div>
+        <div class="fd-alts fd-calts hidden" id="fd-calts"></div>
+      </div>
+      <div class="fd-tag hidden" id="fd-tag">
+        <button class="fd-kind" id="fd-kind" title="Something else"><b id="fd-name"></b><span id="fd-stats"></span><em id="fd-note"></em></button>
+        <div class="fd-alts" id="fd-alts"></div>
+        <div class="fd-menu hidden" id="fd-menu"></div>
+      </div>
+      <div class="fd-tools" id="fd-tools">
+        <div class="fd-inks" id="fd-inks">${sw}</div>
+        <button class="fd-btn fd-color" id="fd-color" aria-label="Color"><i></i></button>
+        <div class="fd-ink" aria-label="Ink"><i id="fd-ink-fill"></i><i id="fd-ink-cost"></i></div>
+        <button class="fd-btn" id="fd-undo" title="Undo the last line (Z)">↶</button>
+        <button class="fd-btn" id="fd-clear" title="Clear (Delete)">Clear</button>
+        <button class="fd-btn fd-album" id="fd-album" title="The blueprint library: paint gun, pencil rifle, eraser bazooka... (T)">📒 Blueprints</button>
+        <button class="fd-btn" id="fd-close" title="Close, the drawing is kept (Esc)">✕</button>
+        <button class="fd-btn primary" id="fd-make">✓ Make it!</button>
+      </div>`);
     this.cv = $('fd-air');
     this.g = this.cv.getContext('2d');
     this.tagEl = $('fd-tag');
@@ -513,7 +575,7 @@ export class FreeDraw {
       // lines on the page kept, they may be it
       if (isEarly(this.game) && it.classList.contains('lock')) {
         // (round 19: shown, not open yet)
-        this.game.hud.toast(`${BLUEPRINTS[it.dataset.i] ? BLUEPRINTS[it.dataset.i].name : ''} — נפתח בהמשך הסיפור`, 'info', 2.2);
+        this.game.hud.toast(tr(`${BLUEPRINTS[it.dataset.i] ? BLUEPRINTS[it.dataset.i].name : ''} — נפתח בהמשך הסיפור`, `${BLUEPRINTS[it.dataset.i] ? BLUEPRINTS[it.dataset.i].name : ''} — opens later in the story`), 'info', 2.2);
         this.game.audio.play('click', 0.3);
         return;
       }
@@ -672,7 +734,7 @@ export class FreeDraw {
     // (ROADMAP 11.20: in a car, the pen draws parts onto it - game/fuse.js)
     const inCar = !!(game.fuse && p.inVehicle && p.mode === 'vehicle');
     if (p.inVehicle && !inCar) {
-      game.hud.toast('צריך לצאת מהרכב כדי לצייר', 'info');
+      game.hud.toast(tr('צריך לצאת מהרכב כדי לצייר', 'You have to get out of the car to draw'), 'info');
       return;
     }
     if ((p.mode !== 'foot' && !inCar) || game.state !== 'play') return;
@@ -1039,7 +1101,7 @@ export class FreeDraw {
     this.menuEl.classList.toggle('hidden', !on);
     if (on) {
       const on = picksOf(this.force);
-      this.menuEl.innerHTML = [['', 'אוטומטי'], ...this.choices()].map(([k, n]) => `<button class="fd-chip${(k ? on.includes(k) : !on.length) ? ' on' : ''}" data-k="${k}">${n}</button>`).join('');
+      this.menuEl.innerHTML = [['', tr('אוטומטי', 'Automatic')], ...this.choices()].map(([k, n]) => `<button class="fd-chip${(k ? on.includes(k) : !on.length) ? ' on' : ''}" data-k="${k}">${n}</button>`).join('');
     }
     if (this.isOpen) this.place();
   }
@@ -1343,8 +1405,8 @@ export class FreeDraw {
       return `<button class="fd-pc r-${PART[it.t].role}${it.t === part.type ? ' on' : ''}" data-t="${it.t}">${PART[it.t].name}${sub}</button>`;
     };
     const rows = groups.map((g) => `<div class="fd-pg${g.k === 'likely' ? ' likely' : ''}"><span>${g.name}</span>${g.items.map(btn).join('')}</div>`).join('');
-    const auto = mine ? `<button class="fd-pc auto" data-t="">אוטומטי (${PART[part.auto].name})</button>` : '';
-    el.innerHTML = `<div class="fd-pm-top"><b>מה הקו הזה?</b>${auto}</div><div class="fd-pm-say" id="fd-pm-say"></div>${rows}`;
+    const auto = mine ? tr(`<button class="fd-pc auto" data-t="">אוטומטי (${PART[part.auto].name})</button>`, `<button class="fd-pc auto" data-t="">Automatic (${PART[part.auto].name})</button>`) : '';
+    el.innerHTML = tr(`<div class="fd-pm-top"><b>מה הקו הזה?</b>${auto}</div><div class="fd-pm-say" id="fd-pm-say"></div>${rows}`, `<div class="fd-pm-top"><b>What is this line?</b>${auto}</div><div class="fd-pm-say" id="fd-pm-say"></div>${rows}`);
     this.pmenuShow(part.type);
     el.classList.remove('hidden');
     const chip = this.chips.find((c) => c.i === i);
@@ -1364,7 +1426,7 @@ export class FreeDraw {
     if (!el || !it) return;
     const now = t === this.pmenuType;
     const name = it.name && it.name !== PART[t].name ? `${PART[t].name}: ${it.name}` : PART[t].name;
-    el.innerHTML = `<b>${now ? 'עכשיו' : 'אם יהיה'} ${esc(name)}</b> — ${esc(it.say || '')}`;
+    el.innerHTML = `<b>${now ? tr('עכשיו', 'now') : tr('אם יהיה', 'if there is one')} ${esc(name)}</b> — ${esc(it.say || '')}`;
   }
 
   // which part's name is at (x, y) on the screen (-1: none)
@@ -1396,7 +1458,7 @@ export class FreeDraw {
     // (and what no one line is: the wheels in its arches, a plane's wings in its outline - faint)
     const imp = P.implicit || [];
     // (ROADMAP 11.15: each its ▾ - its menu; what the game added, its ✕ - taken away)
-    this.partsEl.innerHTML = P.parts.map((q) => `<span class="fd-pchip r-${PART[q.type].role}${this.over[q.i] ? ' mine' : ''}" data-i="${q.i}"><i class="dd">▾</i>${PART[q.type].name}</span>`).join('') + imp.map((q) => `<span class="fd-pchip r-${PART[q.type].role} implicit" title="המשחק הוסיף — נגיעה מורידה">${PART[q.type].name}<i class="x">✕</i></span>`).join('');
+    this.partsEl.innerHTML = P.parts.map((q) => `<span class="fd-pchip r-${PART[q.type].role}${this.over[q.i] ? ' mine' : ''}" data-i="${q.i}"><i class="dd">▾</i>${PART[q.type].name}</span>`).join('') + imp.map((q) => tr(`<span class="fd-pchip r-${PART[q.type].role} implicit" title="המשחק הוסיף — נגיעה מורידה">${PART[q.type].name}<i class="x">✕</i></span>`, `<span class="fd-pchip r-${PART[q.type].role} implicit" title="Added by the game — tap to remove">${PART[q.type].name}<i class="x">✕</i></span>`)).join('');
     const els = [...this.partsEl.children];
     const placed = [];
     this.chips = [];
@@ -1479,8 +1541,8 @@ export class FreeDraw {
     const chips = sum ? sum.abil.map(([r, t]) => `<span class="fd-ab r-${r}">${esc(t)}</span>`) : [];
     if (made && (cbs.length || near.length || adv >= 3)) {
       const stars = clamp(Math.ceil((adv + cbs.length * 2) / 3), 1, 5);
-      chips.unshift(`<span class="fd-cbh" title="${adv} יתרונות${cbs.length ? ` · ${cbs.length} שילובים` : ''}"><b>${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}</b></span>`);
-      for (const c of cbs) chips.push(this.found.has(c.k) ? `<span class="fd-cbc found" data-k="${c.k}">🏆 ${esc(c.name)}<i>✓</i></span>` : `<span class="fd-cbc" data-k="${c.k}">🏆 ${esc(c.name)}<i>חדש!</i></span>`);
+      chips.unshift(tr(`<span class="fd-cbh" title="${adv} יתרונות${cbs.length ? ` · ${cbs.length} שילובים` : ''}"><b>${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}</b></span>`, `<span class="fd-cbh" title="${adv} advantages${cbs.length ? tr(` · ${cbs.length} שילובים`, ` · ${cbs.length} combos`) : ''}"><b>${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}</b></span>`));
+      for (const c of cbs) chips.push(this.found.has(c.k) ? `<span class="fd-cbc found" data-k="${c.k}">🏆 ${esc(c.name)}<i>✓</i></span>` : tr(`<span class="fd-cbc" data-k="${c.k}">🏆 ${esc(c.name)}<i>חדש!</i></span>`, `<span class="fd-cbc" data-k="${c.k}">🏆 ${esc(c.name)}<i>New!</i></span>`));
       for (const c of near) chips.push(`<span class="fd-cbc near" data-k="${c.k}" title="${esc(c.say)}">💡 + ${esc(c.miss)} = ${esc(c.name)}</span>`);
     }
     $('fd-abil').innerHTML = chips.join('');
@@ -1511,7 +1573,7 @@ export class FreeDraw {
     lEl.classList.toggle('hidden', !lines.length);
     // (ROADMAP 11.15) its look: as drawn, or each part the game's own
     const lkEl = $('fd-look');
-    lkEl.innerHTML = PR ? `<span>מראה</span>${LOOKS.map(([k, n]) => `<button class="fd-lk${k === this.look ? ' on' : ''}" data-l="${k}">${n}</button>`).join('')}` : '';
+    lkEl.innerHTML = PR ? tr(`<span>מראה</span>${LOOKS.map(([k, n]) => `<button class="fd-lk${k === this.look ? ' on' : ''}" data-l="${k}">${n}</button>`).join('')}`, `<span>Looks</span>${LOOKS.map(([k, n]) => `<button class="fd-lk${k === this.look ? ' on' : ''}" data-l="${k}">${n}</button>`).join('')}`) : '';
     lkEl.classList.toggle('hidden', !PR);
     // (ROADMAP 11.12) the engineer: its lines as drawn, or the hand's slips put right - (ROADMAP 11.15)
     // and what it would make better, offered: each a ✓ to take; the parts the game added, each a ✕
@@ -1524,7 +1586,7 @@ export class FreeDraw {
       const sg = PR.sugg || [];
       if (sg.length) {
         const allOn = sg.every((q) => this.engOn.has(q.k));
-        rows.push(`<div class="fd-sgh"><b>💡 המהנדס מציע</b>${sg.length > 1 ? `<button class="fd-sg all${allOn ? ' on' : ''}" data-k="all">${allOn ? 'לבטל הכל' : '✓ הכל'}</button>` : ''}</div>`);
+        rows.push(tr(`<div class="fd-sgh"><b>💡 המהנדס מציע</b>${sg.length > 1 ? `<button class="fd-sg all${allOn ? ' on' : ''}" data-k="all">${allOn ? 'לבטל הכל' : '✓ הכל'}</button>` : ''}</div>`, `<div class="fd-sgh"><b>💡 The engineer suggests</b>${sg.length > 1 ? `<button class="fd-sg all${allOn ? ' on' : ''}" data-k="all">${allOn ? tr('לבטל הכל', 'Cancel all') : tr('✓ הכל', '✓ All')}</button>` : ''}</div>`));
         for (const q of sg) {
           const on = this.engOn.has(q.k);
           rows.push(`<button class="fd-sg${on ? ' on' : ''}" data-k="${q.k}"><i>${on ? '✓' : '+'}</i><span>${esc(q.notes.join(' · '))}</span></button>`);
@@ -1535,12 +1597,12 @@ export class FreeDraw {
       const gone = [...this.noImp];
       // (ROADMAP 11.15: wheels the game gave it - nothing drawn moved it - said so)
       const given = this.P && this.P.implicit && this.P.implicit.some((q) => q.type === 'wheel' && q.given);
-      const why = (t) => (t === 'wheel' && (given || (!imp.includes('wheel') && this.gaveWheels)) ? 'גלגלים — כדי שייסע' : IMP_WHY[t] || (PART[t] ? PART[t].name : t));
+      const why = (t) => (t === 'wheel' && (given || (!imp.includes('wheel') && this.gaveWheels)) ? tr('גלגלים — כדי שייסע', 'Wheels — so it drives') : IMP_WHY[t] || (PART[t] ? PART[t].name : t));
       if (given) this.gaveWheels = true;
       if (imp.length || gone.length) {
-        rows.push('<div class="fd-sgh"><b>המשחק הוסיף</b></div>');
+        rows.push(tr('<div class="fd-sgh"><b>המשחק הוסיף</b></div>', '<div class="fd-sgh"><b>Added by the game</b></div>'));
         for (const t of imp) rows.push(`<button class="fd-sg imp on" data-imp="${t}"><i>✕</i><span>${esc(why(t))}</span></button>`);
-        for (const t of gone) if (!imp.includes(t)) rows.push(`<button class="fd-sg imp" data-imp="${t}"><i>+</i><span>${esc(why(t))} (הוסר)</span></button>`);
+        for (const t of gone) if (!imp.includes(t)) rows.push(tr(`<button class="fd-sg imp" data-imp="${t}"><i>+</i><span>${esc(why(t))} (הוסר)</span></button>`, `<button class="fd-sg imp" data-imp="${t}"><i>+</i><span>${esc(why(t))} (removed)</span></button>`));
       }
     }
     nEl.innerHTML = rows.join('');
@@ -1552,10 +1614,10 @@ export class FreeDraw {
     wEl.textContent = warn.join(' · ');
     wEl.classList.toggle('hidden', !warn.length);
     // (ROADMAP 11.15: how many things it can do, and of them together - by the stars)
-    const advSay = made && (cbs.length || adv >= 3) ? ` · ${adv} יתרונות${cbs.length ? `, ${cbs.length === 1 ? 'שילוב אחד' : `${cbs.length} שילובים`}` : ''}` : '';
-    if (PR) $('fd-meta').textContent = sum ? `אורך ${sum.L.toFixed(1)} מ׳ · משקל ${sum.mass.toFixed(1)} טון${PR.ok ? ` · ${PR.spec.cost} דיו` : ''}${advSay}${PR.ok && PR.spec.com && PR.design.page ? ' · ◐ מרכז הכובד' : ''}` : '';
+    const advSay = made && (cbs.length || adv >= 3) ? tr(` · ${adv} יתרונות${cbs.length ? `, ${cbs.length === 1 ? 'שילוב אחד' : `${cbs.length} שילובים`}` : ''}`, ` · ${adv} advantages${cbs.length ? `, ${cbs.length === 1 ? tr('שילוב אחד', 'one combo') : tr(`${cbs.length} שילובים`, `${cbs.length} combos`)}` : ''}`) : '';
+    if (PR) $('fd-meta').textContent = sum ? tr(`אורך ${sum.L.toFixed(1)} מ׳ · משקל ${sum.mass.toFixed(1)} טון${PR.ok ? ` · ${PR.spec.cost} דיו` : ''}${advSay}${PR.ok && PR.spec.com && PR.design.page ? ' · ◐ מרכז הכובד' : ''}`, `Length ${sum.L.toFixed(1)} m · weight ${sum.mass.toFixed(1)} t${PR.ok ? tr(` · ${PR.spec.cost} דיו`, ` · ${PR.spec.cost} ink`) : ''}${advSay}${PR.ok && PR.spec.com && PR.design.page ? tr(' · ◐ מרכז הכובד', ' · ◐ center of gravity') : ''}`) : '';
     else if (PG) {
-      $('fd-meta').textContent = `${PG.R.cost} דיו`;
+      $('fd-meta').textContent = tr(`${PG.R.cost} דיו`, `${PG.R.cost} ink`);
       // (gear that needs its place: why it would not go here)
       const why = this.cannotMake(PG.R);
       if (why) {
@@ -1564,7 +1626,7 @@ export class FreeDraw {
       }
     } else {
       const len = PW.R.len || (KINDS[PW.R.kind] ? KINDS[PW.R.kind].len : 0.5);
-      $('fd-meta').textContent = `אורך ${len.toFixed(2)} מ׳ · ${this.handR().cost} דיו${advSay}`;
+      $('fd-meta').textContent = tr(`אורך ${len.toFixed(2)} מ׳ · ${this.handR().cost} דיו${advSay}`, `Length ${len.toFixed(2)} m · ${this.handR().cost} ink${advSay}`);
     }
     // (which way it faces: a ride's to say; a weapon's, as its parts say)
     $('fd-face').classList.toggle('hidden', !PR);
@@ -1589,7 +1651,7 @@ export class FreeDraw {
   // as a made thing is read (ui/freedraw.js make): the ride, as R is
   partsR() {
     const PR = this.PR;
-    if (!PR.ok) return { cat: null, why: PR.why || 'עוד לא זז' };
+    if (!PR.ok) return { cat: null, why: PR.why || tr('עוד לא זז', 'Doesn\'t move yet') };
     return { cat: 'vehicle', kind: PR.spec.kind, name: PR.sum.name, design: PR.design, spec: PR.spec, cost: PR.spec.cost, mirror: !!(this.P && this.P.flip) };
   }
 
@@ -1604,6 +1666,8 @@ export class FreeDraw {
 
   // (found, or all open: the album's own say - ui/album.js)
   bpOpen(id) {
+    // (ROADMAP 25: what flies waits for the jump, in the car park alone - game/drawlock.js)
+    if (carParkHold(this.game, id)) return false;
     const a = this.game.album;
     if (a && a.early) return a.has(id);
     return !a || a.allOpen || a.has(id);
@@ -1631,16 +1695,23 @@ export class FreeDraw {
     // (picked in the legend or by a chip; or drawn like one picked before - ROADMAP 11.37)
     const mem = this.force ? null : this.remembered();
     const ok = (k) => k && BLUEPRINTS[k] && shelfOf(BLUEPRINTS[k]) === shelf && this.bpOpen(k);
-    const pick = ok(this.force) ? this.force : ok(mem) ? mem : null;
+    let pick = ok(this.force) ? this.force : ok(mem) ? mem : null;
     const all = matchCatalog(this.strokes, ids);
     if (!all) return null;
     const top = all.best;
+    // (ROADMAP 25, the owner's word: things popping up as if he had tried to draw them) a drawing the pen remembers as another
+    // thing is that thing only while the catalog says it may be - not when the likeliest is plainly something else: a rifle
+    // picked once was what every long drawing lit up as from then on (tools/test-catalog.mjs MEMORY=1)
+    if (pick && pick === mem && pick !== top.id) {
+      const m = all.list.find((x) => x.id === pick);
+      if (!m || top.score > m.score + PICK_SLACK || top.rank > m.rank + 2 * PICK_SLACK) pick = null;
+    }
     const b = (pick && all.list.find((x) => x.id === pick)) || top;
     const bp = BLUEPRINTS[b.id];
     // (ROADMAP 11.43: no guessing from a line or two - the likeliest named only with half of it there)
     const early = tooEarly(top, all.have);
     const alts = early ? [] : all.list.filter((x) => x.id !== b.id && x.score >= Math.max(MATCH_MIN, top.score - 0.08)).slice(0, 2).map((x) => ({ key: x.id, name: BLUEPRINTS[x.id].name }));
-    if (!pick && early) return { cat: null, why: all.have < 2 || top.score >= MATCH_MIN ? 'ממשיכים לצייר — ננחש כשחצי מהציור יהיה שם' : 'לא דומה עדיין לשום דבר במאגר — ציירו אחד מהציורים שבמקרא', alts, lit: null };
+    if (!pick && early) return { cat: null, why: all.have < 2 || top.score >= MATCH_MIN ? tr('ממשיכים לצייר — ננחש כשחצי מהציור יהיה שם', 'Keep drawing — we\'ll guess once half the drawing is there') : tr('לא דומה עדיין לשום דבר במאגר — ציירו אחד מהציורים שבמקרא', 'It doesn\'t look like anything we know yet — draw one of the drawings in the guide'), alts, lit: null };
     // (picked, but what is drawn is another thing: said, and not made)
     const other = pick && top.id !== b.id && top.score > b.score + PICK_SLACK && !tooEarly(top, all.have) ? BLUEPRINTS[top.id].name : null;
     const like = b.score >= MATCH_MIN;
@@ -1651,10 +1722,10 @@ export class FreeDraw {
   // (ROADMAP 11.43) why a drawing from the catalog is not made yet (null: it is) - long, said when
   // it is tried; short, on the tag
   notYetSay(R, long) {
-    if (R.other) return long ? `זה נראה כמו ${R.other}, לא ${R.name} — ציירו את מה שבחרתם, או בחרו אחר` : `נראה כמו ${R.other}`;
-    if (R.have < R.need) return long ? `${moreLines(R.need - R.have)} — ל${R.name} יש ${R.parts} חלקים` : `${moreLines(R.need - R.have)} · ${R.parts} חלקים`;
-    if (!R.whole) return long ? `חלקים של ${R.name} חסרים או לא במקום — ציירו את כולו, כמו במקרא` : 'חלקים חסרים או לא במקום';
-    if (!R.like) return long ? `זה עוד לא מספיק דומה ל${R.name} — ציירו אותו כמו במקרא` : 'עוד לא דומה — ציירו כמו במקרא';
+    if (R.other) return long ? tr(`זה נראה כמו ${R.other}, לא ${R.name} — ציירו את מה שבחרתם, או בחרו אחר`, `That looks like ${R.other}, not ${R.name} — draw what you picked, or pick another`) : tr(`נראה כמו ${R.other}`, `Looks like ${R.other}`);
+    if (R.have < R.need) return long ? tr(`${moreLines(R.need - R.have)} — ל${R.name} יש ${R.parts} חלקים`, `${moreLines(R.need - R.have)} — ${R.name} has ${R.parts} parts`) : tr(`${moreLines(R.need - R.have)} · ${R.parts} חלקים`, `${moreLines(R.need - R.have)} · ${R.parts} parts`);
+    if (!R.whole) return long ? tr(`חלקים של ${R.name} חסרים או לא במקום — ציירו את כולו, כמו במקרא`, `Parts of ${R.name} are missing or out of place — draw all of it, like in the guide`) : tr('חלקים חסרים או לא במקום', 'Parts missing or out of place');
+    if (!R.like) return long ? tr(`זה עוד לא מספיק דומה ל${R.name} — ציירו אותו כמו במקרא`, `That isn't close enough to ${R.name} yet — draw it like in the guide`) : tr('עוד לא דומה — ציירו כמו במקרא', 'Not close yet — draw it like in the guide');
     return null;
   }
 
@@ -1675,7 +1746,7 @@ export class FreeDraw {
     const lit = R && R.lit ? R.lit : '';
     const ids = on ? shelfIds(this.shelf) : [];
     const al = this.game.album;
-    const st = (id) => (!al ? 'k' : al.known(id) ? 'k' : al.toLearn(id) ? 'l' : this.bpOpen(id) ? 'k' : 'x');
+    const st = (id) => (carParkHold(this.game, id) ? 'h' : !al ? 'k' : al.known(id) ? 'k' : al.toLearn(id) ? 'l' : this.bpOpen(id) ? 'k' : 'x');
     const early = on && isEarly(this.game);
     const sig = `${on}|${early}|${this.shelf}|${lit}|${this.force || ''}|${this.world || ''}|${ids.map(st).join('')}|${early ? Object.values(EARLY_KIT).flat().map(st).join('') : ''}|${this.game.inventions ? this.game.inventions.list.map((o) => o.id + o.v).join() : ''}`;
     if (sig === this.legSig) return;
@@ -1693,13 +1764,13 @@ export class FreeDraw {
       return;
     }
     const INV = this.game.inventions;
-    const tabs = SHELVES.map((sh) => `<button class="fd-shelf${sh === this.shelf ? ' on' : ''}" data-s="${sh}">${SHELF_NAME[sh]}</button>`).join('') + (INV ? `<button class="fd-shelf inv${this.shelf === 'inv' ? ' on' : ''}" data-s="inv">✦ המצאות</button>` : '');
+    const tabs = SHELVES.map((sh) => `<button class="fd-shelf${sh === this.shelf ? ' on' : ''}" data-s="${sh}">${SHELF_NAME[sh]}</button>`).join('') + (INV ? tr(`<button class="fd-shelf inv${this.shelf === 'inv' ? ' on' : ''}" data-s="inv">✦ המצאות</button>`, `<button class="fd-shelf inv${this.shelf === 'inv' ? ' on' : ''}" data-s="inv">✦ Inventions</button>`) : '');
     if (this.shelf === 'inv' && INV) {
       // (ROADMAP 15.5) what you invented and kept: a touch (or its number) and it is here, parts and all
       const its = INV.list.length
-        ? INV.list.map((o, i) => `<div class="fd-it known inv" data-inv="${o.id}"${i < 9 ? ` data-n="${i + 1}"` : ''}>${i < 9 ? `<em class="fd-n">${i + 1}</em>` : ''}${bpSvg(BLUEPRINTS[(o.base && o.base.bp) || 'car'] || BLUEPRINTS.car)}<b>${esc(o.name)}</b><i>${o.parts.map((q) => PART_ABBR[q.type] || '').join(' ')}${o.v > 1 ? ` · גרסה ${o.v}` : ''}</i></div>`).join('')
-        : '<div class="fd-inv-none">עוד אין המצאות: במכונית — העיפרון, "חלקים", מציירים טורבו, גלגלי שטח, שריון... ושומרים</div>';
-      el.innerHTML = `<div class="fd-shelves">${tabs}<span class="fd-leg-say">${this.game.touch ? 'נגיעה — וההמצאה כאן, עם כל החלקים' : 'נגיעה או 1–9 — וההמצאה כאן, עם כל החלקים'}</span></div><div class="fd-its">${its}</div>`;
+        ? INV.list.map((o, i) => `<div class="fd-it known inv" data-inv="${o.id}"${i < 9 ? ` data-n="${i + 1}"` : ''}>${i < 9 ? `<em class="fd-n">${i + 1}</em>` : ''}${bpSvg(BLUEPRINTS[(o.base && o.base.bp) || 'car'] || BLUEPRINTS.car)}<b>${esc(o.name)}</b><i>${o.parts.map((q) => PART_ABBR[q.type] || '').join(' ')}${o.v > 1 ? tr(` · גרסה ${o.v}`, ` · version ${o.v}`) : ''}</i></div>`).join('')
+        : tr('<div class="fd-inv-none">עוד אין המצאות: במכונית — העיפרון, "חלקים", מציירים טורבו, גלגלי שטח, שריון... ושומרים</div>', '<div class="fd-inv-none">No inventions yet: in a car — the pencil, "Parts", draw a turbo, off-road wheels, armor... and save</div>');
+      el.innerHTML = `<div class="fd-shelves">${tabs}<span class="fd-leg-say">${this.game.touch ? tr('נגיעה — וההמצאה כאן, עם כל החלקים', 'Tap — and the invention is here, with all its parts') : tr('נגיעה או 1–9 — וההמצאה כאן, עם כל החלקים', 'Tap or 1–9 — and the invention is here, with all its parts')}</span></div><div class="fd-its">${its}</div>`;
       document.body.classList.toggle('fd-catalog', on);
       return;
     }
@@ -1709,13 +1780,13 @@ export class FreeDraw {
     const items = ids.map((id) => {
       const bp = BLUEPRINTS[id];
       const s = st(id);
-      const lock = s === 'x';
+      const lock = s === 'x' || s === 'h';
       const num = s === 'k' && n < 9 ? ++n : 0;
       const cls = ['fd-it', lit === id ? 'on' : '', this.force === id || this.world === id ? 'pick' : '', lock ? 'lock' : '', s === 'l' ? 'learn' : '', s === 'k' ? 'known' : ''].filter(Boolean).join(' ');
-      const tag = s === 'l' ? '✎ ללמוד' : lock ? '🔒 לא נמצא' : `${costOfBp(bp)} דיו`;
+      const tag = s === 'l' ? tr('✎ ללמוד', '✎ Learn') : s === 'h' ? tr('🔒 אחרי הקפיצה', '🔒 After the jump') : lock ? tr('🔒 לא נמצא', '🔒 Not found') : tr(`${costOfBp(bp)} דיו`, `${costOfBp(bp)} ink`);
       return `<div class="${cls}" data-i="${id}"${num ? ` data-n="${num}"` : ''}>${num ? `<em class="fd-n">${num}</em>` : ''}${bpSvg(bp)}<b>${bp.name}</b><i>${tag}</i></div>`;
     }).join('');
-    const say = this.game.touch ? 'נגיעה בדבר שאתם מכירים — והוא כאן. או ציירו אותו' : 'נגיעה או 1–9: והוא כאן · ←→ מדפים · אפשר גם לצייר';
+    const say = this.game.touch ? tr('נגיעה בדבר שאתם מכירים — והוא כאן. או ציירו אותו', 'Tap something you know — and it\'s here. Or draw it') : tr('נגיעה או 1–9: והוא כאן · ←→ מדפים · אפשר גם לצייר', 'Tap or 1–9: and it\'s here · ←→ shelves · you can draw too');
     el.innerHTML = `<div class="fd-shelves">${tabs}<span class="fd-leg-say">${say}</span></div><div class="fd-its">${items}</div>`;
   }
 
@@ -1728,10 +1799,15 @@ export class FreeDraw {
     const bp = BLUEPRINTS[id];
     const al = game.album;
     if (!bp || !al || !this.catalogOn() || game.player.mode !== 'foot') return false;
+    if (carParkHold(game, id)) {
+      game.hud.toast(tr(`${bp.name} — נפתח אחרי הקפיצה מהגג`, `${bp.name} — opens after the jump off the roof`), 'info', 2.4);
+      game.audio.play('click', 0.3);
+      return false;
+    }
     // (a ramp, a bridge, a barrier is drawn on the world each time: nothing to learn first)
     if (!inv && !al.known(id) && !(game.gadgets && DRAWN_ON.has(id) && !al.early)) {
       if (al.toLearn(id)) return this.learn(id);
-      game.hud.toast(`${bp.name}: עוד לא נמצא — ${al.where(id)}`, 'info', 3.2);
+      game.hud.toast(tr(`${bp.name}: עוד לא נמצא — ${al.where(id)}`, `${bp.name}: not found yet — ${al.where(id)}`), 'info', 3.2);
       game.audio.play('click', 0.3);
       return false;
     }
@@ -1745,7 +1821,7 @@ export class FreeDraw {
     const cost = inv && game.inventions ? game.inventions.inkOf(inv, costOfBp(bp)) : costOfBp(bp);
     const ink = game.ink;
     if (ink && ink.level < cost) {
-      game.hud.toast(`ל${bp.name} צריך ${cost} דיו, ויש ${Math.floor(ink.level)} — הדיו חוזר לאט, או בקבוק בחנות כתיבה`, 'bad', 3);
+      game.hud.toast(tr(`ל${bp.name} צריך ${cost} דיו, ויש ${Math.floor(ink.level)} — הדיו חוזר לאט, או בקבוק בחנות כתיבה`, `${bp.name} needs ${cost} ink and you have ${Math.floor(ink.level)} — ink comes back slowly, or buy a bottle at a stationery shop`), 'bad', 3);
       return false;
     }
     if (!this.isOpen) this.layout();
@@ -1822,7 +1898,7 @@ export class FreeDraw {
     if (!c || !G || c.p.length < 2) return;
     const U = this.U;
     const r = G.fromLine(this.world, G.lineOnWorld(c.p.map(([x, y]) => [x * U, y * U]), 10));
-    this.wFelt = r.ok ? `✓ ${worldSay(r)} · עוזבים — וזה קם` : `⚠ ${r.why}`;
+    this.wFelt = r.ok ? tr(`✓ ${worldSay(r)} · עוזבים — וזה קם`, `✓ ${worldSay(r)} · step away — and it stands up`) : `⚠ ${r.why}`;
     this.hintEl.textContent = this.wFelt;
     this.hintEl.classList.remove('gone');
   }
@@ -1847,7 +1923,7 @@ export class FreeDraw {
     }
     const cost = costOfBp(bp);
     if (game.ink && game.ink.level < cost) {
-      game.hud.toast(`ל${bp.name} צריך ${cost} דיו, ויש ${Math.floor(game.ink.level)}`, 'bad', 3);
+      game.hud.toast(tr(`ל${bp.name} צריך ${cost} דיו, ויש ${Math.floor(game.ink.level)}`, `${bp.name} needs ${cost} ink and you have ${Math.floor(game.ink.level)}`), 'bad', 3);
       this.strokes = [];
       this.bake();
       this.render();
@@ -1880,7 +1956,7 @@ export class FreeDraw {
     if (!bp) return false;
     // (the list is the pen's on foot: in a car it draws on the car)
     if (game.player.mode !== 'foot' || this.carOpen) {
-      game.hud.toast('צריך לצאת מהרכב כדי לצייר את זה', 'info', 2.4);
+      game.hud.toast(tr('צריך לצאת מהרכב כדי לצייר את זה', 'You have to get out of the car to draw this'), 'info', 2.4);
       return false;
     }
     if (!this.isOpen) this.show();
@@ -1894,7 +1970,7 @@ export class FreeDraw {
     this.choose(id);
     this.legSig = '';
     this.showLegend();
-    game.hud.toast(`${bp.name}: ציירו אותו באוויר, כמו בציור — וכשהוא מוכן, ${game.touch ? '✓' : 'Q'}. מאז הוא בספרייה, מוכן בנגיעה`, 'info', 3.6);
+    game.hud.toast(tr(`${bp.name}: ציירו אותו באוויר, כמו בציור — וכשהוא מוכן, ${game.touch ? '✓' : 'Q'}. מאז הוא בספרייה, מוכן בנגיעה`, `${bp.name}: draw it in the air, like in the picture — and when it's ready, ${game.touch ? '✓' : 'Q'}. From then on it's in the library, ready at a tap`), 'info', 3.6);
     game.audio.play('pageflip', 0.35);
     return true;
   }
@@ -1909,7 +1985,7 @@ export class FreeDraw {
     if (sig === this.refSig) return;
     this.refSig = sig;
     el.classList.toggle('on', !!bp);
-    el.innerHTML = bp ? `<div class="fe-big">${bpSvg(bp)}</div><div class="fe-what"><b>${bp.name}</b><span>${this.game.touch ? 'ציירו אותו, ובסוף ✓' : 'ציירו אותו, ובסוף Q'}</span></div><button class="fe-x" data-x="1" aria-label="משהו אחר">✕</button>` : '';
+    el.innerHTML = bp ? tr(`<div class="fe-big">${bpSvg(bp)}</div><div class="fe-what"><b>${bp.name}</b><span>${this.game.touch ? 'ציירו אותו, ובסוף ✓' : 'ציירו אותו, ובסוף Q'}</span></div><button class="fe-x" data-x="1" aria-label="משהו אחר">✕</button>`, `<div class="fe-big">${bpSvg(bp)}</div><div class="fe-what"><b>${bp.name}</b><span>${this.game.touch ? tr('ציירו אותו, ובסוף ✓', 'Draw it, and at the end ✓') : tr('ציירו אותו, ובסוף Q', 'Draw it, and at the end Q')}</span></div><button class="fe-x" data-x="1" aria-label="Something else">✕</button>`) : '';
   }
 
   // (round 15, game/drawlock.js) the short list, in front of the face: a few weapons, a few rides -
@@ -1924,7 +2000,7 @@ export class FreeDraw {
       const k = al.known(id);
       const num = k && n < 9 ? ++n : 0;
       const cls = ['fd-it', lit === id ? 'on' : '', pick === id ? 'pick' : '', k ? 'known' : 'learn'].filter(Boolean).join(' ');
-      return `<div class="${cls}" data-i="${id}"${num ? ` data-n="${num}"` : ''}>${num ? `<em class="fd-n">${num}</em>` : ''}${bpSvg(bp)}<b>${bp.name}</b><i>${k ? '✓ שלכם' : '✎ לצייר'}</i></div>`;
+      return `<div class="${cls}" data-i="${id}"${num ? ` data-n="${num}"` : ''}>${num ? `<em class="fd-n">${num}</em>` : ''}${bpSvg(bp)}<b>${bp.name}</b><i>${k ? tr('✓ שלכם', '✓ Yours') : tr('✎ לצייר', '✎ Draw')}</i></div>`;
     };
     // (round 16, the player's word: the list took the screen, no room left to draw - a strip over the
     // pen's tools; the one being drawn a small picture at the top - showRef)
@@ -1933,15 +2009,15 @@ export class FreeDraw {
     // the rest locked, to come later in the story)
     const lockCell = (id) => {
       const bp = BLUEPRINTS[id];
-      return `<div class="fd-it lock fe-lock" data-i="${id}" title="${bp.name} - נפתח בהמשך">${bpSvg(bp)}<b>${bp.name}</b><i>🔒</i></div>`;
+      return tr(`<div class="fd-it lock fe-lock" data-i="${id}" title="${bp.name} - נפתח בהמשך">${bpSvg(bp)}<b>${bp.name}</b><i>🔒</i></div>`, `<div class="fd-it lock fe-lock" data-i="${id}" title="${bp.name} - opens later">${bpSvg(bp)}<b>${bp.name}</b><i>🔒</i></div>`);
     };
     const rows = SHELVES.map((sh) => {
       const open = EARLY_KIT[sh] || [];
       const rest = shelfIds(sh).filter((id) => !open.includes(id));
       return `<div class="fe-row"><span class="fe-sh">${SHELF_NAME[sh]}</span>${open.map(cell).join('')}${rest.map(lockCell).join('')}</div>`;
     }).join('');
-    const say = touch ? 'נגיעה בציור ומציירים אותו · או סתם ציירו - המשחק יזהה' : 'לחיצה על ציור ומציירים אותו · או סתם ציירו - המשחק יזהה · מה שכבר ציירתם: המספר שלו';
-    return `<div class="fe-top"><b>מה מציירים?</b><span>${say}</span><em>🔒 עוד ייפתחו בהמשך</em></div><div class="fe-rows">${rows}</div>`;
+    const say = touch ? tr('נגיעה בציור ומציירים אותו · או סתם ציירו - המשחק יזהה', 'Tap a drawing and draw it · or just draw - the game will recognize it') : tr('לחיצה על ציור ומציירים אותו · או סתם ציירו - המשחק יזהה · מה שכבר ציירתם: המספר שלו', 'Click a drawing and draw it · or just draw - the game will recognize it · what you\'ve drawn before: its number');
+    return tr(`<div class="fe-top"><b>מה מציירים?</b><span>${say}</span><em>🔒 עוד ייפתחו בהמשך</em></div><div class="fe-rows">${rows}</div>`, `<div class="fe-top"><b>What are you drawing?</b><span>${say}</span><em>🔒 More open up later</em></div><div class="fe-rows">${rows}</div>`);
   }
 
   // made from the catalog: the album's own way of making a drawn blueprint real (game/game.js
@@ -2085,43 +2161,43 @@ export class FreeDraw {
     this.hintEl.textContent = W
       ? this.cur && this.wFelt
         ? this.wFelt
-        : `${BLUEPRINTS[this.world].name}: ${WORLD_SAY[this.world]}${game.touch ? '' : ' · Esc — ביטול'}`
+        : `${BLUEPRINTS[this.world].name}: ${WORLD_SAY[this.world]}${game.touch ? '' : tr(' · Esc — ביטול', ' · Esc — cancel')}`
       : game.fuse && game.player.inVehicle
       ? this.penOn() && game.fuse.pen.cat === 'par'
         ? game.touch
-          ? 'בחרו חלק וציירו אותו על המכונית · הגודל, המקום והכיוון של הקו הם מה שהוא עושה'
-          : 'בחרו חלק (המספר שלו) וציירו אותו על המכונית · הגודל, המקום והכיוון של הקו הם מה שהוא עושה · Q חוזרים לנסוע'
+          ? tr('בחרו חלק וציירו אותו על המכונית · הגודל, המקום והכיוון של הקו הם מה שהוא עושה', 'Pick a part and draw it on the car · the size, place and direction of the line are what it does')
+          : tr('בחרו חלק (המספר שלו) וציירו אותו על המכונית · הגודל, המקום והכיוון של הקו הם מה שהוא עושה · Q חוזרים לנסוע', 'Pick a part (its number) and draw it on the car · the size, place and direction of the line are what it does · Q back to driving')
         : this.penOn()
         ? game.touch
-          ? 'בחרו נשק, תנועה או הגנה, וציירו אחד מהציורים שמעל · הגודל ליד המכונית קובע'
-          : 'בחרו נשק, תנועה או הגנה (1–3), וציירו אחד מהציורים שמעל · הגודל ליד המכונית קובע · Q חוזרים לנסוע'
+          ? tr('בחרו נשק, תנועה או הגנה, וציירו אחד מהציורים שמעל · הגודל ליד המכונית קובע', 'Pick a weapon, movement or protection, and draw one of the drawings above · the size next to the car decides')
+          : tr('בחרו נשק, תנועה או הגנה (1–3), וציירו אחד מהציורים שמעל · הגודל ליד המכונית קובע · Q חוזרים לנסוע', 'Pick a weapon, movement or protection (1–3), and draw one of the drawings above · the size next to the car decides · Q back to driving')
         : game.touch
-          ? 'ציירו על המכונית — מה שתציירו יהיה עליה'
-          : 'ציירו על המכונית — מה שתציירו יהיה עליה: גלגלים, להבה, שריון... · Q חוזרים לנסוע'
+          ? tr('ציירו על המכונית — מה שתציירו יהיה עליה', 'Draw on the car — whatever you draw will be on it')
+          : tr('ציירו על המכונית — מה שתציירו יהיה עליה: גלגלים, להבה, שריון... · Q חוזרים לנסוע', 'Draw on the car — whatever you draw will be on it: wheels, a flame, armor... · Q back to driving')
       : game.lab
       ? game.touch
-        ? 'ציירו באוויר · כל קו מקבל שם: נגיעה בשם — התפקיד הבא, לחיצה ארוכה — כל האפשרויות · נבנה בדיוק כמו שציירתם'
-        : 'ציירו באוויר · כל קו מקבל שם: לחיצה על השם — התפקיד הבא, ▾ — כל האפשרויות · נבנה בדיוק כמו שציירתם · Q יוצרים'
+        ? tr('ציירו באוויר · כל קו מקבל שם: נגיעה בשם — התפקיד הבא, לחיצה ארוכה — כל האפשרויות · נבנה בדיוק כמו שציירתם', 'Draw in the air · every line gets a name: tap the name — the next role, long press — all the options · built exactly as you drew it')
+        : tr('ציירו באוויר · כל קו מקבל שם: לחיצה על השם — התפקיד הבא, ▾ — כל האפשרויות · נבנה בדיוק כמו שציירתם · Q יוצרים', 'Draw in the air · every line gets a name: click the name — the next role, ▾ — all the options · built exactly as you drew it · Q to make it')
       : this.catalogOn()
       ? game.touch
-        ? 'ציירו באוויר אחד מהציורים שבמקרא · נגיעה בציור — רק אותו · האגודל ממשיך לרוץ'
-        : 'ציירו באוויר אחד מהציורים שבמקרא · 1–3: נשק, רכבים, ציוד · WASD ממשיכים לרוץ · Q יוצרים'
+        ? tr('ציירו באוויר אחד מהציורים שבמקרא · נגיעה בציור — רק אותו · האגודל ממשיך לרוץ', 'Draw one of the drawings in the guide in the air · tap a drawing — just that one · your thumb keeps running')
+        : tr('ציירו באוויר אחד מהציורים שבמקרא · 1–3: נשק, רכבים, ציוד · WASD ממשיכים לרוץ · Q יוצרים', 'Draw one of the drawings in the guide in the air · 1–3: weapons, rides, gear · WASD to keep running · Q to make it')
       : game.touch
-        ? 'ציירו באוויר · בחרו מה מציירים (אפשר כמה ביחד) · האגודל ממשיך לרוץ'
-        : 'ציירו באוויר · 1–5 או למעלה: מה מציירים (אפשר כמה ביחד) · WASD ממשיכים לרוץ · Q יוצרים';
+        ? tr('ציירו באוויר · בחרו מה מציירים (אפשר כמה ביחד) · האגודל ממשיך לרוץ', 'Draw in the air · pick what you\'re drawing (you can pick several) · your thumb keeps running')
+        : tr('ציירו באוויר · 1–5 או למעלה: מה מציירים (אפשר כמה ביחד) · WASD ממשיכים לרוץ · Q יוצרים', 'Draw in the air · 1–5 or up: what you\'re drawing (you can pick several) · WASD to keep running · Q to make it');
     // (what was chosen and is not in the drawing yet: on a line of its own)
     this.noteEl.textContent = has && R && R.cat && R.note ? R.note : '';
     if (has && !PR && !PW && !PG) {
       if (!R || !R.cat) {
         this.nameEl.textContent = '…';
-        this.statsEl.textContent = R && R.why ? R.why : 'עוד קצת';
+        this.statsEl.textContent = R && R.why ? R.why : tr('עוד קצת', 'A little more');
       } else {
         this.nameEl.textContent = (this.force ? '✎ ' : R.remembered ? '★ ' : '') + R.name;
         // (gear that needs its place: why it would not go here, before the ink is spent)
         const why = this.cannotMake(R);
         // (ROADMAP 11.40: from the catalog - the lines still to draw, or how it would come out)
         const say = R.cat !== 'bp' ? statLine(R) : this.notYetSay(R, false) || GRADE_WORD[R.grade];
-        this.statsEl.textContent = why ? `⚠ ${why}` : `${say} · ${cost} דיו`;
+        this.statsEl.textContent = why ? `⚠ ${why}` : tr(`${say} · ${cost} דיו`, `${say} · ${cost} ink`);
         this.nowhere = !!why;
       }
       // what else it could be (the network's next guesses), and the rest of the list
@@ -2129,8 +2205,8 @@ export class FreeDraw {
       // (ROADMAP 11.37: not sure of it - said, so that the other guesses are seen; remembered from
       // before - said too)
       const unsure = R && R.cat && !this.force && !R.remembered && R.net && R.net.best && R.net.best[1] < 0.55;
-      const lead = R && R.remembered ? '<span class="fd-unsure">★ כמו שציירתם קודם · לא זה?</span>' : unsure ? '<span class="fd-unsure">לא בטוח — אולי:</span>' : '';
-      this.altsEl.innerHTML = lead + alts.map((a) => `<button class="fd-chip" data-k="${a.key}">${a.name}?</button>`).join('') + '<button class="fd-chip more" data-k="…">עוד…</button>';
+      const lead = R && R.remembered ? tr('<span class="fd-unsure">★ כמו שציירתם קודם · לא זה?</span>', '<span class="fd-unsure">★ As you drew it before · not this?</span>') : unsure ? tr('<span class="fd-unsure">לא בטוח — אולי:</span>', '<span class="fd-unsure">Not sure — maybe:</span>') : '';
+      this.altsEl.innerHTML = lead + alts.map((a) => `<button class="fd-chip" data-k="${a.key}">${a.name}?</button>`).join('') + tr('<button class="fd-chip more" data-k="…">עוד…</button>', '<button class="fd-chip more" data-k="…">More…</button>');
     }
     const short = R && R.cat && cost > level;
     if (PR || PW) this.nowhere = false;
@@ -2139,10 +2215,10 @@ export class FreeDraw {
     const notYet = !!(R && R.cat === 'bp' && !R.ready);
     // (from the catalog, on a phone: short - the tag by the drawing names it - so the tools keep their width)
     const terse = !!(R && R.cat === 'bp' && game.touch);
-    this.makeBtn.textContent = short ? 'אין מספיק דיו' : nowhere ? 'אין כאן מקום' : notYet ? (terse ? 'עוד לא…' : `עוד לא ${R.name}`) : R && R.cat ? (terse ? '✓ צרו!' : `✓ ${R.name}!`) : PR ? 'עוד לא זז' : '✓ צרו!';
+    this.makeBtn.textContent = short ? tr('אין מספיק דיו', 'Not enough ink') : nowhere ? tr('אין כאן מקום', 'No room here') : notYet ? (terse ? tr('עוד לא…', 'Not yet…') : tr(`עוד לא ${R.name}`, `Not ${R.name} yet`)) : R && R.cat ? (terse ? tr('✓ צרו!', '✓ Make it!') : `✓ ${R.name}!`) : PR ? tr('עוד לא זז', 'Doesn\'t move yet') : tr('✓ צרו!', '✓ Make it!');
     this.makeBtn.classList.toggle('off', !R || !R.cat || short || nowhere || notYet);
     if (this.carOpen) {
-      this.makeBtn.textContent = '▶ לנסוע';
+      this.makeBtn.textContent = tr('▶ לנסוע', '▶ Drive');
       this.makeBtn.classList.remove('off');
     }
     if (ink) {
@@ -2442,7 +2518,7 @@ export class FreeDraw {
       game.audio.play('meh', 0.5);
     };
     if (!R || !R.cat) {
-      shake(!this.strokes.length ? 'עוד לא צויר כלום — ציירו נשק, רכב או ציוד' : R && R.why ? R.why : 'זה עוד לא נראה כמו כלום — עוד כמה קווים');
+      shake(!this.strokes.length ? tr('עוד לא צויר כלום — ציירו נשק, רכב או ציוד', 'Nothing drawn yet — draw a weapon, a ride or gear') : R && R.why ? R.why : tr('זה עוד לא נראה כמו כלום — עוד כמה קווים', 'That doesn\'t look like anything yet — a few more lines'));
       return;
     }
     const p = game.player;
@@ -2457,7 +2533,7 @@ export class FreeDraw {
     }
     const ink = game.ink;
     if (ink && ink.level < R.cost) {
-      shake(`אין מספיק דיו (צריך ${R.cost}) — הדיו חוזר לאט, או בקבוק מחנות כלי כתיבה`);
+      shake(tr(`אין מספיק דיו (צריך ${R.cost}) — הדיו חוזר לאט, או בקבוק מחנות כלי כתיבה`, `Not enough ink (you need ${R.cost}) — ink comes back slowly, or buy a bottle at a stationery shop`));
       if (ink.el) {
         ink.el.classList.remove('flash');
         void ink.el.offsetWidth;
@@ -2527,8 +2603,8 @@ export class FreeDraw {
       this.found.add(k);
       n += comboReward(k);
     }
-    if (game.money) game.money.earn(n, 'שילוב חדש');
-    game.hud.toast(`🏆 שילוב חדש: ${fresh.map(comboName).join(', ')}! +${fmt(n)}`, 'good', 3.6);
+    if (game.money) game.money.earn(n, tr('שילוב חדש', 'New combo'));
+    game.hud.toast(tr(`🏆 שילוב חדש: ${fresh.map(comboName).join(', ')}! +${fmt(n)}`, `🏆 New combo: ${fresh.map(comboName).join(', ')}! +${fmt(n)}`), 'good', 3.6);
     game.audio.play('cheer', 0.5);
   }
 
@@ -2620,8 +2696,8 @@ export class FreeDraw {
     if (v.kind === 'balloon') v.pos.y = Math.max(0, groundHeight(v.pos.x, v.pos.z));
     V.add(v);
     const frame = makeFrame(game.camera, v.pos, so.q, 1, box);
-    const getIn = game.touch ? 'כפתור הרכב הירוק — לעלות' : 'E — לעלות';
-    const say = this.farBoat ? `${v.label} מחכה לכם במים, ליד החוף` : `${v.label}! ${getIn}`;
+    const getIn = game.touch ? tr('כפתור הרכב הירוק — לעלות', 'The green car button — get in') : tr('E — לעלות', 'E — get in');
+    const say = this.farBoat ? tr(`${v.label} מחכה לכם במים, ליד החוף`, `${v.label} is waiting for you in the water, by the shore`) : `${v.label}! ${getIn}`;
     this.farBoat = false;
     game.materialize.begin({ frame, root: v.group, vehicle: v, onReal: () => game.hud.toast(say, 'good', 3) });
     v.strokes = this.strokes.map((s) => s.p);
@@ -2646,7 +2722,7 @@ export class FreeDraw {
     if (k === 'parachute') {
       return this.toHero(canopyModel(R.grade, R.colors), where, 'back', () => {
         game.player.parachute = { grade: R.grade, colours: R.colors.length ? R.colors : null };
-        game.hud.toast(game.touch ? 'יש לכם מצנח! בקפיצה מגובה הוא נפתח לבד, או בכפתור הקפיצה' : 'יש לכם מצנח! בקפיצה מגובה הוא נפתח לבד, או ברווח', 'good', 3.6);
+        game.hud.toast(game.touch ? tr('יש לכם מצנח! בקפיצה מגובה הוא נפתח לבד, או בכפתור הקפיצה', 'You\'ve got a parachute! Jump from up high and it opens by itself, or with the jump button') : tr('יש לכם מצנח! בקפיצה מגובה הוא נפתח לבד, או ברווח', 'You\'ve got a parachute! Jump from up high and it opens by itself, or with Space'), 'good', 3.6);
         game.audio.play('cheer', 0.6);
       });
     }
@@ -2677,7 +2753,7 @@ export class FreeDraw {
     if (E.cat === 'weapon' && E.kind === 'shield') {
       const free = { s: E.strokes.map((s) => ({ p: s.p, c: s.c })), force: 'g:shield', cats: ['gear'] };
       game.weapons.setOff(E.def, 'good', buildWeapon(E), free);
-      game.hud.toast(`ו${E.def.name} ביד השנייה: חוסם ${Math.round(E.def.block * 100)}% מפגיעה מלפנים`, 'good', 3);
+      game.hud.toast(tr(`ו${E.def.name} ביד השנייה: חוסם ${Math.round(E.def.block * 100)}% מפגיעה מלפנים`, `And ${E.def.name} in the other hand: blocks ${Math.round(E.def.block * 100)}% of hits from the front`), 'good', 3);
       return true;
     }
     if (E.cat === 'gear') return this.makeGear(E, where);
@@ -2741,36 +2817,36 @@ export class FreeDraw {
     const t = game.touch;
     const M = v.modes || {};
     const tips = [];
-    if (v.canLift) tips.push(M.plane && !M.copter && !M.balloon ? (t ? 'במהירות, ▲: להמריא' : 'במהירות, רווח: להמריא') : t ? '▲: להמריא · ▼ עד למטה: לנחות' : 'רווח: להמריא · C עד למטה: לנחות');
-    else if (s.base === 'balloon') tips.push(t ? '▲: המבער, למעלה · ▼: למטה · הרוח לוקחת אותו' : 'רווח: המבער, למעלה · C: למטה · הרוח לוקחת אותו');
-    else if (s.base === 'copter') tips.push(t ? 'כפתורי ▲▼: גובה' : 'רווח ו־C: למעלה ולמטה');
-    else if (s.base === 'plane') tips.push(t ? `${game.settings.get('touchDrive') !== 'stick' ? 'גז' : 'קדימה'}: מצערת · צריך כביש ארוך להמראה` : 'W: מצערת · צריך כביש ארוך, ואז רווח: האף למעלה');
-    if (M.drive && M.boat) tips.push('נוסעים ישר לתוך המים ושטים, ועולים לחוף');
-    if (v.dive) tips.push(t ? '▼: לצלול, אף אחד לא רואה אתכם · ▲: לעלות' : 'C: לצלול, אף אחד לא רואה אתכם · רווח: לעלות');
-    if (v.spring && !v.canLift) tips.push(s.kind === 'skate' ? (t ? '▲: קפיצה' : 'רווח: קפיצה') : t ? '▲: קפיצה על הקפיץ' : 'רווח: קפיצה על הקפיץ');
-    if (v.chute) tips.push('המצנח: נוחת לאט מכל גובה');
-    if (v.armor) tips.push('משוריין: פגיעות כואבות לו פחות');
+    if (v.canLift) tips.push(M.plane && !M.copter && !M.balloon ? (t ? tr('במהירות, ▲: להמריא', 'At speed, ▲: take off') : tr('במהירות, רווח: להמריא', 'At speed, Space: take off')) : t ? tr('▲: להמריא · ▼ עד למטה: לנחות', '▲: take off · ▼ all the way: land') : tr('רווח: להמריא · C עד למטה: לנחות', 'Space: take off · C all the way: land'));
+    else if (s.base === 'balloon') tips.push(t ? tr('▲: המבער, למעלה · ▼: למטה · הרוח לוקחת אותו', '▲: the burner, up · ▼: down · the wind takes it') : tr('רווח: המבער, למעלה · C: למטה · הרוח לוקחת אותו', 'Space: the burner, up · C: down · the wind takes it'));
+    else if (s.base === 'copter') tips.push(t ? tr('כפתורי ▲▼: גובה', '▲▼ buttons: height') : tr('רווח ו־C: למעלה ולמטה', 'Space and C: up and down'));
+    else if (s.base === 'plane') tips.push(t ? tr(`${game.settings.get('touchDrive') !== 'stick' ? 'גז' : 'קדימה'}: מצערת · צריך כביש ארוך להמראה`, `${game.settings.get('touchDrive') !== 'stick' ? tr('גז', 'gas') : tr('קדימה', 'forward')}: throttle · it needs a long road to take off`) : tr('W: מצערת · צריך כביש ארוך, ואז רווח: האף למעלה', 'W: throttle · it needs a long road, then Space: nose up'));
+    if (M.drive && M.boat) tips.push(tr('נוסעים ישר לתוך המים ושטים, ועולים לחוף', 'Drive straight into the water and sail, then drive up onto the beach'));
+    if (v.dive) tips.push(t ? tr('▼: לצלול, אף אחד לא רואה אתכם · ▲: לעלות', '▼: dive, nobody can see you · ▲: surface') : tr('C: לצלול, אף אחד לא רואה אתכם · רווח: לעלות', 'C: dive, nobody can see you · Space: surface'));
+    if (v.spring && !v.canLift) tips.push(s.kind === 'skate' ? (t ? tr('▲: קפיצה', '▲: jump') : tr('רווח: קפיצה', 'Space: jump')) : t ? tr('▲: קפיצה על הקפיץ', '▲: bounce on the spring') : tr('רווח: קפיצה על הקפיץ', 'Space: bounce on the spring'));
+    if (v.chute) tips.push(tr('המצנח: נוחת לאט מכל גובה', 'The parachute: floats down slowly from any height'));
+    if (v.armor) tips.push(tr('משוריין: פגיעות כואבות לו פחות', 'Armored: hits hurt it less'));
     // (ROADMAP 11.10: made of parts - each barrel fires; its parachute opens when you say)
-    if (v.turrets && v.turrets.length > 1) tips.push(t ? `ירי: כל ${v.turrets.length} הקנים` : `קליק (להחזיק): יורים מכל ${v.turrets.length} הקנים`);
-    else if (v.turret) tips.push(v.gunType === 'mg' ? (t ? 'ירי: המקלע' : 'קליק (להחזיק): המקלע') : t ? 'ירי: התותח' : 'קליק: התותח');
-    else if (s.base === 'copter') tips.push(t ? 'ירי: מטוסי נייר' : 'קליק: מטוסי נייר');
-    if (v.paraP) tips.unshift(t ? 'באוויר, כפתור המצנח: הוא נפתח' : 'באוויר, G: המצנח נפתח');
-    if (v.ram) tips.push('הלהב מקדימה: ניגוח');
+    if (v.turrets && v.turrets.length > 1) tips.push(t ? tr(`ירי: כל ${v.turrets.length} הקנים`, `Fire: all ${v.turrets.length} barrels`) : tr(`קליק (להחזיק): יורים מכל ${v.turrets.length} הקנים`, `Click (hold): fire all ${v.turrets.length} barrels`));
+    else if (v.turret) tips.push(v.gunType === 'mg' ? (t ? tr('ירי: המקלע', 'Fire: the machine gun') : tr('קליק (להחזיק): המקלע', 'Click (hold): the machine gun')) : t ? tr('ירי: התותח', 'Fire: the cannon') : tr('קליק: התותח', 'Click: the cannon'));
+    else if (s.base === 'copter') tips.push(t ? tr('ירי: מטוסי נייר', 'Fire: paper planes') : tr('קליק: מטוסי נייר', 'Click: paper planes'));
+    if (v.paraP) tips.unshift(t ? tr('באוויר, כפתור המצנח: הוא נפתח', 'In the air, the parachute button: it opens') : tr('באוויר, G: המצנח נפתח', 'In the air, G: the parachute opens'));
+    if (v.ram) tips.push(tr('הלהב מקדימה: ניגוח', 'The blade in front: ramming'));
     // (ROADMAP 11.12: what its parts are where they are)
-    if ((s.tracks || []).length) tips.unshift('זחלים: מסתובב במקום ודורס מכוניות בדרך');
-    if (s.hover) tips.unshift('רחפת: עוברת מהכביש למים בלי לעצור — ומחליקה בפניות');
-    if (s.spring && s.spring.kick) tips.push(t ? '▲: זינוק קדימה' : 'רווח: זינוק קדימה');
-    if (v.bumper) tips.push('פגוש הקפיץ: מעיף את מי שנתקלים בו');
-    if (v.blades && v.blades.side) tips.push('להבי הצד: מי שעוברים לידו נחתך');
-    if ((s.guns || []).some((gn) => gn.giant)) tips.push('התותח הענק: כל ירייה הודפת אחורה');
-    if (v.roofDrive) tips.push('גלגלי הגג: אם מתהפכים — ממשיכים לנסוע');
-    else if (s.handling && s.handling.tipA) tips.push(t ? 'גבוה וצר — בפנייה חדה מתהפך. ▲: להפוך בחזרה' : 'גבוה וצר — בפנייה חדה מתהפך. רווח: להפוך בחזרה');
+    if ((s.tracks || []).length) tips.unshift(tr('זחלים: מסתובב במקום ודורס מכוניות בדרך', 'Tracks: turns on the spot and runs over cars in its way'));
+    if (s.hover) tips.unshift(tr('רחפת: עוברת מהכביש למים בלי לעצור — ומחליקה בפניות', 'Hovercraft: goes from road to water without stopping — and slides in the turns'));
+    if (s.spring && s.spring.kick) tips.push(t ? tr('▲: זינוק קדימה', '▲: a leap forward') : tr('רווח: זינוק קדימה', 'Space: a leap forward'));
+    if (v.bumper) tips.push(tr('פגוש הקפיץ: מעיף את מי שנתקלים בו', 'The spring bumper: sends flying whoever it bumps into'));
+    if (v.blades && v.blades.side) tips.push(tr('להבי הצד: מי שעוברים לידו נחתך', 'The side blades: whoever passes by gets cut'));
+    if ((s.guns || []).some((gn) => gn.giant)) tips.push(tr('התותח הענק: כל ירייה הודפת אחורה', 'The giant cannon: every shot pushes it back'));
+    if (v.roofDrive) tips.push(tr('גלגלי הגג: אם מתהפכים — ממשיכים לנסוע', 'Roof wheels: if it flips — it keeps driving'));
+    else if (s.handling && s.handling.tipA) tips.push(t ? tr('גבוה וצר — בפנייה חדה מתהפך. ▲: להפוך בחזרה', 'Tall and narrow — it flips in a sharp turn. ▲: flip it back') : tr('גבוה וצר — בפנייה חדה מתהפך. רווח: להפוך בחזרה', 'Tall and narrow — it flips in a sharp turn. Space: flip it back'));
     // (a phone: its turbo button over the gas - or the stick all the way, with the stick in the settings)
-    if (s.jets.length && s.base === 'car') tips.push(!t ? 'Shift: טורבו מהסילון' : game.settings.get('touchDrive') !== 'stick' ? 'טורבו מהסילון: הכפתור מעל הגז' : 'ג׳ויסטיק עד הסוף: טורבו');
+    if (s.jets.length && s.base === 'car') tips.push(!t ? tr('Shift: טורבו מהסילון', 'Shift: turbo from the jet') : game.settings.get('touchDrive') !== 'stick' ? tr('טורבו מהסילון: הכפתור מעל הגז', 'Turbo from the jet: the button above the gas') : tr('ג׳ויסטיק עד הסוף: טורבו', 'Joystick all the way: turbo'));
     // (ROADMAP 11.15: what its parts do together - first of all)
-    if (v.stomp) tips.unshift(t ? 'נחיתה מועכת: ▲ לקפוץ — והנחיתה הודפת את מי שסביב' : 'נחיתה מועכת: רווח לקפוץ — והנחיתה הודפת את מי שסביב');
+    if (v.stomp) tips.unshift(t ? tr('נחיתה מועכת: ▲ לקפוץ — והנחיתה הודפת את מי שסביב', 'Crushing landing: ▲ to jump — and the landing knocks back everyone around') : tr('נחיתה מועכת: רווח לקפוץ — והנחיתה הודפת את מי שסביב', 'Crushing landing: Space to jump — and the landing knocks back everyone around'));
     if (v.combos) tips.unshift('🏆 ' + v.combos.map(comboName).join(' · '));
-    else if (s.glide && !v.canLift) tips.push('הכנפיים: אחרי קפיצה מרמפה הוא גולש');
+    else if (s.glide && !v.canLift) tips.push(tr('הכנפיים: אחרי קפיצה מרמפה הוא גולש', 'The wings: after a jump off a ramp it glides'));
     if (tips.length) game.hud.toast(tips.slice(0, 3).join(' · '), 'info', 4);
   }
 

@@ -1,3 +1,4 @@
+import { tr } from '../../core/lang.js';
 // (v5, ROADMAP 11.17) The mainland across the bay: the plan of it, and nothing built yet.
 //
 // The island (South Beach) is where the city began. Across the bay, to the west, the city goes on
@@ -38,38 +39,38 @@ export const ISLAND_X = -238;
 // north-south: x, half the road, the sidewalk, from z0 to z1 (west of the bayfront, east to west)
 const AVE_X = [-700, -790, -880, -970, -1060, -1150, -1240, -1330, -1420, -1510, -1600, -1690, -1780, -1870];
 const AVE_NAMES = [
-  ['שדרות המפרץ', 'Bayfront Blvd'],
-  ['שדרות מיאמי', 'Miami Ave'],
-  ['השדרה השנייה', '2nd Ave'],
-  ['שדרות הנמל', 'Harbor Ave'],
-  ['שדרות הנהר', 'River Ave'],
-  ['שדרות קורל וויי', 'Coral Way'],
-  ['שדרות לה ז\'ון', 'Le Jeune Ave'],
-  ['שדרות ויין', 'Vine Ave'],
-  ['שדרות ווסטרן', 'Western Ave'],
-  ['שדרות לה בריאה', 'La Brea Ave'],
-  ['שדרות פיירפקס', 'Fairfax Ave'],
-  ['שדרות קרסנט', 'Crescent Ave'],
-  ['שדרות קניון', 'Canyon Ave'],
-  ['שדרות הדקלים', 'Palm Ave'],
+  [tr('שדרות המפרץ', 'Bayfront Blvd'), 'Bayfront Blvd'],
+  [tr('שדרות מיאמי', 'Miami Ave'), 'Miami Ave'],
+  [tr('השדרה השנייה', '2nd Ave'), '2nd Ave'],
+  [tr('שדרות הנמל', 'Harbor Ave'), 'Harbor Ave'],
+  [tr('שדרות הנהר', 'River Ave'), 'River Ave'],
+  [tr('שדרות קורל וויי', 'Coral Way'), 'Coral Way'],
+  [tr('שדרות לה ז\'ון', 'Le Jeune Ave'), 'Le Jeune Ave'],
+  [tr('שדרות ויין', 'Vine Ave'), 'Vine Ave'],
+  [tr('שדרות ווסטרן', 'Western Ave'), 'Western Ave'],
+  [tr('שדרות לה בריאה', 'La Brea Ave'), 'La Brea Ave'],
+  [tr('שדרות פיירפקס', 'Fairfax Ave'), 'Fairfax Ave'],
+  [tr('שדרות קרסנט', 'Crescent Ave'), 'Crescent Ave'],
+  [tr('שדרות קניון', 'Canyon Ave'), 'Canyon Ave'],
+  [tr('שדרות הדקלים', 'Palm Ave'), 'Palm Ave'],
 ];
 // east-west: z, from x0 to x1 (north to south; 15th and 5th Street come over the causeways)
 const STREET_Z = [-1195, -1059, -923, -787, -651, -515, -379, -243, -107, 29, 165, 301, 437, 540];
 const STREET_NAMES = [
-  ['דרך הגבעות', 'Hillside Dr'],
-  ['רחוב פרנקלין', 'Franklin St'],
-  ['רחוב 36', '36th St'],
-  ['שדרות אינקווד', 'Inkwood Blvd'],
-  ['רחוב 29', '29th St'],
-  ['רחוב 20', '20th St'],
-  ['דרך הגשר', 'Causeway Blvd'],
-  ['רחוב 11', 'NE 11th St'],
-  ['שדרות השקיעה', 'Sunset Blvd'],
-  ['רחוב פלאגלר', 'Flagler St'],
-  ['קאייה אוצ\'ו', 'Calle Ocho'],
-  ['רחוב 5', '5th St'],
-  ['רחוב 13 דרום', 'SW 13th St'],
-  ['טיילת החוף', 'Ocean Front Walk'],
+  [tr('דרך הגבעות', 'Hillside Dr'), 'Hillside Dr'],
+  [tr('רחוב פרנקלין', 'Franklin St'), 'Franklin St'],
+  [tr('רחוב 36', '36th St'), '36th St'],
+  [tr('שדרות אינקווד', 'Inkwood Blvd'), 'Inkwood Blvd'],
+  [tr('רחוב 29', '29th St'), '29th St'],
+  [tr('רחוב 20', '20th St'), '20th St'],
+  [tr('דרך הגשר', 'Causeway Blvd'), 'Causeway Blvd'],
+  [tr('רחוב 11', '11th Street'), 'NE 11th St'],
+  [tr('שדרות השקיעה', 'Sunset Blvd'), 'Sunset Blvd'],
+  [tr('רחוב פלאגלר', 'Flagler St'), 'Flagler St'],
+  [tr('קאייה אוצ\'ו', 'Calle Ocho'), 'Calle Ocho'],
+  [tr('רחוב 5', '5th Street'), '5th St'],
+  [tr('רחוב 13 דרום', 'SW 13th St'), 'SW 13th St'],
+  [tr('טיילת החוף', 'Ocean Front Walk'), 'Ocean Front Walk'],
 ];
 
 export const M_AVES = AVE_X.map((x, i) => ({
@@ -109,8 +110,8 @@ export const M_STREETS = STREET_Z.map((z, j) => {
 // Venetian rises in a long hump over the channel (the boats pass under it), its two towers and
 // their cables over it; the MacArthur stays low, a small hump in the middle
 export const CAUSEWAYS = [
-  { z: -379, half: 6, x0: SHORE_X, x1: ISLAND_X - 24, mid: -456, rise: 0, run: 182, name: 'גשר ונציאן', sign: 'Venetian Causeway', towers: [-405, -507] },
-  { z: 301, half: 6, x0: SHORE_X, x1: ISLAND_X - 24, mid: -456, rise: 0, run: 150, name: 'גשר מקארתור', sign: 'MacArthur Causeway', towers: null },
+  { z: -379, half: 6, x0: SHORE_X, x1: ISLAND_X - 24, mid: -456, rise: 0, run: 182, name: tr('גשר ונציאן', 'Venetian Bridge'), sign: 'Venetian Causeway', towers: [-405, -507] },
+  { z: 301, half: 6, x0: SHORE_X, x1: ISLAND_X - 24, mid: -456, rise: 0, run: 150, name: tr('גשר מקארתור', 'MacArthur Bridge'), sign: 'MacArthur Causeway', towers: null },
 ];
 
 // the height of a causeway's deck at x (0 at both shores)
@@ -122,14 +123,14 @@ export function deckY(c, x) {
 
 // the districts: where they are, what they are called (Hebrew for the map, English on the signs)
 export const DISTRICTS = [
-  { id: 'paintwood', x0: -1060, x1: SHORE_X, z0: NORTH_Z, z1: -651, name: 'רובע הציורים', sign: 'Paintwood' },
-  { id: 'downtown', x0: -1060, x1: SHORE_X, z0: -651, z1: 29, name: 'דאונטאון', sign: 'Downtown' },
-  { id: 'brickton', x0: -1060, x1: SHORE_X, z0: 29, z1: SEA_Z, name: 'בריקטון', sign: 'Brickton' },
-  { id: 'havana', x0: -1420, x1: -1060, z0: -243, z1: 437, name: 'ליטל הוואנה', sign: 'Little Havana' },
-  { id: 'inkwood', x0: -1600, x1: -1060, z0: NORTH_Z, z1: -243, name: 'אינקווד', sign: 'Inkwood' },
-  { id: 'belcrest', x0: WEST_X, x1: -1600, z0: NORTH_Z, z1: -243, name: 'בל קרסט', sign: 'Bel Crest' },
-  { id: 'valley', x0: WEST_X, x1: -1420, z0: -243, z1: 437, name: 'עמק השמש', sign: 'Sun Valley' },
-  { id: 'beach', x0: WEST_X, x1: -1060, z0: 437, z1: SEA_Z, name: 'חוף פליסייד', sign: 'Palisade Beach' },
+  { id: 'paintwood', x0: -1060, x1: SHORE_X, z0: NORTH_Z, z1: -651, name: tr('רובע הציורים', 'The Painting Quarter'), sign: 'Paintwood' },
+  { id: 'downtown', x0: -1060, x1: SHORE_X, z0: -651, z1: 29, name: tr('דאונטאון', 'Downtown'), sign: 'Downtown' },
+  { id: 'brickton', x0: -1060, x1: SHORE_X, z0: 29, z1: SEA_Z, name: tr('בריקטון', 'Brickton'), sign: 'Brickton' },
+  { id: 'havana', x0: -1420, x1: -1060, z0: -243, z1: 437, name: tr('ליטל הוואנה', 'Little Havana'), sign: 'Little Havana' },
+  { id: 'inkwood', x0: -1600, x1: -1060, z0: NORTH_Z, z1: -243, name: tr('אינקווד', 'Inkwood'), sign: 'Inkwood' },
+  { id: 'belcrest', x0: WEST_X, x1: -1600, z0: NORTH_Z, z1: -243, name: tr('בל קרסט', 'Bel Crest'), sign: 'Bel Crest' },
+  { id: 'valley', x0: WEST_X, x1: -1420, z0: -243, z1: 437, name: tr('עמק השמש', 'Sun Valley'), sign: 'Sun Valley' },
+  { id: 'beach', x0: WEST_X, x1: -1060, z0: 437, z1: SEA_Z, name: tr('חוף פליסייד', 'Palisade Beach'), sign: 'Palisade Beach' },
 ];
 const DISTRICT_BY_ID = Object.fromEntries(DISTRICTS.map((d) => [d.id, d]));
 export function districtOf(x, z) {
@@ -263,27 +264,27 @@ function rowOf(z) {
 // ------------------------------------------------------------------ the places
 // the places the city is known for: where they are (their block), what they are
 export const PLACES = [
-  { id: 'marina', kind: 'mall', name: 'Marina Market', heb: 'מרינה מרקט', at: [-668, -330] },
+  { id: 'marina', kind: 'mall', name: 'Marina Market', heb: tr('מרינה מרקט', 'Marina Market'), at: [-668, -330] },
   // (mega: the giant one, world/mainland/megamall.js - the map shows it big, at any zoom; at its dome,
   // in the middle of its three blocks)
-  { id: 'galleria', kind: 'mall', mega: true, name: 'Bayview Mall', heb: 'ביי־ויו מול', block: '1,8', at: [-835, -37] },
-  { id: 'lanes', kind: 'mall', name: 'Via Inkwell', heb: 'ויה אינקוול — הסמטאות של ביי־ויו מול', block: '1,9', at: [-835, 97] },
-  { id: 'starlight', kind: 'mall', name: 'Starlight Center', heb: 'מרכז סטארלייט', block: '6,3' },
-  { id: 'valleyplaza', kind: 'mall', name: 'Valley Plaza', heb: 'ואלי פלאזה', block: '9,9' },
-  { id: 'neonink', kind: 'club', name: 'NEON INK', heb: 'מועדון ניאון אינק', block: '2,3' },
-  { id: 'velvet', kind: 'club', name: 'BLUE VELVET', heb: 'מועדון בלו ולווט', block: '7,2' },
-  { id: 'plume', kind: 'gourmet', name: 'Maison Plume', heb: 'מזון פלום', block: '1,10' },
-  { id: 'arena', kind: 'arena', name: 'Bayfront Arena', heb: 'ארנת המפרץ', block: '0,7' },
-  { id: 'palace', kind: 'theatre', name: 'Inkwood Palace', heb: 'תיאטרון אינקווד פאלאס', block: '9,3' },
+  { id: 'galleria', kind: 'mall', mega: true, name: 'Bayview Mall', heb: tr('ביי־ויו מול', 'Bayview Mall'), block: '1,8', at: [-835, -37] },
+  { id: 'lanes', kind: 'mall', name: 'Via Inkwell', heb: tr('ויה אינקוול — הסמטאות של ביי־ויו מול', 'Via Inkwell'), block: '1,9', at: [-835, 97] },
+  { id: 'starlight', kind: 'mall', name: 'Starlight Center', heb: tr('מרכז סטארלייט', 'Starlight Center'), block: '6,3' },
+  { id: 'valleyplaza', kind: 'mall', name: 'Valley Plaza', heb: tr('ואלי פלאזה', 'Valley Plaza'), block: '9,9' },
+  { id: 'neonink', kind: 'club', name: 'NEON INK', heb: tr('מועדון ניאון אינק', 'Neon Ink'), block: '2,3' },
+  { id: 'velvet', kind: 'club', name: 'BLUE VELVET', heb: tr('מועדון בלו ולווט', 'Blue Velvet'), block: '7,2' },
+  { id: 'plume', kind: 'gourmet', name: 'Maison Plume', heb: tr('מזון פלום', 'Maison Plume'), block: '1,10' },
+  { id: 'arena', kind: 'arena', name: 'Bayfront Arena', heb: tr('ארנת המפרץ', 'Bayfront Arena'), block: '0,7' },
+  { id: 'palace', kind: 'theatre', name: 'Inkwood Palace', heb: tr('תיאטרון אינקווד פאלאס', 'Inkwood Palace'), block: '9,3' },
   // (ROADMAP 12.7: the hall on the block's east part, its doors on the avenue - world/mainland/halls.js)
-  { id: 'arcade', kind: 'arcade', name: 'INK ARCADE', heb: 'ארקייד INK ARCADE', at: [-1346, -991] },
+  { id: 'arcade', kind: 'arcade', name: 'INK ARCADE', heb: tr('ארקייד INK ARCADE', 'Ink Arcade'), at: [-1346, -991] },
   // (ROADMAP 12.8: on the bay, its doors on Bayfront Boulevard)
-  { id: 'casino', kind: 'casino', name: 'PALACE OF INK', heb: 'הקזינו PALACE OF INK', at: [-724, -311] },
-  { id: 'sign', kind: 'landmark', name: 'INKWOOD', heb: 'השלט על הגבעה', at: [-1330, -1300] },
-  { id: 'observatory', kind: 'landmark', name: 'Inkwood Observatory', heb: 'מצפה הכוכבים', at: [-1160, -1300] },
-  { id: 'lighthouse', kind: 'landmark', name: 'Point Lighthouse', heb: 'המגדלור של הלשון', at: [-760, 690] },
-  { id: 'pier', kind: 'landmark', name: 'Palisade Pier', heb: 'המזח של פליסייד', at: [-1430, 700] },
-  { id: 'pointpark', kind: 'park', name: 'South Point Park', heb: 'פארק הלשון', at: [-810, 500] },
+  { id: 'casino', kind: 'casino', name: 'PALACE OF INK', heb: tr('הקזינו PALACE OF INK', 'Palace of Ink'), at: [-724, -311] },
+  { id: 'sign', kind: 'landmark', name: 'INKWOOD', heb: tr('השלט על הגבעה', 'Inkwood'), at: [-1330, -1300] },
+  { id: 'observatory', kind: 'landmark', name: 'Inkwood Observatory', heb: tr('מצפה הכוכבים', 'Inkwood Observatory'), at: [-1160, -1300] },
+  { id: 'lighthouse', kind: 'landmark', name: 'Point Lighthouse', heb: tr('המגדלור של הלשון', 'Point Lighthouse'), at: [-760, 690] },
+  { id: 'pier', kind: 'landmark', name: 'Palisade Pier', heb: tr('המזח של פליסייד', 'Palisade Pier'), at: [-1430, 700] },
+  { id: 'pointpark', kind: 'park', name: 'South Point Park', heb: tr('פארק הלשון', 'South Point Park'), at: [-810, 500] },
 ];
 export function placeBlock(p) {
   if (!p.block) return null;
@@ -432,8 +433,8 @@ export function mainlandHeight(x, z) {
 
 export function mDistrictName(x, z) {
   const d = districtOf(x, z);
-  if (z > BEACH_Z && d) return 'החוף';
-  if (x > SHORE_X - 45 && x <= SHORE_X && z < BEACH_Z) return 'חזית המפרץ';
+  if (z > BEACH_Z && d) return tr('החוף', 'The beach');
+  if (x > SHORE_X - 45 && x <= SHORE_X && z < BEACH_Z) return tr('חזית המפרץ', 'Bayfront');
   for (const c of CAUSEWAYS) if (Math.abs(z - c.z) < 20 && x > SHORE_X && x < ISLAND_X) return c.name;
   const r = mRoadAt(x, z);
   if (r && r.ave) return r.ave.name;

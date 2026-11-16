@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { fmt } from './money.js';
 import { makeSurface, canvasTexture } from '../render/materials.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 16.4) The counters of the shops on the market's plan that serve (world/corner.js): the
 // deli's, the pharmacy's - and the corner shop's slush machine turning, the blood pressure chair, the
 // scratch cards at the till. A part of the shop's life (game/shoplife.js ShopLife: this.counter).
@@ -39,14 +40,14 @@ const SAY = {
 
 // what the deli makes, what the pharmacist hands over the counter (prices in whole dollars)
 const DELI = [
-  { id: 'sandwich', heb: 'סנדוויץ׳ פסטרמה', name: 'pastrami on rye', price: 7, hp: 40 },
-  { id: 'club', heb: 'כריך הודו', name: 'turkey club', price: 6, hp: 35 },
-  { id: 'cheese', heb: 'גבינה שוויצרית, חצי ליברה', name: 'Swiss, half a pound', price: 4, hp: 15 },
-  { id: 'salami', heb: 'סלמי, חצי ליברה', name: 'salami, half a pound', price: 5, hp: 18 },
+  { id: 'sandwich', heb: tr('סנדוויץ׳ פסטרמה', 'pastrami on rye'), name: 'pastrami on rye', price: 7, hp: 40 },
+  { id: 'club', heb: tr('כריך הודו', 'turkey club'), name: 'turkey club', price: 6, hp: 35 },
+  { id: 'cheese', heb: tr('גבינה שוויצרית, חצי ליברה', 'Swiss, half a pound'), name: 'Swiss, half a pound', price: 4, hp: 15 },
+  { id: 'salami', heb: tr('סלמי, חצי ליברה', 'salami, half a pound'), name: 'salami, half a pound', price: 5, hp: 18 },
 ];
 const RX = [
-  { id: 'kit', heb: 'ערכת עזרה ראשונה', price: 12 },
-  { id: 'pain', heb: 'משככי כאבים', price: 6 },
+  { id: 'kit', heb: tr('ערכת עזרה ראשונה', 'A first aid kit'), price: 12 },
+  { id: 'pain', heb: tr('משככי כאבים', 'Painkillers'), price: 6 },
 ];
 // (what a scratch card pays: most nothing, now and then a little, once in a while a lot)
 const PRIZES = [[0.55, 0], [0.8, 2], [0.92, 5], [0.975, 20], [0.995, 100], [1, 500]];
@@ -491,10 +492,10 @@ export class CounterLife {
     const M = this.M;
     const near = (m, r) => m && Math.hypot(m.x - P.pos.x, m.z - P.pos.z) < r;
     if (this.sitting) return null;
-    if (near(M['bp.seat'], 1.1) && !this.bp) return { counter: 'bp', label: 'E — למדוד לחץ דם' };
+    if (near(M['bp.seat'], 1.1) && !this.bp) return { counter: 'bp', label: tr('E — למדוד לחץ דם', 'E — check your blood pressure') };
     if (this.mine) return null;
-    if (this.kind === 'deli' && (near(M['deli.cust'], 1.5) || near(M['deli.ticket'], 1.0))) return { counter: 'deli', label: 'E — להזמין בדלי' };
-    if (this.kind === 'rx' && near(M['rx.cust'], 1.5)) return { counter: 'rx', label: 'E — לבקש מהרוקחת' };
+    if (this.kind === 'deli' && (near(M['deli.cust'], 1.5) || near(M['deli.ticket'], 1.0))) return { counter: 'deli', label: tr('E — להזמין בדלי', 'E — order at the deli') };
+    if (this.kind === 'rx' && near(M['rx.cust'], 1.5)) return { counter: 'rx', label: tr('E — לבקש מהרוקחת', 'E — ask the pharmacist') };
     return null;
   }
 
@@ -506,8 +507,8 @@ export class CounterLife {
     const k = this.clerk();
     if (k && k.alive) this.say(k, pick(deli ? SAY.hiDeli : SAY.hiRx), 0.9);
     const choices = list.map((it) => ({ label: `${it.heb} · ${fmt(it.price)}`, fn: () => this.orderMine(it) }));
-    choices.push({ label: 'לא עכשיו', fn: null });
-    g.dialog.show(deli ? 'הדלי' : 'הרוקחת', deli ? 'מה לפרוס לכם?' : 'במה אפשר לעזור?', choices);
+    choices.push({ label: tr('לא עכשיו', 'Not now'), fn: null });
+    g.dialog.show(deli ? tr('הדלי', 'The deli') : tr('הרוקחת', 'The pharmacist'), deli ? tr('מה לפרוס לכם?', 'What can I slice for you?') : tr('במה אפשר לעזור?', 'How can I help?'), choices);
   }
 
   orderMine(item) {
@@ -515,7 +516,7 @@ export class CounterLife {
     const q = { v: null, item, num: this.kind === 'deli' ? this.nextNum++ : 0 };
     this.queue.push(q);
     this.mine = { q, item, t: 0 };
-    g.hud.toast(this.kind === 'deli' ? `לקחתם מספר: ${q.num % 100}. מחכים שיקראו לכם` : `הרוקחת מביאה ${item.heb}`, 'info', 2.6);
+    g.hud.toast(this.kind === 'deli' ? tr(`לקחתם מספר: ${q.num % 100}. מחכים שיקראו לכם`, `You took a number: ${q.num % 100}. Wait to be called`) : tr(`הרוקחת מביאה ${item.heb}`, `The pharmacist brings ${item.heb}`), 'info', 2.6);
   }
 
   updateMine(dt) {
@@ -534,7 +535,7 @@ export class CounterLife {
         const sys = Math.round((hurt ? 138 : 112) + Math.random() * 14);
         const dia = Math.round((hurt ? 88 : 70) + Math.random() * 10);
         const pulse = Math.round((hurt ? 96 : 64) + Math.random() * 14);
-        g.hud.toast(`לחץ דם ${sys}/${dia}, דופק ${pulse}${hurt ? ' — קצת גבוה, כדאי לנוח' : ' — הכול תקין'}`, hurt ? 'info' : 'good', 3.2);
+        g.hud.toast(tr(`לחץ דם ${sys}/${dia}, דופק ${pulse}${hurt ? ' — קצת גבוה, כדאי לנוח' : ' — הכול תקין'}`, `Blood pressure ${sys}/${dia}, pulse ${pulse}${hurt ? tr(' — קצת גבוה, כדאי לנוח', ' — a bit high, you should rest') : tr(' — הכול תקין', ' — all normal')}`), hurt ? 'info' : 'good', 3.2);
         this.life.open.sound('beep', 0.5, 8);
       }
       if (S.t > 5.5 || !P.seat) {
@@ -557,7 +558,7 @@ export class CounterLife {
       you.arrange();
       this.cur = null;
       this.mine = null;
-      g.hud.toast(`${m.item.heb} בידיים — משלמים בקופה`, 'good', 2.6);
+      g.hud.toast(tr(`${m.item.heb} בידיים — משלמים בקופה`, `${m.item.heb} in hand — pay at the till`), 'good', 2.6);
       return;
     }
     // (called, and you are not there for long: the next)
@@ -583,7 +584,7 @@ export class CounterLife {
     this.bp = 'you';
     P.seat = { x: s.x, z: s.z, yaw: s.yaw };
     this.sitting = { t: 0 };
-    this.game.hud.toast('מכניסים את היד לשרוול…', 'info', 2);
+    this.game.hud.toast(tr('מכניסים את היד לשרוול…', 'Putting your arm in the cuff…'), 'info', 2);
   }
 
   // the corner shop's till: a scratch card bought, scratched there and then
@@ -591,23 +592,23 @@ export class CounterLife {
     const g = this.game;
     const M = g.money;
     const k = this.life.open.keeper;
-    if (M && !M.pay(2, 'כרטיס גירוד')) {
-      M.refuse('כרטיס גירוד', 2, false, () => {});
+    if (M && !M.pay(2, tr('כרטיס גירוד', 'Scratch card'))) {
+      M.refuse(tr('כרטיס גירוד', 'Scratch card'), 2, false, () => {});
       return;
     }
     if (k && k.alive) this.say(k, pick(SAY.luck), 1);
     this.life.open.sound('till', 0.35, 10);
     const r = Math.random();
     const prize = PRIZES.find(([p]) => r < p)[1];
-    g.dialog.show('כרטיס גירוד · LUCKY INK', 'מגרדים את הכסף…', [{ label: 'לגרד!', fn: () => {
+    g.dialog.show(tr('כרטיס גירוד · LUCKY INK', 'Scratch card · LUCKY INK'), tr('מגרדים את הכסף…', 'Scratching off the money…'), [{ label: tr('לגרד!', 'Scratch it!'), fn: () => {
       g.audio.play('rubber', 0.6);
       if (prize > 0) {
-        if (M) M.earn(prize, 'זכייה בכרטיס גירוד');
+        if (M) M.earn(prize, tr('זכייה בכרטיס גירוד', 'Scratch card win'));
         g.audio.play(prize >= 100 ? 'cheer' : 'coins', 0.7);
-        g.dialog.show('כרטיס גירוד', prize >= 100 ? `זכיתם ב־${fmt(prize)}! הקופאי לא מאמין` : `זכיתם ב־${fmt(prize)}`, [{ label: 'יש!', fn: null }]);
+        g.dialog.show(tr('כרטיס גירוד', 'Scratch card'), prize >= 100 ? tr(`זכיתם ב־${fmt(prize)}! הקופאי לא מאמין`, `You won ${fmt(prize)}! The cashier can't believe it`) : tr(`זכיתם ב־${fmt(prize)}`, `You won ${fmt(prize)}`), [{ label: tr('יש!', 'Yes!'), fn: null }]);
         if (k && k.alive) this.say(k, prize >= 100 ? 'No way! Congratulations!' : 'Hey, a winner!', 1);
       } else {
-        g.dialog.show('כרטיס גירוד', 'לא זכיתם הפעם', [{ label: 'עוד אחד ($2)', fn: () => this.scratch() }, { label: 'מספיק', fn: null }]);
+        g.dialog.show(tr('כרטיס גירוד', 'Scratch card'), tr('לא זכיתם הפעם', 'No win this time'), [{ label: tr('עוד אחד ($2)', 'Another one ($2)'), fn: () => this.scratch() }, { label: tr('מספיק', 'Enough'), fn: null }]);
       }
     } }]);
   }

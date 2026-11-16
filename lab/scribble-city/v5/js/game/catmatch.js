@@ -1,6 +1,7 @@
 import { look, picture, ready } from './sketchnet.js';
 import { BLUEPRINTS } from './blueprints.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 11.40) Drawing from the catalog. On foot the pen no longer makes whatever a sketch
 // looks like: what is drawn is one of the catalog's things (the blueprints, game/blueprints.js), the
 // ones shown by the pen as they are drawn (ui/freedraw.js, the legend) - weapons, vehicles, gear.
@@ -14,7 +15,7 @@ const H = 16;
 
 // the categories, in the legend's order; and their things, in theirs
 export const SHELVES = ['weapon', 'vehicle', 'gear'];
-export const SHELF_NAME = { weapon: 'נשק', vehicle: 'רכבים', gear: 'ציוד' };
+export const SHELF_NAME = { weapon: tr('נשק', 'Weapons'), vehicle: tr('רכבים', 'Rides'), gear: tr('ציוד', 'Gear') };
 export const shelfOf = (bp) => (bp.kind === 'weapon' ? 'weapon' : bp.kind === 'vehicle' ? 'vehicle' : 'gear');
 export function shelfIds(shelf) {
   return Object.values(BLUEPRINTS)
@@ -199,10 +200,10 @@ export function drawnWhole(m, have) {
   return have >= m.need && m.cov >= 0.4 && m.prec >= 0.35;
 }
 
-// (ROADMAP 11.43) a guess is said only with something to guess from: half its lines, a part in
-// three of it traced, and like it
+// (ROADMAP 11.43) a guess is said only with something to guess from: six in ten of its lines (ROADMAP 25: it was half - a
+// thing of four lines was named after two, whatever they were the start of), a part in three of it traced, and like it
 export function tooEarly(m, have) {
-  return have < Math.max(2, Math.ceil(m.n * 0.5)) || m.hit < Math.ceil(m.n * 0.4) || m.score < MATCH_MIN;
+  return have < Math.max(2, Math.ceil(m.n * 0.6)) || m.hit < Math.ceil(m.n * 0.4) || m.score < MATCH_MIN;
 }
 
 // (ROADMAP 11.43) a thing picked (tapped in the legend) is made only if that is what is drawn: as
@@ -211,7 +212,13 @@ export function tooEarly(m, have) {
 export const PICK_SLACK = 0.05;
 
 // the drawing (strokes: [{ p, raw? }]) against the things ids: { best, list (likeliest first), have
-// (its lines) } - each { id, score, need, n }; null with nothing drawn
+// (its lines) } - each { id, score, need, n }; null with nothing drawn.
+// (ROADMAP 25, the owner's word: "things keep popping up as if we tried to draw them, while drawing something else
+// altogether" - tools/test-catalog.mjs) Which is likeliest: how alike (score) and how much of the drawing lies on the thing's
+// own lines (prec), and how much of the thing it covers (cov). By the score alone, a picture much like a dozen things - a
+// long body, a few small parts - was named after whichever of them came out a hair ahead: a thing of a few lines lit up
+// half way through the drawing of another, and a house, a sun or two lines were named a weapon or a car. The score itself
+// is unchanged: it is still how well the thing comes out (gradeOf)
 export function matchCatalog(strokes, ids) {
   const S = strokes.map((s) => s.raw || s.p).filter((p) => p && p.length > 1);
   if (!S.length || !ids.length) return null;
@@ -230,9 +237,9 @@ export function matchCatalog(strokes, ids) {
     const pc = Math.exp(-Math.abs(d.n - n) / n);
     const score = 0.55 * ci + 0.2 * cp + 0.15 * as + 0.1 * pc;
     const { hit, cov, prec } = covered(d, t);
-    list.push({ id, score, ci, cp, as, pc, need, n, hit, cov, prec });
+    list.push({ id, score, rank: score + prec + 0.3 * cov, ci, cp, as, pc, need, n, hit, cov, prec });
   }
-  list.sort((a, b) => b.score - a.score);
+  list.sort((a, b) => b.rank - a.rank);
   return { best: list[0], list, have: d.n };
 }
 

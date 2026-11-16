@@ -3,6 +3,7 @@ import { makeSurface } from '../render/materials.js';
 import { Kit, linC } from './items.js';
 import { damp } from '../core/util.js';
 
+import { tr } from '../core/lang.js';
 // The parachute you drew from its board: jump out of the helicopter (or off anything high) and
 // it opens over you - on its own when the fall gets fast, or at a press of the jump button - and
 // you drift down over the city, steering, until your feet touch the street again.
@@ -76,7 +77,7 @@ export class Parachute {
     this.open = true;
     this.k = 0;
     game.audio.play('chute');
-    game.hud.toast(game.touch ? 'המצנח נפתח! מנווטים עם הג׳ויסטיק' : 'המצנח נפתח! מנווטים עם WASD', 'good', 2.4);
+    game.hud.toast(game.touch ? tr('המצנח נפתח! מנווטים עם הג׳ויסטיק', 'The parachute opened! Steer with the joystick') : tr('המצנח נפתח! מנווטים עם WASD', 'The parachute opened! Steer with WASD'), 'good', 2.4);
   }
 
   // feet on the ground: the canopy sinks and folds away

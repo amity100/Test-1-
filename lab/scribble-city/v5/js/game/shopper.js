@@ -3,6 +3,7 @@ import { fmt } from './money.js';
 import { wear, ACCS } from './wardrobe.js';
 import { newsFlash } from './techlife.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 16.2) You in a shop of the new kind (game/shoplife.js), as its customers are.
 //
 // A thing taken off the shelf and looked at - its maker, its price - put back, or kept: into a basket
@@ -122,27 +123,27 @@ export class Shopper {
     // (ROADMAP 16.5: a shoe on the wall is a sample - your size comes out of the stock room)
     if (this.life.tries && s && s.what === 'shoe' && this.life.tries.seats.length + (this.life.marks.stock ? 1 : 0) > 0) {
       if (this.life.tries.mine) return null;
-      return `לבקש את המידה שלי מהמחסן · ${fmt(price)}`;
+      return tr(`לבקש את המידה שלי מהמחסן · ${fmt(price)}`, `Ask for my size from the stockroom · ${fmt(price)}`);
     }
     // (ROADMAP 16.7: a scent bought - the shops charmed: a tenth off for ten minutes)
     price = charmed(this.game, price);
-    if (f === 'tech') return `לקחת אחד באריזה לקופה · ${fmt(price)}`;
+    if (f === 'tech') return tr(`לקחת אחד באריזה לקופה · ${fmt(price)}`, `Take a boxed one to the till · ${fmt(price)}`);
     // (ROADMAP 16.7: a perfumery's, an optician's - the one on the shelf is to try: yours from the back)
-    if (f === 'perfume') return `לקחת אחד באריזה לקופה · ${fmt(price)}`;
-    if (f === 'optics') return `לקחת לקופה, בנרתיק · ${fmt(price)}`;
+    if (f === 'perfume') return tr(`לקחת אחד באריזה לקופה · ${fmt(price)}`, `Take a boxed one to the till · ${fmt(price)}`);
+    if (f === 'optics') return tr(`לקחת לקופה, בנרתיק · ${fmt(price)}`, `Take it to the till, in a case · ${fmt(price)}`);
     // (ROADMAP 16.8: a florist's bunch - wrapped as a bouquet at the counter)
-    if (f === 'florist') return `זר כזה, עטוף, לקופה · ${fmt(price)}`;
-    if (f === 'books' || f === 'records' || f === 'toys') return `לקחת לקופה · ${fmt(price)}`;
-    if (f === 'jewel') return `לשמור לי בקופה · ${fmt(price)}`;
-    if (f === 'fashion') return `לקחת לקופה · ${fmt(price)}`;
-    return `לשים בסל · ${fmt(price)}`;
+    if (f === 'florist') return tr(`זר כזה, עטוף, לקופה · ${fmt(price)}`, `A bouquet like this, wrapped, to the till · ${fmt(price)}`);
+    if (f === 'books' || f === 'records' || f === 'toys') return tr(`לקחת לקופה · ${fmt(price)}`, `Take it to the till · ${fmt(price)}`);
+    if (f === 'jewel') return tr(`לשמור לי בקופה · ${fmt(price)}`, `Keep it for me at the till · ${fmt(price)}`);
+    if (f === 'fashion') return tr(`לקחת לקופה · ${fmt(price)}`, `Take it to the till · ${fmt(price)}`);
+    return tr(`לשים בסל · ${fmt(price)}`, `Put it in the basket · ${fmt(price)}`);
   }
 
   // the line under the product in its dialog: what you have already
   have() {
     if (!this.items.length) return '';
     const f = this.life.prof.flow;
-    const where = this.life.prof.baskets ? 'בסל' : f === 'jewel' ? 'שמור בקופה' : 'בידיים';
+    const where = this.life.prof.baskets ? tr('בסל', 'In the basket') : f === 'jewel' ? tr('שמור בקופה', 'Kept at the till') : tr('בידיים', 'In your hands');
     return ` · ${where}: ${this.items.length} (${fmt(this.total())})`;
   }
 
@@ -159,7 +160,7 @@ export class Shopper {
       boxed = true;
     }
     price = charmed(this.game, price);
-    const rec = { it, s: boxed ? null : s, what: s.what, price, heb: L.prof.heb[s.what] || 'מוצר', look: s.look };
+    const rec = { it, s: boxed ? null : s, what: s.what, price, heb: L.prof.heb[s.what] || tr('מוצר', 'A product'), look: s.look };
     it.price = price;
     if (L.prof.boxed) {
       // (the one on the table is the shop's, to try: a boxed one from the back for you)
@@ -229,7 +230,7 @@ export class Shopper {
     if (this.pv || !this.items.length) return;
     const k = L.open.keeper;
     if (!k || !k.alive || k.owner !== L.open || !L.open.open) {
-      g.hud.toast('אין אף אחד בקופה', 'info', 2);
+      g.hud.toast(tr('אין אף אחד בקופה', 'There\'s nobody at the till'), 'info', 2);
       return;
     }
     const pv = (this.pv = { c: this.me, me: true, L: { st: 'unload', t: 0, k: 0, n: 0, got: [], reach: new THREE.Vector3(), reachL: new THREE.Vector3(), basket: this.basket } });
@@ -237,7 +238,7 @@ export class Shopper {
       // (behind whoever is being served: you are next)
       pv.L.st = 'queue';
       L.queue.unshift(pv);
-      g.hud.toast('אתם הבאים בתור', 'info', 1.8);
+      g.hud.toast(tr('אתם הבאים בתור', 'You\'re next in line'), 'info', 1.8);
       L.say(k, pick(LINES.wait2), 0.9);
     } else L.payer = pv;
   }
@@ -329,11 +330,11 @@ export class Shopper {
     const g = this.game;
     const total = this.total();
     const n = this.items.length;
-    const name = L.shop.name || 'קופה';
+    const name = L.shop.name || tr('קופה', 'Till');
     const what = summary(this.items.map((r) => r.heb));
-    g.dialog.show(name, `${what}. לתשלום: ${fmt(total)}`, [
+    g.dialog.show(name, tr(`${what}. לתשלום: ${fmt(total)}`, `${what}. To pay: ${fmt(total)}`), [
       {
-        label: `לשלם בכרטיס · ${fmt(total)}`,
+        label: tr(`לשלם בכרטיס · ${fmt(total)}`, `Pay by card · ${fmt(total)}`),
         fn: () => {
           const M = g.money;
           if (M && !M.pay(total, name)) {
@@ -346,7 +347,7 @@ export class Shopper {
           L.stats.bought += n;
         },
       },
-      { label: 'לוותר', fn: () => this.leaveTill(true) },
+      { label: tr('לוותר', 'Never mind'), fn: () => this.leaveTill(true) },
     ]);
   }
 
@@ -420,26 +421,26 @@ export class Shopper {
       // a phone: its camera's zoom - the blueprints' boards photographed from almost twice as far
       if (r.what === 'phone' && !P.zoomCam) {
         P.zoomCam = true;
-        tech.push('מצלמה עם זום: מצלמים שלטי שרטוט מרחוק');
+        tech.push(tr('מצלמה עם זום: מצלמים שלטי שרטוט מרחוק', 'A zoom camera: photograph blueprint signs from far away'));
       }
       // a laptop: the police's radio on it - their cars and officers on your map, always
       if (r.what === 'laptop' && !P.copRadio) {
         P.copRadio = true;
-        tech.push('רדיו משטרתי במחשב: השוטרים תמיד במפה');
+        tech.push(tr('רדיו משטרתי במחשב: השוטרים תמיד במפה', 'A police radio in the computer: the cops are always on the map'));
       }
       // (ROADMAP 16.7) a scent: for ten minutes the shops charmed - a tenth off; glasses on your face
       // (clear: a steadier aim - game/skills.js; dark: a face the police know less - game/lose.js);
       // pomade: the hair slicked back - a new look
       if (r.what === 'perfume' || r.what === 'tester') {
         P.charmT = Math.max(P.charmT || 0, 600);
-        if (!tech.includes('בושם: 10% הנחה בחנויות ל־10 דקות')) tech.push('בושם: 10% הנחה בחנויות ל־10 דקות');
+        if (!tech.includes(tr('בושם: 10% הנחה בחנויות ל־10 דקות', 'Perfume: 10% off in shops for 10 minutes'))) tech.push(tr('בושם: 10% הנחה בחנויות ל־10 דקות', 'Perfume: 10% off in shops for 10 minutes'));
       }
       if (r.what === 'glasses' || r.what === 'sunglasses') {
         const L = P.fig.look;
         L.face = L.face || {};
         L.face.glasses = r.what === 'sunglasses' ? 'shades' : 'round';
         worn = r.heb;
-        if (r.what === 'glasses') tech.push('משקפיים: מכוונים יציב יותר');
+        if (r.what === 'glasses') tech.push(tr('משקפיים: מכוונים יציב יותר', 'Glasses: steadier aim'));
         if (g.streetlife && g.streetlife.saveHero) g.streetlife.saveHero();
       }
       if (r.what === 'pomade') {
@@ -455,7 +456,7 @@ export class Shopper {
       // music in your ears; a bear, a bouquet: a gift to give at a bar; a spray can, a can of paint:
       // your car repainted when the police lose sight of you; tape, a tool: your car patched up when it
       // is nearly a wreck (game/hobbylife.js carCare)
-      if (r.what === 'book' && !tech.includes('מדריך העיר')) {
+      if (r.what === 'book' && !tech.includes(tr('מדריך העיר', 'City guide'))) {
         const p = P.pos;
         let best = null;
         let bd = Infinity;
@@ -468,40 +469,40 @@ export class Shopper {
           }
         }
         if (best && g.gps) {
-          g.gps.set(best.x, best.z, 'שלט שרטוט');
-          tech.push('מדריך העיר');
-          tech.push(`השלט הקרוב מסומן במפה (${Math.round(bd)} מ')`);
+          g.gps.set(best.x, best.z, tr('שלט שרטוט', 'Blueprint sign'));
+          tech.push(tr('מדריך העיר', 'City guide'));
+          tech.push(tr(`השלט הקרוב מסומן במפה (${Math.round(bd)} מ')`, `The nearest sign is marked on the map (${Math.round(bd)} m)`));
         }
       }
       if (r.what === 'record') {
-        if (!P.music) tech.push('מוזיקה באוזניים: מתעייפים פחות בריצה');
+        if (!P.music) tech.push(tr('מוזיקה באוזניים: מתעייפים פחות בריצה', 'Music in your ears: you get less tired running'));
         P.music = true;
       }
       if (r.what === 'toy' || r.what === 'flowers') gifts.push({ what: r.what, heb: r.heb });
       if (r.what === 'spray' || r.what === 'paint') {
         P.paintCans = (P.paintCans || 0) + 1;
-        tech.push(`צבע לרכב (${P.paintCans}): כשהמשטרה מאבדת אתכם ברכב, הוא נצבע מחדש`);
+        tech.push(tr(`צבע לרכב (${P.paintCans}): כשהמשטרה מאבדת אתכם ברכב, הוא נצבע מחדש`, `Car paint (${P.paintCans}): when the police lose you in a car, it gets repainted`));
       }
       if (r.what === 'tape' || r.what === 'tool') {
         P.tape = (P.tape || 0) + 1;
-        tech.push(`ערכת תיקון (${P.tape}): כשהרכב כמעט הרוס, הוא מתוקן`);
+        tech.push(tr(`ערכת תיקון (${P.tape}): כשהרכב כמעט הרוס, הוא מתוקן`, `Repair kit (${P.tape}): when the car is almost wrecked, it gets repaired`));
       }
       // (ROADMAP 16.9) soap: what you have on, clean - its paint, its holes gone; a pair of dumbbells:
       // stronger (more life); water: breath again and a little life
       if (r.what === 'soap' && P.fig) {
         P.fig.paintT = 0;
         if (P.fig.holes) P.fig.holes.length = 0;
-        tech.push('הבגדים נקיים: בלי כתמים ובלי חורים');
+        tech.push(tr('הבגדים נקיים: בלי כתמים ובלי חורים', 'Clean clothes: no stains and no holes'));
       }
       if (r.what === 'dumbbell' && P.maxHp < 150) {
         P.maxHp = Math.min(150, P.maxHp + 5);
         P.hp = Math.min(P.maxHp, P.hp + 5);
-        tech.push(`משקולות בבית: מקסימום חיים ${P.maxHp}`);
+        tech.push(tr(`משקולות בבית: מקסימום חיים ${P.maxHp}`, `Dumbbells at home: max health ${P.maxHp}`));
       }
       if (r.what === 'water') {
         if (g.skills) g.skills.stamina = 100;
         P.hp = Math.min(P.maxHp, P.hp + 5);
-        tech.push('נשימה חזרה: ריצה מלאה, +5 חיים');
+        tech.push(tr('נשימה חזרה: ריצה מלאה, +5 חיים', 'Second wind: full stamina, +5 health'));
       }
       // headphones: on your head, music as you go - a run tires you less
       if (r.what === 'headphones') {
@@ -510,7 +511,7 @@ export class Shopper {
         } catch (e) {
           void e;
         }
-        if (!P.music) tech.push('מוזיקה באוזניים: מתעייפים פחות בריצה');
+        if (!P.music) tech.push(tr('מוזיקה באוזניים: מתעייפים פחות בריצה', 'Music in your ears: you get less tired running'));
         P.music = true;
       }
       // (clothes: put on - the last of each kind)
@@ -546,18 +547,18 @@ export class Shopper {
       lost = true;
     }
     const fx = [
-      hp ? `+${hp} חיים` : null,
-      coffee ? `מהירות ל־${coffee} שניות` : null,
-      energy ? `ריצה בלי להתעייף ל־${energy} שניות` : null,
-      pain ? `פחות נזק ל־${pain} שניות` : null,
-      kits ? `ערכת עזרה ראשונה בכיס (${P.kits})` : null,
-      run ? 'נעלי ריצה: ספרינט מהיר ב־10%' : null,
-      lost ? 'השוטרים לא מזהים אתכם: כוכב אחד פחות' : null,
-      gifts.length ? 'אפשר לתת במתנה בבר' : null,
+      hp ? tr(`+${hp} חיים`, `+${hp} health`) : null,
+      coffee ? tr(`מהירות ל־${coffee} שניות`, `Speed for ${coffee} seconds`) : null,
+      energy ? tr(`ריצה בלי להתעייף ל־${energy} שניות`, `Run without getting tired for ${energy} seconds`) : null,
+      pain ? tr(`פחות נזק ל־${pain} שניות`, `Less damage for ${pain} seconds`) : null,
+      kits ? tr(`ערכת עזרה ראשונה בכיס (${P.kits})`, `A first aid kit in your pocket (${P.kits})`) : null,
+      run ? tr('נעלי ריצה: ספרינט מהיר ב־10%', 'Running shoes: sprint 10% faster') : null,
+      lost ? tr('השוטרים לא מזהים אתכם: כוכב אחד פחות', 'The cops don\'t recognize you: one star less') : null,
+      gifts.length ? tr('אפשר לתת במתנה בבר', 'You can give it as a gift at the bar') : null,
       ...tech,
-      slick ? 'השיער מסורק לאחור: מראה חדש' : worn ? 'לבשתם את זה' : null,
+      slick ? tr('השיער מסורק לאחור: מראה חדש', 'Hair slicked back: a new look') : worn ? tr('לבשתם את זה', 'You put this on') : null,
     ].filter(Boolean).join(', ');
-    g.hud.toast(`${stolen ? 'גנבתם' : 'קניתם'}: ${summary(list.map((r) => r.heb))}${fx ? ` (${fx})` : ''}`, stolen ? 'bad' : 'good', 3);
+    g.hud.toast(`${stolen ? tr('גנבתם', 'You stole') : tr('קניתם', 'You bought')}: ${summary(list.map((r) => r.heb))}${fx ? ` (${fx})` : ''}`, stolen ? 'bad' : 'good', 3);
   }
 
   // ---------------------------------------------------------------- out of the door without paying
@@ -594,7 +595,7 @@ export class Shopper {
     newsFlash(g, { kind: 'steal', head: `SHOPLIFTER AT ${String(L.shop.name || 'A SHOP').toUpperCase()}`, sub: 'POLICE ASK FOR WITNESSES' });
     L.stats.stolen = (L.stats.stolen || 0) + list.length;
     this.use(list, true);
-    g.hud.toast(`יצאתם בלי לשלם (${fmt(value)}) — האזעקה בדלת צפצפה`, 'bad', 3.2);
+    g.hud.toast(tr(`יצאתם בלי לשלם (${fmt(value)}) — האזעקה בדלת צפצפה`, `You left without paying (${fmt(value)}) — the alarm at the door beeped`), 'bad', 3.2);
   }
 
   // ---------------------------------------------------------------- a gun in the shop
@@ -758,7 +759,7 @@ export class Shopper {
           R.ready = true;
           R.st = 'cower';
           R.t = 0;
-          g.hud.toast('השקית על הדלפק — קחו אותה', 'info', 2.5);
+          g.hud.toast(tr('השקית על הדלפק — קחו אותה', 'The bag is on the counter — take it'), 'info', 2.5);
         }
         break;
       }
@@ -788,8 +789,8 @@ export class Shopper {
       R.bag.at = { c: this.me, how: 'carried' };
       P.fig.carryL = 'bagHeld';
       L.shop.robbedT = g.time;
-      if (g.money) g.money.earn(R.cash, `שוד: ${L.shop.name || 'חנות'}`);
-      g.hud.toast(`לקחתם ${fmt(R.cash)} מהקופה — המשטרה בדרך`, 'bad', 3);
+      if (g.money) g.money.earn(R.cash, tr(`שוד: ${L.shop.name || 'חנות'}`, `Robbery: ${L.shop.name || tr('חנות', 'shop')}`));
+      g.hud.toast(tr(`לקחתם ${fmt(R.cash)} מהקופה — המשטרה בדרך`, `You took ${fmt(R.cash)} from the till — the police are on the way`), 'bad', 3);
       this.report();
     }
     if (!inside) {

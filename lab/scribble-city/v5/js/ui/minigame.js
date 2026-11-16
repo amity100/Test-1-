@@ -27,6 +27,7 @@
 import * as THREE from 'three';
 import { makeSurface, canvasTexture } from '../render/materials.js';
 
+import { tr } from '../core/lang.js';
 const KEYS = {
   ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'up', KeyW: 'up',
   ArrowDown: 'down', KeyS: 'down', Space: 'a', KeyJ: 'a', KeyK: 'b', ShiftLeft: 'b', ShiftRight: 'b',
@@ -84,7 +85,7 @@ export class MiniGames {
     const el = (this.el = document.createElement('div'));
     el.id = 'minigame';
     el.className = 'hidden';
-    el.innerHTML = `<div class="mg-touch"></div>
+    el.innerHTML = tr(`<div class="mg-touch"></div>
     <div class="mg-sheet paper-card">
       <div class="mg-head"><span class="mg-title"></span><span class="mg-status"></span><span class="mg-gap"></span><button class="ps-btn mg-quit">יציאה</button></div>
       <div class="mg-stage"><canvas></canvas></div>
@@ -92,7 +93,15 @@ export class MiniGames {
     </div>
     <div class="mg-bar"><span class="mg-title"></span><span class="mg-status"></span><button class="ps-btn mg-quit">יציאה</button></div>
     <div class="mg-pad mg-left"><button data-k="up">▲</button><button data-k="left">◀</button><button data-k="right">▶</button><button data-k="down">▼</button></div>
-    <div class="mg-pad mg-right"><button data-k="b">B</button><button data-k="a">A</button></div>`;
+    <div class="mg-pad mg-right"><button data-k="b">B</button><button data-k="a">A</button></div>`, `<div class="mg-touch"></div>
+    <div class="mg-sheet paper-card">
+      <div class="mg-head"><span class="mg-title"></span><span class="mg-status"></span><span class="mg-gap"></span><button class="ps-btn mg-quit">Leave</button></div>
+      <div class="mg-stage"><canvas></canvas></div>
+      <div class="mg-help"></div>
+    </div>
+    <div class="mg-bar"><span class="mg-title"></span><span class="mg-status"></span><button class="ps-btn mg-quit">Leave</button></div>
+    <div class="mg-pad mg-left"><button data-k="up">▲</button><button data-k="left">◀</button><button data-k="right">▶</button><button data-k="down">▼</button></div>
+    <div class="mg-pad mg-right"><button data-k="b">B</button><button data-k="a">A</button></div>`);
     document.body.appendChild(el);
     this.cv = el.querySelector('canvas');
     this.g = this.cv.getContext('2d');

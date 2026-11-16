@@ -6,6 +6,7 @@
 
 import { felt, text, chip, stack, card, button, inBox, shoe, sfx, GOLD } from './felt.js';
 
+import { tr } from '../../../core/lang.js';
 const value = (hand) => {
   let v = 0;
   let aces = 0;
@@ -36,9 +37,9 @@ const natural = (hand) => hand.length === 2 && value(hand) === 21;
 export class Blackjack {
   constructor(o = {}) {
     this.o = o;
-    this.title = `${o.name || 'BLACKJACK'} · בלאק ג׳ק`;
-    this.help = 'רווח: לחלק / קלף · B: לעמוד · למעלה: להכפיל · בהימור: חצים לשנות · Esc לצאת';
-    this.helpTouch = 'נוגעים בכפתורים שעל השולחן';
+    this.title = tr(`${o.name || 'BLACKJACK'} · בלאק ג׳ק`, `${o.name || 'BLACKJACK'} · blackjack`);
+    this.help = tr('רווח: לחלק / קלף · B: לעמוד · למעלה: להכפיל · בהימור: חצים לשנות · Esc לצאת', 'Space: deal / hit · B: stand · up: double · when betting: arrows to change · Esc to leave');
+    this.helpTouch = tr('נוגעים בכפתורים שעל השולחן', 'Tap the buttons on the table');
     this.pad = 'pad';
     this.pointer = true;
     this.bets = o.vip ? [100, 250, 500, 1000] : [5, 10, 25, 50, 100];

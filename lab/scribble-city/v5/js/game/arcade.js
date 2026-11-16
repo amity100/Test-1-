@@ -21,6 +21,7 @@ import { AirHockey, paintTable } from './minigames/arcade/hockey.js';
 import { ClawGame } from './minigames/arcade/claw.js';
 import { chip, bestOf } from './minigames/arcade/cab.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 12.7) INK ARCADE, on Inkwood Boulevard: a hall 32 by 52 metres of games, its face to
 // the avenue - the name in neon over a canopy of chasing bulbs, a giant joystick on the roof, the
 // games' posters lit beside the doors. Inside, dark and loud: forty upright cabinets in rows and an
@@ -574,7 +575,7 @@ export class Arcade {
   buildClaws(group) {
     const CM = clubMats();
     const TOY = [linC(1, 0.45, 0.7), linC(0.45, 0.9, 1), linC(1, 0.88, 0.4), linC(0.6, 1, 0.5), linC(0.75, 0.55, 1), linC(1, 0.6, 0.3)];
-    const NAMES = ['ארנב ורוד', 'דוב תכלת', 'אפרוח צהוב', 'צפרדע ירוקה', 'חתול סגול', 'שועל כתום'];
+    const NAMES = [tr('ארנב ורוד', 'Pink rabbit'), tr('דוב תכלת', 'Light blue bear'), tr('אפרוח צהוב', 'Yellow chick'), tr('צפרדע ירוקה', 'Green frog'), tr('חתול סגול', 'Purple cat'), tr('שועל כתום', 'Orange fox')];
     for (const c of this.claws) {
       const fr = frame(new Kit(), c.x, c.z, 0, c.n[0], c.n[1]);
       c.toys = [];
@@ -834,7 +835,7 @@ export class Arcade {
     if (inside && !this.welcomed) {
       this.welcomed = true;
       g.hud.big('INK ARCADE', 2200);
-      g.hud.toast(`כרטיסים: ${this.tickets}. משחקים במכונות, אוספים כרטיסים ומחליפים בפרסים בדלפק`, 'info', 4);
+      g.hud.toast(tr(`כרטיסים: ${this.tickets}. משחקים במכונות, אוספים כרטיסים ומחליפים בפרסים בדלפק`, `Tickets: ${this.tickets}. Play the machines, collect tickets and trade them for prizes at the counter`), 'info', 4);
     }
     if (!inside && d > 60) this.welcomed = false;
     const cam = g.camera.position;
@@ -981,17 +982,17 @@ export class Arcade {
     const p = this.game.player.pos;
     if (!this.inHall(p.x, p.z)) return null;
     const near = (s, r) => Math.hypot(p.x - s[0], p.z - s[2]) < r;
-    for (const c of this.cabs) if (near(c.stand, 0.55)) return { kind: 'cab', c, label: `E — לשחק ב־${GAMES[c.game].name} ($1)` };
-    for (const c of this.racers) if (near(c.stand, 0.85)) return { kind: 'racer', c, label: 'E — לשבת ב־INK RALLY ($2)' };
-    for (const pd of this.dance.pads) if (Math.hypot(p.x - pd[0], p.z - pd[2]) < 1.0) return { kind: 'dance', label: 'E — לרקוד ב־INK BEAT ($2)' };
-    for (const tb of this.tables) if (near(tb.stand, 0.9)) return { kind: 'hockey', tb, label: 'E — לשחק הוקי אוויר ($2)' };
-    for (const c of this.claws) if (near(c.stand, 0.6)) return { kind: 'claw', c, label: 'E — מכונת המנוף ($1)' };
+    for (const c of this.cabs) if (near(c.stand, 0.55)) return { kind: 'cab', c, label: tr(`E — לשחק ב־${GAMES[c.game].name} ($1)`, `E — play ${GAMES[c.game].name} ($1)`) };
+    for (const c of this.racers) if (near(c.stand, 0.85)) return { kind: 'racer', c, label: tr('E — לשבת ב־INK RALLY ($2)', 'E — sit in INK RALLY ($2)') };
+    for (const pd of this.dance.pads) if (Math.hypot(p.x - pd[0], p.z - pd[2]) < 1.0) return { kind: 'dance', label: tr('E — לרקוד ב־INK BEAT ($2)', 'E — dance on INK BEAT ($2)') };
+    for (const tb of this.tables) if (near(tb.stand, 0.9)) return { kind: 'hockey', tb, label: tr('E — לשחק הוקי אוויר ($2)', 'E — play air hockey ($2)') };
+    for (const c of this.claws) if (near(c.stand, 0.6)) return { kind: 'claw', c, label: tr('E — מכונת המנוף ($1)', 'E — the claw machine ($1)') };
     const C = PLAN.counter;
-    if (p.x > C.x0 && p.x < C.x1 && p.z > C.z0 - 1.6 && p.z < C.z0) return { kind: 'prizes', label: `E — דלפק הפרסים (${this.tickets} כרטיסים)` };
+    if (p.x > C.x0 && p.x < C.x1 && p.z > C.z0 - 1.6 && p.z < C.z0) return { kind: 'prizes', label: tr(`E — דלפק הפרסים (${this.tickets} כרטיסים)`, `E — the prize counter (${this.tickets} tickets)`) };
     const Pz = PLAN.pizza;
     if (p.x > Pz.x0 && p.x < Pz.x1 && p.z > Pz.z0 - 1.5 && p.z < Pz.z0) return { kind: 'pizza', label: 'E — PIXEL PIZZA' };
     const B = PLAN.booth;
-    if (Math.hypot(p.x - (B.x - 1.0), p.z - B.z) < 0.9) return { kind: 'booth', label: 'E — תא הצילום ($3)' };
+    if (Math.hypot(p.x - (B.x - 1.0), p.z - B.z) < 0.9) return { kind: 'booth', label: tr('E — תא הצילום ($3)', 'E — the photo booth ($3)') };
     return null;
   }
 
@@ -1063,8 +1064,8 @@ export class Arcade {
         if (r && r.prize) {
           this.keep({ kind: 'plush', name: r.prize, from: 'CLAW-SOME' });
           g.hud.big('YOU GOT IT!', 1800);
-          g.hud.toast(`תפסתם ${r.prize}! הוא נשמר באוסף הפרסים שלכם, לבית`, 'good', 3.5);
-        } else g.hud.toast('המנוף החליק... עוד ניסיון?', 'info', 2.5);
+          g.hud.toast(tr(`תפסתם ${r.prize}! הוא נשמר באוסף הפרסים שלכם, לבית`, `You caught ${r.prize}! It's kept in your prize collection, for home`), 'good', 3.5);
+        } else g.hud.toast(tr('המנוף החליק... עוד ניסיון?', 'The claw slipped... another try?'), 'info', 2.5);
       });
       return true;
     }
@@ -1073,9 +1074,9 @@ export class Arcade {
       return true;
     }
     if (tg.kind === 'pizza') {
-      const menu = [['משולש פיצה', 3, 20, [0.95, 0.7, 0.3]], ['נאצ׳וס עם גבינה', 4, 20, [1, 0.8, 0.3]], ['סלאשי כחול', 2, 10, [0.3, 0.6, 1]], ['פופקורן', 2, 10, [1, 0.95, 0.75]]];
+      const menu = [[tr('משולש פיצה', 'A slice of pizza'), 3, 20, [0.95, 0.7, 0.3]], [tr('נאצ׳וס עם גבינה', 'Nachos with cheese'), 4, 20, [1, 0.8, 0.3]], [tr('סלאשי כחול', 'Blue slushie'), 2, 10, [0.3, 0.6, 1]], [tr('פופקורן', 'Popcorn'), 2, 10, [1, 0.95, 0.75]]];
       g.dialog.show('PIXEL PIZZA', 'Fuel for the high score! What can I get you?', menu.map(([label, price, hp, colr]) => ({
-        label: `${label} (+${hp} חיים) · $${price}`,
+        label: tr(`${label} (+${hp} חיים) · $${price}`, `${label} (+${hp} health) · \$${price}`),
         fn: () => {
           if (!g.money || g.money.pay(price, label)) {
             const pl = g.player;
@@ -1083,7 +1084,7 @@ export class Arcade {
             pl.fig.belly = Math.min(1, pl.fig.belly + 0.2);
             pl.fig.bellyColor = colr;
             g.audio.play('coins', 0.5);
-            g.hud.toast(`${label}! +${hp} חיים`, 'good', 2);
+            g.hud.toast(tr(`${label}! +${hp} חיים`, `${label}! +${hp} health`), 'good', 2);
           } else g.money.refuse('PIXEL PIZZA', price);
         },
       })));
@@ -1097,7 +1098,7 @@ export class Arcade {
       this.boothFlash = 4;
       g.inkwell.after(2.4, () => (f.armsUp = 0));
       this.keep({ kind: 'photostrip', from: 'PHOTO INK' });
-      g.hud.toast('ארבעה פלאשים, ארבע פרצופים: רצועת התמונות נשמרה באוסף שלכם', 'good', 3);
+      g.hud.toast(tr('ארבעה פלאשים, ארבע פרצופים: רצועת התמונות נשמרה באוסף שלכם', 'Four flashes, four faces: the photo strip is kept in your collection'), 'good', 3);
       return true;
     }
     return false;
@@ -1123,18 +1124,18 @@ export class Arcade {
     this.tickets += n;
     save(TICKETS, this.tickets);
     g.audio.play('coins', 0.6);
-    g.hud.toast(`${name}: ${n} כרטיסים יצאו מהמכונה! (סה״כ ${this.tickets})`, 'good', 3);
+    g.hud.toast(tr(`${name}: ${n} כרטיסים יצאו מהמכונה! (סה״כ ${this.tickets})`, `${name}: ${n} tickets came out of the machine! (total ${this.tickets})`), 'good', 3);
     this.paintBoard();
   }
 
   prizeMenu() {
     const g = this.game;
-    const LIST = [['סוכריות דיו חמוצות (+15 חיים)', 25, 'candy'], ['מחזיק מפתחות של עט זוהר', 60, 'keychain'], ['כתם דיו מפרווה', 150, 'plush-blot'], ['מנורת PEN-MAN', 300, 'lamp'], ['מחק ענק מפרווה', 600, 'plush-eraser'], ['מכונת משחק קטנה לבית', 1500, 'mini-cabinet'], ['גביע הג׳ויסטיק המוזהב', 3000, 'trophy']];
+    const LIST = [[tr('סוכריות דיו חמוצות (+15 חיים)', 'Sour ink candies (+15 health)'), 25, 'candy'], [tr('מחזיק מפתחות של עט זוהר', 'A glowing pen keychain'), 60, 'keychain'], [tr('כתם דיו מפרווה', 'A fluffy ink blot'), 150, 'plush-blot'], [tr('מנורת PEN-MAN', 'A PEN-MAN lamp'), 300, 'lamp'], [tr('מחק ענק מפרווה', 'A fluffy giant eraser'), 600, 'plush-eraser'], [tr('מכונת משחק קטנה לבית', 'A little arcade machine for home'), 1500, 'mini-cabinet'], [tr('גביע הג׳ויסטיק המוזהב', 'The golden joystick trophy'), 3000, 'trophy']];
     g.dialog.show('PRIZES', `You have ${this.tickets} tickets. Pick a prize!`, LIST.map(([label, price, kind]) => ({
-      label: `${label} · ${price} כרטיסים`,
+      label: tr(`${label} · ${price} כרטיסים`, `${label} · ${price} tickets`),
       fn: () => {
         if (this.tickets < price) {
-          g.hud.toast(`חסרים ${price - this.tickets} כרטיסים. עוד כמה משחקים!`, 'info', 2.5);
+          g.hud.toast(tr(`חסרים ${price - this.tickets} כרטיסים. עוד כמה משחקים!`, `${price - this.tickets} tickets short. A few more games!`), 'info', 2.5);
           return;
         }
         this.tickets -= price;
@@ -1143,10 +1144,10 @@ export class Arcade {
         if (kind === 'candy') {
           const pl = g.player;
           pl.hp = Math.min(pl.maxHp, pl.hp + 15);
-          g.hud.toast('סוכריות חמוצות! +15 חיים', 'good', 2);
+          g.hud.toast(tr('סוכריות חמוצות! +15 חיים', 'Sour candies! +15 health'), 'good', 2);
         } else {
           this.keep({ kind, name: label, from: 'INK ARCADE' });
-          g.hud.toast(`${label}: שלכם! נשמר באוסף הפרסים, ויחכה בבית`, 'good', 3);
+          g.hud.toast(tr(`${label}: שלכם! נשמר באוסף הפרסים, ויחכה בבית`, `${label}: yours! Kept in your prize collection, and it'll be waiting at home`), 'good', 3);
         }
       },
     })));

@@ -13,6 +13,7 @@ import { BLUEPRINTS } from './blueprints.js';
 import { worldSay } from '../ui/freedraw.js';
 import { gearGone, parGone, isEarly } from './drawlock.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.25) The part pen: a category said, a thing drawn - the game knows which of them.
 //
 // The pen out in the car, a row of three: a weapon, something it can do, protection. Over it, what
@@ -55,7 +56,7 @@ export const TIP_MS = 1500;
 // (ROADMAP 11.27) a moment after one went on, the legend says how to put it right
 const MADE_MS = 3200;
 const CAT_NAME = CAT_NAMES;
-const NONE_SAY = { weapon: 'לא זוהה נשק', func: 'לא זוהה אמצעי תנועה', armor: 'לא זוהה אמצעי הגנה' };
+const NONE_SAY = { weapon: tr('לא זוהה נשק', 'No weapon recognized'), func: tr('לא זוהה אמצעי תנועה', 'No way of moving recognized'), armor: tr('לא זוהה אמצעי הגנה', 'No protection recognized') };
 // (ROADMAP 11.27) what tells each thing from the others as it is drawn - the tip's word for it
 const TELL = Object.fromEntries(Object.entries(CAT_ITEMS).map(([id, it]) => [id, it.tell]));
 const CAT_ICON = {
@@ -155,33 +156,33 @@ export function statOf(id, n, mass, top = 28) {
   switch (id) {
     case 'cannon': case 'mg': {
       const gun = gunOf({ r: n.r, len: n.len });
-      return { text: `נזק ${gun.dmg} · טווח ${gun.range} מ׳`, ok: true };
+      return { text: tr(`נזק ${gun.dmg} · טווח ${gun.range} מ׳`, `Damage ${gun.dmg} · range ${gun.range} m`), ok: true };
     }
-    case 'flamer': return { text: `טווח ${Math.round(clamp(6 + n.len * 4, 7, 18))} מ׳`, ok: true };
-    case 'bolt': return { text: `טווח ${Math.round(clamp(9 + n.size * 2, 9, 14))} מ׳`, ok: true };
-    case 'blades': return { text: `נזק ${Math.round(clamp(30 + n.len * 24, 30, 90))}`, ok: true };
+    case 'flamer': return { text: tr(`טווח ${Math.round(clamp(6 + n.len * 4, 7, 18))} מ׳`, `Range ${Math.round(clamp(6 + n.len * 4, 7, 18))} m`), ok: true };
+    case 'bolt': return { text: tr(`טווח ${Math.round(clamp(9 + n.size * 2, 9, 14))} מ׳`, `Range ${Math.round(clamp(9 + n.size * 2, 9, 14))} m`), ok: true };
+    case 'blades': return { text: tr(`נזק ${Math.round(clamp(30 + n.len * 24, 30, 90))}`, `Damage ${Math.round(clamp(30 + n.len * 24, 30, 90))}`), ok: true };
     case 'wing': {
       // (ROADMAP 11.26: wings lift it off - as fast as that, for how big they are)
       const v0 = takeoffOf(n, mass);
-      return v0 <= top * WING_TOP ? { text: `ממריאה ב־${Math.round(v0 * 3.6)} קמ״ש`, ok: true } : { text: 'קטנות מדי להמריא · גדולות יותר', ok: false };
+      return v0 <= top * WING_TOP ? { text: tr(`ממריאה ב־${Math.round(v0 * 3.6)} קמ״ש`, `Takes off at ${Math.round(v0 * 3.6)} km/h`), ok: true } : { text: tr('קטנות מדי להמריא · גדולות יותר', 'Too small to take off · bigger'), ok: false };
     }
     case 'balloon': {
       const k = clamp((n.d ** 3 * 0.32) / mass, 0.1, 3);
-      return k >= 1 ? { text: `הרמה ${pct(k)} ✓`, ok: true } : { text: `הרמה ${pct(k)} · גדול יותר`, ok: false };
+      return k >= 1 ? { text: tr(`הרמה ${pct(k)} ✓`, `Lift ${pct(k)} ✓`), ok: true } : { text: tr(`הרמה ${pct(k)} · גדול יותר`, `Lift ${pct(k)} · bigger`), ok: false };
     }
     case 'rotor': {
       const k = rotorLift(n, mass);
-      return k >= 1 ? { text: `הרמה ${pct(k)} ✓`, ok: true } : { text: `הרמה ${pct(k)} · גדול יותר`, ok: false };
+      return k >= 1 ? { text: tr(`הרמה ${pct(k)} ✓`, `Lift ${pct(k)} ✓`), ok: true } : { text: tr(`הרמה ${pct(k)} · גדול יותר`, `Lift ${pct(k)} · bigger`), ok: false };
     }
-    case 'prop': return { text: 'שטה במים · עד 14 מ׳/ש', ok: true };
-    case 'jet': return { text: `כוח ×${fmt(clamp(0.85 + n.len * 0.32, 0.9, 1.9))}`, ok: true };
-    case 'spring': return { text: `קפיצה ${fmt(clamp(6 + n.coils * 0.85 + n.len * 1.6, 7, 16) ** 2 / 40)} מ׳`, ok: true };
-    case 'chute': return { text: 'בנפילה נפתח', ok: true };
-    case 'armor': return { text: `סופג ${Math.round(clamp(0.25 + n.cover * 0.55, 0.25, 0.65) * 100)}% · כבד יותר`, ok: true };
-    case 'ram': return { text: `הדיפה ×${fmt(clamp(1.6 + n.len * 0.6, 1.6, 3.4))}`, ok: true };
-    case 'star': return { text: `${STAR_T} שניות בלי פגע`, ok: true };
-    case 'smoke': return { text: '6 שניות עשן', ok: true };
-    case 'spikes': return { text: 'ניידת שנצמדת — נהרסת', ok: true };
+    case 'prop': return { text: tr('שטה במים · עד 14 מ׳/ש', 'Sails on water · up to 14 m/s'), ok: true };
+    case 'jet': return { text: tr(`כוח ×${fmt(clamp(0.85 + n.len * 0.32, 0.9, 1.9))}`, `Power ×${fmt(clamp(0.85 + n.len * 0.32, 0.9, 1.9))}`), ok: true };
+    case 'spring': return { text: tr(`קפיצה ${fmt(clamp(6 + n.coils * 0.85 + n.len * 1.6, 7, 16) ** 2 / 40)} מ׳`, `A ${fmt(clamp(6 + n.coils * 0.85 + n.len * 1.6, 7, 16) ** 2 / 40)} m jump`), ok: true };
+    case 'chute': return { text: tr('בנפילה נפתח', 'Opens as you fall'), ok: true };
+    case 'armor': return { text: tr(`סופג ${Math.round(clamp(0.25 + n.cover * 0.55, 0.25, 0.65) * 100)}% · כבד יותר`, `Soaks up ${Math.round(clamp(0.25 + n.cover * 0.55, 0.25, 0.65) * 100)}% · heavier`), ok: true };
+    case 'ram': return { text: tr(`הדיפה ×${fmt(clamp(1.6 + n.len * 0.6, 1.6, 3.4))}`, `Knockback ×${fmt(clamp(1.6 + n.len * 0.6, 1.6, 3.4))}`), ok: true };
+    case 'star': return { text: tr(`${STAR_T} שניות בלי פגע`, `${STAR_T} seconds untouchable`), ok: true };
+    case 'smoke': return { text: tr('6 שניות עשן', '6 seconds of smoke'), ok: true };
+    case 'spikes': return { text: tr('ניידת שנצמדת — נהרסת', 'A police car that rams you — wrecked'), ok: true };
     default: return { text: (ITEMS[id] && ITEMS[id].does) || '', ok: true };
   }
 }
@@ -416,7 +417,7 @@ export class PartPen {
     // (ROADMAP 15.5: not open yet in the story - where it is to be had)
     if (PAR[type] && !parOpen(this.game, type)) {
       const play = this.game.gear && this.game.gear.play;
-      this.game.hud.toast(`${PAR[type].name} עוד נעול — ${play ? play.lockSay(PAR_GATE[type]) : ''}`, 'info', 3);
+      this.game.hud.toast(tr(`${PAR[type].name} עוד נעול — ${play ? play.lockSay(PAR_GATE[type]) : ''}`, `${PAR[type].name} is still locked — ${play ? play.lockSay(PAR_GATE[type]) : ''}`), 'info', 3);
       this.game.audio.play('click', 0.3);
       return;
     }
@@ -527,7 +528,7 @@ export class PartPen {
     if (!item) {
       this.flights.push({ v: null, from: lines.map((L) => L.map((q) => q.slice())), c: inkI, t0: performance.now() });
       g.audio.play('rubber', 0.5);
-      g.hud.toast(`${NONE_SAY[R.cat]} — נסו כמו בציורים שמעל הכפתורים`, 'bad', 2.6);
+      g.hud.toast(tr(`${NONE_SAY[R.cat]} — נסו כמו בציורים שמעל הכפתורים`, `${NONE_SAY[R.cat]} — try it like in the drawings above the buttons`), 'bad', 2.6);
       return false;
     }
     // (ROADMAP 11.28: not open yet - blueprint pages to find first, game/gearplay.js: the ink goes)
@@ -535,7 +536,7 @@ export class PartPen {
     if (play && !play.isOpen(item)) {
       this.flights.push({ v: null, from: lines.map((L) => L.map((q) => q.slice())), c: inkI, t0: performance.now() });
       g.audio.play('fail', 0.5);
-      g.hud.toast(`${ITEMS[item].name} עוד נעול — ${play.lockSay(item)}`, 'bad', 2.8);
+      g.hud.toast(tr(`${ITEMS[item].name} עוד נעול — ${play.lockSay(item)}`, `${ITEMS[item].name} is still locked — ${play.lockSay(item)}`), 'bad', 2.8);
       return false;
     }
     const v = o.v;
@@ -619,7 +620,7 @@ export class PartPen {
         return;
       }
       g.audio.play('cheer', 0.5);
-      g.hud.toast(`✦ נשמרה: ${r.o.name}${r.o.v > 1 ? ` (גרסה ${r.o.v})` : ''} — ${g.touch ? 'העיפרון' : 'Q'} ← "המצאות", ונגיעה בה מביאה אותה עם כל החלקים`, 'good', 4.4);
+      g.hud.toast(tr(`✦ נשמרה: ${r.o.name}${r.o.v > 1 ? ` (גרסה ${r.o.v})` : ''} — ${g.touch ? 'העיפרון' : 'Q'} ← "המצאות", ונגיעה בה מביאה אותה עם כל החלקים`, `✦ Saved: ${r.o.name}${r.o.v > 1 ? tr(` (גרסה ${r.o.v})`, ` (version ${r.o.v})`) : ''} — ${g.touch ? tr('העיפרון', 'the pencil') : 'Q'} → "Inventions", and a tap on it brings it with all its parts`), 'good', 4.4);
       this.legSig = '';
       this.showLegend();
     };
@@ -627,11 +628,11 @@ export class PartPen {
     const names = INV.names(v);
     const choices = names.map((n) => ({ label: n, fn: () => done(n) }));
     choices.push({
-      label: 'שם משלכם…',
+      label: tr('שם משלכם…', 'Your own name…'),
       fn: () => {
         let n = null;
         try {
-          n = window.prompt('איך לקרוא להמצאה?', names[0] || '');
+          n = window.prompt(tr('איך לקרוא להמצאה?', 'What should the invention be called?'), names[0] || '');
         } catch (e) {
           n = null;
         }
@@ -639,11 +640,11 @@ export class PartPen {
       },
     });
     const same = INV.list.filter((o) => o.base && v.bp && o.base.bp === v.bp.id).slice(0, 1);
-    for (const o of same) choices.push({ label: `גרסה חדשה של "${o.name}"`, fn: () => done(o.name) });
+    for (const o of same) choices.push({ label: tr(`גרסה חדשה של "${o.name}"`, `A new version of "${o.name}"`), fn: () => done(o.name) });
     // (kept: the drawing is done - the pen closes, and the name is chosen over the road, by touch, a
     // click or its number)
     if (g.freedraw && g.freedraw.isOpen) g.freedraw.close();
-    g.dialog.show('המצאה חדשה', 'איך לקרוא לה?', choices);
+    g.dialog.show(tr('המצאה חדשה', 'A new invention'), tr('איך לקרוא לה?', 'What should it be called?'), choices);
     return true;
   }
 
@@ -663,7 +664,7 @@ export class PartPen {
     const bp = BLUEPRINTS[type];
     const cost = bp ? 6 + (bp.difficulty || 1) * 3 : 9;
     if (g.ink && g.ink.level < cost) {
-      g.hud.toast(`ל${WORLD_NAME[type]} צריך ${cost} דיו, ויש ${Math.floor(g.ink.level)}`, 'bad', 3);
+      g.hud.toast(tr(`ל${WORLD_NAME[type]} צריך ${cost} דיו, ויש ${Math.floor(g.ink.level)}`, `${WORLD_NAME[type]} needs ${cost} ink and you have ${Math.floor(g.ink.level)}`), 'bad', 3);
       return false;
     }
     if (g.ink) g.ink.spend(cost);
@@ -818,7 +819,7 @@ export class PartPen {
     // (ROADMAP 11.28: kept in the lab, not open yet in this game - game/gearplay.js)
     const play = g.gear && g.gear.play;
     if (play && !play.isOpen(it.item)) {
-      g.hud.toast(`${ITEMS[it.item].name} עוד נעול — ${play.lockSay(it.item)}`, 'bad', 2.4);
+      g.hud.toast(tr(`${ITEMS[it.item].name} עוד נעול — ${play.lockSay(it.item)}`, `${ITEMS[it.item].name} is still locked — ${play.lockSay(it.item)}`), 'bad', 2.4);
       return false;
     }
     // (as it was drawn - one kept before its drawing was: from its little picture)
@@ -1068,7 +1069,7 @@ export class PartPen {
     const row = document.createElement('div');
     row.className = 'pp-row';
     row.id = 'pp-row';
-    row.innerHTML = `${PEN_CATS.map((c, i) => `<button class="pp-part" data-c="${c}" aria-label="${CAT_NAME[c]}">${CAT_ICON[c]}<b>${CAT_NAME[c]}</b>${touch ? '' : `<kbd>${i + 1}</kbd>`}</button>`).join('')}<button class="pp-part pp-par" data-c="par" aria-label="חלקים לציור חופשי"><svg viewBox="0 0 24 24"><path d="M4 20 L8 19 L19 8 L16 5 L5 16 Z"/><path d="M14 7 L17 10"/></svg><b>חלקים</b>${touch ? '' : '<kbd>4</kbd>'}</button><button class="pp-ok" data-ok="1" aria-label="שימו על המכונית">✓</button>`;
+    row.innerHTML = tr(`${PEN_CATS.map((c, i) => `<button class="pp-part" data-c="${c}" aria-label="${CAT_NAME[c]}">${CAT_ICON[c]}<b>${CAT_NAME[c]}</b>${touch ? '' : `<kbd>${i + 1}</kbd>`}</button>`).join('')}<button class="pp-part pp-par" data-c="par" aria-label="חלקים לציור חופשי"><svg viewBox="0 0 24 24"><path d="M4 20 L8 19 L19 8 L16 5 L5 16 Z"/><path d="M14 7 L17 10"/></svg><b>חלקים</b>${touch ? '' : '<kbd>4</kbd>'}</button><button class="pp-ok" data-ok="1" aria-label="שימו על המכונית">✓</button>`, `${PEN_CATS.map((c, i) => `<button class="pp-part" data-c="${c}" aria-label="${CAT_NAME[c]}">${CAT_ICON[c]}<b>${CAT_NAME[c]}</b>${touch ? '' : `<kbd>${i + 1}</kbd>`}</button>`).join('')}<button class="pp-part pp-par" data-c="par" aria-label="Parts for free drawing"><svg viewBox="0 0 24 24"><path d="M4 20 L8 19 L19 8 L16 5 L5 16 Z"/><path d="M14 7 L17 10"/></svg><b>Parts</b>${touch ? '' : '<kbd>4</kbd>'}</button><button class="pp-ok" data-ok="1" aria-label="Put it on the car">✓</button>`);
     const act = (e) => {
       const b = e.target.closest('button');
       if (!b) return;
@@ -1180,14 +1181,14 @@ export class PartPen {
       const touch = !!this.game.touch;
       const all = parList(this.game);
       const its = all.map((t, i) => `<div class="pp-it${t === this.par ? ' on' : ''}${WORLD_PAR.includes(t) ? ' world' : ''}${PAR[t] && !parOpen(this.game, t) ? ' lock' : ''}" data-par="${t}"><svg viewBox="0 0 24 24">${PAR[t] ? PAR[t].icon : WORLD_ICON[t]}</svg><b>${PAR[t] ? PAR[t].name : WORLD_NAME[t]}</b>${touch ? '' : `<kbd>${i + 1}</kbd>`}</div>`).join('');
-      const said = M && M.par && PAR[M.par] ? 'לא יצא כמו שרציתם? ↶ ומציירים שוב — הגודל, המקום והכיוון הם מה שתציירו' : PAR[this.par] ? PAR[this.par].how : `${WORLD_NAME[this.par]} על הכביש: ${WORLD_SAY[this.par]}`;
+      const said = M && M.par && PAR[M.par] ? tr('לא יצא כמו שרציתם? ↶ ומציירים שוב — הגודל, המקום והכיוון הם מה שתציירו', 'Didn\'t come out the way you wanted? ↶ and draw it again — the size, the place and the direction are what you get') : PAR[this.par] ? PAR[this.par].how : tr(`${WORLD_NAME[this.par]} על הכביש: ${WORLD_SAY[this.par]}`, `${WORLD_NAME[this.par]} on the road: ${WORLD_SAY[this.par]}`);
       // (ROADMAP 15.5) what is on it now, kept as an invention of yours
       const v = this.game.player.inVehicle;
       const canSave = !!(this.game.inventions && v && v.fuse && v.fuse.parts.some((q) => q.par));
-      el.innerHTML = `<div class="pp-say">${said}</div><div class="pp-its">${its}</div>${canSave ? '<button class="pp-inv-save" data-save="1">✦ לשמור כהמצאה</button>' : ''}`;
+      el.innerHTML = `<div class="pp-say">${said}</div><div class="pp-its">${its}</div>${canSave ? tr('<button class="pp-inv-save" data-save="1">✦ לשמור כהמצאה</button>', '<button class="pp-inv-save" data-save="1">✦ Save as an invention</button>') : ''}`;
       return;
     }
-    const say = L && L.ask ? 'עוד פרט אחד יכריע' : M ? 'לא יצא נכון? ↶ ומציירים שוב' : 'מה שמציירים — זה מה שיוצא';
+    const say = L && L.ask ? tr('עוד פרט אחד יכריע', 'One more detail will decide it') : M ? tr('לא יצא נכון? ↶ ומציירים שוב', 'Didn\'t come out right? ↶ and draw it again') : tr('מה שמציירים — זה מה שיוצא', 'What you draw — is what you get');
     // (round 17: a new player's car - the short list alone, the turbo first of its things: none of
     // the locked ones after it)
     // (round 19, the player's word: all of them shown, the ones not open locked - the open first)
@@ -1217,7 +1218,7 @@ export class PartPen {
     }
     if (L.ask) {
       this.liveName.textContent = `${ITEMS[L.ask[0]].name}?`;
-      this.liveText.textContent = 'עוד פרט אחד יכריע';
+      this.liveText.textContent = tr('עוד פרט אחד יכריע', 'One more detail will decide it');
       this.liveText.classList.add('bad');
     } else if (L.par) {
       this.liveName.textContent = PAR[L.par] ? PAR[L.par].name : WORLD_NAME[L.par];
@@ -1229,7 +1230,7 @@ export class PartPen {
       this.liveText.classList.toggle('bad', !L.ok);
     } else {
       this.liveName.textContent = '?';
-      this.liveText.textContent = 'לא זוהה עדיין';
+      this.liveText.textContent = tr('לא זוהה עדיין', 'Not recognized yet');
       this.liveText.classList.add('bad');
     }
     el.classList.toggle('none', (!L.item && !L.par) || !!L.ask);
@@ -1250,7 +1251,7 @@ export class PartPen {
     if (sig !== this.tipSig) {
       this.tipSig = sig;
       el.classList.toggle('on', !!two);
-      if (two) el.innerHTML = `<div class="pp-tip-h">עוד פרט אחד יכריע</div><div class="pp-tip-two">${two.map((id) => `<span><svg viewBox="0 0 24 24">${ITEMS[id].icon}</svg>${TELL[id]}</span>`).join('<i>·</i>')}</div>`;
+      if (two) el.innerHTML = tr(`<div class="pp-tip-h">עוד פרט אחד יכריע</div><div class="pp-tip-two">${two.map((id) => `<span><svg viewBox="0 0 24 24">${ITEMS[id].icon}</svg>${TELL[id]}</span>`).join('<i>·</i>')}</div>`, `<div class="pp-tip-h">One more detail will decide it</div><div class="pp-tip-two">${two.map((id) => `<span><svg viewBox="0 0 24 24">${ITEMS[id].icon}</svg>${TELL[id]}</span>`).join('<i>·</i>')}</div>`);
     }
     if (!two || !this.liveEl) return;
     const [x, y] = this.tipSpot(el.offsetWidth || 220, el.offsetHeight || 56, fd.group.map((s) => s.P));

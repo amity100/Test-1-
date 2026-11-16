@@ -4,6 +4,7 @@
 
 import { CabGame, NEON, glowRect, glowText } from './cab.js';
 
+import { tr } from '../../../core/lang.js';
 const W = 10;
 const H = 20;
 const C = 26;
@@ -26,9 +27,9 @@ export class InkTris extends CabGame {
     super(o);
     this.id = 'inktris';
     this.name = 'INKTRIS';
-    this.title = 'INKTRIS · מכונת משחק';
-    this.help = 'חצים לצדדים · למטה מהר · למעלה להפיל · רווח לסובב · Esc לצאת';
-    this.helpTouch = 'החצים לזוז · A לסובב · למעלה להפיל';
+    this.title = tr('INKTRIS · מכונת משחק', 'INKTRIS · arcade machine');
+    this.help = tr('חצים לצדדים · למטה מהר · למעלה להפיל · רווח לסובב · Esc לצאת', 'Arrows to the sides · down to drop fast · up to slam · Space to rotate · Esc to leave');
+    this.helpTouch = tr('החצים לזוז · A לסובב · למעלה להפיל', 'The arrows to move · A to rotate · up to slam');
     this.color = NEON.violet;
     this.tint = '#120a26';
     this.lives0 = 1;

@@ -7,6 +7,7 @@ import { randomCarSpec } from '../render/cars.js';
 import { fmt } from './money.js';
 import { newsFlash } from './techlife.js';
 
+import { tr } from '../core/lang.js';
 // Things that happen in the city now and then, not on any map (ROADMAP 3.4). Every 20-45 s the
 // city may start one near you, picked by where you are, the hour and how busy it is:
 //   a hold-up      somebody in a hood goes into a shop, holds the keeper up with a pen and runs
@@ -211,7 +212,7 @@ export class Events {
     if (!h || h.gone || h.helped || !h.who) return null;
     const p = this.game.player;
     if (p.mode !== 'foot' || Math.hypot(h.who.pos.x - p.pos.x, h.who.pos.z - p.pos.z) > 2.4) return null;
-    return 'לעזור לקום';
+    return tr('לעזור לקום', 'Help them up');
   }
 
   interact() {
@@ -442,7 +443,7 @@ function* robberyScene(sc, def) {
     if (sc.robbed && !r.alive && !sc.caught) {
       sc.caught = true;
       sc.dir.stats.caught++;
-      game.hud.toast('השודד נעצר. הכסף חוזר לחנות', 'good', 3);
+      game.hud.toast(tr('השודד נעצר. הכסף חוזר לחנות', 'The robber was stopped. The money goes back to the shop'), 'good', 3);
     }
   };
   yield* sc.walk(r, s.door[0], s.door[2], 1.5, 0.45);
@@ -500,11 +501,11 @@ function* robberyScene(sc, def) {
     sc.say(r, pick(['Okay! Okay! Take it!', "Don't hurt me! Here!", 'Fine, fine, I give up!']), 'alarm');
     // (ROADMAP 8.1) and something from the till for your trouble
     if (game.money) {
-      game.money.earn(REWARD, `תודה מ-${s.name}`);
-      game.hud.toast(`עצרתם את השודד! הכסף חוזר לחנות, ו-${fmt(REWARD)} מהקופה בשבילכם`, 'good', 3.2);
+      game.money.earn(REWARD, tr(`תודה מ-${s.name}`, `Thanks from ${s.name}`));
+      game.hud.toast(tr(`עצרתם את השודד! הכסף חוזר לחנות, ו-${fmt(REWARD)} מהקופה בשבילכם`, `You stopped the robber! The money goes back to the shop, and ${fmt(REWARD)} from the till is for you`), 'good', 3.2);
       // (and the shopkeeper sketches you a blueprint on the back of a receipt: ROADMAP 9.1)
-      game.inkwell.after(3.4, () => game.album.giftAny(`תודה מ-${s.name}`));
-    } else game.hud.toast('עצרתם את השודד! הכסף חוזר לחנות', 'good', 3);
+      game.inkwell.after(3.4, () => game.album.giftAny(tr(`תודה מ-${s.name}`, `Thanks from ${s.name}`)));
+    } else game.hud.toast(tr('עצרתם את השודד! הכסף חוזר לחנות', 'You stopped the robber! The money goes back to the shop'), 'good', 3);
     yield 2.5;
     if (k && k.alive && k.owner === a) sc.say(k, pick(['Thank you, hero!', 'You got him! Thank you!']));
     // he sits down on the curb to wait for the police
@@ -747,7 +748,7 @@ function* helpScene(sc, def) {
     }
     const pl = game.player;
     pl.hp = Math.min(pl.maxHp, pl.hp + 15);
-    game.hud.toast('עזרתם למישהו לקום. +15 חיים, ממצב הרוח הטוב', 'good', 3);
+    game.hud.toast(tr('עזרתם למישהו לקום. +15 חיים, ממצב הרוח הטוב', 'You helped somebody up. +15 health, from the good mood'), 'good', 3);
     yield 2.5;
   } else {
     sc.say(v, "I'm fine, I'm fine...");

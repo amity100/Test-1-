@@ -1,4 +1,4 @@
-import { lang } from '../../core/lang.js';
+import { lang, tr } from '../../core/lang.js';
 // (v5, ROADMAP 18) What the prologue puts over the picture: the black bars of a film scene, the
 // subtitles (the voices are English; the words under them in the player's language - Hebrew, or
 // English), the objective in the corner (English, the way the game's world speaks), the title card in
@@ -70,7 +70,8 @@ body.fd-open #pl-obj { opacity: 0; }
 #pl-draw canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 #pl-hint { position: absolute; left: 50%; top: 15vh; transform: translateX(-50%) translateY(-8px); color: #fff; direction: ltr; text-align: center; font-size: clamp(18px, 2.6vw, 32px); font-weight: 800; text-shadow: 0 2px 6px #000, 0 0 18px rgba(0,0,0,0.8); opacity: 0; transition: opacity 0.4s, transform 0.4s; letter-spacing: 0.02em; }
 #pl-hint.on { opacity: 1; transform: translateX(-50%) translateY(0); }
-#pl-hint small { display: block; font-size: 0.55em; font-weight: 600; opacity: 0.85; margin-top: 6px; direction: rtl; }
+#pl-hint small { display: block; font-size: 0.55em; font-weight: 600; opacity: 0.85; margin-top: 6px; }
+html[dir=rtl] #pl-hint small { direction: rtl; }
 #pl-hint small[dir=ltr] { direction: ltr; }
 /* (ROADMAP 18.9: the game showing the player round - a card: what to do, and how, its keys as keys) */
 #pl-hint.card { background: linear-gradient(180deg, rgba(24,16,40,0.86), rgba(14,10,26,0.86)); border: 2px solid rgba(255,210,63,0.75); border-radius: 16px; padding: 14px 22px 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.45); text-shadow: none; font-size: clamp(17px, 2.2vw, 26px); min-width: min(78vw, 420px); }
@@ -78,7 +79,7 @@ body.fd-open #pl-obj { opacity: 0; }
 #pl-hint.card small { font-size: 0.62em; line-height: 1.7; opacity: 0.95; margin-top: 8px; }
 #pl-hint.card.how.en { direction: ltr; text-align: left; }
 #pl-hint.card.how { direction: rtl; text-align: right; min-width: min(86vw, 470px); max-width: min(92vw, 560px); padding: 14px 22px 16px; }
-#pl-hint.card.how .tag { text-align: right; letter-spacing: 0.04em; font-size: 0.5em; }
+#pl-hint.card.how .tag { text-align: inherit; letter-spacing: 0.04em; font-size: 0.5em; }
 #pl-hint.card.how .t { display: block; font-size: 1.12em; color: #fff; margin-bottom: 4px; }
 #pl-hint.card.how .say { font-size: 0.66em; font-weight: 600; line-height: 1.5; color: #f2eadf; margin-bottom: 8px; }
 #pl-hint.card.how ul { list-style: none; margin: 0; padding: 0; }
@@ -123,15 +124,15 @@ body.prologue #topbar, body.prologue #money, body.prologue #clock, body.prologue
 
 // the speakers' names and colours over their words
 export const WHO = {
-  D: { he: 'דני', en: 'DANNY', col: '#ffb24a' },
-  L: { he: 'לילי', en: 'LILY', col: '#d79bff' },
-  P: { he: 'בני (בטלפון)', en: 'BENNY (PHONE)', col: '#8fd0ff' },
-  T: { he: 'גבר', en: 'MAN', col: '#ff7a7a' },
-  T2: { he: 'גבר שני', en: 'SECOND MAN', col: '#ff9a7a' },
-  G: { he: 'בחור', en: 'GUY', col: '#9ef0b0' },
-  M: { he: 'איש', en: 'MAN', col: '#c8e0a0' },
-  KB: { he: 'ילד בגלגל', en: 'BOY ON THE WHEEL', col: '#ffe08a' },
-  KG: { he: 'ילדה בגלגל', en: 'GIRL ON THE WHEEL', col: '#ffe08a' },
+  D: { he: tr('דני', 'Danny'), en: 'DANNY', col: '#ffb24a' },
+  L: { he: tr('לילי', 'Lily'), en: 'LILY', col: '#d79bff' },
+  P: { he: tr('בני (בטלפון)', 'Benny (phone)'), en: 'BENNY (PHONE)', col: '#8fd0ff' },
+  T: { he: tr('גבר', 'MAN'), en: 'MAN', col: '#ff7a7a' },
+  T2: { he: tr('גבר שני', 'Second Man'), en: 'SECOND MAN', col: '#ff9a7a' },
+  G: { he: tr('בחור', 'GUY'), en: 'GUY', col: '#9ef0b0' },
+  M: { he: tr('איש', 'MAN'), en: 'MAN', col: '#c8e0a0' },
+  KB: { he: tr('ילד בגלגל', 'Boy On The Wheel'), en: 'BOY ON THE WHEEL', col: '#ffe08a' },
+  KG: { he: tr('ילדה בגלגל', 'Girl On The Wheel'), en: 'GIRL ON THE WHEEL', col: '#ffe08a' },
 };
 
 export class PrologueUI {

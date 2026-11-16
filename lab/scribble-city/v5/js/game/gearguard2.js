@@ -4,6 +4,7 @@ import { NODES } from '../world/roads.js';
 import { CAR_COLORS } from '../render/cars.js';
 import { cops, cars, hold, blast, ring, onCar, inCar } from './gearfx.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.28) The rest of what keeps the car whole (game/gearguard.js has the smoke screen and the
 // dome): the armour's and the bull bar's and the spikes' levels, the oil slick, the rear shield, the
 // repair kit, the new paint, the jammer, the ejector seat, the drawn double. Kits for game/gear.js; B (🛡)
@@ -333,7 +334,7 @@ export const GUARD2 = {
         const D = v.dmg;
         if (D) Object.assign(D, { hp: D.hp > 100 ? D.hp : 100, d0: null, d1: null, glass: 0, flat: -1, bumper: 0, burning: false, burnT: 0, fuse: 0, burnt: false, puffT: 0 });
         g.audio.play('ding', 0.6);
-        g.hud.toast('הרכב תוקן ✓', 'good', 1.6);
+        g.hud.toast(tr('הרכב תוקן ✓', 'The car was repaired ✓'), 'good', 1.6);
       }
     },
     animate(G, v, o, dt, s) {
@@ -371,18 +372,18 @@ export const GUARD2 = {
       s.sprayT = g.time;
       const P = g.police;
       if (!P || !P.hostile) {
-        g.hud.toast('צבע חדש! ✓', 'good', 1.6);
+        g.hud.toast(tr('צבע חדש! ✓', 'New paint! ✓'), 'good', 1.6);
         return;
       }
       if (P.searching) {
         if (!(g.lose && g.lose.repainted(v))) P.clear();
       } else if (lv >= 3) {
         P.clear();
-        g.hud.toast('צבע חדש מול העיניים שלהם — והמשטרה איבדה אתכם', 'good', 2.6);
+        g.hud.toast(tr('צבע חדש מול העיניים שלהם — והמשטרה איבדה אתכם', 'A new paint job right in front of them — and the police lost you'), 'good', 2.6);
       } else if (lv >= 2) {
         P.drop(1);
-        g.hud.toast('צבע חדש: כוכב אחד פחות', 'good', 2.2);
-      } else g.hud.toast('ראו אתכם נצבעים — זה עובד רק כשלא רואים', 'bad', 2.4);
+        g.hud.toast(tr('צבע חדש: כוכב אחד פחות', 'New paint: one star less'), 'good', 2.2);
+      } else g.hud.toast(tr('ראו אתכם נצבעים — זה עובד רק כשלא רואים', 'They saw you get repainted — it only works when they don\'t see'), 'bad', 2.4);
     },
     drawOn(G, v, p, s, fr) {
       // (the mist of it a moment: rings of the new colour round the car)
@@ -525,7 +526,7 @@ export const GUARD2 = {
       if (!K || !K.guard) return;
       const first = laneOf(v) || laneOf(v, false, 40);
       if (!first) {
-        G.game.hud.toast('אין כאן כביש לכפיל — רק על כביש', 'bad', 1.8);
+        G.game.hud.toast(tr('אין כאן כביש לכפיל — רק על כביש', 'There\'s no road here for the decoy — only on a road'), 'bad', 1.8);
         return;
       }
       if (!G.use(p)) return;

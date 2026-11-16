@@ -2,6 +2,7 @@ import { clamp } from '../core/util.js';
 import { shapeOf, springy, turns } from './drawncar.js';
 import { INKS } from './freeform.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.8) Gear drawn freehand (ui/freedraw.js): what it is comes from game/sketchnet.js (or
 // the player's pick), and how good it is from its shape - as the blueprints' gadgets are graded
 // (game/gadgets.js, ROADMAP 9.2), here by what is drawn:
@@ -16,16 +17,16 @@ import { INKS } from './freeform.js';
 // The shield is a weapon of its own kind (game/freeform.js: held up in front, it blocks).
 
 export const GEAR = {
-  shield: { name: 'מגן', cost: 12 },
-  parachute: { name: 'מצנח', cost: 14 },
-  umbrella: { name: 'מטרייה', cost: 8 },
-  key: { name: 'מפתח', cost: 10 },
-  ladder: { name: 'סולם', cost: 10, place: true },
-  ramp: { name: 'רמפה', cost: 12, place: true },
-  bridge: { name: 'גשר', cost: 16, place: true },
-  spring: { name: 'קפיץ', cost: 12, place: true },
+  shield: { name: tr('מגן', 'Shield'), cost: 12 },
+  parachute: { name: tr('מצנח', 'Parachute'), cost: 14 },
+  umbrella: { name: tr('מטרייה', 'Umbrella'), cost: 8 },
+  key: { name: tr('מפתח', 'Key'), cost: 10 },
+  ladder: { name: tr('סולם', 'Ladder'), cost: 10, place: true },
+  ramp: { name: tr('רמפה', 'Ramp'), cost: 12, place: true },
+  bridge: { name: tr('גשר', 'Bridge'), cost: 16, place: true },
+  spring: { name: tr('קפיץ', 'Spring'), cost: 12, place: true },
 };
-const GRADE_NAME = { perfect: 'מושלם', good: 'טוב', wonky: 'עקום', fail: 'גרוע' };
+const GRADE_NAME = { perfect: tr('מושלם', 'Perfect'), good: tr('טוב', 'Good'), wonky: tr('עקום', 'Crooked'), fail: tr('גרוע', 'Bad') };
 // (as in game/gadgets.js and game/parachute.js)
 const KEY_USES = { perfect: 99, good: 8, wonky: 3, fail: 1 };
 const CHUTE_SINK = { perfect: 2.6, good: 3.2, wonky: 4.6, fail: 6.5 };
@@ -250,19 +251,19 @@ function lineOf(R) {
   const g = GRADE_NAME[R.grade];
   switch (R.kind) {
     case 'parachute':
-      return `ירידה של ${CHUTE_SINK[R.grade]} מ׳ בשנייה · ${g}`;
+      return tr(`ירידה של ${CHUTE_SINK[R.grade]} מ׳ בשנייה · ${g}`, `Falls ${CHUTE_SINK[R.grade]} m a second · ${g}`);
     case 'umbrella':
-      return `בגשם ובנפילה · ${g}`;
+      return tr(`בגשם ובנפילה · ${g}`, `In the rain and in a fall · ${g}`);
     case 'key':
-      return `פותח ${p.uses >= 99 ? 'כל מנעול' : `${p.uses || KEY_USES[R.grade]} מנעולים`} · ${g}`;
+      return tr(`פותח ${p.uses >= 99 ? 'כל מנעול' : `${p.uses || KEY_USES[R.grade]} מנעולים`} · ${g}`, `Opens ${p.uses >= 99 ? tr('כל מנעול', 'every lock') : tr(`${p.uses || KEY_USES[R.grade]} מנעולים`, `${p.uses || KEY_USES[R.grade]} locks`)} · ${g}`);
     case 'ladder':
-      return `עד הגג · ${p.rungs || 0} שלבים · ${g}`;
+      return tr(`עד הגג · ${p.rungs || 0} שלבים · ${g}`, `Up to the roof · ${p.rungs || 0} rungs · ${g}`);
     case 'ramp':
-      return `שיפוע ${p.deg}° · גובה ${p.h} מ׳ · ${g}`;
+      return tr(`שיפוע ${p.deg}° · גובה ${p.h} מ׳ · ${g}`, `Slope ${p.deg}° · height ${p.h} m · ${g}`);
     case 'bridge':
-      return `מגג לגג, או מהמזח · ${g}`;
+      return tr(`מגג לגג, או מהמזח · ${g}`, `Roof to roof, or from the pier · ${g}`);
     case 'spring':
-      return `זינוק לגובה ${p.height} מ׳ · ${p.coils} ליפופים · ${g}`;
+      return tr(`זינוק לגובה ${p.height} מ׳ · ${p.coils} ליפופים · ${g}`, `Leaps ${p.height} m high · ${p.coils} coils · ${g}`);
     default:
       return g;
   }

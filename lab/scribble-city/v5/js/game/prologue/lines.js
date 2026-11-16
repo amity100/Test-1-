@@ -51,7 +51,7 @@ export const LINES = {
   P02: { who: "P", en: "We've got a problem.", he: "יש לנו בעיה.", dur: 1.97 },
   D17: { who: "D", en: "We'll deal with it tomorrow.", he: "נטפל בזה מחר.", dur: 2.06 },
   P03: { who: "P", en: "You don't get it. There are people looking for you.", he: "אתה לא מבין. יש אנשים שמחפשים אותך.", dur: 3.41 },
-  T01: { who: "T", en: "Danny! We were just looking for you.", he: "דני! בדיוק חיפשנו אותך.", dur: 2.78 },
+  T01: { who: "T", en: "Danny. Your time's up.", he: "דני. נגמר לך הזמן.", dur: 2.96 },
   D18: { who: "D", en: "Not today.", he: "לא היום.", dur: 0.86 },
   T02: { who: "T", en: "There's something you need to give back.", he: "יש משהו שאתה צריך להחזיר.", dur: 2.47 },
   D19: { who: "D", en: "Tell your boss we'll talk tomorrow.", he: "תגיד לבוס שלך שנדבר מחר.", dur: 2.54 },

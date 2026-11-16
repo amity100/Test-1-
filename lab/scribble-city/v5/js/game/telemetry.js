@@ -15,6 +15,7 @@ import { GpuTimer, browserName } from './perf.js';
 import { shared, pens } from '../render/materials.js';
 import { provokeState } from '../render/provoke.js';
 
+import { tr } from '../core/lang.js';
 export const BUILD = 'v19';
 // frames by how long they took (ms): up to 8.5 (120 Hz), 12.5, 17.5 (60 Hz), 21, 25, 34.5 (30 Hz),
 // 50, 67, 100, 200, longer
@@ -506,6 +507,6 @@ export class Telemetry {
   // the numbers' panel's line
   line() {
     if (this.status === 'off') return '';
-    return this.status === 'on' ? `המדידות נשמרות לקריאה (${this.minutes.length} סיכומים, ${this.idle.length} מדידות בעמידה)` : `שמירת המדידות לא הצליחה: ${this.status}`;
+    return this.status === 'on' ? tr(`המדידות נשמרות לקריאה (${this.minutes.length} סיכומים, ${this.idle.length} מדידות בעמידה)`, `The measurements are kept to be read (${this.minutes.length} summaries, ${this.idle.length} measurements standing still)`) : tr(`שמירת המדידות לא הצליחה: ${this.status}`, `Saving the measurements failed: ${this.status}`);
   }
 }

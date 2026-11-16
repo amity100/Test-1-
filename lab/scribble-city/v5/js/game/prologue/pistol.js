@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Kit, itemMats, linC } from '../items.js';
+import { GUN_GRIP } from '../../render/heroshapes.js';
 
 // (ROADMAP 23.18) A pistol in a man's hand - a thing in the scene, made as the city's things are (game/items.js Kit), not three pen
 // lines drawn from his wrist: a dark slide over its frame, the grip raked back in his fist, the guard and the trigger, the sights,
@@ -65,9 +66,9 @@ export class HeldPistol {
     this.grip = new THREE.Vector3(0, 1, 0);
   }
 
-  // every frame, after the figure is posed: in his right fist, pointing where he aims (aim: a unit vector) - his fist closed
-  // round its grip (fig.grip), the gun where the fist's hollow is (as game/prologue/page.js fistOn has it: 0.07 down the hand
-  // from the wrist, 0.061 out from the palm)
+  // every frame, after the figure is posed: in his right fist, pointing where he aims (aim: a unit vector) - his fist shut
+  // round its grip (fig.grip; fig.gripGun, a fist the grip's own size - render/people.js heroGunR), the gun where the fist's
+  // hollow is: 0.07 down the hand from the wrist, out from the palm by its skin and the grip's round (render/heroshapes.js)
   place(fig, aim) {
     const j = fig && fig.j;
     if (!j || !j.handR || j.handR.lengthSq() === 0) {
@@ -83,13 +84,14 @@ export class HeldPistol {
     _g.normalize();
     this.grip.copy(_g);
     fig.grip = this.grip;
+    fig.gripGun = true;
     // (the hand's way: along his forearm, square to the grip)
     _h.subVectors(j.handR, j.elbowR);
     _h.addScaledVector(_g, -_h.dot(_g));
     if (_h.lengthSq() < 1e-8) _h.copy(_z);
     _h.normalize();
     _n.crossVectors(_g, _h);
-    _e.copy(j.handR).addScaledVector(_h, 0.07 * hk).addScaledVector(_n, 0.0607 * hk);
+    _e.copy(j.handR).addScaledVector(_h, 0.07 * hk).addScaledVector(_n, (0.012 + GUN_GRIP) * hk);
     _x.crossVectors(_g, _z).normalize();
     const k = BIG * S;
     _m.makeBasis(_x, _g, _z);
@@ -106,6 +108,7 @@ export class HeldPistol {
   hide(fig) {
     this.grp.visible = false;
     if (fig && fig.grip === this.grip) fig.grip = null;
+    if (fig) fig.gripGun = false;
   }
 
   dispose() {

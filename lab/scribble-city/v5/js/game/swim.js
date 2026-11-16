@@ -7,6 +7,7 @@ import { srgb, makeSurface } from '../render/materials.js';
 import { Batch } from '../world/kit.js';
 import { isWater } from './rides.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 5.2; never with ?classic) Swimming in the bay, and under it.
 //
 // Into the water over the promenade's railing, off the pier, out of a boat or a plane: you swim
@@ -81,7 +82,7 @@ export class Swim {
     g.audio.play('splat', Math.min(1, 0.3 + fall * 0.05));
     if (this.firstTime === undefined) {
       this.firstTime = false;
-      g.hud.toast(g.touch && !g.pad.active ? 'שוחים! ▼ צולל, ▲ עולה. ליד הקיר או המזח — יוצאים' : 'שוחים! C — לצלול, רווח — לעלות. E ליד הקיר או המזח — לצאת', 'info', 3.4);
+      g.hud.toast(g.touch && !g.pad.active ? tr('שוחים! ▼ צולל, ▲ עולה. ליד הקיר או המזח — יוצאים', 'Swimming! ▼ dive, ▲ surface. By the wall or the pier — get out') : tr('שוחים! C — לצלול, רווח — לעלות. E ליד הקיר או המזח — לצאת', 'Swimming! C — dive, Space — surface. E by the wall or the pier — get out'), 'info', 3.4);
     }
     this.buttons(true);
   }
@@ -200,10 +201,10 @@ export class Swim {
     const g = this.game;
     const touch = g.touch && !g.pad.active;
     const b = this.boat();
-    if (b) return touch ? `לעלות על ${b.label}` : `E — לעלות על ${b.label}`;
-    if (this.shore()) return touch ? 'לצאת מהמים' : 'E — לצאת מהמים';
+    if (b) return touch ? tr(`לעלות על ${b.label}`, `get on the ${b.label}`) : tr(`E — לעלות על ${b.label}`, `E — get on ${b.label}`);
+    if (this.shore()) return touch ? tr('לצאת מהמים', 'Get out of the water') : tr('E — לצאת מהמים', 'E — get out of the water');
     if (touch) return '';
-    return this.depth() > 0.6 ? 'רווח — לעלות · C — עמוק יותר' : 'C — לצלול · Shift — מהר';
+    return this.depth() > 0.6 ? tr('רווח — לעלות · C — עמוק יותר', 'Space — surface · C — deeper') : tr('C — לצלול · Shift — מהר', 'C — dive · Shift — fast');
   }
 
   // how far under the surface your head is
@@ -298,7 +299,7 @@ export class Swim {
     }
     if (far(p.pos.x + Math.sign(this.v.x) * 6, p.pos.z + Math.sign(this.v.z) * 6) && !this.saidFar) {
       this.saidFar = true;
-      g.hud.toast(MAINLAND_ON ? 'כאן נגמר הדף — שוחים חזרה פנימה' : 'הזרם חזק מדי כאן — חזרה לכיוון החוף', 'info', 2.4);
+      g.hud.toast(MAINLAND_ON ? tr('כאן נגמר הדף — שוחים חזרה פנימה', 'The page ends here — swim back in') : tr('הזרם חזק מדי כאן — חזרה לכיוון החוף', 'The current is too strong here — back toward the beach'), 'info', 2.4);
     }
     this.head = clamp(this.head + this.v.y * dt, FLOOR + 0.5, Math.max(top, this.head - 0.02));
     if (this.head > top) this.head = damp(this.head, top, 6, dt);

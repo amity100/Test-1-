@@ -1,3 +1,4 @@
+import { tr } from '../core/lang.js';
 // (ROADMAP 5.6, not with ?classic) What the hero gets better at by doing it. Each skill has
 // points (0..100) that doing the thing adds to; every 20 points is a level (0..5), and a word on
 // the screen when it comes:
@@ -10,11 +11,11 @@
 // The phone's skills page shows where each one is (ui/phone.js); the saves keep them.
 
 export const SKILLS = [
-  { id: 'run', name: 'סיבולת', up: 'הסיבולת השתפרה! רצים יותר זמן ומהר יותר', what: (l) => `ריצה מהירה: ${Math.round(100 / drainOf(l))} שניות` },
-  { id: 'shoot', name: 'ירי', up: 'הירי השתפר! הקליעים מדויקים יותר', what: (l) => `פיזור הקליעים: ${Math.round(100 * spreadOf(l))}%` },
-  { id: 'drive', name: 'נהיגה', up: 'הנהיגה השתפרה! הרכב נשמע לכם יותר', what: (l) => (l ? `אחיזה בכביש: עוד ${l * 5}%` : 'אחיזה בכביש: רגילה') },
-  { id: 'draw', name: 'ציור', up: 'הציור השתפר! קל יותר לצייר ציור מושלם', what: (l) => (l ? `כל ציור מקבל עוד ${l * 2} נקודות` : 'כל ציור מקבל את הציון שלו') },
-  { id: 'fight', name: 'כוח', up: 'המכות התחזקו!', what: (l) => (l ? `המכות חזקות יותר ב־${l * 8}%` : 'מכות רגילות') },
+  { id: 'run', name: tr('סיבולת', 'Stamina'), up: tr('הסיבולת השתפרה! רצים יותר זמן ומהר יותר', 'Your stamina improved! You run longer and faster'), what: (l) => tr(`ריצה מהירה: ${Math.round(100 / drainOf(l))} שניות`, `Fast running: ${Math.round(100 / drainOf(l))} seconds`) },
+  { id: 'shoot', name: tr('ירי', 'Fire'), up: tr('הירי השתפר! הקליעים מדויקים יותר', 'Your shooting improved! The bullets are more accurate'), what: (l) => tr(`פיזור הקליעים: ${Math.round(100 * spreadOf(l))}%`, `Bullet spread: ${Math.round(100 * spreadOf(l))}%`) },
+  { id: 'drive', name: tr('נהיגה', 'Driving'), up: tr('הנהיגה השתפרה! הרכב נשמע לכם יותר', 'Your driving improved! The car listens to you more'), what: (l) => (l ? tr(`אחיזה בכביש: עוד ${l * 5}%`, `Road grip: ${l * 5}% more`) : tr('אחיזה בכביש: רגילה', 'Road grip: normal')) },
+  { id: 'draw', name: tr('ציור', 'Painting'), up: tr('הציור השתפר! קל יותר לצייר ציור מושלם', 'Your drawing improved! It\'s easier to draw a perfect drawing'), what: (l) => (l ? tr(`כל ציור מקבל עוד ${l * 2} נקודות`, `Every drawing gets ${l * 2} more points`) : tr('כל ציור מקבל את הציון שלו', 'Every drawing gets its own score')) },
+  { id: 'fight', name: tr('כוח', 'Strength'), up: tr('המכות התחזקו!', 'Your punches got stronger!'), what: (l) => (l ? tr(`המכות חזקות יותר ב־${l * 8}%`, `Punches ${l * 8}% stronger`) : tr('מכות רגילות', 'Normal punches')) },
 ];
 export const MAX_LEVEL = 5;
 const PER_LEVEL = 20;
@@ -49,7 +50,7 @@ export class Skills {
     const after = this.level(id);
     if (after > before) {
       const s = SKILLS.find((x) => x.id === id);
-      this.game.hud.toast(`${s.up} (רמה ${after} מתוך ${MAX_LEVEL})`, 'good', 3.2);
+      this.game.hud.toast(tr(`${s.up} (רמה ${after} מתוך ${MAX_LEVEL})`, `${s.up} (level ${after} of ${MAX_LEVEL})`), 'good', 3.2);
       this.game.audio.play('ding', 0.7);
     }
   }
@@ -105,7 +106,7 @@ export class Skills {
       this.add('run', (Math.hypot(P.vel.x, P.vel.z) * dt) / 25);
       if (this.stamina <= 0 && !this.winded) {
         this.winded = true;
-        this.game.hud.toast('אין אוויר… רגע לנשום', 'info', 1.6);
+        this.game.hud.toast(tr('אין אוויר… רגע לנשום', 'Out of breath… a moment to breathe'), 'info', 1.6);
       }
     } else {
       this.restT += dt;

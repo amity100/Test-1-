@@ -1,5 +1,6 @@
 import { shapeOf } from './drawncar.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.12) Any line can be any part - and what it does is what that part is, where it is on
 // the thing, as it was drawn. A wheel is a wheel under it; drawn long and flat along its bottom it
 // is a track (slow, it never slides, it turns on the spot); up on its roof, it is what it lands on
@@ -14,11 +15,11 @@ import { shapeOf } from './drawncar.js';
 
 // the parts, as the menu groups them
 export const ROLE_GROUPS = [
-  { k: 'move', name: 'תנועה', t: ['wheel', 'rotor', 'prop', 'jet', 'wing', 'sail', 'balloon', 'hull', 'spring'] },
-  { k: 'fire', name: 'נשק', t: ['barrel', 'blade', 'head', 'scope', 'mag', 'silencer'] },
-  { k: 'gear', name: 'הגנה וציוד', t: ['armor', 'chute', 'fin', 'skid', 'tail'] },
-  { k: 'body', name: 'מבנה', t: ['body', 'cabin', 'frame', 'mast', 'rope', 'window', 'deco'] },
-  { k: 'hand', name: 'אחיזה', t: ['grip', 'stock', 'guard'] },
+  { k: 'move', name: tr('תנועה', 'Movement'), t: ['wheel', 'rotor', 'prop', 'jet', 'wing', 'sail', 'balloon', 'hull', 'spring'] },
+  { k: 'fire', name: tr('נשק', 'Weapons'), t: ['barrel', 'blade', 'head', 'scope', 'mag', 'silencer'] },
+  { k: 'gear', name: tr('הגנה וציוד', 'Protection and gear'), t: ['armor', 'chute', 'fin', 'skid', 'tail'] },
+  { k: 'body', name: tr('מבנה', 'Structure'), t: ['body', 'cabin', 'frame', 'mast', 'rope', 'window', 'deco'] },
+  { k: 'hand', name: tr('אחיזה', 'Grip'), t: ['grip', 'stock', 'guard'] },
 ];
 
 // ------------------------------------------------------------------ where a line is on the thing
@@ -98,98 +99,98 @@ export function roleOf(t, q, ctx = {}) {
     case 'wheel': {
       // (long and flat along its bottom - not an oval wheel: a track)
       // (ROADMAP 11.16: or read as one along under it - a row of loops, two halves)
-      if ((q.track || (sh.w > sh.h * 2.4 && q.long > (q.BW || 1) * 0.4)) && q.v < 0.42) return V('track', 'זחל', 'זחל: איטי, לא מחליק, מסתובב במקום ועולה על מכוניות');
-      if (q.top && q.u > -0.05 && q.u < 1.05 && (sh.w + sh.h) / 4 < (q.BW || 1) * 0.6) return V('roof', 'גלגל גג', ctx.wheels ? 'על הגג: כשהוא מתהפך — ממשיך לנסוע' : 'על הגג: נוסע הפוך, על הגב');
+      if ((q.track || (sh.w > sh.h * 2.4 && q.long > (q.BW || 1) * 0.4)) && q.v < 0.42) return V('track', tr('זחל', 'Track'), tr('זחל: איטי, לא מחליק, מסתובב במקום ועולה על מכוניות', 'Track: slow, doesn\'t skid, turns on the spot and drives over cars'));
+      if (q.top && q.u > -0.05 && q.u < 1.05 && (sh.w + sh.h) / 4 < (q.BW || 1) * 0.6) return V('roof', tr('גלגל גג', 'Roof wheel'), ctx.wheels ? tr('על הגג: כשהוא מתהפך — ממשיך לנסוע', 'On the roof: when it flips — it keeps driving') : tr('על הגג: נוסע הפוך, על הגב', 'On the roof: drives upside-down, on its back'));
       // (ROADMAP 11.16: a wheel scribbled round and round fills its box twice over - round, not square)
-      if (q.closed && !q.round && q.fill > 0.86 && q.fill < 1.08 && sh.len < (sh.w + sh.h) * 2.5 && Math.max(sh.w, sh.h) < Math.min(sh.w, sh.h) * 1.6) return V('square', 'גלגל מרובע', 'מרובע: מקפץ ואיטי יותר, אבל נאחז ומטפס');
-      if ((sh.w + sh.h) / 4 > (q.BH || 1) * 0.42) return V('big', 'גלגל ענק', 'ענק: עולה על מדרכות ומכוניות, אבל כבד');
-      return V('wheel', 'גלגל', air ? 'גלגל נחיתה: נוסע על הקרקע' : 'נוסע — גדול יותר, מהיר יותר');
+      if (q.closed && !q.round && q.fill > 0.86 && q.fill < 1.08 && sh.len < (sh.w + sh.h) * 2.5 && Math.max(sh.w, sh.h) < Math.min(sh.w, sh.h) * 1.6) return V('square', tr('גלגל מרובע', 'Square wheel'), tr('מרובע: מקפץ ואיטי יותר, אבל נאחז ומטפס', 'Square: bumpy and slower, but it grips and climbs'));
+      if ((sh.w + sh.h) / 4 > (q.BH || 1) * 0.42) return V('big', tr('גלגל ענק', 'Giant wheel'), tr('ענק: עולה על מדרכות ומכוניות, אבל כבד', 'Giant: drives over curbs and cars, but heavy'));
+      return V('wheel', tr('גלגל', 'Wheel'), air ? tr('גלגל נחיתה: נוסע על הקרקע', 'Landing wheel: drives on the ground') : tr('נוסע — גדול יותר, מהיר יותר', 'Drives — bigger, faster'));
     }
     case 'rotor':
     case 'prop': {
       // (ROADMAP 11.13) at a helicopter's tail, small: its tail rotor - it holds it straight
       // (ROADMAP 11.16: or a propeller out past its end, at the end of a tail boom drawn out of its
       // top - as high as its top, still its tail rotor)
-      if ((fam === 'copter' || ctx.copter) && q.back && (!q.top || (t === 'prop' && q.past && q.v < 1.4)) && (sh.w + sh.h) / 2 < (q.BH || 1) * 1.3) return V('tail', 'רוטור זנב', 'בזנב: מחזיק את המסוק ישר — בלעדיו הוא מסתובב סביב עצמו');
+      if ((fam === 'copter' || ctx.copter) && q.back && (!q.top || (t === 'prop' && q.past && q.v < 1.4)) && (sh.w + sh.h) / 2 < (q.BH || 1) * 1.3) return V('tail', tr('רוטור זנב', 'Tail rotor'), tr('בזנב: מחזיק את המסוק ישר — בלעדיו הוא מסתובב סביב עצמו', 'On the tail: keeps the helicopter straight — without it, it spins around itself'));
       if (q.upright) {
-        if (q.back) return V('pusher', 'מדחף דוחף', fam === 'boat' ? 'עומד מאחור: דוחף — סירת ביצות מהירה' : fam === 'balloon' ? 'מאחור: דוחף את ספינת האוויר קדימה, והיא פונה לאן שמסתכלים' : ctx.wings ? 'עומד מאחור: דוחף את המטוס' : 'עומד מאחור: דוחף קדימה — עוד מהירות, גם במים');
-        return V('puller', 'מדחף', ctx.wings ? 'עומד מלפנים: מושך את המטוס' : 'עומד: מושך קדימה — עוד מהירות');
+        if (q.back) return V('pusher', tr('מדחף דוחף', 'Pusher propeller'), fam === 'boat' ? tr('עומד מאחור: דוחף — סירת ביצות מהירה', 'Standing at the back: pushes — a fast airboat') : fam === 'balloon' ? tr('מאחור: דוחף את ספינת האוויר קדימה, והיא פונה לאן שמסתכלים', 'At the back: pushes the airship forward, and it turns where you look') : ctx.wings ? tr('עומד מאחור: דוחף את המטוס', 'Standing at the back: pushes the plane') : tr('עומד מאחור: דוחף קדימה — עוד מהירות, גם במים', 'Standing at the back: pushes forward — more speed, on water too'));
+        return V('puller', tr('מדחף', 'Propeller'), ctx.wings ? tr('עומד מלפנים: מושך את המטוס', 'Standing in front: pulls the plane') : tr('עומד: מושך קדימה — עוד מהירות', 'Standing: pulls forward — more speed'));
       }
-      if (q.under) return V('hover', 'מאוורר ריחוף', 'שוכב מתחת: רחפת — מחליקה על היבשה ועל המים');
+      if (q.under) return V('hover', tr('מאוורר ריחוף', 'Hover fan'), tr('שוכב מתחת: רחפת — מחליקה על היבשה ועל המים', 'Lying underneath: a hovercraft — slides over land and water'));
       // (round, at an end - a fan facing out of it: it pushes, it pulls)
-      if (!q.top && !q.flat && (q.front || q.back)) return q.back ? V('pusher', 'מדחף דוחף', 'מאחור: דוחף קדימה — עוד מהירות, גם במים') : V('puller', 'מדחף', 'מלפנים: מושך קדימה — עוד מהירות');
-      return V('lift', t === 'prop' ? 'מדחף מרים' : 'רוטור', 'שוכב מעל: מרים — טס כמו מסוק, אם הוא גדול מספיק');
+      if (!q.top && !q.flat && (q.front || q.back)) return q.back ? V('pusher', tr('מדחף דוחף', 'Pusher propeller'), tr('מאחור: דוחף קדימה — עוד מהירות, גם במים', 'At the back: pushes forward — more speed, on water too')) : V('puller', tr('מדחף', 'Propeller'), tr('מלפנים: מושך קדימה — עוד מהירות', 'In front: pulls forward — more speed'));
+      return V('lift', t === 'prop' ? tr('מדחף מרים', 'Lifting propeller') : tr('רוטור', 'Rotor'), tr('שוכב מעל: מרים — טס כמו מסוק, אם הוא גדול מספיק', 'Lying on top: lifts — flies like a helicopter, if it\'s big enough'));
     }
     case 'jet': {
       // (an engine slung under a wing, lying along it: it pushes - pointing down under it: it lifts)
       // (ROADMAP 11.13: a rocket's, under its foot - it stands up, its back is down: it lifts)
-      if (q.under && (ctx.rocket || (!q.back && !(ctx.wings && sh.w > sh.h * 1.15)))) return V('vtol', 'סילון אנכי', 'מתחת, כלפי מטה: ממריא ונוחת במקום');
-      if (q.front && q.dx > -0.2) return V('retro', 'סילון הפוך', 'מלפנים: בלם חזק בבת אחת');
-      return V('jet', 'סילון', fam === 'plane' || ctx.wings ? 'מאחור: דוחף את המטוס' : 'מאחור: טורבו (Shift)');
+      if (q.under && (ctx.rocket || (!q.back && !(ctx.wings && sh.w > sh.h * 1.15)))) return V('vtol', tr('סילון אנכי', 'Vertical jet'), tr('מתחת, כלפי מטה: ממריא ונוחת במקום', 'Underneath, pointing down: takes off and lands on the spot'));
+      if (q.front && q.dx > -0.2) return V('retro', tr('סילון הפוך', 'Reverse jet'), tr('מלפנים: בלם חזק בבת אחת', 'In front: a strong brake all at once'));
+      return V('jet', tr('סילון', 'Jet'), fam === 'plane' || ctx.wings ? tr('מאחור: דוחף את המטוס', 'At the back: pushes the plane') : tr('מאחור: טורבו (Shift)', 'At the back: turbo (Shift)'));
     }
     case 'wing': {
-      if (q.upright) return V('fin', 'כנף עומדת', air ? 'עומדת: מייצבת את הטיסה' : 'עומדת: ספוילר — אחיזה בפניות מהירות');
-      return V('wing', 'כנף', ctx.thrust ? 'מרימה: טס כשיש מספיק מהירות' : ctx.wheels ? 'גולש אחרי קפיצה' : 'צריכה מדחף או סילון כדי לטוס');
+      if (q.upright) return V('fin', tr('כנף עומדת', 'Upright wing'), air ? tr('עומדת: מייצבת את הטיסה', 'Upright: steadies the flight') : tr('עומדת: ספוילר — אחיזה בפניות מהירות', 'Upright: a spoiler — grip in fast turns'));
+      return V('wing', tr('כנף', 'Wing'), ctx.thrust ? tr('מרימה: טס כשיש מספיק מהירות', 'Lift: it flies once it has enough speed') : ctx.wheels ? tr('גולש אחרי קפיצה', 'Glides after a jump') : tr('צריכה מדחף או סילון כדי לטוס', 'Needs a propeller or a jet to fly'));
     }
     case 'barrel': {
-      if (q.big) return V('giant', 'תותח ענק', 'ענק: פגז כבד ופיצוץ גדול, טעינה איטית — והרתיעה הודפת אותו אחורה');
-      if (q.dy < -0.6) return V('down', 'קנה למטה', 'כלפי מטה: מטיל פצצות');
-      if (q.dy > 0.6) return V('up', 'קנה למעלה', 'כלפי מעלה: יורה על מסוקים ועל גגות');
-      if (q.dx < -0.5) return V('rear', 'קנה אחורי', 'לאחור: יורה על מי שרודף');
-      return q.closed && q.thick > (q.BH || 1) * 0.17 ? V('cannon', 'תותח', 'עבה: תותח — פגז שמתפוצץ') : V('mg', 'מקלע', 'דק: מקלע — צרורות מהירים');
+      if (q.big) return V('giant', tr('תותח ענק', 'Giant cannon'), tr('ענק: פגז כבד ופיצוץ גדול, טעינה איטית — והרתיעה הודפת אותו אחורה', 'Giant: a heavy shell and a big blast, slow to reload — and the recoil pushes it back'));
+      if (q.dy < -0.6) return V('down', tr('קנה למטה', 'Barrel down'), tr('כלפי מטה: מטיל פצצות', 'Pointing down: drops bombs'));
+      if (q.dy > 0.6) return V('up', tr('קנה למעלה', 'Barrel up'), tr('כלפי מעלה: יורה על מסוקים ועל גגות', 'Pointing up: fires at helicopters and rooftops'));
+      if (q.dx < -0.5) return V('rear', tr('קנה אחורי', 'Rear barrel'), tr('לאחור: יורה על מי שרודף', 'Backward: fires at whoever\'s chasing'));
+      return q.closed && q.thick > (q.BH || 1) * 0.17 ? V('cannon', tr('תותח', 'Cannon'), tr('עבה: תותח — פגז שמתפוצץ', 'Thick: a cannon — a shell that explodes')) : V('mg', tr('מקלע', 'Machine gun'), tr('דק: מקלע — צרורות מהירים', 'Thin: a machine gun — fast bursts'));
     }
     case 'blade':
-      if (q.front) return V('ram', 'איל', 'מלפנים: מנגח ומרסק מכוניות');
-      if (q.back) return V('rear', 'להב אחורי', 'מאחור: מי שנצמד מאחור — נהרס');
-      return V('side', 'להבי צד', 'בצדדים: חותך את מי שעוברים לידו');
+      if (q.front) return V('ram', tr('איל', 'Ram'), tr('מלפנים: מנגח ומרסק מכוניות', 'In front: rams and smashes cars'));
+      if (q.back) return V('rear', tr('להב אחורי', 'Rear blade'), tr('מאחור: מי שנצמד מאחור — נהרס', 'At the back: whoever sticks to your tail — wrecked'));
+      return V('side', tr('להבי צד', 'Side blades'), tr('בצדדים: חותך את מי שעוברים לידו', 'On the sides: cuts whoever passes by'));
     case 'head':
-      return q.front ? V('ram', 'ראש מנגח', 'מלפנים: ניגוח כבד — מעיף מכוניות') : V('weight', 'משקולת', 'משקל: יציב בפניות, איטי יותר');
+      return q.front ? V('ram', tr('ראש מנגח', 'Battering head'), tr('מלפנים: ניגוח כבד — מעיף מכוניות', 'In front: a heavy ram — sends cars flying')) : V('weight', tr('משקולת', 'Weight'), tr('משקל: יציב בפניות, איטי יותר', 'Weight: steady in turns, slower'));
     case 'spring':
-      if (q.front) return V('bumper', 'פגוש קפיץ', 'מלפנים: מעיף את מי שנתקלים בו, בלי נזק');
-      if (q.back) return V('kick', 'קפיץ זינוק', 'מאחור: זינוק קדימה (רווח)');
-      if (q.top) return V('righter', 'קפיץ עליון', 'על הגג: כשמתהפך — קופץ בחזרה על הגלגלים');
-      return V('jump', 'קפיץ', 'מתחת: קופץ (רווח) — יותר ליפופים, גבוה יותר');
+      if (q.front) return V('bumper', tr('פגוש קפיץ', 'Spring bumper'), tr('מלפנים: מעיף את מי שנתקלים בו, בלי נזק', 'In front: sends flying whoever it bumps into, without damage'));
+      if (q.back) return V('kick', tr('קפיץ זינוק', 'Launch spring'), tr('מאחור: זינוק קדימה (רווח)', 'At the back: a leap forward (Space)'));
+      if (q.top) return V('righter', tr('קפיץ עליון', 'Top spring'), tr('על הגג: כשמתהפך — קופץ בחזרה על הגלגלים', 'On the roof: when it flips — it bounces back onto its wheels'));
+      return V('jump', tr('קפיץ', 'Spring'), tr('מתחת: קופץ (רווח) — יותר ליפופים, גבוה יותר', 'Underneath: jumps (Space) — more coils, higher'));
     case 'sail':
-      if (ctx.wheels && fam !== 'boat') return V('land', 'מפרש יבשה', 'על גלגלים: יאכטת יבשה — שקטה ומהירה בישר, איטית לצאת');
-      return V('sail', 'מפרש', 'שט ברוח — בלי מנוע, בשקט');
+      if (ctx.wheels && fam !== 'boat') return V('land', tr('מפרש יבשה', 'Land sail'), tr('על גלגלים: יאכטת יבשה — שקטה ומהירה בישר, איטית לצאת', 'On wheels: a land yacht — quiet and fast on the straight, slow to get going'));
+      return V('sail', tr('מפרש', 'Sail'), tr('שט ברוח — בלי מנוע, בשקט', 'Sails on the wind — no engine, quietly'));
     case 'balloon':
-      return V('balloon', 'בלון', 'מרים לאוויר לאט — קטן מדי למשקל: רק מאט נפילה');
+      return V('balloon', tr('בלון', 'Balloon'), tr('מרים לאוויר לאט — קטן מדי למשקל: רק מאט נפילה', 'Lifts slowly into the air — too small for the weight: it only slows a fall'));
     case 'hull':
-      return V('hull', 'גוף צף', 'צף: נכנס למים וממשיך לשוט');
+      return V('hull', tr('גוף צף', 'Floating hull'), tr('צף: נכנס למים וממשיך לשוט', 'Floats: drives into the water and keeps sailing'));
     case 'chute':
-      return V('chute', 'מצנח', 'באוויר (G): נפתח ויורד לאט');
+      return V('chute', tr('מצנח', 'Parachute'), tr('באוויר (G): נפתח ויורד לאט', 'In the air (G): opens and floats down slowly'));
     case 'armor':
-      return q.front ? V('front', 'שריון קדמי', 'מלפנים: מנגח בלי להינזק') : V('armor', 'שריון', 'פגיעות כואבות פחות — אבל כבד');
+      return q.front ? V('front', tr('שריון קדמי', 'Front armor'), tr('מלפנים: מנגח בלי להינזק', 'In front: rams without getting hurt')) : V('armor', tr('שריון', 'Armor'), tr('פגיעות כואבות פחות — אבל כבד', 'Hits hurt less — but heavy'));
     case 'fin':
-      return air ? V('fin', 'סנפיר', 'מייצב את הטיסה') : fam === 'boat' ? V('keel', 'קיל', 'יציב בפניות, לא מחליק') : V('spoiler', 'ספוילר', 'אחיזה בפניות מהירות');
+      return air ? V('fin', tr('סנפיר', 'Fin'), tr('מייצב את הטיסה', 'Steadies the flight')) : fam === 'boat' ? V('keel', tr('קיל', 'Keel'), tr('יציב בפניות, לא מחליק', 'Steady in turns, doesn\'t skid')) : V('spoiler', tr('ספוילר', 'Spoiler'), tr('אחיזה בפניות מהירות', 'Grip in fast turns'));
     case 'skid':
-      return air ? V('skid', 'מגלש', 'נוחת על מגלשים') : V('sled', 'מגלש', 'מחליק בפניות — דריפט');
+      return air ? V('skid', tr('מגלש', 'Skid'), tr('נוחת על מגלשים', 'Lands on skids')) : V('sled', tr('מגלש', 'Skid'), tr('מחליק בפניות — דריפט', 'Slides in the turns — drifting'));
     case 'tail':
-      return V('tail', 'זנב', fam === 'copter' ? 'זנב מסוק: מייצב' : 'קישוט');
+      return V('tail', tr('זנב', 'Tail'), fam === 'copter' ? tr('זנב מסוק: מייצב', 'A helicopter\'s tail: steadies it') : tr('קישוט', 'Decoration'));
     case 'mast':
-      return ctx.sail ? V('mast', 'תורן', 'מחזיק את המפרש') : V('aerial', 'תורן', 'קישוט');
+      return ctx.sail ? V('mast', tr('תורן', 'Mast'), tr('מחזיק את המפרש', 'Holds the sail')) : V('aerial', tr('תורן', 'Mast'), tr('קישוט', 'Decoration'));
     case 'rope':
-      return V('rope', 'חבל', 'קישוט');
+      return V('rope', tr('חבל', 'A rope'), tr('קישוט', 'Decoration'));
     case 'window':
-      return V('window', 'חלון', 'קישוט — רואים דרכו');
+      return V('window', tr('חלון', 'Window'), tr('קישוט — רואים דרכו', 'Decoration — you can see through it'));
     case 'deco':
-      return V('deco', 'קישוט', 'רק מראה — בלי משקל ובלי השפעה');
+      return V('deco', tr('קישוט', 'Decoration'), tr('רק מראה — בלי משקל ובלי השפעה', 'Looks only — no weight and no effect'));
     case 'body':
-      return V('body', 'גוף', 'חלק מהגוף: עוד משקל ועוד עמידות');
+      return V('body', tr('גוף', 'Body'), tr('חלק מהגוף: עוד משקל ועוד עמידות', 'Part of the body: more weight and more toughness'));
     case 'cabin':
-      return V('cabin', 'תא', 'תא על הגוף: הגוף עולה מעליו');
+      return V('cabin', tr('תא', 'Cabin'), tr('תא על הגוף: הגוף עולה מעליו', 'A cabin on the body: the body rises above it'));
     case 'frame':
-      return V('frame', 'שלדה', 'צינורות: קל ופתוח');
+      return V('frame', tr('שלדה', 'Chassis'), tr('צינורות: קל ופתוח', 'Tubes: light and open'));
     case 'scope':
-      return V('scope', 'כוונת', ctx.guns ? 'כל הקנים מדייקים יותר' : 'אין קנה — לא משנה כלום');
+      return V('scope', tr('כוונת', 'Sight'), ctx.guns ? tr('כל הקנים מדייקים יותר', 'Every barrel is more accurate') : tr('אין קנה — לא משנה כלום', 'No barrel — it changes nothing'));
     case 'mag':
-      return V('mag', 'מחסנית', ctx.guns ? 'הקנים נטענים מהר יותר' : 'אין קנה — לא משנה כלום');
+      return V('mag', tr('מחסנית', 'Magazine'), ctx.guns ? tr('הקנים נטענים מהר יותר', 'The barrels reload faster') : tr('אין קנה — לא משנה כלום', 'No barrel — it changes nothing'));
     case 'silencer':
-      return V('silencer', 'משתיק', ctx.guns ? 'ירי שקט — לא מושך משטרה' : 'אין קנה — לא משנה כלום');
+      return V('silencer', tr('משתיק', 'Silencer'), ctx.guns ? tr('ירי שקט — לא מושך משטרה', 'Quiet fire — doesn\'t draw the police') : tr('אין קנה — לא משנה כלום', 'No barrel — it changes nothing'));
     case 'grip':
     case 'stock':
     case 'guard':
-      return V('hand', t === 'grip' ? 'ידית' : t === 'stock' ? 'קת' : 'מגן יד', 'הופך את כל הציור לנשק שמחזיקים ביד');
+      return V('hand', t === 'grip' ? tr('ידית', 'Handle') : t === 'stock' ? tr('קת', 'Stock') : tr('מגן יד', 'Hand guard'), tr('הופך את כל הציור לנשק שמחזיקים ביד', 'Turns the whole drawing into a weapon you hold in your hand'));
     default:
       return V(t, t, '');
   }
@@ -198,24 +199,24 @@ export function roleOf(t, q, ctx = {}) {
 // ------------------------------------------------------------------ the part's menu
 // (on a thing for the hand: what each part does to it - game/handparts.js handSpec)
 const HAND_SAY = {
-  barrel: 'יורה — ארוך יותר: רחוק ומדויק יותר',
-  grip: 'מחזיקים כאן — שתי ידיות: יציב יותר',
-  mag: 'יותר כדורים בכל מחסנית',
-  scope: 'זום ודיוק כשמכוונים',
-  stock: 'בועט פחות',
-  silencer: 'אף אחד לא שומע את הירי',
-  blade: 'על רובה: כידון. לבד: חותך',
-  guard: 'חוסם חלק מהמכה',
-  head: 'הודף חזק',
-  spring: 'הקליעים קופצים מהקירות',
-  wing: 'הקליעים טסים ומוצאים את המטרה',
-  prop: 'משב רוח שהודף אנשים',
-  chute: 'מחזיקים אותו — נופלים לאט',
-  jet: 'הקליעים מהירים יותר',
-  fin: 'הקליעים יציבים — מדויק יותר',
-  armor: 'מגן: חוסם קצת מהפגיעות',
-  body: 'חלק מהנשק',
-  deco: 'רק מראה — בלי השפעה',
+  barrel: tr('יורה — ארוך יותר: רחוק ומדויק יותר', 'Fires — longer: further and more accurate'),
+  grip: tr('מחזיקים כאן — שתי ידיות: יציב יותר', 'You hold it here — two handles: steadier'),
+  mag: tr('יותר כדורים בכל מחסנית', 'More bullets in every magazine'),
+  scope: tr('זום ודיוק כשמכוונים', 'Zoom and accuracy when you aim'),
+  stock: tr('בועט פחות', 'Kicks less'),
+  silencer: tr('אף אחד לא שומע את הירי', 'Nobody hears the shots'),
+  blade: tr('על רובה: כידון. לבד: חותך', 'On a rifle: a bayonet. On its own: it cuts'),
+  guard: tr('חוסם חלק מהמכה', 'Blocks some of the hit'),
+  head: tr('הודף חזק', 'Knocks back hard'),
+  spring: tr('הקליעים קופצים מהקירות', 'The bullets bounce off walls'),
+  wing: tr('הקליעים טסים ומוצאים את המטרה', 'The bullets fly and find the target'),
+  prop: tr('משב רוח שהודף אנשים', 'A gust of wind that blows people back'),
+  chute: tr('מחזיקים אותו — נופלים לאט', 'Hold on to it — you fall slowly'),
+  jet: tr('הקליעים מהירים יותר', 'The bullets are faster'),
+  fin: tr('הקליעים יציבים — מדויק יותר', 'The bullets are steady — more accurate'),
+  armor: tr('מגן: חוסם קצת מהפגיעות', 'A shield: blocks some of the hits'),
+  body: tr('חלק מהנשק', 'Part of the weapon'),
+  deco: tr('רק מראה — בלי השפעה', 'Looks only — no effect'),
 };
 
 // what the player's thing is made of now, for what its parts are where they are (P: game/parts.js
@@ -237,11 +238,11 @@ export function menuOf(P, i, likely = [], ride = (t) => true) {
   const ctx = q ? ctxOf(P) : null;
   const item = (t) => {
     if (q) return Object.assign({ t }, roleOf(t, q, ctx));
-    const say = HAND_SAY[t] || (ride(t) ? 'הופך את הציור לכלי רכב' : 'רק מראה — בלי השפעה');
+    const say = HAND_SAY[t] || (ride(t) ? tr('הופך את הציור לכלי רכב', 'Turns the drawing into a vehicle') : tr('רק מראה — בלי השפעה', 'Looks only — no effect'));
     return { t, v: t, name: null, say };
   };
   const out = [];
-  if (likely.length) out.push({ k: 'likely', name: 'מתאים כאן', items: likely.map(item) });
+  if (likely.length) out.push({ k: 'likely', name: tr('מתאים כאן', 'Fits here'), items: likely.map(item) });
   for (const g of ROLE_GROUPS) out.push({ k: g.k, name: g.name, items: g.t.map(item) });
   return out;
 }

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { clamp, damp, dampAngle } from '../core/util.js';
 import { groundHeight } from '../world/layout.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 5.1; never with ?classic) Climbing.
 //
 // - Up a wall, a fence, a car: jump (Space) in front of something you can reach the top of (up to
@@ -113,7 +114,7 @@ export class Climb {
     }
     if (!best) return null;
     const esc = best.route.kind === 'escape';
-    best.label = best.end === 'bottom' ? (esc ? 'לטפס במדרגות החירום' : 'לטפס בסולם לגג') : esc ? 'לרדת במדרגות החירום' : 'לרדת בסולם';
+    best.label = best.end === 'bottom' ? (esc ? tr('לטפס במדרגות החירום', 'Climb the fire escape') : tr('לטפס בסולם לגג', 'Climb the ladder to the roof')) : esc ? tr('לרדת במדרגות החירום', 'Go down the fire escape') : tr('לרדת בסולם', 'Go down the ladder');
     return best;
   }
 
@@ -205,7 +206,7 @@ export class Climb {
     if (g.time - (this._hintT || -1) > 0.25) {
       this._hintT = g.time;
       const m = this.ledge(0, 0, 0.55);
-      this._hint = m ? (g.touch && !g.pad.active ? 'קפיצה — לטפס' : 'רווח — לטפס') : null;
+      this._hint = m ? (g.touch && !g.pad.active ? tr('קפיצה — לטפס', 'Jump — climb') : tr('רווח — לטפס', 'Space — climb')) : null;
     }
     return this._hint;
   }
@@ -410,7 +411,7 @@ export class Climb {
   // what the prompt says while you are on one
   get prompt() {
     if (!this.on) return null;
-    return this.game.touch && !this.game.pad.active ? 'למעלה/למטה עם המקל · קפיצה — לעזוב' : 'W/S — למעלה/למטה · רווח — לעזוב';
+    return this.game.touch && !this.game.pad.active ? tr('למעלה/למטה עם המקל · קפיצה — לעזוב', 'Up/down with the stick · jump — let go') : tr('W/S — למעלה/למטה · רווח — לעזוב', 'W/S — up/down · Space — let go');
   }
 }
 

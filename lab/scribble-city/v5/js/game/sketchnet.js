@@ -1,5 +1,6 @@
 import { NET } from './sketchnet_w.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.7) What a freehand drawing is, at a glance. A small network (three layers of 3x3
 // filters, then two plain ones) that learned what people draw when they draw a plane, a
 // helicopter, a car, a rifle, a sword... from the Quick, Draw! dataset (Google, CC BY 4.0: tens
@@ -16,57 +17,57 @@ export const CLASSES = NET.classes;
 
 // each class: what it is in the game, and its name there
 const AS = {
-  airplane: ['plane', 'מטוס'],
-  helicopter: ['copter', 'מסוק'],
-  car: ['car', 'מכונית'],
-  'police car': ['car', 'מכונית'],
-  'pickup truck': ['car', 'טנדר'],
-  van: ['car', 'מסחרית'],
-  ambulance: ['car', 'אמבולנס'],
-  truck: ['truck', 'משאית'],
-  firetruck: ['truck', 'כבאית'],
-  bus: ['bus', 'אוטובוס'],
-  'school bus': ['bus', 'אוטובוס'],
-  motorbike: ['moto', 'אופנוע'],
-  bicycle: ['bicycle', 'אופניים'],
-  tractor: ['tractor', 'טרקטור'],
-  cannon: ['tank', 'טנק'],
-  tank: ['tank', 'טנק'],
-  rifle: ['gun', 'רובה'],
-  pistol: ['gun', 'אקדח'],
-  smg: ['gun', 'תת־מקלע'],
-  shotgun: ['gun', 'רובה ציד'],
-  minigun: ['gun', 'מיניגאן'],
-  launcher: ['gun', 'משגר רקטות'],
-  sword: ['sword', 'חרב'],
-  knife: ['sword', 'סכין'],
-  axe: ['club', 'גרזן'],
-  hammer: ['club', 'פטיש'],
-  'baseball bat': ['club', 'מחבט'],
-  boomerang: ['boomerang', 'בומרנג'],
-  bomb: ['bomb', 'פצצה'],
+  airplane: ['plane', tr('מטוס', 'Plane')],
+  helicopter: ['copter', tr('מסוק', 'Helicopter')],
+  car: ['car', tr('מכונית', 'Car')],
+  'police car': ['car', tr('מכונית', 'Car')],
+  'pickup truck': ['car', tr('טנדר', 'Pickup truck')],
+  van: ['car', tr('מסחרית', 'Van')],
+  ambulance: ['car', tr('אמבולנס', 'Ambulance')],
+  truck: ['truck', tr('משאית', 'Truck')],
+  firetruck: ['truck', tr('כבאית', 'Fire truck')],
+  bus: ['bus', tr('אוטובוס', 'Bus')],
+  'school bus': ['bus', tr('אוטובוס', 'Bus')],
+  motorbike: ['moto', tr('אופנוע', 'Motorbike')],
+  bicycle: ['bicycle', tr('אופניים', 'Bicycle')],
+  tractor: ['tractor', tr('טרקטור', 'Tractor')],
+  cannon: ['tank', tr('טנק', 'Tank')],
+  tank: ['tank', tr('טנק', 'Tank')],
+  rifle: ['gun', tr('רובה', 'Rifle')],
+  pistol: ['gun', tr('אקדח', 'Pistol')],
+  smg: ['gun', tr('תת־מקלע', 'Submachine gun')],
+  shotgun: ['gun', tr('רובה ציד', 'Shotgun')],
+  minigun: ['gun', tr('מיניגאן', 'Minigun')],
+  launcher: ['gun', tr('משגר רקטות', 'Rocket launcher')],
+  sword: ['sword', tr('חרב', 'Sword')],
+  knife: ['sword', tr('סכין', 'Knife')],
+  axe: ['club', tr('גרזן', 'Axe')],
+  hammer: ['club', tr('פטיש', 'Hammer')],
+  'baseball bat': ['club', tr('מחבט', 'Bat')],
+  boomerang: ['boomerang', tr('בומרנג', 'Boomerang')],
+  bomb: ['bomb', tr('פצצה', 'Bomb')],
   // (ROADMAP 11.8: on the water, in the air, under the feet, and the gear)
-  sailboat: ['boat', 'סירת מפרש'],
-  speedboat: ['boat', 'סירת מנוע'],
-  canoe: ['boat', 'קאנו'],
-  submarine: ['boat', 'צוללת'],
-  'cruise ship': ['boat', 'ספינה'],
-  'hot air balloon': ['balloon', 'כדור פורח'],
-  skateboard: ['skate', 'סקייטבורד'],
-  shield: ['shield', 'מגן'],
-  parachute: ['parachute', 'מצנח'],
-  umbrella: ['umbrella', 'מטרייה'],
-  ladder: ['ladder', 'סולם'],
-  bridge: ['bridge', 'גשר'],
-  key: ['key', 'מפתח'],
-  spring: ['spring', 'קפיץ'],
+  sailboat: ['boat', tr('סירת מפרש', 'Sailboat')],
+  speedboat: ['boat', tr('סירת מנוע', 'Motorboat')],
+  canoe: ['boat', tr('קאנו', 'Canoe')],
+  submarine: ['boat', tr('צוללת', 'Submarine')],
+  'cruise ship': ['boat', tr('ספינה', 'Ship')],
+  'hot air balloon': ['balloon', tr('כדור פורח', 'Hot-air balloon')],
+  skateboard: ['skate', tr('סקייטבורד', 'Skateboard')],
+  shield: ['shield', tr('מגן', 'Shield')],
+  parachute: ['parachute', tr('מצנח', 'Parachute')],
+  umbrella: ['umbrella', tr('מטרייה', 'Umbrella')],
+  ladder: ['ladder', tr('סולם', 'Ladder')],
+  bridge: ['bridge', tr('גשר', 'Bridge')],
+  key: ['key', tr('מפתח', 'Key')],
+  spring: ['spring', tr('קפיץ', 'Spring')],
 };
 export const GROUP_OF = (c) => (AS[c] ? AS[c][0] : 'other');
 export const NAME_OF = (c) => (AS[c] ? AS[c][1] : null);
 export const VEHICLE_GROUPS = new Set(['plane', 'copter', 'car', 'truck', 'bus', 'moto', 'bicycle', 'tractor', 'tank', 'boat', 'balloon', 'skate']);
 // a car, a truck, a bus, a motorbike, a bicycle, a tractor: one family (all driven alike)
 export const CAR_FAMILY = new Set(['car', 'truck', 'bus', 'moto', 'bicycle', 'tractor']);
-export const GROUP_NAME = { plane: 'מטוס', copter: 'מסוק', car: 'מכונית', truck: 'משאית', bus: 'אוטובוס', moto: 'אופנוע', bicycle: 'אופניים', tractor: 'טרקטור', tank: 'טנק', gun: 'אקדח או רובה', sword: 'חרב', club: 'פטיש', boomerang: 'בומרנג', bomb: 'פצצה', boat: 'סירה', balloon: 'כדור פורח', skate: 'סקייטבורד', shield: 'מגן', parachute: 'מצנח', umbrella: 'מטרייה', ladder: 'סולם', bridge: 'גשר', key: 'מפתח', spring: 'קפיץ' };
+export const GROUP_NAME = { plane: tr('מטוס', 'Plane'), copter: tr('מסוק', 'Helicopter'), car: tr('מכונית', 'Car'), truck: tr('משאית', 'Truck'), bus: tr('אוטובוס', 'Bus'), moto: tr('אופנוע', 'Motorbike'), bicycle: tr('אופניים', 'Bicycle'), tractor: tr('טרקטור', 'Tractor'), tank: tr('טנק', 'Tank'), gun: tr('אקדח או רובה', 'Pistol or rifle'), sword: tr('חרב', 'Sword'), club: tr('פטיש', 'Hammer'), boomerang: tr('בומרנג', 'Boomerang'), bomb: tr('פצצה', 'Bomb'), boat: tr('סירה', 'Boat'), balloon: tr('כדור פורח', 'Hot-air balloon'), skate: tr('סקייטבורד', 'Skateboard'), shield: tr('מגן', 'Shield'), parachute: tr('מצנח', 'Parachute'), umbrella: tr('מטרייה', 'Umbrella'), ladder: tr('סולם', 'Ladder'), bridge: tr('גשר', 'Bridge'), key: tr('מפתח', 'Key'), spring: tr('קפיץ', 'Spring') };
 // (ROADMAP 11.8) what the player says they draw: five kinds of thing, any of them together
 export const CATEGORIES = {
   weapon: ['gun', 'sword', 'club', 'bomb', 'boomerang'],
@@ -77,7 +78,7 @@ export const CATEGORIES = {
 };
 export const CATEGORY_ORDER = ['weapon', 'car', 'air', 'sea', 'gear'];
 export const GEAR_GROUPS = new Set(CATEGORIES.gear);
-export const CATEGORY_NAME = { weapon: 'נשק', car: 'רכב', air: 'כלי טיס', sea: 'כלי שייט', gear: 'ציוד' };
+export const CATEGORY_NAME = { weapon: tr('נשק', 'Weapons'), car: tr('רכב', 'Ride'), air: tr('כלי טיס', 'Aircraft'), sea: tr('כלי שייט', 'Boat'), gear: tr('ציוד', 'Gear') };
 export const CATEGORY_OF = (grp) => CATEGORY_ORDER.find((c) => CATEGORIES[c].includes(grp)) || null;
 // the groups a choice of categories allows (null: any)
 export function groupsOf(cats) {

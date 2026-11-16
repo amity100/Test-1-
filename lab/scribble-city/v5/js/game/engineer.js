@@ -2,6 +2,7 @@ import { clamp } from '../core/util.js';
 import { shapeOf, spanAt } from './drawncar.js';
 import { rideSpec } from './partsum.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.12) The engineer: what was drawn, made to work - its form by what it does, its look by
 // the drawing. Three ways to have it (ui/freedraw.js, on the card):
 //   - as drawn: as it is (and what that does, its warnings: a rotor not over its weight leans)
@@ -22,9 +23,9 @@ import { rideSpec } from './partsum.js';
 // (ROADMAP 11.15) opt: { only (a Set of its engineering steps, EN_STEPS: only these), noTidy (its lines
 // as drawn - none of the tidying) }: what it would do, offered on the card; what the player took, done
 export const ENG_LEVELS = [
-  ['raw', 'כמו שצויר'],
-  ['tidy', 'מסודר'],
-  ['eng', 'מהונדס'],
+  ['raw', tr('כמו שצויר', 'As drawn')],
+  ['tidy', tr('מסודר', 'Tidy')],
+  ['eng', tr('מהונדס', 'Engineered')],
 ];
 // (its steps: tidying - a hand's slips; engineering - what makes it work better, each one offered)
 export const TIDY_STEPS = ['smooth', 'wheels', 'level'];
@@ -99,7 +100,7 @@ export function engineer(design, level = 'eng', opt = {}) {
       const y0 = Math.min(...main.pts.map((p) => p[1]));
       for (const p of main.pts) if (p[1] < y0 + H * 0.12) p[1] = y0 + (p[1] - y0) * 0.3;
     }
-    say('הקווים הוחלקו', [main]);
+    say(tr('הקווים הוחלקו', 'The lines were smoothed'), [main]);
   }, 'smooth');
   // its wheels round, on one line, alike
   step(() => {
@@ -120,7 +121,7 @@ export function engineer(design, level = 'eng', opt = {}) {
         w.y += r - w.r;
         w.r = r;
       }
-      say('הגלגלים הושוו', wheels.map((w) => w.s));
+      say(tr('הגלגלים הושוו', 'The wheels were matched'), wheels.map((w) => w.s));
     } else {
       // (two by two: those at its back alike, those at its front)
       for (const half of [wheels.filter((w) => w.x < (box.x0 + box.x1) / 2), wheels.filter((w) => w.x >= (box.x0 + box.x1) / 2)]) {
@@ -135,7 +136,7 @@ export function engineer(design, level = 'eng', opt = {}) {
       }
     }
     for (const w of wheels) wheelAt(w);
-    if (lined.length) say(lined.length > 1 ? `${lined.length} גלגלים יושרו על קו אחד` : 'גלגל יושר לקו של האחרים', lined);
+    if (lined.length) say(lined.length > 1 ? tr(`${lined.length} גלגלים יושרו על קו אחד`, `${lined.length} wheels were lined up on one line`) : tr('גלגל יושר לקו של האחרים', 'A wheel was lined up with the others'), lined);
   }, 'wheels');
   // its barrels, wings, rotors level (a propeller upright) - as they nearly were
   for (const s of above ? [] : S) {
@@ -147,21 +148,21 @@ export function engineer(design, level = 'eng', opt = {}) {
         const to = snap(a, (8 * Math.PI) / 180);
         if (to !== a) {
           rotate(s, s.base, to - a);
-          say('הקנה יושר', [s]);
+          say(tr('הקנה יושר', 'The barrel was straightened'), [s]);
         }
       } else if ((t === 'wing' && v === 'wing' && !s.span) || ((t === 'rotor' || t === 'prop') && v === 'lift')) {
         const a = axisOf(s.pts);
         const d = wrapHalf(-a);
         if (Math.abs(d) > 1e-3 && Math.abs(d) < (12 * Math.PI) / 180) {
           rotate(s, centre(s.pts), d);
-          say(t === 'wing' ? 'הכנף יושרה' : 'הרוטור יושר', [s]);
+          say(t === 'wing' ? tr('הכנף יושרה', 'The wing was straightened') : tr('הרוטור יושר', 'The rotor was straightened'), [s]);
         }
       } else if ((t === 'prop' || t === 'rotor') && (v === 'pusher' || v === 'puller')) {
         const a = axisOf(s.pts);
         const d = wrapHalf(Math.PI / 2 - a);
         if (Math.abs(d) > 1e-3 && Math.abs(d) < (15 * Math.PI) / 180) {
           rotate(s, centre(s.pts), d);
-          say('המדחף הוזקף', [s]);
+          say(tr('המדחף הוזקף', 'The propeller was set upright'), [s]);
         }
       }
     }, 'level');
@@ -183,8 +184,8 @@ export function engineer(design, level = 'eng', opt = {}) {
           wheelAt(w);
         }
       }
-      if (up.length) say(up.length > 1 ? 'הגלגלים חוברו לגוף' : 'גלגל חובר לגוף', up);
-      if (down.length) say(down.length > 1 ? 'הגלגלים הורדו מתוך הגוף — שיהיה מרווח מהכביש' : 'גלגל הורד מתוך הגוף — שיהיה מרווח מהכביש', down);
+      if (up.length) say(up.length > 1 ? tr('הגלגלים חוברו לגוף', 'The wheels were attached to the body') : tr('גלגל חובר לגוף', 'A wheel was attached to the body'), up);
+      if (down.length) say(down.length > 1 ? tr('הגלגלים הורדו מתוך הגוף — שיהיה מרווח מהכביש', 'The wheels were lowered out of the body — so there\'s clearance from the road') : tr('גלגל הורד מתוך הגוף — שיהיה מרווח מהכביש', 'A wheel was lowered out of the body — so there\'s clearance from the road'), down);
     }, 'wheelsBody');
     // ---- spread to carry its weight: its weight between its wheels
     step(() => {
@@ -214,7 +215,7 @@ export function engineer(design, level = 'eng', opt = {}) {
         w.x += dx;
         wheelAt(w);
       }
-      say(t < 0.5 ? 'הגלגלים האחוריים הוזזו אחורה — שהמשקל יהיה ביניהם' : 'הגלגלים הקדמיים הוזזו קדימה — שהמשקל יהיה ביניהם', end.map((w) => w.s));
+      say(t < 0.5 ? tr('הגלגלים האחוריים הוזזו אחורה — שהמשקל יהיה ביניהם', 'The rear wheels were moved back — so the weight sits between them') : tr('הגלגלים הקדמיים הוזזו קדימה — שהמשקל יהיה ביניהם', 'The front wheels were moved forward — so the weight sits between them'), end.map((w) => w.s));
     }, 'spread');
     // ---- down low between its wheels, when it would roll over in a turn
     step(() => {
@@ -227,7 +228,7 @@ export function engineer(design, level = 'eng', opt = {}) {
       const wheelSet = new Set(wheels.map((w) => w.s));
       const low = S.filter((s) => !wheelSet.has(s) && vOf(s) !== 'track');
       for (const s of low) shift(s, 0, -d);
-      say('הגוף הונמך בין הגלגלים — יציב יותר בפניות', low);
+      say(tr('הגוף הונמך בין הגלגלים — יציב יותר בפניות', 'The body was lowered between the wheels — steadier in the turns'), low);
     }, 'low');
     const top = (x) => {
       const sp = spanAt(main.pts, clamp(x, box.x0 + 1e-3, box.x1 - 1e-3));
@@ -253,7 +254,7 @@ export function engineer(design, level = 'eng', opt = {}) {
       const dx = clamp(spec.com[0] - c, -L * 0.3, L * 0.3);
       if (Math.abs(dx) > L * 0.03) {
         for (const s of rotors) shift(s, dx, 0);
-        say('הרוטור הוזז מעל מרכז הכובד', rotors);
+        say(tr('הרוטור הוזז מעל מרכז הכובד', 'The rotor was moved over the center of gravity'), rotors);
       }
       // (each rotor - its blades drawn one by one, together - up on its mast)
       for (const g of rotorSets(rotors)) {
@@ -264,7 +265,7 @@ export function engineer(design, level = 'eng', opt = {}) {
         const dy = cy < t + 0.25 ? t + 0.35 - cy : cy > t + 1.4 ? t + 0.7 - cy : 0;
         if (Math.abs(dy) > 0.05) {
           for (const s of g) shift(s, 0, dy);
-          say('הרוטור הוצב על תורן', g);
+          say(tr('הרוטור הוצב על תורן', 'The rotor was set on a mast'), g);
         }
       }
     }, 'rotorCom');
@@ -291,7 +292,7 @@ export function engineer(design, level = 'eng', opt = {}) {
           grown.add(s);
         }
       }
-      say(f > 1.6 ? `הרוטור הוגדל פי ${f.toFixed(1)} — רוטור של מסוק אמיתי ארוך כמעט כמו המסוק כולו` : `הרוטור הוגדל ב־${Math.round((f - 1) * 100)}% — כדי שירים אותו`, rotors);
+      say(f > 1.6 ? tr(`הרוטור הוגדל פי ${f.toFixed(1)} — רוטור של מסוק אמיתי ארוך כמעט כמו המסוק כולו`, `The rotor was made ${f.toFixed(1)} times bigger — a real helicopter's rotor is almost as long as the whole helicopter`) : tr(`הרוטור הוגדל ב־${Math.round((f - 1) * 100)}% — כדי שירים אותו`, `The rotor was made ${Math.round((f - 1) * 100)}% bigger — so it lifts it`), rotors);
     }, 'rotorGrow');
     // (ROADMAP 11.13: a helicopter of one rotor, nothing to hold it straight - it turns round itself:
     // a small rotor at the end of its tail, as a real one has, a fifth of its rotor's size)
@@ -311,7 +312,7 @@ export function engineer(design, level = 'eng', opt = {}) {
         drawn.delete(s);
       } else {
         spec = sp;
-        say(design.copter ? 'נוסף רוטור זנב — בלעדיו מסוק מסתובב סביב עצמו' : 'נוסף רוטור זנב — בלעדיו הוא מסתובב סביב עצמו באוויר', [s]);
+        say(design.copter ? tr('נוסף רוטור זנב — בלעדיו מסוק מסתובב סביב עצמו', 'A tail rotor was added — without one a helicopter spins around itself') : tr('נוסף רוטור זנב — בלעדיו הוא מסתובב סביב עצמו באוויר', 'A tail rotor was added — without one it spins around itself in the air'), [s]);
       }
     }
     // ---- jets under it, under its weight
@@ -322,12 +323,12 @@ export function engineer(design, level = 'eng', opt = {}) {
       const dx = clamp(spec.com[0] - c, -L * 0.3, L * 0.3);
       if (Math.abs(dx) <= L * 0.03) return;
       for (const s of vtols) shift(s, dx, 0);
-      say('הסילונים הוזזו אל מתחת למרכז הכובד', vtols);
+      say(tr('הסילונים הוזזו אל מתחת למרכז הכובד', 'The jets were moved under the center of gravity'), vtols);
     }, 'jetsCom');
     // (ROADMAP 11.13: too weak to lift it - a rocket's engine, a jump jet's: bigger, as much as it
     // must be - its thrust goes as its size, up to four times as big as drawn)
     for (let round = 0; round < 2; round++) {
-      if (!vtols.length || !spec.sum || !spec.sum.warn.some((w) => w.startsWith('הסילונים שמתחת חלשים'))) break;
+      if (!vtols.length || !spec.sum || !spec.sum.warn.some((w) => w.startsWith(tr('הסילונים שמתחת חלשים', 'The jets underneath are')))) break;
       const before = spec;
       step(() => {
         const lift = liftOf(spec, 'J');
@@ -339,7 +340,7 @@ export function engineer(design, level = 'eng', opt = {}) {
           s.pts = s.pts.map(([x, y]) => [cx + (x - cx) * f, t + (y - t) * f]);
           grown.add(s);
         }
-        say('הסילונים הוגדלו — כדי שירימו אותו', vtols);
+        say(tr('הסילונים הוגדלו — כדי שירימו אותו', 'The jets were made bigger — so they lift it'), vtols);
       }, 'jetsGrow');
       if (spec === before) break;
     }
@@ -361,7 +362,7 @@ export function engineer(design, level = 'eng', opt = {}) {
       const dx = clamp(want - np, -L * 0.25, L * 0.25);
       if (Math.abs(dx) <= L * 0.03 || !(spec.pitchy || want - np < -L * 0.2)) return;
       for (const s of wings) shift(s, dx, 0);
-      say('הכנפיים הוזזו אל מרכז הכובד', wings);
+      say(tr('הכנפיים הוזזו אל מרכז הכובד', 'The wings were moved to the center of gravity'), wings);
     }, 'wingsCom');
     // (too small to hold it up: as big as they must be - out longer, their shape as drawn (drawn edge
     // on: deeper) - up to a glider's)
@@ -369,7 +370,7 @@ export function engineer(design, level = 'eng', opt = {}) {
     // (ROADMAP 11.13: again, while it is still too heavy for them - a glider's wings at most, twice
     // as long as it is, near half as deep)
     for (let round = 0; round < 3; round++) {
-      if (!wingsAll.length || !spec.sum || !spec.sum.warn.some((w) => w.startsWith('הכנפיים קטנות'))) break;
+      if (!wingsAll.length || !spec.sum || !spec.sum.warn.some((w) => w.startsWith(tr('הכנפיים קטנות', 'The wings are')))) break;
       const before = spec;
       step(() => {
         const lift = liftOf(spec, 'W');
@@ -386,7 +387,7 @@ export function engineer(design, level = 'eng', opt = {}) {
           } else stretch(s, Math.max(1, Math.min(f, (L * (round ? 0.55 : 0.45)) / Math.max(1e-6, shapeOf(s.pts).w))), 1);
           grown.add(s);
         }
-        say(f > 1.5 || round ? 'הכנפיים הוארכו — כנף קטנה מדי לא מחזיקה מטוס באוויר' : 'הכנפיים הוגדלו — כדי שימריא', wingsAll);
+        say(f > 1.5 || round ? tr('הכנפיים הוארכו — כנף קטנה מדי לא מחזיקה מטוס באוויר', 'The wings were lengthened — a wing that\'s too small can\'t keep a plane in the air') : tr('הכנפיים הוגדלו — כדי שימריא', 'The wings were made bigger — so it takes off'), wingsAll);
       }, 'wingsGrow');
       // (no bigger they can be)
       if (spec === before) break;
@@ -398,7 +399,7 @@ export function engineer(design, level = 'eng', opt = {}) {
         const t = top(s.base[0]);
         if (s.base[0] > box.x0 && s.base[0] < box.x1 && s.base[1] > t + 0.35) {
           shift(s, 0, Math.max(t + 0.12 - s.base[1], -0.9));
-          say('הקנה הונח על הגג', [s]);
+          say(tr('הקנה הונח על הגג', 'The barrel was put on the roof'), [s]);
         }
       }, 'barrelRoof');
     }
@@ -417,7 +418,7 @@ export function engineer(design, level = 'eng', opt = {}) {
         const dy = clamp(mid(x) - cy, -H * 0.4, H * 0.4);
         if (Math.abs(dy) > H * 0.05) {
           shift(s, 0, dy);
-          say(jet ? 'הסילון מורכז על הזנב' : front ? 'המדחף מורכז על החרטום' : 'המדחף מורכז על הזנב', [s]);
+          say(jet ? tr('הסילון מורכז על הזנב', 'The jet was centered on the tail') : front ? tr('המדחף מורכז על החרטום', 'The propeller was centered on the nose') : tr('המדחף מורכז על הזנב', 'The propeller was centered on the tail'), [s]);
         }
         if (!jet && Math.abs(cx - x) > L * 0.1) shift(s, x - cx, 0);
       }, 'propCenter');
@@ -453,7 +454,7 @@ export function engineer(design, level = 'eng', opt = {}) {
       for (const s of turned) of.delete(s);
       if (at < 0 || of.size === had) continue;
       if (!of.size) notes.splice(at, 1);
-      else if (/^\d+ גלגלים יושרו/.test(t)) notes[at] = of.size > 1 ? `${of.size} גלגלים יושרו על קו אחד` : 'גלגל יושר לקו של האחרים';
+      else if (/^\d+ גלגלים יושרו/.test(t)) notes[at] = of.size > 1 ? tr(`${of.size} גלגלים יושרו על קו אחד`, `${of.size} wheels were lined up on one line`) : tr('גלגל יושר לקו של האחרים', 'A wheel was lined up with the others');
     }
     fin = rideSpec(D);
     if (!keeps(fin)) return level === 'eng' ? engineer(design, 'tidy', opt) : { design, notes: [], changes: [], steps: [] };
@@ -484,11 +485,11 @@ export function engineer(design, level = 'eng', opt = {}) {
 
 // [the note, said instead when it did not get all the way, the warnings still on the card that say so]
 const CLOSER = [
-  ['הרוטור הוזז מעל מרכז הכובד', 'הרוטור קורב למרכז הכובד — לא עד הסוף, כדי שיישאר דומה לציור', ['הרוטור מאחורי מרכז הכובד', 'הרוטור לפני מרכז הכובד']],
-  ['הסילונים הוזזו אל מתחת למרכז הכובד', 'הסילונים קורבו אל מתחת למרכז הכובד — לא עד הסוף, כדי שיישאר דומה לציור', ['הסילונים מאחורי מרכז הכובד', 'הסילונים לפני מרכז הכובד']],
-  ['הכנפיים הוזזו אל מרכז הכובד', 'הכנפיים קורבו אל מרכז הכובד — לא עד הסוף, כדי שיישאר דומה לציור', ['מרכז הכובד מאחורי הכנפיים']],
-  ['הגלגלים האחוריים הוזזו אחורה — שהמשקל יהיה ביניהם', 'הגלגלים האחוריים הוזזו אחורה — לא עד הסוף, כדי שיישאר דומה לציור', ['מרכז הכובד מאחורי הגלגלים', 'מרכז הכובד מעל הגלגלים האחוריים']],
-  ['הגלגלים הקדמיים הוזזו קדימה — שהמשקל יהיה ביניהם', 'הגלגלים הקדמיים הוזזו קדימה — לא עד הסוף, כדי שיישאר דומה לציור', ['מרכז הכובד לפני הגלגלים', 'מרכז הכובד מעל הגלגלים הקדמיים']],
+  [tr('הרוטור הוזז מעל מרכז הכובד', 'The rotor was moved over the center of gravity'), tr('הרוטור קורב למרכז הכובד — לא עד הסוף, כדי שיישאר דומה לציור', 'The rotor was moved closer to the center of gravity — not all the way, so it still looks like your drawing'), [tr('הרוטור מאחורי מרכז הכובד', 'The rotor is behind the center of gravity'), tr('הרוטור לפני מרכז הכובד', 'The rotor is in front of the center of gravity')]],
+  [tr('הסילונים הוזזו אל מתחת למרכז הכובד', 'The jets were moved under the center of gravity'), tr('הסילונים קורבו אל מתחת למרכז הכובד — לא עד הסוף, כדי שיישאר דומה לציור', 'The jets were moved closer under the center of gravity — not all the way, so it still looks like your drawing'), [tr('הסילונים מאחורי מרכז הכובד', 'The jets are behind the center of gravity'), tr('הסילונים לפני מרכז הכובד', 'The jets are in front of the center of gravity')]],
+  [tr('הכנפיים הוזזו אל מרכז הכובד', 'The wings were moved to the center of gravity'), tr('הכנפיים קורבו אל מרכז הכובד — לא עד הסוף, כדי שיישאר דומה לציור', 'The wings were moved closer to the center of gravity — not all the way, so it still looks like your drawing'), [tr('מרכז הכובד מאחורי הכנפיים', 'The center of gravity is behind the wings')]],
+  [tr('הגלגלים האחוריים הוזזו אחורה — שהמשקל יהיה ביניהם', 'The rear wheels were moved back — so the weight sits between them'), tr('הגלגלים האחוריים הוזזו אחורה — לא עד הסוף, כדי שיישאר דומה לציור', 'The rear wheels were moved back — not all the way, so it still looks like your drawing'), [tr('מרכז הכובד מאחורי הגלגלים', 'The center of gravity is behind the wheels'), tr('מרכז הכובד מעל הגלגלים האחוריים', 'The center of gravity is over the rear wheels')]],
+  [tr('הגלגלים הקדמיים הוזזו קדימה — שהמשקל יהיה ביניהם', 'The front wheels were moved forward — so the weight sits between them'), tr('הגלגלים הקדמיים הוזזו קדימה — לא עד הסוף, כדי שיישאר דומה לציור', 'The front wheels were moved forward — not all the way, so it still looks like your drawing'), [tr('מרכז הכובד לפני הגלגלים', 'The center of gravity is in front of the wheels'), tr('מרכז הכובד מעל הגלגלים הקדמיים', 'The center of gravity is over the front wheels')]],
 ];
 
 // (the rotors of it: the lines of each one - its blades drawn one by one, an X - together, as

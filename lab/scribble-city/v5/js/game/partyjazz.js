@@ -7,6 +7,7 @@ import { venueFrame, PartySound, drawPeople } from './partykit.js';
 import { paintPosters } from './partyart.js';
 import { jazzPlan } from '../world/jazzplan.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 12.9) BLUE VELVET's night: a jazz club on Inkwood Boulevard. Its room is laid out as
 // one (world/jazzplan.js, world/venues2.js: the bandstand before the velvet curtain, the parquet,
 // the round tables with their candles, the bar, the booths); here, near you, what makes it a night:
@@ -280,7 +281,7 @@ export class JazzNight {
     if (inP && !this.welcomed && on) {
       this.welcomed = true;
       g.hud.big(F.name, 2000);
-      g.hud.toast('להקת ג׳אז חיה הלילה. E ליד הבמה כדי לבקש שיר או לתת טיפ ללהקה; הברמן מכין קוקטיילים', 'info', 5);
+      g.hud.toast(tr('להקת ג׳אז חיה הלילה. E ליד הבמה כדי לבקש שיר או לתת טיפ ללהקה; הברמן מכין קוקטיילים', 'A live jazz band tonight. E by the stage to request a song or tip the band; the bartender makes cocktails'), 'info', 5);
     }
     if (!inP && dist > 40) this.welcomed = false;
     if (this.clap > 0) this.clap -= dt;
@@ -388,8 +389,8 @@ export class JazzNight {
     const d = F.D(p.x);
     const st = this.J.stage;
     if (Math.abs(u - F.mid) < 3.2 && d > st.d1 - 0.2 && d < st.d1 + 1.5) {
-      if (Math.abs(u - F.mid) < 1.4) return { kind: 'tip', label: 'E — לתת טיפ ללהקה ($20)' };
-      return { kind: 'song', label: 'E — לבקש שיר מהלהקה ($10)' };
+      if (Math.abs(u - F.mid) < 1.4) return { kind: 'tip', label: tr('E — לתת טיפ ללהקה ($20)', 'E — tip the band ($20)') };
+      return { kind: 'song', label: tr('E — לבקש שיר מהלהקה ($10)', 'E — request a song from the band ($10)') };
     }
     return null;
   }
@@ -412,11 +413,11 @@ export class JazzNight {
         this.lastN = S.n;
       }
       this.applause();
-      g.hud.toast('הזמרת מחייכת אליכם: "This one is for you, darling"', 'good', 3.5);
+      g.hud.toast(tr('הזמרת מחייכת אליכם: "This one is for you, darling"', 'The singer smiles at you: "This one is for you, darling"'), 'good', 3.5);
     } else {
       this.applause();
       for (const w of this.crowd) if (w.at === 'table') w.cheer = 1;
-      g.hud.toast('הלהקה מקדישה לכם סולו! כל השולחנות מוחאים כפיים', 'good', 3);
+      g.hud.toast(tr('הלהקה מקדישה לכם סולו! כל השולחנות מוחאים כפיים', 'The band dedicates a solo to you! Every table applauds'), 'good', 3);
       const p = g.player;
       p.hp = Math.min(p.maxHp, p.hp + 10);
     }

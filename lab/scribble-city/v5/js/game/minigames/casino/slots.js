@@ -5,6 +5,7 @@
 
 import { text, button, inBox, sfx, GOLD, RED, FONT, roundRect } from './felt.js';
 
+import { tr } from '../../../core/lang.js';
 const SYM = ['7', 'BAR', 'pen', 'bell', 'star', 'drop', 'cherry'];
 // each reel's strip: the rare symbols few, the common many
 const STRIP = ['cherry', 'drop', 'star', 'bell', 'drop', 'cherry', 'pen', 'drop', 'star', 'BAR', 'cherry', 'drop', 'bell', 'star', '7', 'drop', 'cherry', 'star', 'pen', 'drop', 'bell', 'cherry', 'BAR', 'star'];
@@ -13,9 +14,9 @@ const PAY = { 7: 100, BAR: 40, pen: 25, bell: 15, star: 10, drop: 8, cherry: 6 }
 export class SlotGame {
   constructor(o = {}) {
     this.o = o;
-    this.title = `${o.name || 'INK FORTUNE'} · מכונת מזל`;
-    this.help = 'למעלה ולמטה לשנות הימור · רווח למשוך את הידית · Esc לצאת';
-    this.helpTouch = 'נוגעים ב־SPIN · החצים לשנות הימור';
+    this.title = tr(`${o.name || 'INK FORTUNE'} · מכונת מזל`, `${o.name || 'INK FORTUNE'} · slot machine`);
+    this.help = tr('למעלה ולמטה לשנות הימור · רווח למשוך את הידית · Esc לצאת', 'Up and down to change the bet · Space to pull the lever · Esc to leave');
+    this.helpTouch = tr('נוגעים ב־SPIN · החצים לשנות הימור', 'Tap SPIN · the arrows to change the bet');
     this.pad = 'pad';
     this.pointer = true;
     this.bets = o.vip ? [25, 100, 500] : [1, 5, 25];

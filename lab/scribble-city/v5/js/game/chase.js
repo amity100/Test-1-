@@ -2,6 +2,7 @@ import { AVES, STREETS, NORTH_EDGE, SOUTH_EDGE, WEST_EDGE, BLVD, groundHeight } 
 import { angleDiff, damp, dampAngle } from '../core/util.js';
 import { M_AVES, M_STREETS } from '../world/mainland/plan.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 6.1, not with ?classic) Real chases. With you in a car and the police after you:
 //   - the car behind you calls on you to pull over first
 //   - their cars come at you, not to where you were: up behind you, then beside your back wheel,
@@ -264,7 +265,7 @@ export class Chase {
     this.stats.pits++;
     if (!this.pitTold) {
       this.pitTold = true;
-      game.hud.toast('ניידת סובבה אתכם! לא לתת להן להיצמד לגלגל האחורי', 'bad', 2.6);
+      game.hud.toast(tr('ניידת סובבה אתכם! לא לתת להן להיצמד לגלגל האחורי', 'A police car spun you around! Don\'t let them stick to your rear wheel'), 'bad', 2.6);
     }
     return true;
   }
@@ -381,7 +382,7 @@ export class Chase {
     }
     this.blocks.push(b);
     this.stats.roadblocks++;
-    game.hud.toast('מחסום משטרה לפניכם!', 'bad', 2.4);
+    game.hud.toast(tr('מחסום משטרה לפניכם!', 'A police roadblock ahead!'), 'bad', 2.4);
     return b;
   }
 

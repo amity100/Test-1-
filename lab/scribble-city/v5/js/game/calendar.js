@@ -1,20 +1,21 @@
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 12.3) The city's week: what is on tonight, where, and when the next one is. The
 // clock's own days (game/daynight.js weekday); each event has its nights and its hours (past 24:
 // on into the next morning). The phone lists them (ui/phone.js, the events app) and sets the GPS;
 // when one begins, the city says so.
 
-export const DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+export const DAYS = [tr('ראשון', 'Sunday'), tr('שני', 'Monday'), tr('שלישי', 'Tuesday'), tr('רביעי', 'Wednesday'), tr('חמישי', 'Thursday'), tr('שישי', 'Friday'), tr('שבת', 'Saturday')];
 
 export const EVENTS = [
   {
-    id: 'inkfest', name: 'INK FEST', he: 'אינק פסט', nights: [4, 5, 6, 0], from: 20, to: 26, x: 92, z: 274,
-    what: 'פסטיבל על במה צפה מול החוף: די ג׳יי, אלפי רוקדים, משאיות אוכל, ריקוד בקהל וזיקוקים בחצות',
-    where: 'החוף של האי, ליד המזח',
+    id: 'inkfest', name: 'INK FEST', he: tr('אינק פסט', 'Ink Fest'), nights: [4, 5, 6, 0], from: 20, to: 26, x: 92, z: 274,
+    what: tr('פסטיבל על במה צפה מול החוף: די ג׳יי, אלפי רוקדים, משאיות אוכל, ריקוד בקהל וזיקוקים בחצות', 'A festival on a floating stage off the beach: a DJ, thousands dancing, food trucks, dancing in the crowd and fireworks at midnight'),
+    where: tr('החוף של האי, ליד המזח', 'The island\'s beach, by the pier'),
   },
   {
-    id: 'artnight', name: 'ART NIGHT', he: 'ערב אמנות', nights: [2, 5], from: 19, to: 24, x: -835, z: -857,
-    what: 'עשרה קירות ציורי ענק, ציירים שמציירים מול העיניים, ג׳אז, הדפסים וקפה קובני, וקרב ציור על הבמה: 3 סיבובים, 25 שניות, והשופטים הם רשת שמזהה ציורים',
-    where: 'חצר הקירות, פיינטווד',
+    id: 'artnight', name: 'ART NIGHT', he: tr('ערב אמנות', 'Art night'), nights: [2, 5], from: 19, to: 24, x: -835, z: -857,
+    what: tr('עשרה קירות ציורי ענק, ציירים שמציירים מול העיניים, ג׳אז, הדפסים וקפה קובני, וקרב ציור על הבמה: 3 סיבובים, 25 שניות, והשופטים הם רשת שמזהה ציורים', 'Ten giant painted walls, painters painting before your eyes, jazz, prints and Cuban coffee, and a drawing battle on the stage: 3 rounds, 25 seconds, and the judges are a network that recognizes drawings'),
+    where: tr('חצר הקירות, פיינטווד', 'The Wall Yard, Paintwood'),
   },
 ];
 
@@ -80,11 +81,11 @@ export class Calendar {
 
   // what the phone shows of each: on now (and till when), or when next
   status(ev) {
-    if (this.isOn(ev)) return { on: true, text: `עכשיו! עד ${hh(ev.to)}` };
+    if (this.isOn(ev)) return { on: true, text: tr(`עכשיו! עד ${hh(ev.to)}`, `Now! Until ${hh(ev.to)}`) };
     const nx = this.next(ev);
     if (!nx) return { on: false, text: '' };
     const today = nx.inH < 24 && nx.day === this.now().day;
-    return { on: false, text: `${today ? 'הערב' : `יום ${DAYS[nx.day]}`} ב־${hh(nx.hour)} · בעוד ${this.realMin(nx.inH)} דקות משחק` };
+    return { on: false, text: tr(`${today ? 'הערב' : `יום ${DAYS[nx.day]}`} ב־${hh(nx.hour)} · בעוד ${this.realMin(nx.inH)} דקות משחק`, `${today ? tr('הערב', 'Tonight') : tr(`יום ${DAYS[nx.day]}`, `Day ${DAYS[nx.day]}`)} at ${hh(nx.hour)} · in ${this.realMin(nx.inH)} game minutes`) };
   }
 
   // the GPS to it
@@ -103,7 +104,7 @@ export class Calendar {
       const was = this.was.get(ev.id);
       this.was.set(ev.id, on);
       // (the moment it begins, not when the game is opened in the middle of it)
-      if (on && was === false && g.state === 'play') g.hud.toast(`${ev.he} מתחיל עכשיו: ${ev.where}! (טלפון ← אירועים, לניווט)`, 'info', 6);
+      if (on && was === false && g.state === 'play') g.hud.toast(tr(`${ev.he} מתחיל עכשיו: ${ev.where}! (טלפון ← אירועים, לניווט)`, `${ev.he} is starting now: ${ev.where}! (phone → Events, to navigate)`), 'info', 6);
     }
   }
 }

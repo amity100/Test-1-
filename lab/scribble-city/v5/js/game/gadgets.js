@@ -6,6 +6,7 @@ import { Kit, itemMats, linC } from './items.js';
 import { RAMPS, rampAt, DECKS } from './vehicles.js';
 import { makeFrame, localBox } from './materialize.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 9.2, not with ?classic) Drawings that solve problems.
 //   - a ladder: drawn facing a building's wall, it stands against it up to the roof (over the
 //     parapet, if there is one); E at its foot climbs it, like the ladders of the fire escapes.
@@ -30,9 +31,9 @@ export const PLACED = new Set(['ladder', 'ramp', 'bridge', 'spring', 'dbridge', 
 // (ROADMAP 15.4) what is drawn as a line on the world and comes up the way it was drawn - and how
 export const DRAWN_ON = new Set(['ramp', 'bridge', 'barrier']);
 export const WORLD_SAY = {
-  ramp: 'קו על הכביש: מאיפה היא מתחילה ולאן היא עולה. קצר — תלולה, ארוך — מתונה',
-  bridge: 'קו מנקודה לנקודה: מקצה גג לגג, מעל רחוב או מים (עד 40 מ\')',
-  barrier: 'קו על הקרקע: איפה שהוא יעמוד, באורך שתציירו (עד 14 מ\')',
+  ramp: tr('קו על הכביש: מאיפה היא מתחילה ולאן היא עולה. קצר — תלולה, ארוך — מתונה', 'A line on the road: where it starts and where it rises to. Short — steep, long — gentle'),
+  bridge: tr('קו מנקודה לנקודה: מקצה גג לגג, מעל רחוב או מים (עד 40 מ\')', 'A line from point to point: from roof edge to roof, over a street or water (up to 40 m)'),
+  barrier: tr('קו על הקרקע: איפה שהוא יעמוד, באורך שתציירו (עד 14 מ\')', 'A line on the ground: where it will stand, as long as you draw it (up to 14 m)'),
 };
 const MAX_EACH = 3;
 const RUNG = 0.32;
@@ -46,29 +47,29 @@ const SMUDGE = 14;
 const TILL = [40, 160];
 
 const WHY = {
-  wall: 'סולם מציירים מול קיר של בניין (קרוב אליו)',
-  low: 'הקיר הזה נמוך: קופצים עליו (רווח)',
-  high: 'גבוה מדי לסולם מצויר',
-  top: 'למעלה, בקצה הגג, עומד משהו גבוה מדי: נסו קיר אחר',
-  way: 'משהו בולט מהקיר בדרך למעלה: נסו קצת הצידה',
-  foot: 'אין מקום לרגלי הסולם כאן',
-  roof: 'אין על הגג הזה איפה לרדת מהסולם',
-  near: 'כבר יש כאן סולם',
-  ramp: 'רמפה מציירים על הכביש, מול שטח ישר ופנוי (בלי מכוניות)',
-  spring: 'קפיץ מציירים על קרקע פנויה ממש לפניכם (לא במים, לא בתוך קיר)',
-  edge: 'גשר מציירים בקצה: של גג או של המזח',
-  far: 'אין צד שני קרוב מספיק (עד 28 מטר), בגובה שלכם',
-  short: 'הצד השני קרוב מאוד: אפשר פשוט לקפוץ',
-  noroofs: 'אין כאן לאן לטפס',
+  wall: tr('סולם מציירים מול קיר של בניין (קרוב אליו)', 'Draw a ladder against the wall of a building (close to it)'),
+  low: tr('הקיר הזה נמוך: קופצים עליו (רווח)', 'This wall is low: jump onto it (Space)'),
+  high: tr('גבוה מדי לסולם מצויר', 'Too high for a drawn ladder'),
+  top: tr('למעלה, בקצה הגג, עומד משהו גבוה מדי: נסו קיר אחר', 'Up there, on the edge of the roof, something stands too high: try another wall'),
+  way: tr('משהו בולט מהקיר בדרך למעלה: נסו קצת הצידה', 'Something sticks out of the wall on the way up: try a little to the side'),
+  foot: tr('אין מקום לרגלי הסולם כאן', 'No room for the ladder\'s feet here'),
+  roof: tr('אין על הגג הזה איפה לרדת מהסולם', 'There\'s nowhere on this roof to step off the ladder'),
+  near: tr('כבר יש כאן סולם', 'There\'s already a ladder here'),
+  ramp: tr('רמפה מציירים על הכביש, מול שטח ישר ופנוי (בלי מכוניות)', 'Draw a ramp on the road, facing flat, open ground (no cars)'),
+  spring: tr('קפיץ מציירים על קרקע פנויה ממש לפניכם (לא במים, לא בתוך קיר)', 'Draw a spring on open ground right in front of you (not in water, not in a wall)'),
+  edge: tr('גשר מציירים בקצה: של גג או של המזח', 'Draw a bridge at an edge: of a roof or of the pier'),
+  far: tr('אין צד שני קרוב מספיק (עד 28 מטר), בגובה שלכם', 'There\'s no other side close enough (up to 28 meters), at your height'),
+  short: tr('הצד השני קרוב מאוד: אפשר פשוט לקפוץ', 'The other side is very close: you can just jump'),
+  noroofs: tr('אין כאן לאן לטפס', 'There\'s nothing to climb here'),
   // (ROADMAP 15.4: drawn on the world, as a line)
-  line: 'ציירו קו על הקרקע: מאיפה מתחילים ולאן',
-  rampLine: 'רמפה: קו על הכביש — מאיפה היא מתחילה ולאן היא עולה. קצר — תלולה, ארוך — מתונה',
-  rampFree: 'אין כאן מקום פנוי וישר לרמפה (בלי קיר, מכונית או מים)',
-  bridgeLine: 'גשר: קו מנקודה לנקודה — מקצה גג לגג, מעל רחוב, מעל מים',
-  bridgeLong: 'ארוך מדי — גשר מצויר מגיע עד 40 מטר',
-  bridgeSteep: 'תלול מדי לגשר — הקצוות רחוקים מדי בגובה',
-  barrierLine: 'מחסום: קו על הקרקע, איפה שהוא יעמוד',
-  barrierFree: 'המחסום נכנס בקיר או במכונית — ציירו אותו במקום פנוי',
+  line: tr('ציירו קו על הקרקע: מאיפה מתחילים ולאן', 'Draw a line on the ground: where it starts and where it goes'),
+  rampLine: tr('רמפה: קו על הכביש — מאיפה היא מתחילה ולאן היא עולה. קצר — תלולה, ארוך — מתונה', 'Ramp: a line on the road — where it starts and where it rises to. Short — steep, long — gentle'),
+  rampFree: tr('אין כאן מקום פנוי וישר לרמפה (בלי קיר, מכונית או מים)', 'There\'s no clear, flat room for a ramp here (no wall, car or water)'),
+  bridgeLine: tr('גשר: קו מנקודה לנקודה — מקצה גג לגג, מעל רחוב, מעל מים', 'Bridge: a line from point to point — from roof edge to roof, over a street, over water'),
+  bridgeLong: tr('ארוך מדי — גשר מצויר מגיע עד 40 מטר', 'Too long — a drawn bridge reaches up to 40 meters'),
+  bridgeSteep: tr('תלול מדי לגשר — הקצוות רחוקים מדי בגובה', 'Too steep for a bridge — the ends are too far apart in height'),
+  barrierLine: tr('מחסום: קו על הקרקע, איפה שהוא יעמוד', 'Roadblock: a line on the ground, where it will stand'),
+  barrierFree: tr('המחסום נכנס בקיר או במכונית — ציירו אותו במקום פנוי', 'The roadblock goes into a wall or a car — draw it in a clear spot'),
 };
 
 const _d = new THREE.Vector3();
@@ -939,10 +940,10 @@ export class Gadgets {
     const g = this.game;
     if (id === 'umbrella') {
       this.umbrella = { grade, colour: colour ? colour.slice() : null };
-      g.hud.toast('יש לכם מטריה! בגשם היא נפתחת מעליכם (והציורים באוויר לא נמרחים), ובנפילה מגובה היא מאטה אתכם', 'good', 4.2);
+      g.hud.toast(tr('יש לכם מטריה! בגשם היא נפתחת מעליכם (והציורים באוויר לא נמרחים), ובנפילה מגובה היא מאטה אתכם', 'You\'ve got an umbrella! In the rain it opens over you (and drawings in the air don\'t smudge), and in a fall from up high it slows you down'), 'good', 4.2);
     } else if (id === 'key') {
       this.key = { grade, uses: KEY_USES[grade] || KEY_USES.good };
-      g.hud.toast('יש לכם מפתח שמתאים לכל מנעול: מכונית חונה נפתחת בלי אזעקה, וחנות סגורה בלילה נפתחת', 'good', 4.2);
+      g.hud.toast(tr('יש לכם מפתח שמתאים לכל מנעול: מכונית חונה נפתחת בלי אזעקה, וחנות סגורה בלילה נפתחת', 'You\'ve got a key that fits every lock: a parked car opens without an alarm, and a shop closed at night opens'), 'good', 4.2);
     }
     g.audio.play('cheer', 0.6);
   }
@@ -991,7 +992,7 @@ export class Gadgets {
     }
     if (this.rainSaid || this.sheltered()) return;
     this.rainSaid = true;
-    g.hud.toast('יורד גשם: הוא ימרח קצת את הדיו. מטריה מצוירת (או גג מעליכם) תשמור על הציור', 'info', 3.6);
+    g.hud.toast(tr('יורד גשם: הוא ימרח קצת את הדיו. מטריה מצוירת (או גג מעליכם) תשמור על הציור', 'It\'s raining: it will smudge the ink a little. A drawn umbrella (or a roof over you) will keep the drawing safe'), 'info', 3.6);
   }
 
   // ---------------------------------------------------------------- the key
@@ -1002,7 +1003,7 @@ export class Gadgets {
     this.stats.keys++;
     if (K.uses <= 0) {
       this.key = null;
-      this.game.hud.toast('המפתח המצויר התעקם במנעול. אפשר לצייר חדש', 'info', 2.8);
+      this.game.hud.toast(tr('המפתח המצויר התעקם במנעול. אפשר לצייר חדש', 'The drawn key bent in the lock. You can draw a new one'), 'info', 2.8);
     }
     return true;
   }
@@ -1036,8 +1037,8 @@ export class Gadgets {
   target() {
     const P = this.game.player;
     if (P.mode !== 'foot' || P.inVehicle) return null;
-    if (this.tillAt()) return { label: 'לרוקן את הקופה' };
-    if (this.shutterAt()) return { label: 'לפתוח את החנות הסגורה במפתח' };
+    if (this.tillAt()) return { label: tr('לרוקן את הקופה', 'Empty the till') };
+    if (this.shutterAt()) return { label: tr('לפתוח את החנות הסגורה במפתח', 'Open the closed shop with the key') };
     return null;
   }
 
@@ -1049,9 +1050,9 @@ export class Gadgets {
     if (t) {
       t.tillTaken = true;
       const n = Math.round(TILL[0] + Math.random() * (TILL[1] - TILL[0]));
-      if (g.money) g.money.earn(n, 'הקופה של חנות סגורה');
+      if (g.money) g.money.earn(n, tr('הקופה של חנות סגורה', 'The till of a closed shop'));
       g.audio.play('till', 0.7);
-      g.hud.toast(`$${n} מהקופה`, 'good', 2);
+      g.hud.toast(tr(`$${n} מהקופה`, `\$${n} from the till`), 'good', 2);
       this.stats.tills++;
       g.onCrime('burglary', P.pos.x, P.pos.z);
       return true;
@@ -1064,10 +1065,10 @@ export class Gadgets {
     // (one shop in three has an alarm on the shutter)
     if (Math.random() < 0.34) {
       g.audio.play('alarm', 0.7);
-      g.hud.toast('אזעקה! המשטרה בדרך', 'bad', 2.2);
+      g.hud.toast(tr('אזעקה! המשטרה בדרך', 'Alarm! The police are on the way'), 'bad', 2.2);
       g.onCrime('alarm', e.x, e.z);
       g.enemies.noise(_v.set(e.x, 1, e.z), 40, 'alarm');
-    } else g.hud.toast('התריס עולה בשקט…', 'info', 2);
+    } else g.hud.toast(tr('התריס עולה בשקט…', 'The shutter rises quietly…'), 'info', 2);
     return true;
   }
 

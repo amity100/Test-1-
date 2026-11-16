@@ -12,24 +12,25 @@
 import { look, CLASSES, NAME_OF } from '../sketchnet.js';
 import { INK, PAPER, PENS, HAND, MARKER, box, text, figure, cash } from './ink2d.js';
 
+import { tr } from '../../core/lang.js';
 export const SUBJECTS = [
-  { c: 'house', he: 'בית' },
-  { c: 'tree', he: 'עץ' },
-  { c: 'face', he: 'פרצוף' },
-  { c: 'flower', he: 'פרח' },
-  { c: 'cat', he: 'חתול' },
-  { c: 'star', he: 'כוכב' },
-  { c: 'cloud', he: 'ענן' },
-  { c: 'fish', he: 'דג' },
-  { c: 'sailboat', he: 'סירת מפרש' },
-  { c: 'umbrella', he: 'מטרייה' },
-  { c: 'hot air balloon', he: 'כדור פורח' },
-  { c: 'key', he: 'מפתח' },
-  { c: 'ladder', he: 'סולם' },
-  { c: 'car', he: 'מכונית' },
-  { c: 'airplane', he: 'מטוס' },
-  { c: 'bicycle', he: 'אופניים' },
-  { c: 'helicopter', he: 'מסוק' },
+  { c: 'house', he: tr('בית', 'House') },
+  { c: 'tree', he: tr('עץ', 'Tree') },
+  { c: 'face', he: tr('פרצוף', 'Face') },
+  { c: 'flower', he: tr('פרח', 'Flower') },
+  { c: 'cat', he: tr('חתול', 'Cat') },
+  { c: 'star', he: tr('כוכב', 'Star') },
+  { c: 'cloud', he: tr('ענן', 'Cloud') },
+  { c: 'fish', he: tr('דג', 'Fish') },
+  { c: 'sailboat', he: tr('סירת מפרש', 'Sailboat') },
+  { c: 'umbrella', he: tr('מטרייה', 'Umbrella') },
+  { c: 'hot air balloon', he: tr('כדור פורח', 'Hot-air balloon') },
+  { c: 'key', he: tr('מפתח', 'Key') },
+  { c: 'ladder', he: tr('סולם', 'Ladder') },
+  { c: 'car', he: tr('מכונית', 'Car') },
+  { c: 'airplane', he: tr('מטוס', 'Plane') },
+  { c: 'bicycle', he: tr('אופניים', 'Bicycle') },
+  { c: 'helicopter', he: tr('מסוק', 'Helicopter') },
 ];
 const HE = Object.fromEntries(SUBJECTS.map((s) => [s.c, s.he]));
 export const heName = (c) => HE[c] || NAME_OF(c) || c;
@@ -264,9 +265,9 @@ export class DrawOff {
   // o: { venue (the name on the banner, the world's English), fee (to play again), prize (x1) }
   constructor(o = {}) {
     this.o = o;
-    this.title = 'Draw-Off · קרב ציור';
-    this.help = 'ציירו עם העכבר על הדף · Enter: סיימתי · K / Shift: מחיקת הקו האחרון · Esc ליציאה';
-    this.helpTouch = 'ציירו באצבע על הדף · "סיימתי" כשגמרתם';
+    this.title = tr('Draw-Off · קרב ציור', 'Draw-Off · drawing battle');
+    this.help = tr('ציירו עם העכבר על הדף · Enter: סיימתי · K / Shift: מחיקת הקו האחרון · Esc ליציאה', 'Draw with the mouse on the page · Enter: done · K / Shift: erase the last line · Esc to leave');
+    this.helpTouch = tr('ציירו באצבע על הדף · "סיימתי" כשגמרתם', 'Draw with your finger on the page · "Done" when you\'ve finished');
     this.pad = 'tap';
     // (drawn with the pointer: in the world, the screen's face takes the mouse and the finger)
     this.pointer = true;
@@ -321,7 +322,7 @@ export class DrawOff {
       return { R, st, n, pace: R.pace * (0.8 + r() * 0.65), j: null, oops: oops && c !== this.subj.c };
     });
     this.res = null;
-    this.api.status(`סיבוב ${this.round + 1} מתוך ${ROUNDS}`);
+    this.api.status(tr(`סיבוב ${this.round + 1} מתוך ${ROUNDS}`, `Round ${this.round + 1} of ${ROUNDS}`));
     this.api.audio.play('click', 0.5);
   }
 
@@ -358,7 +359,7 @@ export class DrawOff {
       if (again) {
         const fee = this.o.fee || 0;
         if (fee && this.api.money && !this.api.money.pay(fee, 'Draw-Off')) {
-          this.api.toast('אין מספיק כסף לעוד קרב', 'bad', 2);
+          this.api.toast(tr('אין מספיק כסף לעוד קרב', 'Not enough money for another battle'), 'bad', 2);
           return;
         }
         this.newContest();
@@ -468,13 +469,13 @@ export class DrawOff {
     } catch (e) {
       // (no room: the record is only for now)
     }
-    if (prize && this.api.money) this.api.money.earn(prize, place === 0 ? 'פרס ראשון: קרב ציור' : 'פרס: קרב ציור');
+    if (prize && this.api.money) this.api.money.earn(prize, place === 0 ? tr('פרס ראשון: קרב ציור', 'First prize: drawing battle') : tr('פרס: קרב ציור', 'Prize: drawing battle'));
     this.final = { place: place + 1, total, prize, record, won: place === 0, gallery: this.gallery, wins: this.rec.wins };
     this.ranking = order;
     this.scene = 'final';
     this.t = 0;
     this.api.audio.play(place === 0 ? 'cheer' : place < 3 ? 'coins' : 'buzzer', 0.6);
-    this.api.status(place === 0 ? 'ניצחון!' : `מקום ${place + 1}`);
+    this.api.status(place === 0 ? tr('ניצחון!', 'Victory!') : tr(`מקום ${place + 1}`, `${place + 1} place`));
   }
 
   // ------------------------------------------------------------------ drawing
@@ -533,8 +534,8 @@ export class DrawOff {
       return;
     }
     // the round, the thing to draw, the clock
-    text(g, `סיבוב ${this.round + 1}/${ROUNDS}`, 905, 62, { size: 26, color: PAPER, outline: '#120a10' });
-    text(g, `ציירו: ${sub.he}!`, 450, 64, { size: 46, color: PENS.yellow, outline: '#120a10', ow: 8 });
+    text(g, tr(`סיבוב ${this.round + 1}/${ROUNDS}`, `Round ${this.round + 1}/${ROUNDS}`), 905, 62, { size: 26, color: PAPER, outline: '#120a10' });
+    text(g, tr(`ציירו: ${sub.he}!`, `Draw: ${sub.he}!`), 450, 64, { size: 46, color: PENS.yellow, outline: '#120a10', ow: 8 });
     if (this.scene === 'draw') {
       const k = Math.max(0, this.left / TIME);
       const cx = 92;
@@ -582,26 +583,26 @@ export class DrawOff {
     // what the judges make of it so far
     if (this.scene === 'draw') {
       const q = this.guess;
-      let say = 'השופטים מסתכלים...';
+      let say = tr('השופטים מסתכלים...', 'The judges are looking...');
       let col = PAPER;
       const slow = this.rivals.find((v) => this.rivalAt(v, this.t) < 1);
       if (this.doneAt !== null) {
-        say = slow ? 'סיימתם! מחכים לשאר הציירים...' : 'סיימתם!';
+        say = slow ? tr('סיימתם! מחכים לשאר הציירים...', 'You\'re done! Waiting for the other artists...') : tr('סיימתם!', 'You\'re done!');
         col = PENS.yellow;
       } else if (q && q.best) {
         if (q.best === this.subj.c && q.p > 0.35) {
-          say = `השופטים: זה ${this.subj.he}! (${Math.round(q.p * 100)}%)`;
+          say = tr(`השופטים: זה ${this.subj.he}! (${Math.round(q.p * 100)}%)`, `The judges: it's ${this.subj.he}! (${Math.round(q.p * 100)}%)`);
           col = PENS.green;
-        } else say = `השופטים רואים: ${heName(q.best)}...`;
+        } else say = tr(`השופטים רואים: ${heName(q.best)}...`, `The judges see: ${heName(q.best)}...`);
       }
       text(g, say, PX + PW / 2, PY - 14, { size: 22, color: col, outline: '#120a10' });
       // the two buttons under the paper
       if (this.doneAt !== null) return;
       const by = PY + PH + 10;
       box(g, PX + PW / 2 + 8, by, PW / 2 - 8, 44, { fill: this.strokes.length ? PENS.green : '#4a4a52', color: '#120a10', r: 10, seed: 41 });
-      text(g, 'סיימתי!', PX + (PW * 3) / 4 + 4, by + 23, { size: 26, color: PAPER, outline: '#120a10' });
+      text(g, tr('סיימתי!', 'Done!'), PX + (PW * 3) / 4 + 4, by + 23, { size: 26, color: PAPER, outline: '#120a10' });
       box(g, PX, by, PW / 2 - 8, 44, { fill: '#6b4a5a', color: '#120a10', r: 10, seed: 42 });
-      text(g, 'מחיקת הקו האחרון', PX + PW / 4 - 4, by + 23, { size: 22, color: PAPER, outline: '#120a10' });
+      text(g, tr('מחיקת הקו האחרון', 'Erase the last line'), PX + PW / 4 - 4, by + 23, { size: 22, color: PAPER, outline: '#120a10' });
     }
   }
 
@@ -638,7 +639,7 @@ export class DrawOff {
         s.forEach(([px, py], j) => (j ? g.lineTo(ox + px * k, oy + py * k) : g.moveTo(ox + px * k, oy + py * k)));
         g.stroke();
       }
-      if (this.scene === 'draw' && f >= 1) text(g, 'סיים!', sx + sw - 30, sy + sh - 16, { size: 18, color: PENS.green, outline: PAPER });
+      if (this.scene === 'draw' && f >= 1) text(g, tr('סיים!', 'Done!'), sx + sw - 30, sy + sh - 16, { size: 18, color: PENS.green, outline: PAPER });
     }
   }
 
@@ -646,7 +647,7 @@ export class DrawOff {
     g.fillStyle = 'rgba(10, 6, 12, 0.55)';
     g.fillRect(0, 0, W, H);
     const n = Math.max(1, 3 - Math.floor(this.t / 0.75));
-    text(g, `ציירו: ${this.subj.he}!`, W / 2, H / 2 - 50, { size: 76, color: PENS.yellow, outline: '#120a10', ow: 12 });
+    text(g, tr(`ציירו: ${this.subj.he}!`, `Draw: ${this.subj.he}!`), W / 2, H / 2 - 50, { size: 76, color: PENS.yellow, outline: '#120a10', ow: 12 });
     if (this.t > 0.3) text(g, String(n), W / 2, H / 2 + 70, { font: MARKER, size: 96, color: PAPER, outline: '#120a10', ow: 12 });
   }
 
@@ -661,13 +662,13 @@ export class DrawOff {
       const col = good ? PENS.green : PENS.red;
       if (who === 0) {
         // yours: the big stamp on your paper
-        const say = good ? `השופטים: ${pct}% ${this.subj.he}!` : s.j.best ? `השופטים ראו: ${heName(s.j.best)}` : 'השופטים לא ראו כלום';
+        const say = good ? tr(`השופטים: ${pct}% ${this.subj.he}!`, `The judges: ${pct}% ${this.subj.he}!`) : s.j.best ? tr(`השופטים ראו: ${heName(s.j.best)}`, `The judges saw: ${heName(s.j.best)}`) : tr('השופטים לא ראו כלום', 'The judges saw nothing');
         g.save();
         g.translate(PX + PW / 2, PY + PH / 2);
         g.rotate(-0.08);
         box(g, -230, -58, 460, 116, { fill: 'rgba(255, 253, 246, 0.92)', color: col, w: 6, r: 14, seed: 90 });
         text(g, say, 0, -16, { size: 34, color: col, outline: PAPER });
-        text(g, `${s.pts} נקודות`, 0, 30, { size: 30, color: INK, outline: PAPER });
+        text(g, tr(`${s.pts} נקודות`, `${s.pts} points`), 0, 30, { size: 30, color: INK, outline: PAPER });
         g.restore();
       } else {
         const y = PY + (who - 1) * 144;
@@ -681,12 +682,12 @@ export class DrawOff {
       }
     }
     // the totals so far, at the bottom of the artists' column
-    if (this.t > 0.6 + this.order.length * 1.1) text(g, 'לחצו להמשך', 798, 574, { size: 22, color: PAPER, outline: '#120a10' });
+    if (this.t > 0.6 + this.order.length * 1.1) text(g, tr('לחצו להמשך', 'Tap to continue'), 798, 574, { size: 22, color: PAPER, outline: '#120a10' });
   }
 
   drawFinal(g, W, H) {
     const F = this.final;
-    const names = ['אתם', ...RIVALS.map((R) => R.name)];
+    const names = [tr('אתם', 'You'), ...RIVALS.map((R) => R.name)];
     const cols = [PENS.yellow, ...RIVALS.map((R) => R.shirt)];
     // the podium: the first three on it, in their order (each one's name and points over the head)
     const base = 498;
@@ -697,20 +698,20 @@ export class DrawOff {
       text(g, String(place + 1), x, base - h / 2, { font: MARKER, size: 44, color: PAPER, outline: '#120a10' });
       figure(g, x, base - h, 70, place === 0 ? { ra: -2.7, la: 2.7, hop: 0.05 * Math.abs(Math.sin(this.t * 6)) } : {}, who === 0 ? { shirt: PENS.violet } : { shirt: RIVALS[who - 1].shirt, hair: RIVALS[who - 1].hair, skin: RIVALS[who - 1].skin });
       const top = base - h - 133 - (place === 0 ? 6 : 0);
-      text(g, who === 0 ? 'אתם!' : names[who], x, top - 34, { font: who === 0 ? HAND : MARKER, size: 22, color: cols[who], outline: '#120a10' });
+      text(g, who === 0 ? tr('אתם!', 'You!') : names[who], x, top - 34, { font: who === 0 ? HAND : MARKER, size: 22, color: cols[who], outline: '#120a10' });
       text(g, `${this.totals[who]}`, x, top - 12, { font: MARKER, size: 18, color: PAPER, outline: '#120a10' });
     }
     // fourth, off the podium
     const fourth = this.ranking[3];
-    text(g, `${fourth === 0 ? 'אתם' : names[fourth]} · ${this.totals[fourth]}`, W / 2, 514, { font: fourth === 0 ? HAND : MARKER, size: 18, color: '#d8c8d0', outline: '#120a10' });
-    const say = F.won ? `ניצחתם בקרב הציור! ${cash(F.prize)}` : F.prize ? `מקום ${F.place}! ${cash(F.prize)}` : 'הפעם לא עליתם לפודיום';
+    text(g, `${fourth === 0 ? tr('אתם', 'You') : names[fourth]} · ${this.totals[fourth]}`, W / 2, 514, { font: fourth === 0 ? HAND : MARKER, size: 18, color: '#d8c8d0', outline: '#120a10' });
+    const say = F.won ? tr(`ניצחתם בקרב הציור! ${cash(F.prize)}`, `You won the drawing battle! ${cash(F.prize)}`) : F.prize ? tr(`מקום ${F.place}! ${cash(F.prize)}`, `${F.place} place! ${cash(F.prize)}`) : tr('הפעם לא עליתם לפודיום', 'You didn\'t make the podium this time');
     text(g, say, W / 2, 120, { size: 36, color: F.won ? PENS.yellow : PAPER, outline: '#120a10', ow: 7 });
-    if (F.record) text(g, `שיא חדש: ${F.total}`, W / 2, 158, { size: 24, color: PENS.green, outline: '#120a10' });
+    if (F.record) text(g, tr(`שיא חדש: ${F.total}`, `New record: ${F.total}`), W / 2, 158, { size: 24, color: PENS.green, outline: '#120a10' });
     // the buttons
     box(g, 530, 532, 300, 52, { fill: PENS.green, color: '#120a10', r: 12, seed: 140 });
-    text(g, this.o.fee ? `עוד קרב (${cash(this.o.fee)})` : 'עוד קרב', 680, 559, { size: 26, color: PAPER, outline: '#120a10' });
+    text(g, this.o.fee ? tr(`עוד קרב (${cash(this.o.fee)})`, `Another battle (${cash(this.o.fee)})`) : tr('עוד קרב', 'Another battle'), 680, 559, { size: 26, color: PAPER, outline: '#120a10' });
     box(g, 170, 532, 300, 52, { fill: '#6b4a5a', color: '#120a10', r: 12, seed: 141 });
-    text(g, 'יציאה', 320, 559, { size: 26, color: PAPER, outline: '#120a10' });
+    text(g, tr('יציאה', 'Leave'), 320, 559, { size: 26, color: PAPER, outline: '#120a10' });
   }
 }
 

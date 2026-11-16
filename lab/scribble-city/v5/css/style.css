@@ -450,7 +450,7 @@ body.air-drawing #toasts { top: auto; bottom: max(70px, calc(env(safe-area-inset
   transform: rotate(-2deg);
 }
 .cover .sub { font-family: var(--font-hand); font-size: 28px; margin: 4px 0 14px; color: var(--red); }
-.howto { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; text-align: right; margin-bottom: 14px; }
+.howto { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; text-align: start; margin-bottom: 14px; }
 .howto .col { flex: 1 1 220px; max-width: 290px; background: rgba(255, 240, 122, 0.55); border: 2px solid var(--ink); border-radius: 8px; padding: 6px 12px; font-size: 14.5px; transform: rotate(0.6deg); }
 .howto .col:nth-child(2) { transform: rotate(-0.8deg); }
 .howto h3 { margin: 0 0 4px; font-family: var(--font-hand); font-size: 24px; }
@@ -648,7 +648,7 @@ body.touch #goals { top: auto; bottom: 12px; right: auto; left: 50%; transform: 
 #dialog .text { font-size: 18px; line-height: 1.45; margin-bottom: 10px; min-height: 26px; }
 #dialog .choices { display: flex; flex-direction: column; gap: 6px; }
 #dialog .choices button {
-  text-align: right;
+  text-align: start;
   font: inherit;
   font-size: 16px;
   padding: 6px 12px;
@@ -879,7 +879,7 @@ html, body { background: #1b1430; }
 #map-legend { position: absolute; top: calc(max(12px, env(safe-area-inset-top)) + 84px); right: max(14px, env(safe-area-inset-right)); padding: 6px 8px 8px; width: 196px; max-height: calc(100% - 210px); overflow: auto; }
 #map-legend h3 { margin: 0 4px 4px; font: 400 22px/1.1 var(--font-hand); }
 #map-legend h3 small { font: 12px var(--font-ui); color: var(--ink-soft); }
-.lg-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 2px 4px; border: 0; background: none; color: var(--ink); font: 15px/1.2 var(--font-ui); text-align: right; cursor: pointer; border-radius: 8px; }
+.lg-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 2px 4px; border: 0; background: none; color: var(--ink); font: 15px/1.2 var(--font-ui); text-align: start; cursor: pointer; border-radius: 8px; }
 .lg-row:hover { background: rgba(255, 210, 63, 0.3); }
 .lg-row canvas { width: 26px; height: 26px; flex: none; }
 .lg-row.off { opacity: 0.38; }
@@ -927,7 +927,7 @@ html, body { background: #1b1430; }
 .sheet.settings { width: min(820px, 94vw); }
 .pause-btns, .pause-foot { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 .pause-foot { margin-top: 6px; }
-.opt-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 22px; margin-top: 10px; text-align: right; }
+.opt-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 22px; margin-top: 10px; text-align: start; }
 .opt-group { padding: 4px 4px 2px; }
 .opt-group h3 { margin: 4px 0 2px; font: 400 24px/1.1 var(--font-hand); color: #c2185b; border-bottom: 2px solid rgba(27, 20, 48, 0.25); }
 .opt-group .opt { justify-content: flex-start; margin: 8px 0; font-size: 16px; }
@@ -970,7 +970,7 @@ html, body { background: #1b1430; }
 #phone.up .phone-body { animation: phoneUp 0.24s ease-out; }
 @keyframes phoneUp { from { transform: translateY(70%) rotate(4deg); opacity: 0.4; } to { transform: rotate(-2.5deg); opacity: 1; } }
 .phone-notch { width: 74px; height: 14px; margin: 0 auto 6px; border-radius: 0 0 10px 10px; background: var(--ink); }
-.phone-status { display: flex; align-items: center; gap: 8px; padding: 0 10px 6px; font: 700 13px/1 var(--font-ui); color: var(--ink); direction: rtl; }
+.phone-status { display: flex; align-items: center; gap: 8px; padding: 0 10px 6px; font: 700 13px/1 var(--font-ui); color: var(--ink); }
 #phone-clock { direction: ltr; }
 #phone-sky { flex: 1; font-weight: 600; }
 .phone-bars { display: flex; align-items: flex-end; gap: 2px; height: 12px; }
@@ -1021,7 +1021,7 @@ html, body { background: #1b1430; }
 .prop-top span { direction: ltr; color: #1d7a3c; font-size: 19px; }
 .prop.owned .prop-top span { color: #b07a00; }
 .prop.ev .prop-top { flex-direction: column; align-items: flex-start; gap: 0; }
-.prop.ev .prop-top span { direction: rtl; font-size: 17px; }
+.prop.ev .prop-top span { font-size: 17px; }
 .prop-what { margin: 2px 0 5px; font: 500 12px/1.25 var(--font-ui); color: var(--ink-soft); }
 .prop-btns { display: flex; gap: 6px; flex-wrap: wrap; }
 .prop-btns .btn[disabled] { opacity: 0.5; cursor: default; }
@@ -1343,7 +1343,7 @@ body.touch .fd-zone { display: block; }
 .fd-tag { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: min(380px, 70vw); pointer-events: auto; }
 .fd-tag.shake { animation: fd-shake 0.4s; }
 @keyframes fd-shake { 0%, 100% { translate: 0; } 20% { translate: -7px; } 40% { translate: 7px; } 60% { translate: -4px; } 80% { translate: 3px; } }
-.fd-kind { display: flex; flex-direction: column; align-items: flex-start; text-align: right; max-width: 100%; padding: 3px 10px 4px; border: 2.5px solid var(--ink); border-radius: 10px 12px 9px 11px; background: rgba(255, 252, 244, 0.94); box-shadow: 2px 3px 0 var(--ink); cursor: pointer; color: var(--ink); font-family: var(--font-ui); }
+.fd-kind { display: flex; flex-direction: column; align-items: flex-start; text-align: start; max-width: 100%; padding: 3px 10px 4px; border: 2.5px solid var(--ink); border-radius: 10px 12px 9px 11px; background: rgba(255, 252, 244, 0.94); box-shadow: 2px 3px 0 var(--ink); cursor: pointer; color: var(--ink); font-family: var(--font-ui); }
 .fd-kind b { font-family: var(--font-hand); font-size: 26px; line-height: 1.05; }
 .fd-kind span { font-size: 13px; font-weight: 600; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .fd-kind em { font-style: normal; font-size: 12.5px; font-weight: 700; line-height: 1.2; color: #a2341f; }
@@ -1394,7 +1394,7 @@ body.fd-car .fd-ink { display: none; }
 /* (ROADMAP 11.24) the part pen (game/partpen.js): the parts to draw, over the pen's tools (a phone: at
    the bottom, between the steering and the tools); what the drawing makes, by the pen; the ink flying
    to its place; the three kept parts by the steering */
-.pp-row { position: fixed; z-index: 18; left: 50%; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 64px); transform: translateX(-50%); display: none; align-items: stretch; gap: 8px; padding: 6px 8px; background: rgba(255, 252, 244, 0.94); border: 2.5px solid var(--ink); border-radius: 12px 10px 13px 9px; box-shadow: 3px 4px 0 var(--ink); direction: rtl; pointer-events: auto; touch-action: none; }
+.pp-row { position: fixed; z-index: 18; left: 50%; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 64px); transform: translateX(-50%); display: none; align-items: stretch; gap: 8px; padding: 6px 8px; background: rgba(255, 252, 244, 0.94); border: 2.5px solid var(--ink); border-radius: 12px 10px 13px 9px; box-shadow: 3px 4px 0 var(--ink); pointer-events: auto; touch-action: none; }
 .pp-row.on { display: flex; }
 .pp-part { position: relative; display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 8px; font-family: var(--font-hand); font-size: 21px; line-height: 1; color: var(--ink); background: var(--paper-2); border: 2.5px solid var(--ink); border-radius: 11px 8px 12px 7px; box-shadow: 2px 3px 0 var(--ink); cursor: pointer; white-space: nowrap; }
 .pp-part svg, .pp-slot > svg:not([viewBox="0 0 40 28"]) { width: 30px; height: 30px; fill: none; stroke: var(--ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -1405,7 +1405,7 @@ body.fd-car .fd-ink { display: none; }
 @keyframes pp-hint { 50% { transform: translateY(-3px); box-shadow: 0 0 0 4px #33b5ff, 2px 3px 0 var(--ink); } }
 .pp-ok { display: none; font-family: var(--font-hand); font-size: 24px; line-height: 1; padding: 4px 14px; color: var(--ink); background: linear-gradient(90deg, #ffd23f, #ff9a3c); border: 2.5px solid var(--ink); border-radius: 11px 8px 12px 7px; box-shadow: 2px 3px 0 var(--ink); cursor: pointer; }
 .pp-row.wet .pp-ok { display: block; }
-.pp-live { position: fixed; z-index: 18; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; padding: 3px 10px 5px; background: rgba(255, 252, 244, 0.95); border: 2px solid var(--ink); border-radius: 10px 8px 11px 7px; box-shadow: 2px 3px 0 var(--ink); color: var(--ink); pointer-events: none; opacity: 0; transition: opacity 0.12s; direction: rtl; white-space: nowrap; }
+.pp-live { position: fixed; z-index: 18; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; padding: 3px 10px 5px; background: rgba(255, 252, 244, 0.95); border: 2px solid var(--ink); border-radius: 10px 8px 11px 7px; box-shadow: 2px 3px 0 var(--ink); color: var(--ink); pointer-events: none; opacity: 0; transition: opacity 0.12s; white-space: nowrap; }
 .pp-live.on { opacity: 1; }
 .pp-live b { font-family: var(--font-hand); font-size: 19px; line-height: 1.05; }
 .pp-live span { font: 700 13.5px var(--font-ui); color: #1d7a3a; }
@@ -1423,7 +1423,7 @@ body.fd-car .fd-ink { display: none; }
 /* (ROADMAP 11.25) over the row, what the category has - each as it is drawn, to see (not buttons); the
    one the drawing is now lit. (ROADMAP 11.27) the drawing decides: nothing on it to tap - a line begun
    over it draws */
-.pp-legend { position: fixed; z-index: 18; left: 50%; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 126px); transform: translateX(-50%); display: none; flex-direction: column; align-items: center; gap: 1px; padding: 2px 6px 4px; background: rgba(255, 252, 244, 0.9); border: 2px solid var(--ink); border-radius: 10px 8px 11px 7px; direction: rtl; pointer-events: none; }
+.pp-legend { position: fixed; z-index: 18; left: 50%; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 126px); transform: translateX(-50%); display: none; flex-direction: column; align-items: center; gap: 1px; padding: 2px 6px 4px; background: rgba(255, 252, 244, 0.9); border: 2px solid var(--ink); border-radius: 10px 8px 11px 7px; pointer-events: none; }
 .pp-legend.on { display: flex; }
 /* (ROADMAP 15.3) the drawn parts: chosen with a touch */
 .pp-legend.par { pointer-events: auto; max-width: min(640px, calc(100vw - 24px)); }
@@ -1445,7 +1445,7 @@ body.fd-car .fd-ink { display: none; }
 .pp-it.ask { opacity: 1; box-shadow: inset 0 0 0 2px #33b5ff; }
 /* (ROADMAP 11.27) not sure of two: by the drawing, the two as they are drawn and what tells them apart -
    a tip to see, not to tap */
-.pp-tip { position: fixed; z-index: 19; left: 0; top: 0; display: none; flex-direction: column; align-items: center; gap: 2px; padding: 4px 10px 6px; background: #fff8d6; border: 2.5px dashed var(--ink); border-radius: 11px 8px 12px 7px; box-shadow: 2px 3px 0 var(--ink); color: var(--ink); direction: rtl; pointer-events: none; white-space: nowrap; }
+.pp-tip { position: fixed; z-index: 19; left: 0; top: 0; display: none; flex-direction: column; align-items: center; gap: 2px; padding: 4px 10px 6px; background: #fff8d6; border: 2.5px dashed var(--ink); border-radius: 11px 8px 12px 7px; box-shadow: 2px 3px 0 var(--ink); color: var(--ink); pointer-events: none; white-space: nowrap; }
 .pp-tip.on { display: flex; animation: pp-tip 0.22s ease-out; }
 @keyframes pp-tip { from { opacity: 0; transform: translateY(5px) scale(0.96); } }
 .pp-tip-h { font: 700 12px var(--font-ui); color: #c2410c; }
@@ -1491,7 +1491,7 @@ body.touch:not(.drive-btns) .pp-slots { bottom: auto; top: calc(max(8px, env(saf
   .pp-tip svg { width: 22px; height: 22px; }
 }
 /* (ROADMAP 11.20) the part just drawn onto something: what it is, what it does there, its numbers */
-.fz-tag { position: fixed; left: 0; top: 0; z-index: 60; max-width: 280px; display: flex; flex-direction: column; gap: 2px; padding: 7px 11px 8px; background: rgba(255, 252, 244, 0.95); border: 2.5px solid var(--ink); border-radius: 12px 9px 13px 8px; box-shadow: 3px 4px 0 var(--ink); color: var(--ink); pointer-events: none; opacity: 0; transform: translateY(6px) scale(0.96); transition: opacity 0.18s, transform 0.18s; direction: rtl; }
+.fz-tag { position: fixed; left: 0; top: 0; z-index: 60; max-width: 280px; display: flex; flex-direction: column; gap: 2px; padding: 7px 11px 8px; background: rgba(255, 252, 244, 0.95); border: 2.5px solid var(--ink); border-radius: 12px 9px 13px 8px; box-shadow: 3px 4px 0 var(--ink); color: var(--ink); pointer-events: none; opacity: 0; transform: translateY(6px) scale(0.96); transition: opacity 0.18s, transform 0.18s; }
 .fz-tag.on { opacity: 1; transform: none; }
 /* (ROADMAP 11.21) the pen down: the marks card and the tag fade - the line under them shows */
 body.fd-pen .fd-fuse, body.fd-pen .fz-tag.on { opacity: 0.18; }
@@ -1669,7 +1669,7 @@ body.touch .fd-hint { font-size: 21px; top: 22%; left: 58%; width: 60vw; }
 /* (ROADMAP 11.40) on foot: the catalog - what can be drawn, as it is drawn, like the parts drawn on a
    car (.pp-legend), in place of what-is-drawn's buttons; the one the drawing is like lights up. At the
    side, under the map (a phone: along the bottom, below) */
-.fd-leg { position: absolute; z-index: 3; left: max(12px, env(safe-area-inset-left)); top: calc(max(10px, env(safe-area-inset-top)) + 196px); width: 216px; max-height: calc(100% - max(10px, env(safe-area-inset-top)) - 196px - 92px); display: none; flex-direction: column; align-items: stretch; gap: 4px; padding: 5px 6px 6px; background: rgba(255, 252, 244, 0.93); border: 2.5px solid var(--ink); border-radius: 12px 9px 13px 10px; box-shadow: 3px 4px 0 var(--ink); direction: rtl; pointer-events: auto; }
+.fd-leg { position: absolute; z-index: 3; left: max(12px, env(safe-area-inset-left)); top: calc(max(10px, env(safe-area-inset-top)) + 196px); width: 216px; max-height: calc(100% - max(10px, env(safe-area-inset-top)) - 196px - 92px); display: none; flex-direction: column; align-items: stretch; gap: 4px; padding: 5px 6px 6px; background: rgba(255, 252, 244, 0.93); border: 2.5px solid var(--ink); border-radius: 12px 9px 13px 10px; box-shadow: 3px 4px 0 var(--ink); pointer-events: auto; }
 body.fd-catalog .fd-leg { display: flex; }
 body.fd-catalog .fd-cats { display: none; }
 .fd-shelves { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; white-space: nowrap; min-width: 0; flex: none; }
@@ -1825,7 +1825,7 @@ body.chatting #goals { display: none; }
 
 /* (ROADMAP 11.28) the things of the pen: their meters by the slots, the phone's rewind and protection
    buttons (they show only while the car carries such a thing: game/gear.js), the rewind's picture */
-.gear-bar { position: fixed; z-index: 6; left: max(14px, env(safe-area-inset-left)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 66px); display: none; flex-direction: column; gap: 3px; direction: rtl; pointer-events: none; }
+.gear-bar { position: fixed; z-index: 6; left: max(14px, env(safe-area-inset-left)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 66px); display: none; flex-direction: column; gap: 3px; pointer-events: none; }
 .gear-bar.on { display: flex; }
 .gear-bar .gm { display: flex; align-items: center; gap: 6px; padding: 2px 7px; background: rgba(255, 252, 244, 0.88); border: 2px solid var(--ink); border-radius: 9px 7px 10px 6px; font: 700 11.5px var(--font-ui); color: var(--ink); }
 .gear-bar .gm b { min-width: 74px; white-space: nowrap; }
@@ -1862,7 +1862,7 @@ body.phone-cam #btn-rewind, body.phone-cam #btn-gear, body.touch.fd-open #btn-re
    under a print's dots and a film's grain, its name, a tip at a time, and the bar a pencil draws.
    Everything that moves moves by transform and opacity - drawn by the compositor, alive even while
    the page is busy building the city */
-#loader { position: fixed; inset: 0; z-index: 90; overflow: hidden; background: #140d22; color: #fff8ec; direction: rtl; font-family: "Rubik", system-ui, sans-serif; transition: opacity 0.8s ease, transform 0.8s ease; --p: 0; }
+#loader { position: fixed; inset: 0; z-index: 90; overflow: hidden; background: #140d22; color: #fff8ec; font-family: "Rubik", system-ui, sans-serif; transition: opacity 0.8s ease, transform 0.8s ease; --p: 0; }
 #loader.out { opacity: 0; transform: scale(1.05); pointer-events: none; }
 #loader.gone { display: none; }
 .ld-reel { position: absolute; inset: 0; overflow: hidden; background: #140d22; }
@@ -1989,7 +1989,7 @@ body.touch.fd-early .fd-leg { width: auto; top: auto; }
 @media (max-height: 480px) { body.fd-early .fd-leg { top: auto; } }
 body.touch .fe-top em { display: none; }
 /* (round 16) the one being drawn: small, at the top of the screen - its picture to draw from */
-.fd-ref { position: absolute; z-index: 4; top: calc(max(10px, env(safe-area-inset-top)) + 58px); left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 8px; padding: 4px 6px 4px 10px; background: rgba(255, 252, 244, 0.94); border: 2.5px solid var(--ink); border-radius: 12px 9px 13px 10px; box-shadow: 3px 4px 0 var(--ink); direction: rtl; pointer-events: auto; }
+.fd-ref { position: absolute; z-index: 4; top: calc(max(10px, env(safe-area-inset-top)) + 58px); left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 8px; padding: 4px 6px 4px 10px; background: rgba(255, 252, 244, 0.94); border: 2.5px solid var(--ink); border-radius: 12px 9px 13px 10px; box-shadow: 3px 4px 0 var(--ink); pointer-events: auto; }
 .fd-ref.on { display: flex; }
 .fd-ref .fe-big { width: 96px; height: 60px; padding: 3px; }
 .fd-ref .fe-what { gap: 1px; }

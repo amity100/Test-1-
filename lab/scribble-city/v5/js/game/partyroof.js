@@ -13,6 +13,7 @@ import { PartySound, drawPeople, floorQuad, canvas } from './partykit.js';
 import { paintLED, paintPool } from './partyart.js';
 import { CLUB_FORM } from './partyclub.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 12.9) SKY POOL: the party on the roof of PALACE OF INK's tower, sixty-six storeys over
 // the bay. Up in the lift from the casino's hall (on its west wall, under the tower), out onto a deck
 // of wood behind glass: the pool lit from under the water down its middle, daybeds along its sides,
@@ -424,7 +425,7 @@ export class SkyPool {
     if (up && !this.welcomed) {
       this.welcomed = true;
       g.hud.big('SKY POOL', 2200);
-      if (on) g.hud.toast('מסיבת הגג של PALACE OF INK! E ליד הדי ג׳יי לרקוד או לבקש את הדרופ, בבר לקוקטייל, ובמעלית חזרה ללובי', 'info', 5);
+      if (on) g.hud.toast(tr('מסיבת הגג של PALACE OF INK! E ליד הדי ג׳יי לרקוד או לבקש את הדרופ, בבר לקוקטייל, ובמעלית חזרה ללובי', 'The PALACE OF INK rooftop party! E by the DJ to dance or ask for the drop, at the bar for a cocktail, and the elevator back to the lobby'), 'info', 5);
     }
     if (!up) this.welcomed = false;
     if (this.led) this.led.visible = !this.dancing;
@@ -559,14 +560,14 @@ export class SkyPool {
     if (!this.set || (this.game.minigames && this.game.minigames.isOpen)) return null;
     const p = this.game.player.pos;
     // (in the casino's hall: the lift up)
-    if (p.y < DECK - 10 && p.x < LIFT.x + 2.9 && p.x > LIFT.x && Math.abs(p.z - LIFT.z) < 1.7) return { kind: 'up', label: 'E — מעלית ל־SKY POOL: מסיבת הגג (קומה 66)' };
+    if (p.y < DECK - 10 && p.x < LIFT.x + 2.9 && p.x > LIFT.x && Math.abs(p.z - LIFT.z) < 1.7) return { kind: 'up', label: tr('E — מעלית ל־SKY POOL: מסיבת הגג (קומה 66)', 'E — elevator to the SKY POOL: the rooftop party (floor 66)') };
     if (!this.onRoof(p.x, p.y, p.z)) return null;
     const hx = (HOUSE.x0 + HOUSE.x1) / 2;
-    if (Math.abs(p.x - hx) < 1.4 && p.z > HOUSE.z1 && p.z < HOUSE.z1 + 1.6) return { kind: 'down', label: 'E — מעלית חזרה ללובי של הקזינו' };
+    if (Math.abs(p.x - hx) < 1.4 && p.z > HOUSE.z1 && p.z < HOUSE.z1 + 1.6) return { kind: 'down', label: tr('E — מעלית חזרה ללובי של הקזינו', 'E — elevator back to the casino lobby') };
     if (this.part === 'off') return null;
-    if (p.x > BAR.x0 && p.x < BAR.x1 && p.z > BAR.z1 && p.z < BAR.z1 + 1.5) return { kind: 'bar', label: 'E — SKY BAR: קוקטיילים מול הנוף' };
-    if (Math.abs(p.x - DJ.x) < 2.4 && p.z < DJ.z - 0.5 && p.z > DJ.z - 1.9) return { kind: 'dj', label: 'E — לבקש מהדי ג׳יי את הדרופ ($20)' };
-    if (p.x > DANCE.x0 && p.x < DANCE.x1 && p.z > DANCE.z0 && p.z < DANCE.z1) return { kind: 'dance', label: 'E — לרקוד מול הדי ג׳יי (Ink Beat)' };
+    if (p.x > BAR.x0 && p.x < BAR.x1 && p.z > BAR.z1 && p.z < BAR.z1 + 1.5) return { kind: 'bar', label: tr('E — SKY BAR: קוקטיילים מול הנוף', 'E — SKY BAR: cocktails with a view') };
+    if (Math.abs(p.x - DJ.x) < 2.4 && p.z < DJ.z - 0.5 && p.z > DJ.z - 1.9) return { kind: 'dj', label: tr('E — לבקש מהדי ג׳יי את הדרופ ($20)', 'E — ask the DJ for the drop ($20)') };
+    if (p.x > DANCE.x0 && p.x < DANCE.x1 && p.z > DANCE.z0 && p.z < DANCE.z1) return { kind: 'dance', label: tr('E — לרקוד מול הדי ג׳יי (Ink Beat)', 'E — dance in front of the DJ (Ink Beat)') };
     return null;
   }
 
@@ -579,7 +580,7 @@ export class SkyPool {
       return true;
     }
     if (tg.kind === 'bar') {
-      const menu = [['סאנסט ספריץ על הגג (+20 חיים)', 14, 20, [1, 0.55, 0.3]], ['מוחיטו קפוא (+15 חיים)', 11, 15, [0.7, 1, 0.6]], ['לימונדה ורודה (+10 חיים)', 6, 10, [1, 0.6, 0.75]]];
+      const menu = [[tr('סאנסט ספריץ על הגג (+20 חיים)', 'Rooftop sunset spritz (+20 health)'), 14, 20, [1, 0.55, 0.3]], [tr('מוחיטו קפוא (+15 חיים)', 'Frozen mojito (+15 health)'), 11, 15, [0.7, 1, 0.6]], [tr('לימונדה ורודה (+10 חיים)', 'Pink lemonade (+10 health)'), 6, 10, [1, 0.6, 0.75]]];
       g.dialog.show('SKY BAR', 'Best view in the city. What can I get you?', menu.map(([label, price, hp, colr]) => ({
         label: `${label} · $${price}`,
         fn: () => {
@@ -589,7 +590,7 @@ export class SkyPool {
             pl.fig.belly = Math.min(1, pl.fig.belly + 0.15);
             pl.fig.bellyColor = colr;
             g.audio.play('coins', 0.5);
-            g.hud.toast(`${label.split(' (')[0]}! +${hp} חיים`, 'good', 2);
+            g.hud.toast(tr(`${label.split(' (')[0]}! +${hp} חיים`, `${label.split(' (')[0]}! +${hp} health`), 'good', 2);
           } else g.money.refuse('SKY BAR', price);
         },
       })));
@@ -597,7 +598,7 @@ export class SkyPool {
     }
     if (tg.kind === 'dj') {
       if (this.part === 'build' || (this.part === 'drop' && this.dropT < 8)) {
-        g.hud.toast('הדי ג׳יי מצביע על השמיים: זה כבר קורה!', 'info', 2.5);
+        g.hud.toast(tr('הדי ג׳יי מצביע על השמיים: זה כבר קורה!', 'The DJ points at the sky: it\'s happening!'), 'info', 2.5);
         return true;
       }
       if (g.money && !g.money.pay(20, 'DJ')) {
@@ -608,7 +609,7 @@ export class SkyPool {
       if (S.band && S.c && S.c.state === 'running') S.jump(20);
       else this.clock = (this.songN * BARS + 20) * ((4 * 60) / BPM);
       g.audio.play('coins', 0.5);
-      g.hud.toast('הדי ג׳יי מרים יד אל הקהל: הדרופ בדרך!', 'good', 3);
+      g.hud.toast(tr('הדי ג׳יי מרים יד אל הקהל: הדרופ בדרך!', 'The DJ raises a hand to the crowd: the drop is coming!'), 'good', 3);
       return true;
     }
     if (tg.kind === 'dance') {
@@ -625,8 +626,8 @@ export class SkyPool {
         if (r && (r.grade === 'S' || r.grade === 'A')) {
           for (const q of this.crowd) if (q.at === 'dance') q.cheer = 1;
           g.audio.play('cheer', 0.5);
-          g.hud.toast('כל הגג רקד אחריכם!', 'good', 2.8);
-        } else if (r && r.grade) g.hud.toast('רקדתם מעל העיר', 'good', 2.4);
+          g.hud.toast(tr('כל הגג רקד אחריכם!', 'The whole roof danced after you!'), 'good', 2.8);
+        } else if (r && r.grade) g.hud.toast(tr('רקדתם מעל העיר', 'You danced above the city'), 'good', 2.4);
       }, { world });
       return true;
     }
@@ -639,7 +640,7 @@ export class SkyPool {
     if (this.riding) return;
     this.riding = true;
     g.audio.play('coins', 0.25);
-    g.hud.toast(up ? 'המעלית עולה… 66 קומות מעל המפרץ' : 'המעלית יורדת ללובי…', 'info', 1.6);
+    g.hud.toast(up ? tr('המעלית עולה… 66 קומות מעל המפרץ', 'The elevator is going up… 66 floors above the bay') : tr('המעלית יורדת ללובי…', 'The elevator is going down to the lobby…'), 'info', 1.6);
     const go = () => {
       this.riding = false;
       const p = g.player;

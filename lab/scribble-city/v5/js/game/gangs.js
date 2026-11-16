@@ -1,3 +1,4 @@
+import { tr } from '../core/lang.js';
 // (ROADMAP 6.5, not with ?classic) The city's gangs.
 //   - two gangs own the alleys of the west blocks (world/streets.js): the INKBLOTS in the north, in
 //     purple, and the ERASERS in the south, in a school eraser's pink and white, with erasers for
@@ -10,8 +11,8 @@
 //     your hands, and a vehicle of yours left by their turf is rubbed out while you are away.
 
 export const GANGS = {
-  inkblots: { name: 'הכתמים', sign: 'INKBLOTS', color: '#7b45d6', fill: 'rgba(123, 69, 214, 0.1)', line: 'rgba(123, 69, 214, 0.75)', hatch: 'rgba(123, 69, 214, 0.32)', crew: [0.52, 0.28, 0.78] },
-  erasers: { name: 'המוחקים', sign: 'ERASERS', color: '#f0508a', fill: 'rgba(255, 111, 154, 0.12)', line: 'rgba(240, 80, 138, 0.8)', hatch: 'rgba(240, 80, 138, 0.34)', crew: [0.98, 0.62, 0.7] },
+  inkblots: { name: tr('הכתמים', 'The Blots'), sign: 'INKBLOTS', color: '#7b45d6', fill: 'rgba(123, 69, 214, 0.1)', line: 'rgba(123, 69, 214, 0.75)', hatch: 'rgba(123, 69, 214, 0.32)', crew: [0.52, 0.28, 0.78] },
+  erasers: { name: tr('המוחקים', 'The Erasers'), sign: 'ERASERS', color: '#f0508a', fill: 'rgba(255, 111, 154, 0.12)', line: 'rgba(240, 80, 138, 0.8)', hatch: 'rgba(240, 80, 138, 0.34)', crew: [0.98, 0.62, 0.7] },
 };
 
 const WAR_EVERY = [75, 150]; // seconds between two raids while you are near a turf
@@ -134,7 +135,7 @@ export class Gangs {
     for (const e of war.defenders) this.enlist(e, war, 'home');
     this.war = war;
     this.stats.wars++;
-    game.hud.toast(`מלחמת כנופיות! ${GANGS[raidId].name} פושטים על השטח של ${GANGS[home.gang].name}`, 'bad', 3);
+    game.hud.toast(tr(`מלחמת כנופיות! ${GANGS[raidId].name} פושטים על השטח של ${GANGS[home.gang].name}`, `Gang war! ${GANGS[raidId].name} are raiding ${GANGS[home.gang].name}' turf`), 'bad', 3);
     return war;
   }
 
@@ -294,7 +295,7 @@ export class Gangs {
       e.awareness = 1;
       e.enterCombat(false);
     }
-    this.game.hud.toast('נכנסתם למלחמה: שתי הכנופיות אחריכם!', 'bad', 2.4);
+    this.game.hud.toast(tr('נכנסתם למלחמה: שתי הכנופיות אחריכם!', 'You\'ve joined a war: both gangs are after you!'), 'bad', 2.4);
   }
 
   // over: the raiders go back to their turf, the defenders to theirs
@@ -315,7 +316,7 @@ export class Gangs {
     const W = this.game.weapons;
     const slot = W.current;
     if (W.slots.indexOf(slot) < W.keep) return false;
-    W.drop(slot, `המוחקים מחקו לכם את ה${slot.def.name}!`);
+    W.drop(slot, tr(`המוחקים מחקו לכם את ה${slot.def.name}!`, `The Erasers erased your ${slot.def.name}!`));
     this.stats.weapons++;
     return true;
   }
@@ -343,7 +344,7 @@ export class Gangs {
       v.dead = true;
       v.removeAt = game.time;
       this.stats.cars++;
-      game.hud.toast('המוחקים מחקו את הרכב שהשארתם ליד השטח שלהם!', 'bad', 3);
+      game.hud.toast(tr('המוחקים מחקו את הרכב שהשארתם ליד השטח שלהם!', 'The Erasers erased the vehicle you left by their turf!'), 'bad', 3);
     }
   }
 }

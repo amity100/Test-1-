@@ -3,6 +3,7 @@ import { buildPenGunModel, buildM4Model, buildBigEraserModel } from './items.js'
 import { WEAPON_DEFS } from './weapons.js';
 import { groundHeight } from '../world/layout.js';
 
+import { tr } from '../core/lang.js';
 // Gear dropped by officers (pen-pistols, paint M4s, big school erasers): it tumbles to the
 // ground and waits there, slowly turning, until you walk over it.
 
@@ -89,7 +90,7 @@ export class Pickups {
     game.weapons.add(def, 'good', it.model, undefined);
     game.weapons.current.popAt = game.time;
     game.hud.updateWeapon();
-    game.hud.toast(`הרמת ${def.name}!`, 'good', 2);
+    game.hud.toast(tr(`הרמת ${def.name}!`, `You picked up ${def.name}!`), 'good', 2);
     game.audio.play('ding', 0.6);
   }
 

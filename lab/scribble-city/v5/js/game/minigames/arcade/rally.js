@@ -6,6 +6,7 @@
 
 import { CabGame, NEON, glowLine, glowText, FONT } from './cab.js';
 
+import { tr } from '../../../core/lang.js';
 const SEG = 200;
 const RUMBLE = 3;
 const ROAD_W = 2000;
@@ -30,9 +31,9 @@ export class InkRally extends CabGame {
     super(o);
     this.id = 'rally';
     this.name = 'INK RALLY';
-    this.title = 'INK RALLY · מכונת מרוצים';
-    this.help = 'ימינה ושמאלה להיגוי · למטה לבלום · הגז לחוץ לבד · Esc לצאת';
-    this.helpTouch = 'החצים להיגוי · למטה לבלום';
+    this.title = tr('INK RALLY · מכונת מרוצים', 'INK RALLY · racing machine');
+    this.help = tr('ימינה ושמאלה להיגוי · למטה לבלום · הגז לחוץ לבד · Esc לצאת', 'Left and right to steer · down to brake · the gas is held by itself · Esc to leave');
+    this.helpTouch = tr('החצים להיגוי · למטה לבלום', 'The arrows to steer · down to brake');
     this.color = NEON.pink;
     this.lives0 = 1;
     this.perTicket = 200;

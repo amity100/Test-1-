@@ -5,6 +5,7 @@ import { EATEN } from '../world/foods.js';
 import { forkToMouth } from './venuelife.js';
 import { fmt } from './money.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 16.3) An eatery's day (world/eatery.js): a shop's life (game/shoplife.js) - its till,
 // its things in motion, you with a gun at its till (game/shopper.js) - but what is sold here is made.
 //
@@ -747,7 +748,7 @@ export class EateryLife extends ShopLife {
     if (this.mine) return;
     const k = this.open.keeper;
     if (!k || !k.alive || !this.open.open) {
-      g.hud.toast('אין אף אחד בקופה', 'info', 2);
+      g.hud.toast(tr('אין אף אחד בקופה', 'There\'s nobody at the till'), 'info', 2);
       return;
     }
     if (Math.random() < 0.8) this.say(k, pick(['Hi! What can I get you?', 'Hey there! What\'ll it be?', 'Welcome! Ready to order?']), 1);
@@ -755,14 +756,14 @@ export class EateryLife extends ShopLife {
       label: `${it.heb} · ${fmt(it.price)}`,
       fn: () => this.chose(it),
     }));
-    choices.push({ label: 'לא עכשיו', fn: null });
-    g.dialog.show(this.shop.name || 'תפריט', 'מה להזמין?', choices);
+    choices.push({ label: tr('לא עכשיו', 'Not now'), fn: null });
+    g.dialog.show(this.shop.name || tr('תפריט', 'Menu'), tr('מה להזמין?', 'What would you like?'), choices);
   }
 
   chose(item) {
     const g = this.game;
     const M = g.money;
-    const name = this.shop.name || 'הזמנה';
+    const name = this.shop.name || tr('הזמנה', 'Order');
     if (M && !M.pay(item.price, name)) {
       M.refuse(name, item.price, false, () => {});
       return;
@@ -774,7 +775,7 @@ export class EateryLife extends ShopLife {
     const o = { v: null, item, st: 'new', it: null };
     this.orders.push(o);
     this.mine = { st: 'wait', t: 0, order: o, item, seat: null, eatT: 0 };
-    g.hud.toast(`הזמנתם ${item.heb}. מחכים ליד הדלפק…`, 'info', 2.5);
+    g.hud.toast(tr(`הזמנתם ${item.heb}. מחכים ליד הדלפק…`, `You ordered ${item.heb}. Waiting by the counter…`), 'info', 2.5);
   }
 
   // yours: ready, taken; eaten at a table, or taken with you
@@ -796,10 +797,10 @@ export class EateryLife extends ShopLife {
         m.st = 'carry';
         m.t = 0;
         P.fig.carry = 'held';
-        g.hud.toast(`${m.item.heb}! שבו ליד שולחן פנוי (E) או צאו איתו לדרך`, 'good', 3.2);
+        g.hud.toast(tr(`${m.item.heb}! שבו ליד שולחן פנוי (E) או צאו איתו לדרך`, `${m.item.heb}! Sit at a free table (E) or take it with you`), 'good', 3.2);
       } else if (!m.told) {
         m.told = true;
-        g.hud.toast('ההזמנה שלכם מוכנה על הדלפק', 'info', 2.5);
+        g.hud.toast(tr('ההזמנה שלכם מוכנה על הדלפק', 'Your order is ready on the counter'), 'info', 2.5);
       }
     }
     if (m.st === 'carry' && !inside) {
@@ -878,13 +879,13 @@ export class EateryLife extends ShopLife {
   }
 
   // what it does for you (and the toast that says so)
-  eatEffect(item, how = 'אכלתם') {
+  eatEffect(item, how = tr('אכלתם', 'You ate')) {
     const g = this.game;
     const P = g.player;
     const hp = item.hp || 0;
     if (hp) P.hp = Math.min(P.maxHp, P.hp + hp);
     if (item.coffee) P.coffeeT = Math.max(P.coffeeT || 0, item.coffee);
-    const fx = [hp ? `+${hp} חיים` : null, item.coffee ? `מהירות ל־${item.coffee} שניות` : null].filter(Boolean).join(', ');
+    const fx = [hp ? tr(`+${hp} חיים`, `+${hp} health`) : null, item.coffee ? tr(`מהירות ל־${item.coffee} שניות`, `Speed for ${item.coffee} seconds`) : null].filter(Boolean).join(', ');
     g.hud.toast(`${how} ${item.heb}${fx ? ` (${fx})` : ''}`, 'good', 2.6);
   }
 
@@ -895,7 +896,7 @@ export class EateryLife extends ShopLife {
     P.fig.carry = null;
     P.meals = P.meals || [];
     P.meals.push({ heb: m.item.heb, hp: m.item.hp || 10, coffee: m.item.coffee || 0, model: m.item.model });
-    g.hud.toast(`לקחתם ${m.item.heb} לדרך — תאכלו כשתצטרכו חיים`, 'info', 3);
+    g.hud.toast(tr(`לקחתם ${m.item.heb} לדרך — תאכלו כשתצטרכו חיים`, `You took ${m.item.heb} to go — eat it when you need health`), 'info', 3);
     this.mine = null;
   }
 

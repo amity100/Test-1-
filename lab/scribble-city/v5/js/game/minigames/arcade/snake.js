@@ -4,6 +4,7 @@
 
 import { CabGame, NEON, glowLine, glowCircle, glowRect, glowText } from './cab.js';
 
+import { tr } from '../../../core/lang.js';
 const GW = 30;
 const GH = 17;
 const S = 30;
@@ -17,9 +18,9 @@ export class DoodleSnake extends CabGame {
     super(o);
     this.id = 'snake';
     this.name = 'DOODLE SNAKE';
-    this.title = 'DOODLE SNAKE · מכונת משחק';
-    this.help = 'חצים לפנות · Esc לצאת';
-    this.helpTouch = 'החצים לפנות';
+    this.title = tr('DOODLE SNAKE · מכונת משחק', 'DOODLE SNAKE · arcade machine');
+    this.help = tr('חצים לפנות · Esc לצאת', 'Arrows to turn · Esc to leave');
+    this.helpTouch = tr('החצים לפנות', 'The arrows to turn');
     this.color = NEON.green;
     this.tint = '#06180e';
     this.lives0 = 1;

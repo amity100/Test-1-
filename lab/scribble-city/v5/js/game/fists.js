@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { clamp, damp } from '../core/util.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 5.4, not with ?classic) A fist fight. The bare fists are always there, second in the
 // list after the pencil (2, or X / the wheel round to them). A click throws a jab with the left;
 // a click while it lands carries on into a cross with the right, and a third into a front kick
@@ -9,7 +10,7 @@ import { clamp, damp } from '../core/util.js';
 // harder. No ink is rubbed out by a fist: people reel back, go down and get up again, and in the
 // end stay down, out cold, seeing stars.
 
-export const FISTS = { id: 'fists', name: 'אגרופים', kind: 'fists', bare: true, range: 1.7 };
+export const FISTS = { id: 'fists', name: tr('אגרופים', 'Fists'), kind: 'fists', bare: true, range: 1.7 };
 
 // limb: L / R (a hand) or K (the right foot); dur: seconds; at: when in it the blow lands (0..1);
 // dmg: how much it dazes; push: m/s it sends them back; reach: how far apart the two of you are

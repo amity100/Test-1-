@@ -7,18 +7,18 @@ import { ARENA } from '../world/mainland/landmarks.js';
 
 // (v5, ROADMAP 11.17) what the mainland's places are, in a line each (the map's note under the name)
 const PLACE_NOTES = {
-  pier: 'Palisade Pier: גלגל ענק, רכבת הרים עם לולאה, קרוסלה, משחקייה, דוכני אוכל, דייגים בקצה',
-  lighthouse: 'Point Lighthouse: בקצה שובר הגלים. בלילה האור שלו מסתובב מעל הים',
-  pointpark: 'פארק הלשון: מדשאות, דקלים, מגרש משחקים, בית קפה והדרך אל המגדלור',
-  arena: 'Bayfront Arena: האצטדיון על המפרץ. הערב: WAVE נגד PENS',
-  marina: 'Marina Market: שוק על המים, רציפים וסירות. בטיילת המפרץ',
-  observatory: 'Inkwood Observatory: על הגבעות ליד השלט. כיפות נחושת, ובלילה הוא מואר מעל העיר',
+  pier: tr('Palisade Pier: גלגל ענק, רכבת הרים עם לולאה, קרוסלה, משחקייה, דוכני אוכל, דייגים בקצה', 'Palisade Pier: a giant wheel, a roller coaster with a loop, a carousel, a playground, food stands, fishermen at the end'),
+  lighthouse: tr('Point Lighthouse: בקצה שובר הגלים. בלילה האור שלו מסתובב מעל הים', 'Point Lighthouse: at the end of the breakwater. At night its light turns over the sea'),
+  pointpark: tr('פארק הלשון: מדשאות, דקלים, מגרש משחקים, בית קפה והדרך אל המגדלור', 'Tongue Park: lawns, palms, a playground, a café and the path to the lighthouse'),
+  arena: tr('Bayfront Arena: האצטדיון על המפרץ. הערב: WAVE נגד PENS', 'Bayfront Arena: the stadium on the bay. Tonight: WAVE vs PENS'),
+  marina: tr('Marina Market: שוק על המים, רציפים וסירות. בטיילת המפרץ', 'Marina Market: a market on the water, docks and boats. On the bay promenade'),
+  observatory: tr('Inkwood Observatory: על הגבעות ליד השלט. כיפות נחושת, ובלילה הוא מואר מעל העיר', 'Inkwood Observatory: on the hills by the sign. Copper domes, lit up over the city at night'),
   // (ROADMAP 11.30, 11.31)
-  galleria: 'BAYVIEW MALL: קניון על שלושה בלוקים. באמצע אטריום סגלגל בגובה חמש קומות מתחת לכיפת זכוכית עם שקיעה, ובו מפל מים עם הכתר, מגדל מעליות זכוכית, מדרגות נעות מצטלבות, דקלים עם נורות ושתי מכוניות־על על במות מסתובבות. לצדו שני אולמות באותו סגנון, וארקדות זכוכית מעל השדרות. מתחם האוכל PALM & PLATE עם מרפסת מעל האטריום, וחנויות: SOLARA, TIDAL, VELORA, MONARCH, AZURE ועוד. נכנסים מהצפון או מהדרום',
+  galleria: tr('BAYVIEW MALL: קניון על שלושה בלוקים. באמצע אטריום סגלגל בגובה חמש קומות מתחת לכיפת זכוכית עם שקיעה, ובו מפל מים עם הכתר, מגדל מעליות זכוכית, מדרגות נעות מצטלבות, דקלים עם נורות ושתי מכוניות־על על במות מסתובבות. לצדו שני אולמות באותו סגנון, וארקדות זכוכית מעל השדרות. מתחם האוכל PALM & PLATE עם מרפסת מעל האטריום, וחנויות: SOLARA, TIDAL, VELORA, MONARCH, AZURE ועוד. נכנסים מהצפון או מהדרום', 'BAYVIEW MALL: a mall over three blocks. In the middle, a five-storey oval atrium under a glass dome with a sunset, with a waterfall with the crown, a glass elevator tower, criss-crossing escalators, palms with lights and two supercars on turning stages. Beside it, two halls in the same style, and glass arcades over the avenues. The PALM & PLATE food court with a terrace over the atrium, and shops: SOLARA, TIDAL, VELORA, MONARCH, AZURE and more. Enter from the north or the south'),
   // (ROADMAP 12.7, 12.8)
-  casino: 'PALACE OF INK: הקזינו על המפרץ. מכונות מזל, בלאק ג׳ק ורולטה שמשחקים על השולחן עצמו, מזרקות רוקדות בכניסה, בר ובמה עם זמרת, וחדר VIP',
-  arcade: 'INK ARCADE: אולם משחקים ענק בשדרת אינקווד. ארבעים מכונות שמשחקים בהן על המסך שלהן, מכוניות מירוץ, מכונת ריקוד, הוקי אוויר, מכונות מנוף, פינבול, כרטיסים ודלפק פרסים, ופיצה',
-  lanes: 'Via Inkwell: הסמטאות של ביי־ויו מול, מעבר לרחוב פלגלר מהאולם האמצעי, מתחת לחופת זכוכית. שני רחובות של חנויות בבתים צבעוניים, סמטת אמנים, ובסופם כיכר עם מזרקה ואולם אוכל, תחת שמיים מצוירים',
+  casino: tr('PALACE OF INK: הקזינו על המפרץ. מכונות מזל, בלאק ג׳ק ורולטה שמשחקים על השולחן עצמו, מזרקות רוקדות בכניסה, בר ובמה עם זמרת, וחדר VIP', 'PALACE OF INK: the casino on the bay. Slot machines, blackjack and roulette played on the table itself, dancing fountains at the entrance, a bar and a stage with a singer, and a VIP room'),
+  arcade: tr('INK ARCADE: אולם משחקים ענק בשדרת אינקווד. ארבעים מכונות שמשחקים בהן על המסך שלהן, מכוניות מירוץ, מכונת ריקוד, הוקי אוויר, מכונות מנוף, פינבול, כרטיסים ודלפק פרסים, ופיצה', 'INK ARCADE: a huge games hall on Inkwood Avenue. Forty machines you play on their own screens, racing cars, a dance machine, air hockey, claw machines, pinball, tickets and a prize counter, and pizza'),
+  lanes: tr('Via Inkwell: הסמטאות של ביי־ויו מול, מעבר לרחוב פלגלר מהאולם האמצעי, מתחת לחופת זכוכית. שני רחובות של חנויות בבתים צבעוניים, סמטת אמנים, ובסופם כיכר עם מזרקה ואולם אוכל, תחת שמיים מצוירים', 'Via Inkwell: the lanes of Bayview Mall, across Flagler Street from the middle hall, under a glass canopy. Two streets of shops in colorful houses, an artists\' alley, and at their end a square with a fountain and a food hall, under a painted sky'),
 };
 import { BLUEPRINTS } from '../game/blueprints.js';
 import { shopOpen, shopHours } from '../game/rhythm.js';
@@ -27,6 +27,7 @@ import { searchArea } from '../game/heli.js';
 import { GANGS } from '../game/gangs.js';
 import { ATM_KINDS, fmt } from '../game/money.js';
 
+import { tr, lang } from '../core/lang.js';
 // The city's map (ROADMAP 2.1). The whole city drawn in pen on a page of graph paper: the bay with
 // its waves, the beach, the pier with the big wheel, the park, every building from above in its own
 // colours with its shadow, the streets with their names, the districts, and little drawn stickers
@@ -85,50 +86,50 @@ const COL = {
 
 // every kind of shop: its group on the map and what it is in Hebrew
 const KINDS = {
-  cafe: ['food', 'בית קפה'],
-  tacos: ['food', 'טאקו'],
-  diner: ['food', 'דיינר'],
-  pizza: ['food', 'פיצרייה'],
-  icecream: ['food', 'גלידרייה'],
-  juice: ['food', 'בר מיצים'],
-  falafel: ['food', 'פלאפל'],
-  bagel: ['food', 'מאפייה'],
-  deli: ['food', 'מעדנייה'],
-  sushi: ['food', 'סושי'],
-  grocery: ['shop', 'סופרמרקט'],
-  shop: ['shop', 'מינימרקט'],
-  books: ['shop', 'חנות ספרים'],
-  phones: ['shop', 'חנות טלפונים'],
-  boutique: ['shop', 'חנות בגדים'],
-  music: ['shop', 'חנות תקליטים'],
-  hardware: ['shop', 'כלי עבודה'],
-  optics: ['shop', 'אופטיקה'],
-  flowers: ['shop', 'חנות פרחים'],
-  surf: ['shop', 'חנות גלישה'],
-  barber: ['service', 'מספרה'],
-  laundry: ['service', 'מכבסה'],
-  gym: ['service', 'חדר כושר'],
-  pharmacy: ['service', 'בית מרקחת'],
-  bar: ['fun', 'בר'],
-  club: ['fun', 'מועדון ריקודים'],
-  cinema: ['fun', 'קולנוע'],
-  arcade: ['fun', 'ארקייד'],
-  casino: ['fun', 'קזינו'],
-  friends: ['fun', 'דוכן "ציירו לעצמכם חבר"'],
-  lobby: ['hotel', 'מלון'],
-  motel: ['hotel', 'מוטל'],
+  cafe: ['food', tr('בית קפה', 'Café')],
+  tacos: ['food', tr('טאקו', 'Tacos')],
+  diner: ['food', tr('דיינר', 'Diner')],
+  pizza: ['food', tr('פיצרייה', 'Pizzeria')],
+  icecream: ['food', tr('גלידרייה', 'Ice cream parlor')],
+  juice: ['food', tr('בר מיצים', 'Juice bar')],
+  falafel: ['food', tr('פלאפל', 'Falafel')],
+  bagel: ['food', tr('מאפייה', 'Bakery')],
+  deli: ['food', tr('מעדנייה', 'Deli')],
+  sushi: ['food', tr('סושי', 'Sushi')],
+  grocery: ['shop', tr('סופרמרקט', 'Supermarket')],
+  shop: ['shop', tr('מינימרקט', 'Mini-market')],
+  books: ['shop', tr('חנות ספרים', 'Bookshop')],
+  phones: ['shop', tr('חנות טלפונים', 'Phone shop')],
+  boutique: ['shop', tr('חנות בגדים', 'Clothes shop')],
+  music: ['shop', tr('חנות תקליטים', 'Record shop')],
+  hardware: ['shop', tr('כלי עבודה', 'Hardware')],
+  optics: ['shop', tr('אופטיקה', 'Optician')],
+  flowers: ['shop', tr('חנות פרחים', 'Flower shop')],
+  surf: ['shop', tr('חנות גלישה', 'Surf shop')],
+  barber: ['service', tr('מספרה', 'Barbershop')],
+  laundry: ['service', tr('מכבסה', 'Laundromat')],
+  gym: ['service', tr('חדר כושר', 'Gym')],
+  pharmacy: ['service', tr('בית מרקחת', 'Pharmacy')],
+  bar: ['fun', tr('בר', 'Bar')],
+  club: ['fun', tr('מועדון ריקודים', 'Dance club')],
+  cinema: ['fun', tr('קולנוע', 'Cinema')],
+  arcade: ['fun', tr('ארקייד', 'Arcade')],
+  casino: ['fun', tr('קזינו', 'Casino')],
+  friends: ['fun', tr('דוכן "ציירו לעצמכם חבר"', '"Draw Yourself a Friend" stand')],
+  lobby: ['hotel', tr('מלון', 'Hotel')],
+  motel: ['hotel', tr('מוטל', 'Motel')],
   // (v5, ROADMAP 11.17: the mainland's)
-  fashion: ['shop', 'חנות אופנה'],
-  shoes: ['shop', 'חנות נעליים'],
-  electronics: ['shop', 'אלקטרוניקה'],
-  jewelry: ['shop', 'תכשיטים'],
-  toys: ['shop', 'צעצועים'],
-  perfume: ['shop', 'בשמים'],
-  sports: ['shop', 'ספורט'],
-  burger: ['food', 'המבורגר'],
-  noodles: ['food', 'נודלס'],
-  gourmet: ['food', 'מסעדת שף'],
-  theatre: ['fun', 'תיאטרון'],
+  fashion: ['shop', tr('חנות אופנה', 'Fashion store')],
+  shoes: ['shop', tr('חנות נעליים', 'Shoe store')],
+  electronics: ['shop', tr('אלקטרוניקה', 'Electronics')],
+  jewelry: ['shop', tr('תכשיטים', 'Jewelry')],
+  toys: ['shop', tr('צעצועים', 'Toys')],
+  perfume: ['shop', tr('בשמים', 'Perfume')],
+  sports: ['shop', tr('ספורט', 'Sports')],
+  burger: ['food', tr('המבורגר', 'Burgers')],
+  noodles: ['food', tr('נודלס', 'Noodles')],
+  gourmet: ['food', tr('מסעדת שף', 'Chef\'s restaurant')],
+  theatre: ['fun', tr('תיאטרון', 'Theater')],
 };
 
 // (the mainland's stores drawn with the stickers of their kin)
@@ -136,34 +137,34 @@ const GLYPH_OF = { theatre: 'cinema', fashion: 'boutique', shoes: 'boutique', el
 
 // the legend: each group's sticker, its name, and from how close it shows (pixels a metre)
 const CATS = [
-  { id: 'blueprint', name: 'שלטי שרטוטים', glyph: 'board', fill: '#ffd23f', square: true, k: 0 },
+  { id: 'blueprint', name: tr('שלטי שרטוטים', 'Blueprint signs'), glyph: 'board', fill: '#ffd23f', square: true, k: 0 },
   // (ROADMAP 8.2; none with ?classic) the places that can be yours (gold: yours)
-  { id: 'prop', name: 'נכסים', glyph: 'deed', fill: '#c8f0b0', k: 0, nc: true },
-  { id: 'car', name: 'מוסך, דלק וחניה', glyph: 'pump', fill: '#ffd0c8', k: 0 },
-  { id: 'fun', name: 'בילוי ולילה', glyph: 'bar', fill: '#ff9ccc', k: 0 },
-  { id: 'place', name: 'מקומות מיוחדים', glyph: 'wheel', fill: '#fff3c4', k: 0 },
+  { id: 'prop', name: tr('נכסים', 'Property'), glyph: 'deed', fill: '#c8f0b0', k: 0, nc: true },
+  { id: 'car', name: tr('מוסך, דלק וחניה', 'Garage, gas and parking'), glyph: 'pump', fill: '#ffd0c8', k: 0 },
+  { id: 'fun', name: tr('בילוי ולילה', 'Fun and nightlife'), glyph: 'bar', fill: '#ff9ccc', k: 0 },
+  { id: 'place', name: tr('מקומות מיוחדים', 'Special places'), glyph: 'wheel', fill: '#fff3c4', k: 0 },
   // (v5, ROADMAP 11.17) the plots to draw a home on (game/friend.js)
-  { id: 'home', name: 'מגרשים לבית', glyph: 'deed', fill: '#ffe0ef', k: 0.9, nc: true },
-  { id: 'hotel', name: 'מלונות', glyph: 'lobby', fill: '#aec6f6', k: 1.4 },
-  { id: 'food', name: 'אוכל ושתייה', glyph: 'cafe', fill: '#ffc580', k: 1.75 },
-  { id: 'shop', name: 'חנויות', glyph: 'shop', fill: '#a6e5e1', k: 1.75 },
-  { id: 'service', name: 'שירותים', glyph: 'barber', fill: '#d2c0f3', k: 1.75 },
-  { id: 'hide', name: 'מחבואים', glyph: 'hide', fill: '#dcefff', dashed: true, k: 3 },
-  { id: 'bus', name: 'תחנות אוטובוס', glyph: 'bus', fill: '#ffffff', square: true, k: 3, off: true },
-  { id: 'gang', name: 'שטחי כנופיות', glyph: 'gang', fill: '#ffd0d0', k: 0 },
+  { id: 'home', name: tr('מגרשים לבית', 'Lots for a house'), glyph: 'deed', fill: '#ffe0ef', k: 0.9, nc: true },
+  { id: 'hotel', name: tr('מלונות', 'Hotels'), glyph: 'lobby', fill: '#aec6f6', k: 1.4 },
+  { id: 'food', name: tr('אוכל ושתייה', 'Food and drink'), glyph: 'cafe', fill: '#ffc580', k: 1.75 },
+  { id: 'shop', name: tr('חנויות', 'Shops'), glyph: 'shop', fill: '#a6e5e1', k: 1.75 },
+  { id: 'service', name: tr('שירותים', 'Services'), glyph: 'barber', fill: '#d2c0f3', k: 1.75 },
+  { id: 'hide', name: tr('מחבואים', 'Hideouts'), glyph: 'hide', fill: '#dcefff', dashed: true, k: 3 },
+  { id: 'bus', name: tr('תחנות אוטובוס', 'Bus stops'), glyph: 'bus', fill: '#ffffff', square: true, k: 3, off: true },
+  { id: 'gang', name: tr('שטחי כנופיות', 'Gang turf'), glyph: 'gang', fill: '#ffd0d0', k: 0 },
 ];
 const CAT = Object.fromEntries(CATS.map((c) => [c.id, c]));
 const ORDER = ['prop', 'blueprint', 'car', 'fun', 'place', 'hotel', 'food', 'shop', 'service', 'hide', 'bus'];
 
 const HIDE_NOTE = {
-  alley: 'בקצה הסמטה',
-  dumpster: 'מאחורי פח אשפה',
-  bush: 'בין השיחים בפארק',
-  motel: 'מאחורי המוטל',
+  alley: tr('בקצה הסמטה', 'At the end of the alley'),
+  dumpster: tr('מאחורי פח אשפה', 'Behind a dumpster'),
+  bush: tr('בין השיחים בפארק', 'Among the bushes in the park'),
+  motel: tr('מאחורי המוטל', 'Behind the motel'),
 };
 
-const VEHICLE_NAME = { car: 'המכונית שלכם', tank: 'הטנק שלכם', bike: 'האופנוע שלכם', copter: 'המסוק שלכם' };
-const SKY_NAME = { clear: 'בהיר', cloudy: 'מעונן', drizzle: 'טפטוף', rain: 'גשם', storm: 'סערה', fog: 'ערפל' };
+const VEHICLE_NAME = { car: tr('המכונית שלכם', 'Your car'), tank: tr('הטנק שלכם', 'Your tank'), bike: tr('האופנוע שלכם', 'Your motorbike'), copter: tr('המסוק שלכם', 'Your helicopter') };
+const SKY_NAME = { clear: tr('בהיר', 'Clear'), cloudy: tr('מעונן', 'Cloudy'), drizzle: tr('טפטוף', 'Drizzle'), rain: tr('גשם', 'Rain'), storm: tr('סערה', 'Storm'), fog: tr('ערפל', 'Fog') };
 
 function clamp(v, a, b) {
   return v < a ? a : v > b ? b : v;
@@ -334,10 +335,10 @@ export class CityMap {
     this.centreOnPlayer(false, this.lastK || clamp(this.H / 300, this.kMin(), K_MAX));
     this.updateHead();
     $('map-hint').textContent = this.game.pad && this.game.pad.active
-      ? 'סטיק — הזזה · RT/LT — זום · Ⓐ — יעד, או מה זה · Ⓧ — בלי יעד · Ⓨ — אליכם · Ⓑ — סגירה'
+      ? tr('סטיק — הזזה · RT/LT — זום · Ⓐ — יעד, או מה זה · Ⓧ — בלי יעד · Ⓨ — אליכם · Ⓑ — סגירה', 'Stick — move · RT/LT — zoom · Ⓐ — destination, or what\'s this · Ⓧ — no destination · Ⓨ — to you · Ⓑ — close')
       : this.game.touch
-      ? 'גרירה — הזזה · שתי אצבעות — זום · נגיעה — יעד, או מה זה'
-      : 'גרירה — הזזה · גלגלת — זום · קליק — יעד · קליק ימני — בלי יעד · M — סגירה';
+      ? tr('גרירה — הזזה · שתי אצבעות — זום · נגיעה — יעד, או מה זה', 'Drag — move · two fingers — zoom · tap — destination, or what\'s this')
+      : tr('גרירה — הזזה · גלגלת — זום · קליק — יעד · קליק ימני — בלי יעד · M — סגירה', 'Drag — move · wheel — zoom · click — destination · right-click — no destination · M — close');
     this.render();
   }
 
@@ -401,10 +402,10 @@ export class CityMap {
     const w = this.game.weather;
     const sky = w ? SKY_NAME[w.kind] || '' : '';
     // (in Hebrew "in the market" drops the article: השוק -> בשוק)
-    const inn = where ? `אתם ב${where.startsWith('ה') ? where.slice(1) : where}` : 'אתם מחוץ לעיר';
+    const inn = where ? tr(`אתם ב${where.startsWith('ה') ? where.slice(1) : where}`, `You're in ${where.startsWith('ה') ? where.slice(1) : where}`) : tr('אתם מחוץ לעיר', 'You\'re outside the city');
     const gps = this.game.gps;
     const r = gps && gps.target && gps.route;
-    const to = r ? ` · ⚑ ${r.len < 1000 ? `${Math.max(10, Math.round(r.len / 10) * 10)} מ׳` : `${(r.len / 1000).toFixed(1)} ק״מ`}` : '';
+    const to = r ? ` · ⚑ ${r.len < 1000 ? tr(`${Math.max(10, Math.round(r.len / 10) * 10)} מ׳`, `${Math.max(10, Math.round(r.len / 10) * 10)} m`) : tr(`${(r.len / 1000).toFixed(1)} ק״מ`, `${(r.len / 1000).toFixed(1)} km`)}` : '';
     $('map-where').textContent = `${inn} · ${dn ? dn.clock : ''}${sky ? ` · ${sky}` : ''}${to}`;
   }
 
@@ -516,25 +517,25 @@ export class CityMap {
       if (!k) continue;
       const d = s.door;
       // (ROADMAP 8.1: where the ATMs are)
-      const atm = game.money && ATM_KINDS.has(s.kind) ? 'יש כאן כספומט PAPERTRUST' : undefined;
+      const atm = game.money && ATM_KINDS.has(s.kind) ? tr('יש כאן כספומט PAPERTRUST', 'There\'s a PAPERTRUST cash machine here') : undefined;
       add({ cat: k[0], glyph: GLYPH_OF[kind] || kind, x: d[0], z: d[2], name: s.name === 'tower' ? null : s.name, he: k[1], hours: kind === 'club' ? 'club' : kind === 'motel' ? 'lobby' : kind, shop: s, note: atm });
     }
     // the blueprints' boards
     for (const b of w.billboards || []) {
       const bp = BLUEPRINTS[b.id];
       if (!bp) continue;
-      add({ cat: 'blueprint', glyph: 'board', x: b.x, z: b.z, name: bp.name, bp, board: b, note: b.roof ? 'על גג. עולים במדרגות החירום או בסולם, ומצלמים מלמעלה' : undefined });
+      add({ cat: 'blueprint', glyph: 'board', x: b.x, z: b.z, name: bp.name, bp, board: b, note: b.roof ? tr('על גג. עולים במדרגות החירום או בסולם, ומצלמים מלמעלה', 'On a roof. Go up the fire escape or a ladder, and photograph it from above') : undefined });
     }
     // the places worth a visit
-    if (w.wheel) add({ cat: 'place', glyph: 'wheel', x: w.wheel.x, z: w.wheel.z, name: 'הגלגל הענק', note: 'על המזח' });
-    if (w.helipad) add({ cat: 'place', glyph: 'heli', x: w.helipad.x, z: w.helipad.z, name: 'מנחת המסוקים', note: 'בקצה המזח, ולידו השרטוטים של המסוק ושל המצנח' });
-    for (const f of w.fountains || []) add({ cat: 'place', glyph: 'fountain', x: f.x, z: f.z, name: 'כיכר המזרקה', note: 'בתי קפה ושולחנות סביב המזרקה' });
-    for (const c of w.courts || []) add({ cat: 'place', glyph: 'court', x: (c.x0 + c.x1) / 2, z: (c.z0 + c.z1) / 2, name: 'מגרש הכדורסל', note: 'בפארק הדקלים' });
-    for (const m of w.markets || []) add({ cat: 'place', glyph: 'market', x: (m.x0 + m.x1) / 2, z: (m.z0 + m.z1) / 2, name: 'השוק', note: 'דוכנים של פירות, פרחים, דגים ובגדים' });
-    add({ cat: 'place', glyph: 'beach', x: 80, z: -100, name: 'החוף', note: 'חול, סוכות מצילים, שמשיות והאוקיינוס' });
+    if (w.wheel) add({ cat: 'place', glyph: 'wheel', x: w.wheel.x, z: w.wheel.z, name: tr('הגלגל הענק', 'The giant wheel'), note: tr('על המזח', 'On the pier') });
+    if (w.helipad) add({ cat: 'place', glyph: 'heli', x: w.helipad.x, z: w.helipad.z, name: tr('מנחת המסוקים', 'The helipad'), note: tr('בקצה המזח, ולידו השרטוטים של המסוק ושל המצנח', 'At the end of the pier, with the helicopter and parachute blueprints next to it') });
+    for (const f of w.fountains || []) add({ cat: 'place', glyph: 'fountain', x: f.x, z: f.z, name: tr('כיכר המזרקה', 'Fountain Square'), note: tr('בתי קפה ושולחנות סביב המזרקה', 'Cafés and tables around the fountain') });
+    for (const c of w.courts || []) add({ cat: 'place', glyph: 'court', x: (c.x0 + c.x1) / 2, z: (c.z0 + c.z1) / 2, name: tr('מגרש הכדורסל', 'The basketball court'), note: tr('בפארק הדקלים', 'In Palm Park') });
+    for (const m of w.markets || []) add({ cat: 'place', glyph: 'market', x: (m.x0 + m.x1) / 2, z: (m.z0 + m.z1) / 2, name: tr('השוק', 'The market'), note: tr('דוכנים של פירות, פרחים, דגים ובגדים', 'Stalls of fruit, flowers, fish and clothes') });
+    add({ cat: 'place', glyph: 'beach', x: 80, z: -100, name: tr('החוף', 'The beach'), note: tr('חול, סוכות מצילים, שמשיות והאוקיינוס', 'Sand, lifeguard huts, umbrellas and the ocean') });
     // (v5) the bandshell in the park at the island's tip (world/northend.js)
     this.bandshell = (w.ctx && w.ctx.bandshell) || null;
-    if (this.bandshell) add({ cat: 'place', glyph: 'music', x: this.bandshell.x, z: (this.bandshell.z0 + this.bandshell.z1) / 2, name: 'הבמה בקצה האי', note: 'NORTH SHORE BANDSHELL: קשתות פסטל מעל הבמה, פסנתר, שורות כיסאות על הרחבה, והים מאחור' });
+    if (this.bandshell) add({ cat: 'place', glyph: 'music', x: this.bandshell.x, z: (this.bandshell.z0 + this.bandshell.z1) / 2, name: tr('הבמה בקצה האי', 'The stage at the end of the island'), note: tr('NORTH SHORE BANDSHELL: קשתות פסטל מעל הבמה, פסנתר, שורות כיסאות על הרחבה, והים מאחור', 'NORTH SHORE BANDSHELL: pastel arches over the stage, a piano, rows of chairs on the plaza, and the sea behind') });
     if (ml) {
       for (const pl of PLACES) {
         const b = placeBlock(pl);
@@ -542,41 +543,41 @@ export class CityMap {
         const z = pl.at ? pl.at[1] : b ? b.cz : 0;
         const glyph = pl.mega ? 'mall' : pl.id === 'pier' ? 'wheel' : pl.id === 'lighthouse' ? 'lighthouse' : pl.id === 'observatory' ? 'dome' : pl.kind === 'arena' ? 'arena' : pl.kind === 'mall' ? 'market' : pl.kind === 'club' ? 'club' : pl.kind === 'gourmet' ? 'diner' : pl.kind === 'theatre' ? 'cinema' : pl.kind === 'arcade' ? 'arcade' : pl.kind === 'casino' ? 'casino' : 'fountain';
         // (ROADMAP 11.30: the giant mall - big, at any zoom, its name with it)
-        add({ cat: 'place', glyph, x, z, name: pl.mega ? `קניון ${pl.heb}` : pl.heb, note: PLACE_NOTES[pl.id] || pl.name, big: !!pl.mega });
+        add({ cat: 'place', glyph, x, z, name: pl.mega ? tr(`קניון ${pl.heb}`, `${pl.heb} Mall`) : pl.heb, note: PLACE_NOTES[pl.id] || pl.name, big: !!pl.mega });
       }
-      add({ cat: 'place', glyph: 'beach', x: -1500, z: 600, name: 'חוף פליסייד', note: 'הטיילת, החול והאוקיינוס בדרום היבשה' });
+      add({ cat: 'place', glyph: 'beach', x: -1500, z: 600, name: tr('חוף פליסייד', 'Palisade Beach'), note: tr('הטיילת, החול והאוקיינוס בדרום היבשה', 'The boardwalk, the sand and the ocean in the south of the mainland') });
       // (v5, ROADMAP 11.17) DRAW YOURSELF A FRIEND on the mainland, the plots to draw a home on, and
       // the home she drew (game/friend.js; their places from the bake, world/mainland/far.json)
-      for (const [x, z] of w.allStands || []) add({ cat: 'fun', glyph: 'friends', x, z, name: 'צייר לך חברה', note: 'עיפרון קסם: מציירים חברה, מדברים איתה, והיא באה איתכם' });
+      for (const [x, z] of w.allStands || []) add({ cat: 'fun', glyph: 'friends', x, z, name: tr('צייר לך חברה', 'Draw Yourself a Friend'), note: tr('עיפרון קסם: מציירים חברה, מדברים איתה, והיא באה איתכם', 'A magic pencil: draw a friend, talk to her, and she comes along with you') });
       const F = game.friend;
       for (const [key, x, z] of w.allPlots || []) {
         if (w.homes && w.homes.has(key)) {
           const h = w.homes.get(key);
-          add({ cat: 'place', glyph: 'friends', x, z, name: `הבית של ${h.heb || (F && F.data && F.data.heb) || 'החברה'}`, note: 'הבית שהיא ציירה לעצמה. נכנסים: סרט, ארוחה, ציור על הקיר' });
-        } else add({ cat: 'home', glyph: 'deed', x, z, name: 'מגרש לבית', note: 'מגרש ריק: החברה שציירתם יכולה לצייר עליו בית' });
+          add({ cat: 'place', glyph: 'friends', x, z, name: tr(`הבית של ${h.heb || (F && F.data && F.data.heb) || 'החברה'}`, `${h.heb || (F && F.data && F.data.heb) || tr('החברה', 'The friend')}'s house`), note: tr('הבית שהיא ציירה לעצמה. נכנסים: סרט, ארוחה, ציור על הקיר', 'The house she drew for herself. Go in: a movie, a meal, a picture on the wall') });
+        } else add({ cat: 'home', glyph: 'deed', x, z, name: tr('מגרש לבית', 'Lot for a house'), note: tr('מגרש ריק: החברה שציירתם יכולה לצייר עליו בית', 'An empty lot: the friend you drew can draw a house on it') });
       }
     }
     // the service station (ROADMAP 4.6; none with ?classic)
     const G = w.garages;
     if (G) {
       for (const b of G.bays) {
-        if (b.kind === 'garage') add({ cat: 'car', glyph: 'wrench', x: b.x + 4, z: b.z, name: 'מוסך INK & IRON', note: 'צבע חדש וציור על הרכב, שדרוגים ותיקונים. נכנסים ברכב לתא ועוצרים' });
-        else add({ cat: 'car', glyph: 'wash', x: b.x + 4, z: b.z, name: 'שטיפת SPLASH WASH', note: 'נכנסים ברכב לתא ועוצרים: מברשות, קצף, והרכב יוצא נקי' });
+        if (b.kind === 'garage') add({ cat: 'car', glyph: 'wrench', x: b.x + 4, z: b.z, name: tr('מוסך INK & IRON', 'INK & IRON Garage'), note: tr('צבע חדש וציור על הרכב, שדרוגים ותיקונים. נכנסים ברכב לתא ועוצרים', 'A new paint job and drawings on your car, upgrades and repairs. Drive into the bay and stop') });
+        else add({ cat: 'car', glyph: 'wash', x: b.x + 4, z: b.z, name: tr('שטיפת SPLASH WASH', 'SPLASH WASH car wash'), note: tr('נכנסים ברכב לתא ועוצרים: מברשות, קצף, והרכב יוצא נקי', 'Drive into the bay and stop: brushes, foam, and the car comes out clean') });
       }
       const c = G.canopy;
-      add({ cat: 'car', glyph: 'pump', x: (c.x0 + c.x1) / 2, z: (c.z0 + c.z1) / 2, name: 'תחנת הדלק PENCIL PETROL', note: 'עוצרים ליד משאבה, והמיכל מתמלא' });
+      add({ cat: 'car', glyph: 'pump', x: (c.x0 + c.x1) / 2, z: (c.z0 + c.z1) / 2, name: tr('תחנת הדלק PENCIL PETROL', 'PENCIL PETROL gas station'), note: tr('עוצרים ליד משאבה, והמיכל מתמלא', 'Stop by a pump and the tank fills up') });
       const pk = G.parking[1] || G.parking[0];
-      if (pk) add({ cat: 'car', glyph: 'parking', x: pk.x, z: pk.z, name: 'החניה שלכם', note: 'רכב שמשאירים באחד משלושת המקומות הכחולים נשמר כאן' });
+      if (pk) add({ cat: 'car', glyph: 'parking', x: pk.x, z: pk.z, name: tr('החניה שלכם', 'Your parking'), note: tr('רכב שמשאירים באחד משלושת המקומות הכחולים נשמר כאן', 'A car you leave in one of the three blue spots is kept here') });
     }
     // the places that can be yours (ROADMAP 8.2; none with ?classic)
     for (const p of (game.props && game.props.list) || []) {
-      add({ cat: 'prop', glyph: 'deed', x: p.x, z: p.z, name: p.name, prop: p, note: () => (p.owned ? `שלכם · ${fmt(p.income)} לבנק בכל בוקר` : `${p.he}. למכירה: ${fmt(p.price)} · מכניס ${fmt(p.income)} בכל בוקר`) });
+      add({ cat: 'prop', glyph: 'deed', x: p.x, z: p.z, name: p.name, prop: p, note: () => (p.owned ? tr(`שלכם · ${fmt(p.income)} לבנק בכל בוקר`, `Yours · ${fmt(p.income)} to the bank every morning`) : tr(`${p.he}. למכירה: ${fmt(p.price)} · מכניס ${fmt(p.income)} בכל בוקר`, `${p.he}. For sale: ${fmt(p.price)} · brings in ${fmt(p.income)} every morning`)) });
     }
     // the police station (ROADMAP 6.3; none with ?classic)
-    if (w.station) add({ cat: 'place', glyph: 'police', x: w.station.x, z: w.station.z, name: 'תחנת המשטרה', note: 'בכיכר המזרקה. כאן משחררים אתכם אחרי מעצר' });
+    if (w.station) add({ cat: 'place', glyph: 'police', x: w.station.x, z: w.station.z, name: tr('תחנת המשטרה', 'The police station'), note: tr('בכיכר המזרקה. כאן משחררים אתכם אחרי מעצר', 'On Fountain Square. This is where you\'re let out after an arrest') });
     // where nobody sees you
-    for (const h of w.hideSpots || []) add({ cat: 'hide', glyph: 'hide', x: h.x, z: h.z, name: 'מחבוא', note: `${HIDE_NOTE[h.kind] || ''}${HIDE_NOTE[h.kind] ? '. ' : ''}כאן לא רואים אתכם, ואפשר לצייר בשקט`, spot: h });
-    for (const b of w.busStops || []) add({ cat: 'bus', glyph: 'bus', x: b.x, z: b.z, name: 'תחנת אוטובוס', note: districtName(b.x, b.z) });
+    for (const h of w.hideSpots || []) add({ cat: 'hide', glyph: 'hide', x: h.x, z: h.z, name: tr('מחבוא', 'Hideout'), note: tr(`${HIDE_NOTE[h.kind] || ''}${HIDE_NOTE[h.kind] ? '. ' : ''}כאן לא רואים אתכם, ואפשר לצייר בשקט`, `${HIDE_NOTE[h.kind] || ''}${HIDE_NOTE[h.kind] ? '. ' : ''}Nobody can see you here, and you can draw in peace`), spot: h });
+    for (const b of w.busStops || []) add({ cat: 'bus', glyph: 'bus', x: b.x, z: b.z, name: tr('תחנת אוטובוס', 'Bus stop'), note: districtName(b.x, b.z) });
     // the most important first: they keep their place when the stickers crowd (the big ones before all)
     const rank = Object.fromEntries(ORDER.map((id, i) => [id, i]));
     this.items.sort((a, b) => (b.big ? 1 : 0) - (a.big ? 1 : 0) || rank[a.cat] - rank[b.cat]);
@@ -1385,7 +1386,7 @@ export class CityMap {
     g.font = o.font;
     g.textAlign = o.align || 'center';
     g.textBaseline = 'middle';
-    g.direction = o.dir || 'rtl';
+    g.direction = o.dir || (lang() === 'he' ? 'rtl' : 'ltr');
     if (o.halo !== 0) {
       g.lineJoin = 'round';
       g.lineWidth = o.halo || 4;
@@ -1421,17 +1422,17 @@ export class CityMap {
     for (const z of [-260, 60]) {
       const x = this.sx((WATER_X + MAP.x1) / 2 + 20);
       const y = this.sy(z);
-      if (on(x, y, 200)) this.text(g, 'האוקיינוס', x, y, { font: `${bay}px ${hand}`, color: '#3b5fb3', haloCol: COL.water, halo: 5, alpha: 0.9 });
+      if (on(x, y, 200)) this.text(g, tr('האוקיינוס', 'The ocean'), x, y, { font: `${bay}px ${hand}`, color: '#3b5fb3', haloCol: COL.water, halo: 5, alpha: 0.9 });
     }
     {
       const x = this.sx((BAY_X + MAP.x0) / 2 - 10);
       const y = this.sy(-150);
-      if (on(x, y, 200)) this.text(g, 'המפרץ', x, y, { font: `${bay}px ${hand}`, color: '#3b5fb3', haloCol: COL.water, halo: 5, alpha: 0.9, rot: -Math.PI / 2 });
+      if (on(x, y, 200)) this.text(g, tr('המפרץ', 'The bay'), x, y, { font: `${bay}px ${hand}`, color: '#3b5fb3', haloCol: COL.water, halo: 5, alpha: 0.9, rot: -Math.PI / 2 });
     }
     {
       const x = this.sx(-110);
       const y = this.sy(SHORE_Z + 40);
-      if (on(x, y, 200)) this.text(g, 'הים', x, y, { font: `${bay}px ${hand}`, color: '#3b5fb3', haloCol: COL.water, halo: 5, alpha: 0.9 });
+      if (on(x, y, 200)) this.text(g, tr('הים', 'The sea'), x, y, { font: `${bay}px ${hand}`, color: '#3b5fb3', haloCol: COL.water, halo: 5, alpha: 0.9 });
     }
     // the streets' names, along them
     const st = clamp(9 + k * 1.6, 11, 15);
@@ -1512,20 +1513,20 @@ export class CityMap {
     for (const z of k < 0.75 ? [] : k < 2.1 ? [-120] : [-300, -120, 60, 220]) {
       const x = this.sx((PROM_X1 + BEACH_WALK[0]) / 2);
       const y = this.sy(z);
-      if (on(x, y, 150)) this.text(g, 'פארק החוף', x, y, { font: `${side}px ${hand}`, rot: -Math.PI / 2, halo: 5, haloCol: COL.grass, alpha: fade });
+      if (on(x, y, 150)) this.text(g, tr('פארק החוף', 'Beach Park'), x, y, { font: `${side}px ${hand}`, rot: -Math.PI / 2, halo: 5, haloCol: COL.grass, alpha: fade });
       const bx = this.sx((SAND_X0 + WATER_X) / 2);
-      if (on(bx, y, 150)) this.text(g, 'החוף', bx, y, { font: `${side}px ${hand}`, rot: -Math.PI / 2, halo: 5, haloCol: COL.sand, alpha: fade });
+      if (on(bx, y, 150)) this.text(g, tr('החוף', 'The beach'), bx, y, { font: `${side}px ${hand}`, rot: -Math.PI / 2, halo: 5, haloCol: COL.sand, alpha: fade });
     }
     {
       const x = this.sx((PIER.x0 + PIER.x1) / 2 + 22);
       const y = this.sy(PIER.z1 + 10);
-      if (on(x, y, 150)) this.text(g, 'המזח', x, y, { font: `${side}px ${hand}`, halo: 5, haloCol: COL.water });
+      if (on(x, y, 150)) this.text(g, tr('המזח', 'The pier'), x, y, { font: `${side}px ${hand}`, halo: 5, haloCol: COL.water });
       const bx = this.sx(Math.max(BAY_X - 70, (this.vis.x0 + BAY_X) / 2));
       const by = this.sy(-430 - 14);
-      if (!MAINLAND_ON && on(bx, by, 150)) this.text(g, 'גשר המפרץ', bx, by, { font: `${side}px ${hand}`, halo: 5, haloCol: COL.water });
+      if (!MAINLAND_ON && on(bx, by, 150)) this.text(g, tr('גשר המפרץ', 'The bay bridge'), bx, by, { font: `${side}px ${hand}`, halo: 5, haloCol: COL.water });
       const cx = this.sx(-110);
       const cy = this.sy(SOUTH_EDGE + 20);
-      if (on(cx, cy, 150) && k > 1.2) this.text(g, 'החוף', cx + 70, cy, { font: `${side}px ${hand}`, halo: 5, haloCol: COL.sand });
+      if (on(cx, cy, 150) && k > 1.2) this.text(g, tr('החוף', 'The beach'), cx + 70, cy, { font: `${side}px ${hand}`, halo: 5, haloCol: COL.sand });
     }
   }
 
@@ -1613,7 +1614,7 @@ export class CityMap {
       }
     }
     // (over the stickers round it)
-    for (const p of placed) if (p.it.big) this.text(g, p.it.name, p.x, p.y + p.r + 11, { font: BIG, dir: 'rtl', halo: 4.5 });
+    for (const p of placed) if (p.it.big) this.text(g, p.it.name, p.x, p.y + p.r + 11, { font: BIG, dir: /[\u0590-\u05FF]/.test(p.it.name) ? 'rtl' : 'ltr', halo: 4.5 });
   }
 
   isOpen(it) {
@@ -1697,7 +1698,7 @@ export class CityMap {
       const y = this.sy(v.pos.z);
       if (x < -R || y < -R || x > this.W + R || y > this.H + R) continue;
       sticker(g, x, y, 'car', '#cfe0ff', R, { ring: this.hover === v || this.sel === v });
-      this.placed.unshift({ x, y, it: { vehicle: v, cat: 'vehicle', name: VEHICLE_NAME[v.kind] || 'כלי הרכב שלכם' }, r: R });
+      this.placed.unshift({ x, y, it: { vehicle: v, cat: 'vehicle', name: VEHICLE_NAME[v.kind] || tr('כלי הרכב שלכם', 'Your vehicles') }, r: R });
     }
     // the destination: a pin (it can be pointed at like a sticker)
     const tg = game.gps && game.gps.target;
@@ -1705,7 +1706,7 @@ export class CityMap {
       const x = this.sx(tg.x);
       const y = this.sy(tg.z);
       pin(g, x, y, 1);
-      this.placed.unshift({ x, y: y - 23, it: { waypoint: true, cat: 'waypoint', name: tg.name || 'היעד שלכם', x: tg.x, z: tg.z }, r: 13 });
+      this.placed.unshift({ x, y: y - 23, it: { waypoint: true, cat: 'waypoint', name: tg.name || tr('היעד שלכם', 'Your destination'), x: tg.x, z: tg.z }, r: 13 });
     }
     // you: an arrow the way you face
     const p = this.playerPos();
@@ -1765,7 +1766,7 @@ export class CityMap {
     g.fillStyle = COL.ink;
     g.fillRect(x0, y - 3, len / 2, 6);
     g.strokeRect(x0, y - 3, len, 6);
-    this.text(g, `${m} מ׳`, (x0 + x1) / 2, y - 15, { font: '600 13px Rubik, sans-serif', halo: 0 });
+    this.text(g, tr(`${m} מ׳`, `${m} m`), (x0 + x1) / 2, y - 15, { font: '600 13px Rubik, sans-serif', halo: 0 });
     // the north
     const nx = x1 - 6;
     const ny = y - 64;
@@ -1783,7 +1784,7 @@ export class CityMap {
     g.fill();
     g.stroke();
     g.restore();
-    this.text(g, 'צ', nx, ny + 14, { font: '700 14px Rubik, sans-serif', halo: 3 });
+    this.text(g, tr('צ', 'N'), nx, ny + 14, { font: '700 14px Rubik, sans-serif', halo: 3 });
   }
 
   // ------------------------------------------------------------------ pointing at the map
@@ -1820,24 +1821,24 @@ export class CityMap {
     const tx = it.vehicle ? it.vehicle.pos.x : it.x;
     const tz = it.vehicle ? it.vehicle.pos.z : it.z;
     const d = Math.hypot(tx - pl.x, tz - pl.z);
-    const far = d < 15 ? 'ממש לידכם' : `${d < 1000 ? Math.round(d / 10) * 10 : (d / 1000).toFixed(1)} ${d < 1000 ? 'מ׳' : 'ק״מ'} מכם`;
+    const far = d < 15 ? tr('ממש לידכם', 'Right next to you') : tr(`${d < 1000 ? Math.round(d / 10) * 10 : (d / 1000).toFixed(1)} ${d < 1000 ? 'מ׳' : 'ק״מ'} מכם`, `${d < 1000 ? Math.round(d / 10) * 10 : (d / 1000).toFixed(1)} ${d < 1000 ? tr('מ׳', 'm') : tr('ק״מ', 'km')} from you`);
     const rows = [];
     if (it.shop || it.hours) {
       const latin = it.name && /^[\x20-\x7e]+$/.test(it.name);
       rows.push(`<div class="t${latin ? ' en' : ''}" ${latin ? 'dir="ltr"' : ''}>${it.name || it.he}</div>`);
       if (it.name) rows.push(`<div class="s">${it.he}</div>`);
       const hrs = shopHours(it.hours);
-      if (!hrs) rows.push('<div class="h open">פתוח 24 שעות</div>');
-      else if (this.isOpen(it)) rows.push(`<div class="h open">פתוח עכשיו · עד ${hhmm(hrs[1])}</div>`);
-      else rows.push(`<div class="h shut">סגור עכשיו · נפתח ב־${hhmm(hrs[0])}</div>`);
+      if (!hrs) rows.push(tr('<div class="h open">פתוח 24 שעות</div>', '<div class="h open">Open 24 hours</div>'));
+      else if (this.isOpen(it)) rows.push(tr(`<div class="h open">פתוח עכשיו · עד ${hhmm(hrs[1])}</div>`, `<div class="h open">Open now · until ${hhmm(hrs[1])}</div>`));
+      else rows.push(tr(`<div class="h shut">סגור עכשיו · נפתח ב־${hhmm(hrs[0])}</div>`, `<div class="h shut">Closed now · opens at ${hhmm(hrs[0])}</div>`));
     } else if (it.bp) {
       rows.push(`<div class="t">${it.name}</div>`);
-      rows.push('<div class="s">שלט שרטוט</div>');
+      rows.push(tr('<div class="s">שלט שרטוט</div>', '<div class="s">Blueprint sign</div>'));
       const got = this.game.album.items && this.game.album.items.has(it.bp.id);
-      rows.push(got ? '<div class="h open">צילמתם אותו ✓</div>' : `<div class="h">עוד לא צולם · ${this.game.touch ? 'כפתור המצלמה' : 'F'} ליד השלט</div>`);
+      rows.push(got ? tr('<div class="h open">צילמתם אותו ✓</div>', '<div class="h open">You photographed it ✓</div>') : tr(`<div class="h">עוד לא צולם · ${this.game.touch ? 'כפתור המצלמה' : 'F'} ליד השלט</div>`, `<div class="h">Not photographed yet · ${this.game.touch ? tr('כפתור המצלמה', 'the camera button') : 'F'} by the sign</div>`));
     } else if (it.waypoint) {
       rows.push(`<div class="t">${it.name}</div>`);
-      rows.push('<div class="s">היעד שלכם</div>');
+      rows.push(tr('<div class="s">היעד שלכם</div>', '<div class="s">Your destination</div>'));
     } else {
       rows.push(`<div class="t">${it.name}</div>`);
       if (it.note) rows.push(`<div class="s">${typeof it.note === 'function' ? it.note() : it.note}</div>`);
@@ -1846,7 +1847,7 @@ export class CityMap {
     if (pinned) {
       const tg = this.game.gps.target;
       const here = it.waypoint || (tg && Math.abs(tg.x - tx) < 0.5 && Math.abs(tg.z - tz) < 0.5);
-      rows.push(here ? '<button class="card-btn" data-act="clear">✕ בלי יעד</button>' : '<button class="card-btn go" data-act="go">⚑ סמנו כיעד</button>');
+      rows.push(here ? tr('<button class="card-btn" data-act="clear">✕ בלי יעד</button>', '<button class="card-btn" data-act="clear">✕ No destination</button>') : tr('<button class="card-btn go" data-act="go">⚑ סמנו כיעד</button>', '<button class="card-btn go" data-act="go">⚑ Set as destination</button>'));
     }
     c.innerHTML = rows.join('');
     c.classList.toggle('pinned', pinned);

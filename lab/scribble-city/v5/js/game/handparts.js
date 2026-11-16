@@ -4,6 +4,7 @@ import { shapeOf } from './drawncar.js';
 import { PART } from './parts.js';
 import { handCombos } from './combos.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.11, parts 2) A thing for the hand, made of its parts - and each part changes what it
 // does, as each part of a ride does (game/partsum.js):
 //   - its barrels: each one fires (two: both together; three or more: they turn, each firing in
@@ -26,17 +27,17 @@ import { handCombos } from './combos.js';
 
 // ------------------------------------------------------------------ what each ink fires
 export const ELEMENT = {
-  2: { k: 'fire', name: 'אש', line: 'מצית ושורף' },
-  3: { k: 'blast', name: 'נפץ', line: 'מתפוצץ קטן' },
-  4: { k: 'shock', name: 'חשמל', line: 'משתק לרגע' },
-  5: { k: 'glue', name: 'דבק', line: 'מדביק למקום' },
-  6: { k: 'water', name: 'מים', line: 'הודף ומכבה שריפות' },
-  7: { k: 'ink', name: 'דיו', line: 'ענן דיו שמסתיר' },
-  8: { k: 'bounce', name: 'קופצני', line: 'קופץ מקירות' },
-  9: { k: 'tippex', name: 'טיפקס', line: 'מוחק את מה שפוגע בו' },
-  10: { k: 'light', name: 'אור', line: 'קרן אור' },
+  2: { k: 'fire', name: tr('אש', 'Fire'), line: tr('מצית ושורף', 'Sets on fire and burns') },
+  3: { k: 'blast', name: tr('נפץ', 'Explosive'), line: tr('מתפוצץ קטן', 'A small explosion') },
+  4: { k: 'shock', name: tr('חשמל', 'Electric'), line: tr('משתק לרגע', 'Stuns for a moment') },
+  5: { k: 'glue', name: tr('דבק', 'Glue'), line: tr('מדביק למקום', 'Sticks it in place') },
+  6: { k: 'water', name: tr('מים', 'Water'), line: tr('הודף ומכבה שריפות', 'Knocks back and puts out fires') },
+  7: { k: 'ink', name: tr('דיו', 'Ink'), line: tr('ענן דיו שמסתיר', 'An ink cloud that hides') },
+  8: { k: 'bounce', name: tr('קופצני', 'Bouncy'), line: tr('קופץ מקירות', 'Bounces off walls') },
+  9: { k: 'tippex', name: tr('טיפקס', 'White-out'), line: tr('מוחק את מה שפוגע בו', 'Erases whatever it hits') },
+  10: { k: 'light', name: tr('אור', 'Light'), line: tr('קרן אור', 'A beam of light') },
 };
-const ELEMENT_ADJ = { fire: 'של אש', blast: 'נפיץ', shock: 'חשמלי', glue: 'של דבק', water: 'של מים', ink: 'של דיו', bounce: 'קופצני', tippex: 'של טיפקס', light: 'של אור' };
+const ELEMENT_ADJ = { fire: tr('של אש', 'fire'), blast: tr('נפיץ', 'explosive'), shock: tr('חשמלי', 'electric'), glue: tr('של דבק', 'glue'), water: tr('של מים', 'water'), ink: tr('של דיו', 'ink'), bounce: tr('קופצני', 'Bouncy'), tippex: tr('של טיפקס', 'white-out'), light: tr('של אור', 'light') };
 const FEM = new Set(['sword', 'bomb']);
 const GUN = new Set(['pistol', 'smg', 'assault', 'rifle', 'shotgun', 'minigun', 'launcher', 'laser']);
 
@@ -402,29 +403,29 @@ export function handSpec(P) {
     if (nB === 2) {
       def.volley = 2;
       def.rate = def.rate * 0.85;
-      lines.push(['fire', 'שני קנים', 'יורה משניהם בבת אחת']);
+      lines.push(['fire', tr('שני קנים', 'Two barrels'), tr('יורה משניהם בבת אחת', 'Fires from both at once')]);
     } else if (nB >= 3 && kind !== 'minigun') {
       // (three or more: they turn, each firing in its turn - quicker and quicker as they spin up)
       def.spin = true;
       def.rate = Math.max(def.rate, 9) * 1.3;
       def.mag = def.mag ? Math.round(def.mag * 2) : def.mag;
       def.ammo = Math.max(def.ammo || 0, (def.mag || 0) * 4);
-      lines.push(['fire', `${nB} קנים`, 'מסתובבים ויורים בלי הפסקה']);
+      lines.push(['fire', tr(`${nB} קנים`, `${nB} barrels`), tr('מסתובבים ויורים בלי הפסקה', 'They spin and fire nonstop')]);
     }
     const longest = barrels.reduce((a, b) => Math.max(a, b.len), R.bl || 0);
     longB = longest > 0.45 && kind !== 'launcher';
     if (longest > 0.45 && kind !== 'launcher') {
       def.speed *= 1.15;
       def.spread *= 0.75;
-      lines.push(['fire', 'קנה ארוך', 'רחוק ומדויק יותר']);
+      lines.push(['fire', tr('קנה ארוך', 'A long barrel'), tr('רחוק ומדויק יותר', 'Further and more accurate')]);
     } else if (longest < 0.18 && barrels.length && kind !== 'launcher') {
       def.spread *= 1.35;
-      lines.push(['fire', 'קנה קצר', 'פחות מדויק']);
+      lines.push(['fire', tr('קנה קצר', 'A short barrel'), tr('פחות מדויק', 'Less accurate')]);
     }
     if (barrels.some((b) => b.bent)) {
       def.curve = 3;
-      lines.push(['fire', 'קנה מעוקל', 'הקליעים מתעקלים אל מי שמכוונים אליו']);
-      abil.push(['fire', 'מתעקל']);
+      lines.push(['fire', tr('קנה מעוקל', 'A curved barrel'), tr('הקליעים מתעקלים אל מי שמכוונים אליו', 'The bullets curve toward whoever you aim at')]);
+      abil.push(['fire', tr('מתעקל', 'Curving')]);
     }
     // its magazine: as big as drawn; round, a drum
     const mags = by('mag');
@@ -434,7 +435,7 @@ export function handSpec(P) {
       const k = clamp(m.h / Math.max(1, R.bodyT), 0.6, 3);
       def.mag = Math.round(def.mag * (round ? 2.5 : 0.7 + k * 0.35));
       def.ammo = Math.max(def.ammo, def.mag * 4);
-      lines.push(['fire', round ? 'מחסנית תוף' : 'מחסנית', `${def.mag} כדורים בכל מחסנית`]);
+      lines.push(['fire', round ? tr('מחסנית תוף', 'A drum magazine') : tr('מחסנית', 'Magazine'), tr(`${def.mag} כדורים בכל מחסנית`, `${def.mag} bullets in every magazine`)]);
     }
     if (by('scope').length || R.scope) {
       // (a scope - a tube along its top, long: it zooms; a little sight on it: truer, no zoom)
@@ -444,34 +445,34 @@ export function handSpec(P) {
       if (w >= 0.2) {
         def.zoom = clamp(1.5 + w * 3, 1.6, 3.2);
         def.spread *= 0.55;
-        lines.push(['fire', 'כוונת', `זום ×${def.zoom.toFixed(1)} כשמכוונים, ויותר מדויק`]);
-        abil.push(['fire', `כוונת ×${def.zoom.toFixed(1)}`]);
+        lines.push(['fire', tr('כוונת', 'Sight'), tr(`זום ×${def.zoom.toFixed(1)} כשמכוונים, ויותר מדויק`, `Zoom ×${def.zoom.toFixed(1)} when you aim, and more accurate`)]);
+        abil.push(['fire', tr(`כוונת ×${def.zoom.toFixed(1)}`, `Scope ×${def.zoom.toFixed(1)}`)]);
       } else {
         def.spread *= 0.8;
-        lines.push(['fire', 'כוונת קטנה', 'יורה מדויק יותר']);
+        lines.push(['fire', tr('כוונת קטנה', 'A small sight'), tr('יורה מדויק יותר', 'Fires more accurately')]);
       }
     }
     if (by('stock').length || R.stock) {
       def.kick = (def.kick || 0.1) * 0.5;
       def.spread *= 0.85;
-      lines.push(['hand', 'קת', 'בועט פחות']);
+      lines.push(['hand', tr('קת', 'Stock'), tr('בועט פחות', 'Kicks less')]);
     }
     if (by('grip').length >= 2) {
       def.hands = 2;
       def.spread *= 0.85;
-      lines.push(['hand', 'ידית קדמית', 'יציב יותר בשתי ידיים']);
+      lines.push(['hand', tr('ידית קדמית', 'A front grip'), tr('יציב יותר בשתי ידיים', 'Steadier in two hands')]);
     }
     if (by('silencer').length) {
       def.quiet = true;
       def.damage = Math.round(def.damage * 0.95);
-      lines.push(['fire', 'משתיק', 'אף אחד לא שומע את הירי']);
-      abil.push(['gear', 'שקט']);
+      lines.push(['fire', tr('משתיק', 'Silencer'), tr('אף אחד לא שומע את הירי', 'Nobody hears the shots')]);
+      abil.push(['gear', tr('שקט', 'Quiet')]);
     }
     const bay = by('blade')[0];
     if (bay) {
       def.bayonet = { damage: Math.round(clamp(30 + (bay.sh.w / Math.max(1, R.L)) * 80, 30, 70)), range: clamp(2 + (bay.sh.w / Math.max(1, R.L)) * 2, 2, 3.2) };
-      lines.push(['fire', 'כידון', 'מקרוב: דוקר במקום לירות']);
-      abil.push(['fire', 'כידון']);
+      lines.push(['fire', tr('כידון', 'Bayonet'), tr('מקרוב: דוקר במקום לירות', 'Up close: stabs instead of firing')]);
+      abil.push(['fire', tr('כידון', 'Bayonet')]);
     }
     if (by('wing').length) {
       def.projectile = 'plane';
@@ -479,26 +480,26 @@ export function handSpec(P) {
       def.homing = 2.4 + by('wing').length * 0.6;
       def.speed = Math.min(def.speed, 34);
       def.gravity = 0;
-      lines.push(['air', 'כנפיים', 'הקליעים טסים כמו מטוסי נייר ומוצאים את המטרה']);
-      abil.push(['air', 'מטוסי נייר']);
+      lines.push(['air', tr('כנפיים', 'Wings'), tr('הקליעים טסים כמו מטוסי נייר ומוצאים את המטרה', 'The bullets fly like paper planes and find the target')]);
+      abil.push(['air', tr('מטוסי נייר', 'Paper planes')]);
     }
     if (by('prop').length) {
       def.wind = clamp(8 + by('prop')[0].sh.h / Math.max(1, R.bodyT) * 2, 8, 16);
-      lines.push(['air', 'מדחף', 'משב רוח שהודף אנשים']);
-      abil.push(['air', 'רוח']);
+      lines.push(['air', tr('מדחף', 'Propeller'), tr('משב רוח שהודף אנשים', 'A gust of wind that blows people back')]);
+      abil.push(['air', tr('רוח', 'Wind')]);
     }
   } else if (kind === 'sword') {
     const blade = by('blade')[0];
     const sh = blade ? blade.sh : null;
     if (sh && !sh.closed && sh.dev > 0.22 && sh.len < Math.hypot(sh.w, sh.h) * 1.35) {
       def.arc = (def.arc || 1.5) * 1.5;
-      lines.push(['fire', 'להב מעוקל', 'מכה רחבה יותר']);
+      lines.push(['fire', tr('להב מעוקל', 'A curved blade'), tr('מכה רחבה יותר', 'A wider swing')]);
     }
     if (sh && toothed(blade.g)) {
       def.damage = Math.round(def.damage * 1.25);
       def.saw = true;
-      lines.push(['fire', 'להב משונן', 'פוגע חזק יותר ומנסר קירות']);
-      abil.push(['fire', 'משונן']);
+      lines.push(['fire', tr('להב משונן', 'A serrated blade'), tr('פוגע חזק יותר ומנסר קירות', 'Hits harder and saws through walls')]);
+      abil.push(['fire', tr('משונן', 'Serrated')]);
     }
     // (a blade at each end of its grip: it spins)
     const bl = by('blade');
@@ -507,12 +508,12 @@ export function handSpec(P) {
     if (ends) {
       def.arc = Math.PI * 2;
       def.rate *= 0.85;
-      def.name = 'חרב כפולה';
-      lines.push(['fire', 'להב כפול', 'מסתובב ופוגע מכל הצדדים']);
+      def.name = tr('חרב כפולה', 'Double sword');
+      lines.push(['fire', tr('להב כפול', 'Double blade'), tr('מסתובב ופוגע מכל הצדדים', 'Spins and hits on every side')]);
     }
     if (by('guard').length || R.guard) {
       def.parry = 0.3;
-      lines.push(['hand', 'מגן יד', 'חוסם 30% ממכה מלפנים']);
+      lines.push(['hand', tr('מגן יד', 'Hand guard'), tr('חוסם 30% ממכה מלפנים', 'Blocks 30% of a hit from the front')]);
     }
     el = ELEMENT[(blade || {}).ink] || el;
   } else if (kind === 'club') {
@@ -520,14 +521,14 @@ export function handSpec(P) {
     if (head) {
       const k = clamp(head.sh.h / Math.max(1, R.bodyT), 1, 4);
       def.knock = (def.knock || 6) * (0.8 + k * 0.2);
-      lines.push(['fire', 'ראש', `הודף פי ${(def.knock / 5).toFixed(1)}`]);
+      lines.push(['fire', tr('ראש', 'Head'), tr(`הודף פי ${(def.knock / 5).toFixed(1)}`, `Knocks back ${(def.knock / 5).toFixed(1)} times as hard`)]);
     }
     el = ELEMENT[(head || {}).ink] || el;
   }
   // ---- what it fires, by its ink (a gun's barrels, a blade, a head)
   const inkLine = (e) => {
     const k = Object.keys(ELEMENT).find((i) => ELEMENT[i] === e);
-    return ['el-' + e.k, `דיו ${INKS[k].name}`, e.k === 'light' ? 'קליעי אור שעוברים דרך קירות דקים' : e.line];
+    return ['el-' + e.k, tr(`דיו ${INKS[k].name}`, `${INKS[k].name} ink`), e.k === 'light' ? tr('קליעי אור שעוברים דרך קירות דקים', 'Bullets of light that go through thin walls') : e.line];
   };
   // (mixed: each barrel its own - one in pencil or black fires as ever; game/weapons.js fireGun)
   const per = barrels.map((b) => (b.el ? b.el.k : null));
@@ -541,7 +542,7 @@ export function handSpec(P) {
       lines.unshift(inkLine(e));
       abil.unshift(['el-' + e.k, e.name]);
     }
-    lines.unshift(['el-mix', 'קנים בצבעים שונים', 'כל קנה יורה משהו אחר']);
+    lines.unshift(['el-mix', tr('קנים בצבעים שונים', 'Barrels in different colors'), tr('כל קנה יורה משהו אחר', 'Every barrel fires something else')]);
     if (per.includes('bounce')) def.bounce = Math.max(def.bounce || 0, 3);
   } else if (el && (el.k !== 'light' || (gun && kind !== 'laser'))) {
     def.element = el.k;
@@ -555,30 +556,30 @@ export function handSpec(P) {
   if (springs.length) {
     if (gun) {
       def.bounce = Math.max(def.bounce || 0, clamp(2 + springs.length, 2, 5));
-      lines.push(['gear', 'קפיץ', `הקליעים קופצים ${def.bounce} פעמים`]);
-      abil.push(['gear', 'קופץ']);
+      lines.push(['gear', tr('קפיץ', 'Spring'), tr(`הקליעים קופצים ${def.bounce} פעמים`, `The bullets bounce ${def.bounce} times`)]);
+      abil.push(['gear', tr('קופץ', 'jumping')]);
     } else {
       def.knock = (def.knock || 5) * 2;
-      lines.push(['gear', 'קפיץ', 'הודף פי שניים']);
+      lines.push(['gear', tr('קפיץ', 'Spring'), tr('הודף פי שניים', 'Knocks back twice as hard')]);
     }
   }
   if (by('chute').length) {
     def.chute = true;
-    lines.push(['gear', 'מצנח', 'כשמחזיקים אותו, נופלים לאט']);
-    abil.push(['gear', 'מצנח']);
+    lines.push(['gear', tr('מצנח', 'Parachute'), tr('כשמחזיקים אותו, נופלים לאט', 'While you hold it, you fall slowly')]);
+    abil.push(['gear', tr('מצנח', 'Parachute')]);
   }
   // (ROADMAP 11.12: any part on it - a jet: its shots faster; a fin: truer; armour: a blow blocked)
   if (by('jet').length && def.speed) {
     def.speed *= 1.45;
-    lines.push(['fire', 'סילון', 'הקליעים מהירים יותר']);
+    lines.push(['fire', tr('סילון', 'Jet'), tr('הקליעים מהירים יותר', 'The bullets are faster')]);
   }
   if (by('fin').length && def.spread) {
     def.spread *= 0.8;
-    lines.push(['fire', 'סנפיר', 'הקליעים יציבים — מדויק יותר']);
+    lines.push(['fire', tr('סנפיר', 'Fin'), tr('הקליעים יציבים — מדויק יותר', 'The bullets are steady — more accurate')]);
   }
   if (by('armor').length) {
     def.parry = Math.max(def.parry || 0, 0.2);
-    lines.push(['gear', 'שריון', 'חוסם חלק מהמכה מלפנים']);
+    lines.push(['gear', tr('שריון', 'Armor'), tr('חוסם חלק מהמכה מלפנים', 'Blocks some of a hit from the front')]);
   }
   // ---- (ROADMAP 11.15) what its parts do together, more than each alone (game/combos.js)
   const combo = handCombos(def, {
@@ -605,38 +606,38 @@ export function handSpec(P) {
   let name = def.name;
   const g = FEM.has(kind) ? 1 : 0;
   const adj = [];
-  if (def.volley === 2) adj.push(['כפול', 'כפולה'][g]);
-  if (def.quiet) adj.push(['שקט', 'שקטה'][g]);
-  if (def.elements) adj.push(['צבעוני', 'צבעונית'][g]);
-  else if (def.element && ELEMENT_ADJ[def.element]) adj.push(def.element === 'shock' ? ['חשמלי', 'חשמלית'][g] : def.element === 'blast' ? ['נפיץ', 'נפיצה'][g] : def.element === 'bounce' ? ['קופצני', 'קופצנית'][g] : ELEMENT_ADJ[def.element]);
+  if (def.volley === 2) adj.push([tr('כפול', 'double'), tr('כפולה', 'double')][g]);
+  if (def.quiet) adj.push([tr('שקט', 'Quiet'), tr('שקטה', 'silent')][g]);
+  if (def.elements) adj.push([tr('צבעוני', 'colorful'), tr('צבעונית', 'colorful')][g]);
+  else if (def.element && ELEMENT_ADJ[def.element]) adj.push(def.element === 'shock' ? [tr('חשמלי', 'electric'), tr('חשמלית', 'electric')][g] : def.element === 'blast' ? [tr('נפיץ', 'explosive'), tr('נפיצה', 'explosive')][g] : def.element === 'bounce' ? [tr('קופצני', 'Bouncy'), tr('קופצנית', 'bouncy')][g] : ELEMENT_ADJ[def.element]);
   if (adj.length) name += ' ' + adj.slice(0, 2).join(' ');
-  if (def.bayonet) name += ' עם כידון';
+  if (def.bayonet) name += tr(' עם כידון', ' with a bayonet');
   def.name = name;
   // ---- its numbers
   const bars = [];
   if (def.kind === 'gun') {
     const per = def.damage * (def.pellets || 1) * (def.volley || 1);
-    bars.push({ k: 'dmg', name: 'נזק', v: per / 160, txt: `${def.damage}${def.pellets ? `×${def.pellets}` : ''}${def.volley ? `×${def.volley}` : ''}` });
-    bars.push({ k: 'rate', name: 'קצב', v: def.rate / 20, txt: `${def.rate >= 10 ? Math.round(def.rate) : def.rate.toFixed(1)} בשנייה` });
+    bars.push({ k: 'dmg', name: tr('נזק', 'Damage'), v: per / 160, txt: `${def.damage}${def.pellets ? `×${def.pellets}` : ''}${def.volley ? `×${def.volley}` : ''}` });
+    bars.push({ k: 'rate', name: tr('קצב', 'Rate'), v: def.rate / 20, txt: tr(`${def.rate >= 10 ? Math.round(def.rate) : def.rate.toFixed(1)} בשנייה`, `${def.rate >= 10 ? Math.round(def.rate) : def.rate.toFixed(1)} a second`) });
     const range = Math.round(def.speed * (def.gravity ? 1.6 : 2.6));
-    bars.push({ k: 'range', name: 'טווח', v: range / 300, txt: `${range} מ׳` });
-    bars.push({ k: 'acc', name: 'דיוק', v: clamp(1 - def.spread * 9, 0.05, 1), txt: '' });
-    if (def.mag) bars.push({ k: 'mag', name: 'מחסנית', v: def.mag / 150, txt: `${def.mag}` });
+    bars.push({ k: 'range', name: tr('טווח', 'Range'), v: range / 300, txt: tr(`${range} מ׳`, `${range} m`) });
+    bars.push({ k: 'acc', name: tr('דיוק', 'Accuracy'), v: clamp(1 - def.spread * 9, 0.05, 1), txt: '' });
+    if (def.mag) bars.push({ k: 'mag', name: tr('מחסנית', 'Magazine'), v: def.mag / 150, txt: `${def.mag}` });
   } else if (def.kind === 'beam') {
-    bars.push({ k: 'dmg', name: 'נזק', v: def.damage / 130, txt: `${def.damage}` });
-    bars.push({ k: 'range', name: 'טווח', v: def.range / 130, txt: `${Math.round(def.range)} מ׳` });
+    bars.push({ k: 'dmg', name: tr('נזק', 'Damage'), v: def.damage / 130, txt: `${def.damage}` });
+    bars.push({ k: 'range', name: tr('טווח', 'Range'), v: def.range / 130, txt: tr(`${Math.round(def.range)} מ׳`, `${Math.round(def.range)} m`) });
   } else if (def.kind === 'melee') {
-    bars.push({ k: 'dmg', name: 'נזק', v: def.damage / 130, txt: `${def.damage}` });
-    bars.push({ k: 'range', name: 'טווח', v: def.range / 4, txt: `${def.range.toFixed(1)} מ׳` });
-    bars.push({ k: 'rate', name: 'מהירות', v: def.rate / 3.2, txt: `${def.rate.toFixed(1)} בשנייה` });
-    if (def.knock) bars.push({ k: 'knock', name: 'הדיפה', v: def.knock / 14, txt: `×${(def.knock / 5).toFixed(1)}` });
+    bars.push({ k: 'dmg', name: tr('נזק', 'Damage'), v: def.damage / 130, txt: `${def.damage}` });
+    bars.push({ k: 'range', name: tr('טווח', 'Range'), v: def.range / 4, txt: tr(`${def.range.toFixed(1)} מ׳`, `${def.range.toFixed(1)} m`) });
+    bars.push({ k: 'rate', name: tr('מהירות', 'Speed'), v: def.rate / 3.2, txt: tr(`${def.rate.toFixed(1)} בשנייה`, `${def.rate.toFixed(1)} a second`) });
+    if (def.knock) bars.push({ k: 'knock', name: tr('הדיפה', 'Knockback'), v: def.knock / 14, txt: `×${(def.knock / 5).toFixed(1)}` });
   } else {
-    bars.push({ k: 'dmg', name: 'נזק', v: def.damage / 140, txt: `${def.damage}` });
-    if (def.radius) bars.push({ k: 'blast', name: 'פיצוץ', v: def.radius / 8, txt: `${def.radius.toFixed(1)} מ׳` });
+    bars.push({ k: 'dmg', name: tr('נזק', 'Damage'), v: def.damage / 140, txt: `${def.damage}` });
+    if (def.radius) bars.push({ k: 'blast', name: tr('פיצוץ', 'Blast'), v: def.radius / 8, txt: tr(`${def.radius.toFixed(1)} מ׳`, `${def.radius.toFixed(1)} m`) });
   }
-  if (gun) abil.unshift(['fire', def.volley ? `ירי ×${def.volley}` : 'ירי']);
-  else if (def.kind === 'melee') abil.unshift(['fire', def.arc >= Math.PI * 2 ? 'סיבוב' : def.slash ? 'חיתוך' : 'מכה']);
-  else abil.unshift(['fire', 'זריקה']);
+  if (gun) abil.unshift(['fire', def.volley ? tr(`ירי ×${def.volley}`, `Fire ×${def.volley}`) : tr('ירי', 'Fire')]);
+  else if (def.kind === 'melee') abil.unshift(['fire', def.arc >= Math.PI * 2 ? tr('סיבוב', 'Spin') : def.slash ? tr('חיתוך', 'Cutting') : tr('מכה', 'Hit')]);
+  else abil.unshift(['fire', tr('זריקה', 'Throw')]);
   def.cost = Math.round(clamp((KINDS[kind] ? KINDS[kind].cost : 14) + lines.length * 2, 10, 40));
   const sum = { ok: true, name, abil, bars, lines, warn: [], L, cost: def.cost, kind, combos: combo.list, adv: abil.length, near: combo.near };
   return { def, sum };

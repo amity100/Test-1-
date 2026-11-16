@@ -7,6 +7,7 @@ import { boxOf } from './signshape.js';
 import { buildDesign } from './designbuild.js';
 import { clamp } from '../core/util.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 11.22) Drawn onto the car you drive the way you would draw on it: what you draw is the
 // part - your own lines, where you drew them, made solid - and what it does is what such a thing
 // does where you put it. Wings out of its side, a wheel where a wheel goes, a rotor on its roof, a
@@ -31,21 +32,21 @@ export const AX = {
 
 // what each one is, what it does - one line (the tag, game/fuse.js)
 export const DRAWN = {
-  wing: 'כנפיים',
-  wheel: 'גלגלים',
-  rotor: 'רוטור',
-  jet: 'רקטה',
-  spring: 'קפיץ',
-  barrel: 'תותח',
-  blade: 'להב',
-  balloon: 'בלון',
-  magnet: 'מגנט',
-  star: 'כוכב',
-  bolt: 'ברק',
-  smoke: 'עשן',
-  chute: 'מצנח',
-  float: 'מצופים',
-  deco3: 'קישוט',
+  wing: tr('כנפיים', 'Wings'),
+  wheel: tr('גלגלים', 'Wheels'),
+  rotor: tr('רוטור', 'Rotor'),
+  jet: tr('רקטה', 'Rocket'),
+  spring: tr('קפיץ', 'Spring'),
+  barrel: tr('תותח', 'Cannon'),
+  blade: tr('להב', 'Blade'),
+  balloon: tr('בלון', 'Balloon'),
+  magnet: tr('מגנט', 'Magnet'),
+  star: tr('כוכב', 'Star'),
+  bolt: tr('ברק', 'Lightning'),
+  smoke: tr('עשן', 'Smoke'),
+  chute: tr('מצנח', 'Parachute'),
+  float: tr('מצופים', 'Floats'),
+  deco3: tr('קישוט', 'Decoration'),
 };
 
 // what a drawing there could be instead (its tag's "or else": the first is what it was read as)

@@ -8,6 +8,7 @@ import { clamp, damp, dampAngle } from '../core/util.js';
 import { downStep } from './fists.js';
 import { dress } from './wardrobe.js';
 
+import { tr } from '../core/lang.js';
 const GRAVITY = 24;
 const _m = new THREE.Matrix4();
 const _x = new THREE.Vector3();
@@ -153,7 +154,7 @@ export class Player {
       if (this.armor <= 0.5) {
         this.armor = 0;
         dress(this.fig.look, false);
-        this.game.hud.toast('האפוד נקרע', 'bad', 1.8);
+        this.game.hud.toast(tr('האפוד נקרע', 'The vest tore'), 'bad', 1.8);
       }
     }
     // (ROADMAP 16.4: painkillers from the pharmacy - a blow hurts less while they work)
@@ -204,28 +205,28 @@ export class Player {
     // used at the worst moment, a moment after the last blow)
     if (this.energyT > 0) {
       this.energyT -= dt;
-      if (this.energyT <= 0) this.game.hud.toast('האנרגיה מהמשקה נגמרה', 'info', 1.8);
+      if (this.energyT <= 0) this.game.hud.toast(tr('האנרגיה מהמשקה נגמרה', 'The energy from the drink ran out'), 'info', 1.8);
     }
     if (this.painT > 0) {
       this.painT -= dt;
-      if (this.painT <= 0) this.game.hud.toast('משככי הכאבים הפסיקו לפעול', 'info', 1.8);
+      if (this.painT <= 0) this.game.hud.toast(tr('משככי הכאבים הפסיקו לפעול', 'The painkillers wore off'), 'info', 1.8);
     }
     // (ROADMAP 16.8: a spray can, tape from the hardware store - your car looked after)
     if (this.inVehicle && (this.paintCans > 0 || this.tape > 0)) carCare(this.game, dt);
     // (ROADMAP 16.7: a scent from the perfumery - the shops charmed for ten minutes)
     if (this.charmT > 0) {
       this.charmT -= dt;
-      if (this.charmT <= 0) this.game.hud.toast('ריח הבושם התפוגג', 'info', 1.8);
+      if (this.charmT <= 0) this.game.hud.toast(tr('ריח הבושם התפוגג', 'The perfume\'s scent faded'), 'info', 1.8);
     }
     // (ROADMAP 16.6: the police scanner from an electronics shop - ten minutes of their radio)
     if (this.scannerT > 0) {
       this.scannerT -= dt;
-      if (this.scannerT <= 0) this.game.hud.toast('הסוללה של הסורק המשטרתי נגמרה', 'info', 2);
+      if (this.scannerT <= 0) this.game.hud.toast(tr('הסוללה של הסורק המשטרתי נגמרה', 'The police scanner\'s battery ran out'), 'info', 2);
     }
     if (this.kits > 0 && this.mode === 'foot' && this.hp > 0 && this.hp < this.maxHp * 0.3 && this.game.time - this.lastHurt > 1.2) {
       this.kits--;
       this.hp = Math.min(this.maxHp, this.hp + 60);
-      this.game.hud.toast(`השתמשתם בערכת עזרה ראשונה: +60 חיים${this.kits ? ` (נשארו ${this.kits})` : ''}`, 'good', 2.6);
+      this.game.hud.toast(tr(`השתמשתם בערכת עזרה ראשונה: +60 חיים${this.kits ? ` (נשארו ${this.kits})` : ''}`, `You used a first aid kit: +60 health${this.kits ? tr(` (נשארו ${this.kits})`, ` (${this.kits} left)`) : ''}`), 'good', 2.6);
       if (this.game.audio) this.game.audio.play('magic');
     }
     // (ROADMAP 16.3: what you took away from an eatery, eaten when you need it - hurt, and out of
@@ -237,7 +238,7 @@ export class Player {
       this.eatT = 1.6;
       this.eatCarry = fig.carry;
       fig.carry = /cup|juice|shake|soda|mug/i.test(m.model || '') ? (/soda|juice|shake/i.test(m.model) ? 'soda' : 'coffee') : /cone|gelato/i.test(m.model || '') ? 'icecream' : 'burger';
-      this.game.hud.toast(`אכלתם את ה${m.heb} שלקחתם: +${m.hp || 10} חיים`, 'good', 2.4);
+      this.game.hud.toast(tr(`אכלתם את ה${m.heb} שלקחתם: +${m.hp || 10} חיים`, `You ate the ${m.heb} you took: +${m.hp || 10} health`), 'good', 2.4);
     }
     if (this.eatT > 0) {
       this.eatT -= dt;

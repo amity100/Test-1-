@@ -1,5 +1,6 @@
 import { fmt } from './money.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 8.2, not with ?classic) Properties: four places in the city that can be yours.
 //   INK CLUB        the club                            $8,000   $500 every morning
 //   Star Motel      its rooms and its parking lot       $5,000   $350
@@ -13,10 +14,10 @@ import { fmt } from './money.js';
 const PAY_HOUR = 8;
 const STOPPED_DAY = 48 * 60; // seconds between takings with the clock stopped
 export const PROPS = [
-  { id: 'club', name: 'INK CLUB', kind: 'bar', he: 'מועדון הלילה', price: 8000, income: 500, gift: 'inkbomb' },
-  { id: 'motel', name: 'Star Motel', kind: 'lobby', he: 'המוטל והחניון שלו', price: 5000, income: 350, gift: 'parachute' },
-  { id: 'arcade', name: 'Pixel Arcade', kind: 'arcade', he: 'הארקייד', price: 3000, income: 200, gift: 'laser' },
-  { id: 'cafe', name: 'Bay Cafe', kind: 'cafe', he: 'בית הקפה בשדרה הראשונה', price: 2000, income: 150, gift: 'planes' },
+  { id: 'club', name: 'INK CLUB', kind: 'bar', he: tr('מועדון הלילה', 'Ink Club'), price: 8000, income: 500, gift: 'inkbomb' },
+  { id: 'motel', name: 'Star Motel', kind: 'lobby', he: tr('המוטל והחניון שלו', 'Star Motel'), price: 5000, income: 350, gift: 'parachute' },
+  { id: 'arcade', name: 'Pixel Arcade', kind: 'arcade', he: tr('הארקייד', 'Pixel Arcade'), price: 3000, income: 200, gift: 'laser' },
+  { id: 'cafe', name: 'Bay Cafe', kind: 'cafe', he: tr('בית הקפה בשדרה הראשונה', 'Bay Cafe'), price: 2000, income: 150, gift: 'planes' },
 ];
 export const BOSS = ['Hey, boss!', 'Morning, boss.', 'Good to see you, boss!', 'All quiet here, boss.', 'The boss is in!'];
 
@@ -51,7 +52,7 @@ export class Properties {
   offer(shop, back) {
     const p = this.of(shop);
     if (!p || p.owned) return null;
-    return { label: `לקנות את המקום · ${fmt(p.price)}`, fn: () => this.ask(p, back) };
+    return { label: tr(`לקנות את המקום · ${fmt(p.price)}`, `Buy the place · ${fmt(p.price)}`), fn: () => this.ask(p, back) };
   }
 
   ask(p, back) {
@@ -59,25 +60,25 @@ export class Properties {
     const M = game.money;
     const can = M.can(p.price);
     const choices = [];
-    if (can) choices.push({ label: `לקנות ב-${fmt(p.price)}`, fn: () => this.buy(p) });
-    choices.push({ label: 'לא עכשיו', fn: back || null });
-    const text = can ? `${p.name}, ${p.he}: ${fmt(p.price)}. מכניס ${fmt(p.income)} לבנק בכל בוקר, ואצלכם הכול על חשבון הבית.` : `${p.name} עולה ${fmt(p.price)}, ויש לכם ${fmt(M.total)}. הוא מכניס ${fmt(p.income)} בכל בוקר.`;
+    if (can) choices.push({ label: tr(`לקנות ב-${fmt(p.price)}`, `Buy for ${fmt(p.price)}`), fn: () => this.buy(p) });
+    choices.push({ label: tr('לא עכשיו', 'Not now'), fn: back || null });
+    const text = can ? tr(`${p.name}, ${p.he}: ${fmt(p.price)}. מכניס ${fmt(p.income)} לבנק בכל בוקר, ואצלכם הכול על חשבון הבית.`, `${p.name}, ${p.he}: ${fmt(p.price)}. Brings in ${fmt(p.income)} to the bank every morning, and here everything's on the house for you.`) : tr(`${p.name} עולה ${fmt(p.price)}, ויש לכם ${fmt(M.total)}. הוא מכניס ${fmt(p.income)} בכל בוקר.`, `${p.name} costs ${fmt(p.price)}, and you have ${fmt(M.total)}. It brings in ${fmt(p.income)} every morning.`);
     game.dialog.show(p.name, text, choices);
   }
 
   buy(p) {
     const game = this.game;
     const M = game.money;
-    if (p.owned || !M.pay(p.price, `קניתם את ${p.name}`)) return false;
+    if (p.owned || !M.pay(p.price, tr(`קניתם את ${p.name}`, `You bought ${p.name}`))) return false;
     p.owned = true;
     p.since = M.day;
     p.paidDay = null;
     this.stats.bought++;
     game.audio.play('cheer', 0.6);
-    game.hud.big(`${p.name} שלכם!`, 2200);
-    game.hud.toast(`מעכשיו ${p.name} מכניס ${fmt(p.income)} לבנק בכל בוקר, ושם הכול על חשבון הבית`, 'good', 4);
+    game.hud.big(tr(`${p.name} שלכם!`, `${p.name} is yours!`), 2200);
+    game.hud.toast(tr(`מעכשיו ${p.name} מכניס ${fmt(p.income)} לבנק בכל בוקר, ושם הכול על חשבון הבית`, `From now on ${p.name} brings in ${fmt(p.income)} to the bank every morning, and everything there is on the house`), 'good', 4);
     // (and a blueprint in a drawer of the office, ROADMAP 9.1)
-    if (p.gift) game.inkwell.after(2.4, () => game.album.gift(p.gift, `מהמגירה של ${p.name}`));
+    if (p.gift) game.inkwell.after(2.4, () => game.album.gift(p.gift, tr(`מהמגירה של ${p.name}`, `From ${p.name}'s drawer`)));
     return true;
   }
 
@@ -106,11 +107,11 @@ export class Properties {
     let sum = 0;
     for (const p of list) {
       p.paidDay = day;
-      game.money.income(p.income, `הכנסות: ${p.name}`);
+      game.money.income(p.income, tr(`הכנסות: ${p.name}`, `Income: ${p.name}`));
       sum += p.income;
     }
     this.stats.paid += sum;
-    game.hud.toast(`בוקר טוב! הנכסים שלכם הכניסו ${fmt(sum)} לבנק`, 'good', 3.6);
+    game.hud.toast(tr(`בוקר טוב! הנכסים שלכם הכניסו ${fmt(sum)} לבנק`, `Good morning! Your properties brought ${fmt(sum)} into the bank`), 'good', 3.6);
     game.audio.play('till', 0.6);
   }
 
@@ -119,7 +120,7 @@ export class Properties {
   sleep() {
     const game = this.game;
     if (game.police.level > 0) {
-      game.hud.toast('לא עכשיו: המשטרה מחפשת אתכם', 'bad', 2.4);
+      game.hud.toast(tr('לא עכשיו: המשטרה מחפשת אתכם', 'Not now: the police are after you'), 'bad', 2.4);
       return false;
     }
     const dn = game.daynight;
@@ -134,7 +135,7 @@ export class Properties {
     P.hp = P.maxHp;
     this.stats.slept++;
     game.audio.play('pageflip', 0.6);
-    game.hud.big('בוקר טוב!', 1800);
+    game.hud.big(tr('בוקר טוב!', 'Good morning!'), 1800);
     if (game.saves && game.saves.canSave()) game.saves.save('auto', true);
     return true;
   }

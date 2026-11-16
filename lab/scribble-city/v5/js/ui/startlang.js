@@ -1,4 +1,4 @@
-import { lang, setLang } from '../core/lang.js';
+import { lang, setLang, applyStaticLang } from '../core/lang.js';
 
 // (round 16, the player's word) The start screen's choice of language: עברית / English - its own
 // words switched at once, and the story told in it (core/lang.js).
@@ -32,12 +32,12 @@ const WORDS = {
     loading: 'Sharpening the pens…',
     cont: 'Continue where you left off',
     tips: [
-      'What you draw comes to life: draw a rifle, a sword or even a helicopter in the air - and it is in your hands.',
-      'Any car parked in the street can be yours. Just do not let the police see.',
-      'A turbo on the car - and it shoots forward.',
-      'Anything you have drawn once is kept - from then on it is ready at a touch.',
-      'Photograph the blueprint signs around the city and draw them. The better the drawing, the stronger the weapon.',
-      'Walk into any shop with its door open: to buy, to eat, or just to look.',
+      'What you draw becomes real: sketch a rifle, a sword, even a helicopter in the air — and it’s in your hands.',
+      'Any car parked on the street can be yours. Just don’t let the cops see you.',
+      'Draw a turbo on your car — and it rockets forward.',
+      'Anything you’ve drawn once is saved — after that it’s ready at a tap.',
+      'Photograph blueprint signs around the city and draw them. The better your drawing, the stronger the weapon.',
+      'Walk into any shop with an open door: buy, eat, or just look around.',
     ],
   },
 };
@@ -47,7 +47,9 @@ export function applyStartLang() {
   const L = lang();
   const W = WORDS[L];
   document.documentElement.lang = L;
+  document.documentElement.dir = L === 'he' ? 'rtl' : 'ltr';
   document.body.classList.toggle('lang-en', L === 'en');
+  document.body.classList.toggle('lang-he', L === 'he');
   const logo = document.querySelector('.ld-logo');
   if (logo) {
     const k = logo.querySelector('.ld-kicker');
@@ -82,9 +84,21 @@ export function setupStartLang() {
       if (!b) return;
       e.preventDefault();
       e.stopPropagation();
+      // (ROADMAP 24: the whole game speaks the language chosen, and its modules read their words once, as they load - a change
+      // of language loads the page again; the choice is kept)
+      const was = lang();
       setLang(b.dataset.l);
+      if (lang() !== was) {
+        try {
+          location.reload();
+          return;
+        } catch (err) {
+          // (cannot: the start screen's own words at least)
+        }
+      }
       applyStartLang();
     });
   }
+  applyStaticLang();
   applyStartLang();
 }

@@ -12,6 +12,7 @@ import { BeautyLife } from './beautylife.js';
 import { HobbyLife } from './hobbylife.js';
 import { ServiceLife } from './servicelife.js';
 import { waitBeat, stopWait } from './waiting.js';
+import { tr } from '../core/lang.js';
 
 // (v5, ROADMAP 14.4) A shop's day, as it really goes - the shops of the new kind (world/market.js):
 // every action tied to a real thing in the shop.
@@ -52,7 +53,7 @@ const GROCERY = {
   // (whole dollars: game/money.js)
   prices: { soda: 2, water: 1, cans: 1, juice: 3, cartons: 3, yogurt: 1, tins: 2, jars: 3, sauce: 3, oil: 5, cereal: 4, dry: 2, small: 2, meds: 5, chips: 2, coffee: 6, bread: 3, clean: 5, candy: 1, fruit: 1, energy: 3, pain: 6, kit: 12, care: 5, hotdog: 2, slush: 2 },
   names: { soda: 'a bottle of pop', water: 'a bottle of water', cans: 'a can of pop', juice: 'a bottle of juice', cartons: 'a carton', yogurt: 'a yoghurt', tins: 'a tin', jars: 'a jar', sauce: 'a bottle of sauce', oil: 'a bottle of oil', cereal: 'a box of cereal', dry: 'a box', small: 'a small box', meds: 'a box of medicine', chips: 'a bag of chips', coffee: 'a bag of coffee', bread: 'a loaf', clean: 'a bottle of cleaner', candy: 'a bar of chocolate', fruit: 'a piece of fruit', energy: 'an energy drink', pain: 'a box of painkillers', kit: 'a first-aid kit', care: 'a bottle of shampoo', hotdog: 'a hot dog', slush: 'a slush' },
-  heb: { soda: 'בקבוק משקה', water: 'בקבוק מים', cans: 'פחית משקה', juice: 'בקבוק מיץ', cartons: 'קרטון חלב/מיץ', yogurt: 'יוגורט', tins: 'שימורים', jars: 'צנצנת', sauce: 'רוטב', oil: 'שמן', cereal: 'דגני בוקר', dry: 'קופסה', small: 'קופסה קטנה', meds: 'תרופה', chips: 'שקית צ\'יפס', coffee: 'שקית קפה', bread: 'לחם', clean: 'חומר ניקוי', candy: 'חטיף שוקולד', fruit: 'פרי', energy: 'משקה אנרגיה', pain: 'משככי כאבים', kit: 'ערכת עזרה ראשונה', care: 'שמפו', hotdog: 'נקניקייה', slush: 'ברד' },
+  heb: { soda: tr('בקבוק משקה', 'A bottle of soda'), water: tr('בקבוק מים', 'A bottle of water'), cans: tr('פחית משקה', 'A can of soda'), juice: tr('בקבוק מיץ', 'A bottle of juice'), cartons: tr('קרטון חלב/מיץ', 'A carton of milk/juice'), yogurt: tr('יוגורט', 'Yogurt'), tins: tr('שימורים', 'Canned food'), jars: tr('צנצנת', 'A jar'), sauce: tr('רוטב', 'Sauce'), oil: tr('שמן', 'Oil'), cereal: tr('דגני בוקר', 'Breakfast cereal'), dry: tr('קופסה', 'A box'), small: tr('קופסה קטנה', 'A small box'), meds: tr('תרופה', 'Medicine'), chips: tr('שקית צ\'יפס', 'A bag of chips'), coffee: tr('שקית קפה', 'A bag of coffee'), bread: tr('לחם', 'Bread'), clean: tr('חומר ניקוי', 'Cleaning product'), candy: tr('חטיף שוקולד', 'A chocolate bar'), fruit: tr('פרי', 'Fruit'), energy: tr('משקה אנרגיה', 'An energy drink'), pain: tr('משככי כאבים', 'Painkillers'), kit: tr('ערכת עזרה ראשונה', 'A first aid kit'), care: tr('שמפו', 'Shampoo'), hotdog: tr('נקניקייה', 'A hot dog'), slush: tr('ברד', 'Hail') },
   food: new Set(['soda', 'water', 'cans', 'juice', 'cartons', 'yogurt', 'chips', 'bread', 'candy', 'fruit', 'energy', 'hotdog', 'slush']),
   say: {
     shelf: ['Hmm, which one...', 'Two for one? Nice.', 'Where is the milk?', 'This one\'s cheaper.', 'We\'re out of eggs again?', 'Ooh, a new flavour.', 'Is this the low-fat one?', 'I always forget something.'],
@@ -83,7 +84,7 @@ const FASHION = {
   crowd: 5,
   prices: { garment: 49, folded: 29, shoe: 69 },
   names: { garment: 'a garment', folded: 'a folded shirt', shoe: 'a shoe' },
-  heb: { garment: 'בגד', folded: 'חולצה מקופלת', shoe: 'נעל' },
+  heb: { garment: tr('בגד', 'Clothing'), folded: tr('חולצה מקופלת', 'A folded shirt'), shoe: tr('נעל', 'A shoe') },
   food: new Set(),
   say: {
     shelf: ['Do you have this in blue?', 'Too small...', 'I love this colour!', 'Is this on sale?', 'Does it come in a medium?', 'Hmm, linen...'],
@@ -115,7 +116,7 @@ const TECH = {
   crowd: 5,
   prices: { phone: 599, laptop: 999, headphones: 129 },
   names: { phone: 'a phone', laptop: 'a laptop', headphones: 'headphones' },
-  heb: { phone: 'טלפון', laptop: 'מחשב נייד', headphones: 'אוזניות' },
+  heb: { phone: tr('טלפון', 'A phone'), laptop: tr('מחשב נייד', 'A laptop'), headphones: tr('אוזניות', 'Headphones') },
   food: new Set(),
   boxed: { model: 'small', cell: 'box.laptop', tint: [0.95, 0.95, 0.94] },
   say: {
@@ -153,7 +154,7 @@ const JEWEL = {
   crowd: 3,
   prices: { ring: 890, watch: 1250, necklace: 640 },
   names: { ring: 'a ring', watch: 'a watch', necklace: 'a necklace' },
-  heb: { ring: 'טבעת', watch: 'שעון', necklace: 'שרשרת' },
+  heb: { ring: tr('טבעת', 'A ring'), watch: tr('שעון', 'A watch'), necklace: tr('שרשרת', 'A necklace') },
   food: new Set(),
   say: {
     shelf: ['Oh, that one sparkles.', 'Hmm...', 'Look at that one.'],
@@ -184,7 +185,7 @@ const SHOES = {
   crowd: 4,
   prices: { shoe: 89 },
   names: { shoe: 'a pair of shoes' },
-  heb: { shoe: 'נעליים' },
+  heb: { shoe: tr('נעליים', 'Shoes') },
   food: new Set(),
   say: {
     shelf: ['Ooh, these.', 'Do these come in black?', 'Hmm, nice.', 'Are these comfortable?'],
@@ -212,7 +213,7 @@ const SPORTS = {
   crowd: 5,
   prices: { garment: 39, folded: 25, shoe: 99 },
   names: { garment: 'a jersey', folded: 'a training shirt', shoe: 'a pair of running shoes' },
-  heb: { garment: 'בגד ספורט', folded: 'חולצת אימון', shoe: 'נעלי ריצה' },
+  heb: { garment: tr('בגד ספורט', 'Sportswear'), folded: tr('חולצת אימון', 'A training shirt'), shoe: tr('נעלי ריצה', 'Running shoes') },
   food: new Set(),
   say: {
     shelf: ['That\'s our team!', 'Do you have it in a large?', 'Nice colours.', 'Is this breathable?'],
@@ -243,7 +244,7 @@ const PERFUME = {
   crowd: 5,
   prices: { perfume: 79, tester: 79 },
   names: { perfume: 'a perfume', tester: 'a perfume' },
-  heb: { perfume: 'בושם', tester: 'בושם' },
+  heb: { perfume: tr('בושם', 'Perfume'), tester: tr('בושם', 'Perfume') },
   food: new Set(),
   boxed: { line: 'perfume', model: 'perfumeBox', cell: null, tint: [0.1, 0.1, 0.11], cap: [0.86, 0.7, 0.36] },
   say: {
@@ -274,7 +275,7 @@ const OPTICS = {
   crowd: 4,
   prices: { glasses: 120, sunglasses: 85 },
   names: { glasses: 'glasses', sunglasses: 'sunglasses' },
-  heb: { glasses: 'משקפיים', sunglasses: 'משקפי שמש' },
+  heb: { glasses: tr('משקפיים', 'Glasses'), sunglasses: tr('משקפי שמש', 'Sunglasses') },
   food: new Set(),
   boxed: { line: 'case', model: 'perfumeBox', cell: null, tint: [0.16, 0.22, 0.4], cap: [0.86, 0.7, 0.36] },
   say: {
@@ -308,7 +309,7 @@ const BARBER = {
   crowd: 2,
   prices: { pomade: 18 },
   names: { pomade: 'a pomade' },
-  heb: { pomade: 'מוצר לשיער' },
+  heb: { pomade: tr('מוצר לשיער', 'A hair product') },
   food: new Set(),
   say: {
     shelf: ['Does this hold all day?', 'Smells good.', 'For curly hair?'],
@@ -345,7 +346,7 @@ const BOOKS = {
   crowd: 5,
   prices: { book: 15 },
   names: { book: 'a book' },
-  heb: { book: 'ספר' },
+  heb: { book: tr('ספר', 'A book') },
   food: new Set(),
   say: { ...HOBBY_SAY, shelf: ['Ooh, a new one.', 'I loved this!', 'Is this the sequel?', 'Hmm...'], back: ['Maybe next time.'], keep: ['I\'ll take this one.'], read: ['Mm.', 'Listen to this...', 'Good opening.', 'Huh!'], player: ['Hello! Looking for anything in particular?', 'Welcome - the new ones are on the tables.'], found: ['A wonderful book.'], thanks: ['Happy reading!'], run: ['Shh - this is a bookshop!'], help: ['That one\'s a page-turner.'] },
 };
@@ -356,7 +357,7 @@ const RECORDS = {
   crowd: 4,
   prices: { record: 22 },
   names: { record: 'a record' },
-  heb: { record: 'תקליט' },
+  heb: { record: tr('תקליט', 'A record') },
   food: new Set(),
   say: { ...HOBBY_SAY, shelf: ['No way - first pressing!', 'I\'ve been looking for this.', 'Great cover.'], back: ['Already have it.'], keep: ['This one\'s mine.'], listen: ['Oh, this is good.', 'What a bass line!', 'Classic.'], player: ['Hey! Try anything at the listening post.', 'Welcome - new arrivals in the front crates.'], found: ['Great record.'], thanks: ['Enjoy the music!'], run: ['Careful with the crates!'], help: ['That one\'s a classic.'] },
 };
@@ -367,7 +368,7 @@ const TOYS = {
   crowd: 5,
   prices: { toy: 25 },
   names: { toy: 'a teddy bear' },
-  heb: { toy: 'דובי' },
+  heb: { toy: tr('דובי', 'A teddy bear') },
   food: new Set(),
   say: { ...HOBBY_SAY, shelf: ['So cute!', 'Look at this one!', 'Can I have it?'], back: ['Maybe for the birthday.'], keep: ['This one!'], hug: ['Aww!', 'It\'s so soft!', 'I love him!'], player: ['Hi! Watch the train go round!', 'Welcome to the toy shop!'], found: ['A favourite!'], thanks: ['Have fun!'], run: ['No running near the train!'], help: ['That one squeaks!'] },
 };
@@ -378,7 +379,7 @@ const FLORIST = {
   crowd: 3,
   prices: { flowers: 30 },
   names: { flowers: 'a bouquet' },
-  heb: { flowers: 'זר פרחים' },
+  heb: { flowers: tr('זר פרחים', 'A bouquet of flowers') },
   food: new Set(),
   boxed: { line: 'flowers', model: 'bouquet', cell: null, tint: [0.96, 0.36, 0.5], cap: [0.96, 0.86, 0.78] },
   say: { ...HOBBY_SAY, shelf: ['Beautiful.', 'Are these fresh?', 'What are these called?'], back: ['Not today.'], keep: ['A bouquet of these, please.'], smell: ['Mmm...', 'They smell lovely.', 'Like spring!'], player: ['Hello! Something for someone special?', 'Welcome - everything came in this morning.'], found: ['Lovely choice.'], thanks: ['She\'ll love them!', 'Enjoy!'], run: ['Mind the buckets!'], help: ['Roses last longest in cool water.'] },
@@ -390,7 +391,7 @@ const HARDWARE = {
   crowd: 4,
   prices: { paint: 24, tool: 16, spray: 12, tape: 6 },
   names: { paint: 'a can of paint', tool: 'a tool', spray: 'a spray can', tape: 'a roll of tape' },
-  heb: { paint: 'פחית צבע', tool: 'כלי עבודה', spray: 'ספריי צבע', tape: 'נייר דבק' },
+  heb: { paint: tr('פחית צבע', 'A can of paint'), tool: tr('כלי עבודה', 'Hardware'), spray: tr('ספריי צבע', 'Spray paint'), tape: tr('נייר דבק', 'Tape') },
   food: new Set(),
   say: { ...HOBBY_SAY, shelf: ['Is this the right size?', 'Hmm, metric?', 'This should do it.'], back: ['Wrong size.'], keep: ['That\'ll do.'], player: ['Hey! Need a hand finding something?', 'Welcome - paint\'s at the back, I can mix it.'], found: ['Good choice.'], thanks: ['Good luck with the job!'], run: ['Watch the nails!'], help: ['That\'s the strong stuff.'] },
 };
@@ -403,7 +404,7 @@ const LAUNDRY = {
   crowd: 4,
   prices: { soap: 6 },
   names: { soap: 'a box of soap' },
-  heb: { soap: 'אבקת כביסה' },
+  heb: { soap: tr('אבקת כביסה', 'Laundry detergent') },
   food: new Set(),
   say: { ...HOBBY_SAY, shelf: ['The blue one cleans best.', 'Do I need softener?'], back: ['I\'ve got some at home.'], keep: ['This one.'], player: ['Hi! Machines on the left are free.', 'Need change? I\'ve got coins.'], found: ['Good stuff.'], thanks: ['Have a nice day!'], run: ['Careful - the floor\'s wet!'], help: ['Thirty minutes a wash.'] },
 };
@@ -414,7 +415,7 @@ const GYM = {
   crowd: 5,
   prices: { water: 2, dumbbell: 30 },
   names: { water: 'a bottle of water', dumbbell: 'a pair of dumbbells' },
-  heb: { water: 'בקבוק מים', dumbbell: 'זוג משקולות' },
+  heb: { water: tr('בקבוק מים', 'A bottle of water'), dumbbell: tr('זוג משקולות', 'A pair of dumbbells') },
   food: new Set(['water']),
   say: { ...HOBBY_SAY, shelf: ['Need a heavier pair.', 'Ugh, these are heavy.'], back: ['Later.'], keep: ['I\'ll take one.'], player: ['Hey! Ready to sweat?', 'Welcome! Talk to me about a session.'], found: ['Stay hydrated!'], thanks: ['Good workout!'], run: ['Save it for the treadmill!'], help: ['Keep your back straight.'] },
 };
@@ -3240,9 +3241,9 @@ export class ShopLife {
 
   label(s) {
     const what = s.what;
-    const heb = this.prof.heb[what] || 'מוצר';
+    const heb = this.prof.heb[what] || tr('מוצר', 'A product');
     // (a jeweller's things are behind glass: asked for, and the seller hands it over)
-    return this.prof.flow === 'jewel' ? `E — לבקש לראות: ${heb}` : `E — לבדוק: ${heb}`;
+    return this.prof.flow === 'jewel' ? tr(`E — לבקש לראות: ${heb}`, `E — ask to see: ${heb}`) : tr(`E — לבדוק: ${heb}`, `E — check out: ${heb}`);
   }
 
   // you take it off the shelf and look at it: its name, its price; buy it, or put it back
@@ -3277,7 +3278,7 @@ export class ShopLife {
     // the till, as everybody does: game/shopper.js)
     const you = this.you;
     const take = you.takeLabel(price, s);
-    const full = !take && !you.pv ? ' · הידיים מלאות: קודם לקופה' : '';
+    const full = !take && !you.pv ? tr(' · הידיים מלאות: קודם לקופה', ' · your hands are full: to the till first') : '';
     const choices = [];
     if (take) {
       choices.push({
@@ -3291,14 +3292,14 @@ export class ShopLife {
       });
     }
     choices.push({
-      label: 'להחזיר למדף',
+      label: tr('להחזיר למדף', 'Put it back on the shelf'),
       fn: () => {
         back();
         this.inspecting = null;
       },
     });
     void M;
-    game.dialog.show(brand ? `${brand}` : this.prof.heb[s.what] || 'מוצר', `${this.prof.heb[s.what] || ''} — ${name}. ${this.prof.flow ? 'המחיר' : 'המחיר על המדף'}: ${fmt(price)}${you.have()}${full}`, choices);
+    game.dialog.show(brand ? `${brand}` : this.prof.heb[s.what] || tr('מוצר', 'A product'), `${this.prof.heb[s.what] || ''} — ${name}. ${this.prof.flow ? tr('המחיר', 'The price') : tr('המחיר על המדף', 'The price on the shelf')}: ${fmt(price)}${you.have()}${full}`, choices);
     // (if the dialog is closed some other way: back on the shelf)
     this.inspecting = { it, s, back, t: game.time };
   }

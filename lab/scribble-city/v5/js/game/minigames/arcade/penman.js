@@ -4,6 +4,7 @@
 
 import { CabGame, NEON, glowLine, glowCircle, glowText } from './cab.js';
 
+import { tr } from '../../../core/lang.js';
 const MAP = [
   '#####################',
   '#o.......#.#.......o#',
@@ -49,9 +50,9 @@ export class PenMan extends CabGame {
     super(o);
     this.id = 'penman';
     this.name = 'PEN-MAN';
-    this.title = 'PEN-MAN · מכונת משחק';
-    this.help = 'חצים לנוע במבוך · Esc לצאת';
-    this.helpTouch = 'החצים לנוע במבוך';
+    this.title = tr('PEN-MAN · מכונת משחק', 'PEN-MAN · arcade machine');
+    this.help = tr('חצים לנוע במבוך · Esc לצאת', 'Arrows to move through the maze · Esc to leave');
+    this.helpTouch = tr('החצים לנוע במבוך', 'The arrows to move through the maze');
     this.color = NEON.yellow;
     this.tint = '#0a0a24';
     this.perTicket = 150;

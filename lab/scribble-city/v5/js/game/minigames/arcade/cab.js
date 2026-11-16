@@ -6,6 +6,7 @@
 
 import { MARKER } from '../ink2d.js';
 
+import { tr } from '../../../core/lang.js';
 export const NEON = { pink: '#ff4fa8', cyan: '#3ff0ff', yellow: '#ffe14a', green: '#5dff7a', orange: '#ff9a3c', violet: '#b07bff', red: '#ff4a4a', white: '#f6f4ff', blue: '#4f8bff' };
 const BEST = 'scribble-city-v5-arcade-best';
 export const FONT = (px) => `700 ${px}px ${MARKER}`;
@@ -203,7 +204,7 @@ export class CabGame {
     this.games++;
     this.reset();
     this.sfx('start');
-    this.api.status(`שיא: ${this.best}`);
+    this.api.status(tr(`שיא: ${this.best}`, `Best: ${this.best}`));
   }
 
   sfx(kind, vol = 1) {

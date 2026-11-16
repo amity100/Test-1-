@@ -9,14 +9,15 @@
 
 import { MAINLAND_ON, mainlandHeight, mDistrictName, CAUSEWAYS, PAGE } from './mainland/plan.js';
 
+import { tr } from '../core/lang.js';
 export const CURB = 0.15;
 
 // north-south roads, west to east. x: centre, half: half the street, walk: sidewalk width
 export const AVES = [
-  { x: -204, half: 7, walk: 5, name: 'שדרות מרידיאן', sign: 'Meridian Ave' },
-  { x: -135, half: 7, walk: 5, name: 'שדרות וושינגטון', sign: 'Washington Ave' },
-  { x: -66, half: 7, walk: 5, name: 'שדרות קולינס', sign: 'Collins Ave' },
-  { x: 5, half: 8, walk: 6, name: 'אושן דרייב', sign: 'Ocean Dr', blvd: true },
+  { x: -204, half: 7, walk: 5, name: tr('שדרות מרידיאן', 'Meridian Avenue'), sign: 'Meridian Ave' },
+  { x: -135, half: 7, walk: 5, name: tr('שדרות וושינגטון', 'Washington Avenue'), sign: 'Washington Ave' },
+  { x: -66, half: 7, walk: 5, name: tr('שדרות קולינס', 'Collins Avenue'), sign: 'Collins Ave' },
+  { x: 5, half: 8, walk: 6, name: tr('אושן דרייב', 'Ocean Drive'), sign: 'Ocean Dr', blvd: true },
 ];
 export const BLVD = AVES[3];
 export const STREET_X0 = -3;
@@ -34,12 +35,12 @@ export const BEACH_WALK = [31, 35.5];
 
 // east-west roads, north to south
 export const STREETS = [
-  { z: -379, half: 6, walk: 5, name: 'רחוב 15', sign: '15th St' },
-  { z: -243, half: 6, walk: 5, name: 'רחוב 13', sign: '13th St' },
-  { z: -107, half: 6, walk: 5, name: 'רחוב 11', sign: '11th St' },
-  { z: 29, half: 6, walk: 5, name: 'רחוב 9', sign: '9th St' },
-  { z: 165, half: 6, walk: 5, name: 'רחוב 7', sign: '7th St' },
-  { z: 301, half: 6, walk: 5, name: 'רחוב 5', sign: '5th St' },
+  { z: -379, half: 6, walk: 5, name: tr('רחוב 15', '15th Street'), sign: '15th St' },
+  { z: -243, half: 6, walk: 5, name: tr('רחוב 13', '13th Street'), sign: '13th St' },
+  { z: -107, half: 6, walk: 5, name: tr('רחוב 11', '11th Street'), sign: '11th St' },
+  { z: 29, half: 6, walk: 5, name: tr('רחוב 9', '9th Street'), sign: '9th St' },
+  { z: 165, half: 6, walk: 5, name: tr('רחוב 7', '7th Street'), sign: '7th St' },
+  { z: 301, half: 6, walk: 5, name: tr('רחוב 5', '5th Street'), sign: '5th St' },
 ];
 
 // the land of the city (the westernmost row of houses faces Coral Ave from behind it)
@@ -52,7 +53,7 @@ export const WATER_X = 108;
 // then the park along the shore and the sea wall at the island's tip, the water beyond it - where
 // the blocks used to be only shapes in the distance (world/northend.js; not with ?island=1)
 export const NORTH_ON = MAINLAND_ON;
-export const NORTH_ST = { z: -515, half: 6, walk: 5, name: 'רחוב 17', sign: '17th St' };
+export const NORTH_ST = { z: -515, half: 6, walk: 5, name: tr('רחוב 17', '17th Street'), sign: '17th St' };
 // 17th Street's own sidewalk on its far side ends here; the shore park, then the sea wall
 export const NORTH_END = NORTH_ST.z - NORTH_ST.half - NORTH_ST.walk;
 export const NORTH_SHORE = -562;
@@ -105,16 +106,16 @@ export const BLOCK_TYPES = [
 ];
 
 export const DISTRICT_NAMES = {
-  gang: 'הסמטאות',
-  towers: 'מרכז העיר',
-  hotels: 'שדרת המלונות',
-  motel: 'מוטל הכוכב',
-  plaza: 'כיכר המזרקה',
-  shops: 'רובע החנויות',
-  park: 'פארק הדקלים',
-  first: 'אושן דרייב',
-  market: 'השוק',
-  west: 'הקצה המערבי',
+  gang: tr('הסמטאות', 'The alleys'),
+  towers: tr('מרכז העיר', 'Downtown'),
+  hotels: tr('שדרת המלונות', 'Hotel Row'),
+  motel: tr('מוטל הכוכב', 'Star Motel'),
+  plaza: tr('כיכר המזרקה', 'Fountain Square'),
+  shops: tr('רובע החנויות', 'The shopping quarter'),
+  park: tr('פארק הדקלים', 'Palm Park'),
+  first: tr('אושן דרייב', 'Ocean Drive'),
+  market: tr('השוק', 'The market'),
+  west: tr('הקצה המערבי', 'The west end'),
 };
 
 // the land between two avenues and two streets (sidewalks not included)
@@ -293,10 +294,10 @@ export function nearestRoadInfo(x, z) {
 
 export function districtName(x, z) {
   if (MAINLAND_ON && x < WEST_EDGE - 20) return mDistrictName(x, z);
-  if (x > PIER.x0 - 1 && z > PIER.z0 - 2 && z < PIER.z1 + 2) return 'המזח';
-  if (x > PARK_X1 && x < WATER_X + 40) return 'החוף';
-  if (x > PROM_X1 && x <= PARK_X1) return 'פארק החוף';
-  if (x > WALK_X0 - 24 && x < PROM_X1 + 1 && z > NORTH_EDGE - 20 && z < SOUTH_EDGE + 20) return 'אושן דרייב';
+  if (x > PIER.x0 - 1 && z > PIER.z0 - 2 && z < PIER.z1 + 2) return tr('המזח', 'The pier');
+  if (x > PARK_X1 && x < WATER_X + 40) return tr('החוף', 'The beach');
+  if (x > PROM_X1 && x <= PARK_X1) return tr('פארק החוף', 'Beach Park');
+  if (x > WALK_X0 - 24 && x < PROM_X1 + 1 && z > NORTH_EDGE - 20 && z < SOUTH_EDGE + 20) return tr('אושן דרייב', 'Ocean Drive');
   const b = blockAt(x, z);
   if (b) return DISTRICT_NAMES[b.type] || '';
   const r = nearestRoadInfo(x, z);

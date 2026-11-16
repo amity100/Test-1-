@@ -1,3 +1,4 @@
+import { tr } from '../core/lang.js';
 // (ROADMAP 9.3, not with ?classic) A sheet to draw on, for what is drawn onto the world: a graffiti
 // for a wall, a tattoo for the arm. It comes with its own pens; what it gives back is the strokes,
 // in the sheet's own measure (u across, 0..1 from the left; v up, 0..1 from the bottom), each
@@ -15,12 +16,17 @@ export class SketchPad {
     const el = (this.el = document.createElement('div'));
     el.id = 'sketchpad';
     el.className = 'hidden';
-    el.innerHTML = `<div class="ps-sheet paper-card">
+    el.innerHTML = tr(`<div class="ps-sheet paper-card">
       <div class="ps-head"><span class="ps-title"></span><span class="ps-hint"></span></div>
       <canvas width="1000" height="420"></canvas>
       <div class="ps-row"><span class="ps-label">עט</span><div class="ps-swatches"></div></div>
       <div class="ps-row ps-actions"><button class="ps-btn sp-undo">בטל קו</button><button class="ps-btn sp-clear">נקה</button><span class="ps-gap"></span><button class="ps-btn sp-cancel">ביטול</button><button class="ps-btn primary sp-done"></button></div>
-    </div>`;
+    </div>`, `<div class="ps-sheet paper-card">
+      <div class="ps-head"><span class="ps-title"></span><span class="ps-hint"></span></div>
+      <canvas width="1000" height="420"></canvas>
+      <div class="ps-row"><span class="ps-label">Pen</span><div class="ps-swatches"></div></div>
+      <div class="ps-row ps-actions"><button class="ps-btn sp-undo">Undo line</button><button class="ps-btn sp-clear">Clear</button><span class="ps-gap"></span><button class="ps-btn sp-cancel">Cancel</button><button class="ps-btn primary sp-done"></button></div>
+    </div>`);
     document.body.appendChild(el);
     this.cv = el.querySelector('canvas');
     this.g = this.cv.getContext('2d');
@@ -108,7 +114,7 @@ export class SketchPad {
     this.cv.height = Math.round(1000 / this.aspect);
     this.titleEl.textContent = o.title || '';
     this.hintEl.textContent = o.hint || '';
-    this.doneEl.textContent = o.done || 'סיימתי!';
+    this.doneEl.textContent = o.done || tr('סיימתי!', 'Done!');
     this.swEl.innerHTML = '';
     o.pens.forEach((p, i) => {
       const b = document.createElement('button');

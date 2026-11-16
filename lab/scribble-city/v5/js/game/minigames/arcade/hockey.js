@@ -5,6 +5,7 @@
 
 import { CabGame, NEON, glowText } from './cab.js';
 
+import { tr } from '../../../core/lang.js';
 const X0 = 26;
 const X1 = 974;
 const Y0 = 26;
@@ -19,9 +20,9 @@ export class AirHockey extends CabGame {
     super(o);
     this.id = 'hockey';
     this.name = 'AIR HOCKEY';
-    this.title = 'AIR HOCKEY · הוקי אוויר';
-    this.help = 'העכבר על השולחן מזיז את המחבט · או החצים · Esc לצאת';
-    this.helpTouch = 'אצבע על השולחן מזיזה את המחבט';
+    this.title = tr('AIR HOCKEY · הוקי אוויר', 'AIR HOCKEY');
+    this.help = tr('העכבר על השולחן מזיז את המחבט · או החצים · Esc לצאת', 'The mouse on the table moves the paddle · or the arrows · Esc to leave');
+    this.helpTouch = tr('אצבע על השולחן מזיזה את המחבט', 'A finger on the table moves the paddle');
     this.color = NEON.cyan;
     this.lives0 = 1;
     this.hud = false;

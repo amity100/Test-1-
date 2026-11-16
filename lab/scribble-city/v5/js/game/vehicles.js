@@ -7,6 +7,7 @@ import { MODELS, RIDES, PEDAL, seatOn, updateBoat, updatePlane, drawWake } from 
 import { hybridStep, updateBalloon } from './hybrid.js';
 import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 
+import { tr } from '../core/lang.js';
 // The things you drive: the city's own cars (taken from the traffic or from the curb), and the
 // ones you drew - the scribble car, the crazy tank, the motorbike, the paper helicopter. They are
 // made like everything else in the city (glossy paint full of the sunset), and how well you drew
@@ -365,7 +366,7 @@ class Vehicle {
       this.halfWid = 0.98;
       this.heightM = this.carKind === 'van' ? 2.15 : 1.45;
       this.seat = true;
-      this.label = stock ? (stock.police ? 'ניידת' : stock.taxi ? 'מונית' : 'מכונית') : this.bp.name;
+      this.label = stock ? (stock.police ? tr('ניידת', 'police car') : stock.taxi ? tr('מונית', 'taxi') : tr('מכונית', 'car')) : this.bp.name;
       if (!stock && !cb) this.racing = true;
       this.reveal = stock ? 1 : 0;
       if (cb) {
@@ -751,7 +752,7 @@ class Vehicle {
     const g = this.game;
     if (this.driver === g.player && !(this.edgeSaid > g.time)) {
       this.edgeSaid = g.time + 8;
-      g.hud.toast('כאן נגמר הדף — העיר מצוירת עד כאן', 'info', 2.4);
+      g.hud.toast(tr('כאן נגמר הדף — העיר מצוירת עד כאן', 'The page ends here — the city is drawn this far'), 'info', 2.4);
     }
   }
 
@@ -1205,8 +1206,8 @@ class Vehicle {
       this.vz *= 0.55;
     }
     this.hurt(8);
-    if (this.driver === game.player && !this.roofDrive) game.hud.toast(this.righter ? 'התהפך — הקפיץ על הגג מחזיר אותו לגלגלים' : game.touch ? 'התהפך! ▲ — להפוך בחזרה' : 'התהפך! רווח — להפוך בחזרה', 'info', 2.6);
-    else if (this.driver === game.player) game.hud.toast('התהפך — וממשיך לנסוע על גלגלי הגג', 'info', 2.2);
+    if (this.driver === game.player && !this.roofDrive) game.hud.toast(this.righter ? tr('התהפך — הקפיץ על הגג מחזיר אותו לגלגלים', 'It flipped — the spring on the roof puts it back on its wheels') : game.touch ? tr('התהפך! ▲ — להפוך בחזרה', 'It flipped! ▲ — flip it back') : tr('התהפך! רווח — להפוך בחזרה', 'It flipped! Space — flip it back'), 'info', 2.6);
+    else if (this.driver === game.player) game.hud.toast(tr('התהפך — וממשיך לנסוע על גלגלי הגג', 'It flipped — and keeps driving on its roof wheels'), 'info', 2.2);
   }
 
   // (ROADMAP 11.12) how a drawn one stands (its model's stance, game/partbuild.js): on its tail, its
@@ -1576,7 +1577,7 @@ class Vehicle {
       if (input) game.camRig.yaw += this.spin * dt;
       if (input && !this.toldSpin) {
         this.toldSpin = true;
-        game.hud.toast('אין רוטור זנב — הוא מסתובב סביב עצמו! ציירו רוטור קטן בזנב', 'info', 3);
+        game.hud.toast(tr('אין רוטור זנב — הוא מסתובב סביב עצמו! ציירו רוטור קטן בזנב', 'No tail rotor — it spins around itself! Draw a small rotor on the tail'), 'info', 3);
       }
     }
     const maxAlt = this.grade === 'fail' ? 1.2 : 70;

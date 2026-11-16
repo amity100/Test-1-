@@ -1,3 +1,4 @@
+import { tr, lang } from '../core/lang.js';
 // (v5, ROADMAP 11.17) Talking with the friend you drew (game/friend.js): a page of the notebook
 // with what she says and what you say - typed, or one of the little cards under it - and her
 // hearts at the top. The game goes on round it (she stands with you); its keys wait while you type.
@@ -11,12 +12,12 @@ export class ChatPanel {
     const el = document.createElement('div');
     el.id = 'chat';
     el.className = 'paper-card hidden';
-    el.dir = 'rtl';
+    el.dir = lang() === 'he' ? 'rtl' : 'ltr';
     el.innerHTML =
-      '<div class="chat-head"><span class="chat-name"></span><span class="chat-love"></span><button class="chat-x" type="button" aria-label="סגירה">✕</button></div>' +
+      tr('<div class="chat-head"><span class="chat-name"></span><span class="chat-love"></span><button class="chat-x" type="button" aria-label="סגירה">✕</button></div>', '<div class="chat-head"><span class="chat-name"></span><span class="chat-love"></span><button class="chat-x" type="button" aria-label="Close">✕</button></div>') +
       '<div class="chat-log"></div>' +
       '<div class="chat-chips"></div>' +
-      '<form class="chat-form" autocomplete="off"><input class="chat-in" type="text" maxlength="240" enterkeyhint="send" placeholder="לכתוב לה משהו..."><button class="chat-send" type="submit">שליחה</button></form>';
+      tr('<form class="chat-form" autocomplete="off"><input class="chat-in" type="text" maxlength="240" enterkeyhint="send" placeholder="לכתוב לה משהו..."><button class="chat-send" type="submit">שליחה</button></form>', '<form class="chat-form" autocomplete="off"><input class="chat-in" type="text" maxlength="240" enterkeyhint="send" placeholder="Write her something..."><button class="chat-send" type="submit">Send</button></form>');
     (document.getElementById('hud') || document.body).appendChild(el);
     this.el = el;
     this.nameEl = el.querySelector('.chat-name');

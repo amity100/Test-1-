@@ -6,6 +6,7 @@ import { makeLineMaterial } from '../render/materials.js';
 import { Sketcher, FONT_HAND } from '../render/sketch2d.js';
 import { planDrawing } from '../game/materialize.js';
 
+import { tr } from '../core/lang.js';
 const PX = 250; // virtual pixels per metre handed to the recognizer (what the paper pad used)
 const INK_C = [0.07, 0.07, 0.11];
 const RED = [0.8, 0.12, 0.15];
@@ -21,10 +22,10 @@ const RED_CSS = '#c81e24';
 const TRACED_MAX = 70; // tracing over the ghost never makes a perfect item
 
 const COMMENTS = {
-  perfect: ['מושלם! כל הכבוד', 'יצירת מופת!', 'מדויק להפליא'],
-  good: ['טוב מאוד', 'יפה! זה יעבוד', 'ציור טוב'],
-  wonky: ['עקום... יעבוד חלקית', 'בערך... נקווה לטוב', 'יצא קצת מעוות'],
-  fail: ['זה לא דומה בכלל', 'אוי... זה ייצא מקולקל', 'צריך לתרגל'],
+  perfect: [tr('מושלם! כל הכבוד', 'Perfect! Well done'), tr('יצירת מופת!', 'A masterpiece!'), tr('מדויק להפליא', 'Amazingly precise')],
+  good: [tr('טוב מאוד', 'Very good'), tr('יפה! זה יעבוד', 'Nice! It\'ll work'), tr('ציור טוב', 'A good drawing')],
+  wonky: [tr('עקום... יעבוד חלקית', 'Crooked... it\'ll partly work'), tr('בערך... נקווה לטוב', 'Roughly... let\'s hope for the best'), tr('יצא קצת מעוות', 'It came out a bit warped')],
+  fail: [tr('זה לא דומה בכלל', 'That looks nothing like it'), tr('אוי... זה ייצא מקולקל', 'Oh... this will come out broken'), tr('צריך לתרגל', 'Needs practice')],
 };
 
 const _ndc = new THREE.Vector2();
@@ -233,7 +234,7 @@ export class AirDraw {
     if (this.dryShown) return;
     this.dryShown = true;
     const g = this.game;
-    g.hud.toast(g.money ? 'הדיו נגמר! ✓ מסיימים במה שיש, או ממלאים: בקבוק דיו בחנויות הכתיבה, ועם הזמן הוא חוזר לבד' : 'הדיו נגמר!', 'info', 4);
+    g.hud.toast(g.money ? tr('הדיו נגמר! ✓ מסיימים במה שיש, או ממלאים: בקבוק דיו בחנויות הכתיבה, ועם הזמן הוא חוזר לבד', 'Out of ink! ✓ finish with what you have, or refill: an ink bottle at the stationery shops, and over time it comes back by itself') : tr('הדיו נגמר!', 'Out of ink!'), 'info', 4);
     this.inkEl.classList.add('dry');
   }
 
@@ -290,7 +291,7 @@ export class AirDraw {
     if (this.learning) {
       this.ghost = true;
       this.ghostBtn.classList.add('on');
-      this.titleEl.textContent = `לומדים לצייר: ${this.bp.name} — עוברים על הקווים הכחולים, פעם אחת`;
+      this.titleEl.textContent = tr(`לומדים לצייר: ${this.bp.name} — עוברים על הקווים הכחולים, פעם אחת`, `Learning to draw: ${this.bp.name} — trace the blue lines, once`);
     }
     // (the ink in the pen: ROADMAP 9.4, not with ?classic)
     this.dryShown = false;
@@ -316,7 +317,7 @@ export class AirDraw {
     this.ids = this.game.album.ids();
     if (!this.ids.includes(id)) this.ids.push(id);
     const i = this.ids.indexOf(id);
-    this.titleEl.textContent = `מציירים באוויר: ${bp.name}`;
+    this.titleEl.textContent = tr(`מציירים באוויר: ${bp.name}`, `Drawing in the air: ${bp.name}`);
     this.refCaption.textContent = bp.name;
     this.countEl.textContent = `${i + 1}/${this.ids.length} ▦`;
     this.refEl.classList.toggle('single', this.ids.length < 2);
@@ -350,7 +351,7 @@ export class AirDraw {
     this.ghost = !this.ghost;
     if (this.ghost) this.traced = true;
     this.ghostBtn.classList.toggle('on', this.ghost);
-    if (this.ghost) this.game.hud.toast(`נייר העתקה: עוברים על הקווים הכחולים (ציון עד ${TRACED_MAX})`, 'info', 2.6);
+    if (this.ghost) this.game.hud.toast(tr(`נייר העתקה: עוברים על הקווים הכחולים (ציון עד ${TRACED_MAX})`, `Tracing paper: trace the blue lines (score up to ${TRACED_MAX})`), 'info', 2.6);
   }
 
   setupSheet() {
@@ -372,7 +373,7 @@ export class AirDraw {
     this.dangerOn = on;
     this.dangerEl.classList.toggle('on', !!on);
     this.statusEl.classList.toggle('danger', !!on);
-    this.statusEl.textContent = on ? text || '⚠ תוקפים אותך!' : text || 'שקט… אפשר לצייר';
+    this.statusEl.textContent = on ? text || tr('⚠ תוקפים אותך!', '⚠ You\'re under attack!') : text || tr('שקט… אפשר לצייר', 'Quiet… you can draw');
   }
 
   undo() {
@@ -387,7 +388,7 @@ export class AirDraw {
     const strokesPx = this.strokes.map((s) => s.map(([u, v]) => [(u + W / 2) * PX, (H / 2 - v) * PX]));
     const ink = strokesPx.reduce((a, s) => a + s.length, 0);
     if (ink < 6) {
-      this.game.hud.toast('עוד לא ציירתם כלום באוויר…', 'info');
+      this.game.hud.toast(tr('עוד לא ציירתם כלום באוויר…', 'You haven\'t drawn anything in the air yet…'), 'info');
       return;
     }
     const res = scoreDrawing(strokesPx, this.bp);
@@ -447,9 +448,9 @@ export class AirDraw {
     this.bp.strokes.forEach((st, i) => {
       if (res.partCoverage[i] < 0.38 && !missing.includes(st.label)) missing.push(st.label);
     });
-    if (missing.length) sk.text(`חסר: ${missing.slice(0, 3).join(', ')}`, 300, 268, { size: 34, color: RED_CSS, font: FONT_HAND, align: 'right', weight: 400 });
-    if (this.traced) sk.text('(העתקה)', 150, 70, { size: 38, color: RED_CSS, font: FONT_HAND, weight: 400 });
-    if (res.smudged) sk.text('(הגשם מרח)', 150, this.traced ? 118 : 70, { size: 36, color: RED_CSS, font: FONT_HAND, weight: 400 });
+    if (missing.length) sk.text(tr(`חסר: ${missing.slice(0, 3).join(', ')}`, `Missing: ${missing.slice(0, 3).join(', ')}`), 300, 268, { size: 34, color: RED_CSS, font: FONT_HAND, align: 'right', weight: 400 });
+    if (this.traced) sk.text(tr('(העתקה)', '(traced)'), 150, 70, { size: 38, color: RED_CSS, font: FONT_HAND, weight: 400 });
+    if (res.smudged) sk.text(tr('(הגשם מרח)', '(the rain smudged it)'), 150, this.traced ? 118 : 70, { size: 36, color: RED_CSS, font: FONT_HAND, weight: 400 });
     this.stickerTex.needsUpdate = true;
     const sw = this.W * 0.42;
     this.sticker.scale.set(sw, sw * (c.height / c.width), 1);

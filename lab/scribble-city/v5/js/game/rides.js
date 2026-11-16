@@ -4,6 +4,7 @@ import { groundHeight, WATER_X, PIER, PROM_X1 } from '../world/layout.js';
 import { clamp, damp } from '../core/util.js';
 import { RIDE } from './doodle.js';
 
+import { tr } from '../core/lang.js';
 // (ROADMAP 4.8; never with ?classic: they are drawn only from the album's new pages) The new
 // drawings to ride: a bicycle and a kick scooter (they ride as the motorbike does, game/
 // vehicles.js drive), a jet ski and a speedboat (kind 'boat': on the bay only), a light plane
@@ -509,7 +510,7 @@ export function updatePlane(v, dt, input) {
       v.pitch = damp(v.pitch, -0.45, 1.4, dt);
       if (!v.stallSaid) {
         v.stallSaid = true;
-        game.hud.toast('מהירות נמוכה מדי — המטוס נופל! מצערת (W) והאף למטה', 'bad', 2.4);
+        game.hud.toast(tr('מהירות נמוכה מדי — המטוס נופל! מצערת (W) והאף למטה', 'Too slow — the plane is falling! Throttle (W) and nose down'), 'bad', 2.4);
       }
     } else v.stallSaid = false;
     s = clamp(s, 0, top);

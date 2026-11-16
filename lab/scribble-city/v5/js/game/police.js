@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { groundHeight, AVES, STREETS, WEST_EDGE } from '../world/layout.js';
 import { NODES } from '../world/roads.js';
 
+import { tr } from '../core/lang.js';
 // The Scribble City Police: crimes that somebody sees (or phones in) earn stars; patrol
 // cars race to you with the siren on and drop off officers with pen-pistols, big school
 // erasers and (from three stars) paint M4s. Break their line of sight and lie low long
@@ -57,9 +58,9 @@ function cornerName(x, z) {
       best = n;
     }
   }
-  return best ? `${best.ave.name} פינת ${best.street.name}` : 'במרכז העיר';
+  return best ? tr(`${best.ave.name} פינת ${best.street.name}`, `${best.ave.name} and ${best.street.name}`) : tr('במרכז העיר', 'Downtown');
 }
-const dirName = (dx, dz) => (Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'מזרחה' : 'מערבה') : dz > 0 ? 'דרומה' : 'צפונה');
+const dirName = (dx, dz) => (Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? tr('מזרחה', 'east') : tr('מערבה', 'west')) : dz > 0 ? tr('דרומה', 'south') : tr('צפונה', 'north'));
 
 export class Police {
   constructor(game) {
@@ -121,7 +122,7 @@ export class Police {
     const t = this.game.time;
     this.addHeat(heat, x, z, false);
     if (this.level > 0 && t - this.seenT > 2) this.lastSeen.set(x, 0, z);
-    this.game.hud.toast('מישהו התקשר למשטרה…', 'info', 2);
+    this.game.hud.toast(tr('מישהו התקשר למשטרה…', 'Somebody called the police…'), 'info', 2);
   }
 
   witnesses(x, z) {
@@ -172,10 +173,10 @@ export class Police {
     }
     if (this.level > before) {
       const hud = this.game.hud;
-      const msg = this.level === 1 ? 'המשטרה מחפשת אותך!' : this.level >= 4 ? 'יחידת מחק מיוחדת בדרך!' : 'עוד ניידות בדרך!';
-      if (before === 0) this.radio(`מוקד לכל הניידות: דיווח על חשוד, ${cornerName(x, z)}.`, true);
-      else if (this.level === 3) this.radio('מוקד: יחידה מיוחדת מצטרפת למרדף. זהירות.', true);
-      else if (this.level >= 4) this.radio('מוקד: כל הכוחות, החשוד מסוכן. מחסומים בכל הצירים.', true);
+      const msg = this.level === 1 ? tr('המשטרה מחפשת אותך!', 'The police are after you!') : this.level >= 4 ? tr('יחידת מחק מיוחדת בדרך!', 'A special eraser unit is on the way!') : tr('עוד ניידות בדרך!', 'More police cars on the way!');
+      if (before === 0) this.radio(tr(`מוקד לכל הניידות: דיווח על חשוד, ${cornerName(x, z)}.`, `Dispatch to all units: suspect reported, ${cornerName(x, z)}.`), true);
+      else if (this.level === 3) this.radio(tr('מוקד: יחידה מיוחדת מצטרפת למרדף. זהירות.', 'Dispatch: a special unit is joining the chase. Careful.'), true);
+      else if (this.level >= 4) this.radio(tr('מוקד: כל הכוחות, החשוד מסוכן. מחסומים בכל הצירים.', 'Dispatch: all units, the suspect is dangerous. Roadblocks on every route.'), true);
       hud.toast(msg, 'bad', 2.4);
       this.dispatchT = Math.min(this.dispatchT, 1);
       // the patrol car already around comes for you
@@ -232,7 +233,7 @@ export class Police {
         if (r.by && r.by.alive && !r.by.headless) {
           this.addHeat(r.heat, r.x, r.z, false);
           if (this.level > 0 && t - this.seenT > 2) this.lastSeen.set(r.x, 0, r.z);
-          game.hud.toast('מישהו התקשר למשטרה…', 'info', 2);
+          game.hud.toast(tr('מישהו התקשר למשטרה…', 'Somebody called the police…'), 'info', 2);
         }
       }
       this.reports = this.reports.filter((r) => !r.done);
@@ -306,10 +307,10 @@ export class Police {
       // (v5, ROADMAP 11.17) lost: the cars close the corners round where you were last seen; found
       // again: everybody on the radio knows where
       if (searching) {
-        this.radio(`איבדנו קשר עין ליד ${cornerName(this.lastSeen.x, this.lastSeen.z)}. סוגרים את האזור.`);
+        this.radio(tr(`איבדנו קשר עין ליד ${cornerName(this.lastSeen.x, this.lastSeen.z)}. סוגרים את האזור.`, `We lost sight of him near ${cornerName(this.lastSeen.x, this.lastSeen.z)}. Sealing off the area.`));
         this.cordon();
       } else {
-        this.radio(`ניידת ${10 + Math.floor(Math.random() * 40)}: יש קשר עין! ${cornerName(pp.x, pp.z)}.`);
+        this.radio(tr(`ניידת ${10 + Math.floor(Math.random() * 40)}: יש קשר עין! ${cornerName(pp.x, pp.z)}.`, `Unit ${10 + Math.floor(Math.random() * 40)}: eyes on the suspect! ${cornerName(pp.x, pp.z)}.`));
         for (const c of game.traffic.list) if (c.police) c.cordon = null;
       }
     }
@@ -321,12 +322,12 @@ export class Police {
         this.carT = 9 + Math.random() * 5;
         const v = p.inVehicle;
         const sg = Math.sign(v.speed || 1);
-        if (Math.abs(v.speed || 0) > 4) this.radio(`החשוד ברכב, נוסע ${dirName(Math.sin(v.yaw) * sg, Math.cos(v.yaw) * sg)}, ${cornerName(v.pos.x, v.pos.z)}.`);
+        if (Math.abs(v.speed || 0) > 4) this.radio(tr(`החשוד ברכב, נוסע ${dirName(Math.sin(v.yaw) * sg, Math.cos(v.yaw) * sg)}, ${cornerName(v.pos.x, v.pos.z)}.`, `The suspect is in a vehicle, heading ${dirName(Math.sin(v.yaw) * sg, Math.cos(v.yaw) * sg)}, ${cornerName(v.pos.x, v.pos.z)}.`));
       }
     }
     if (this.searchT > SEARCH_TIME[this.level]) {
       // (ROADMAP 11.28: got away from two stars or more - a blueprint page, game/gearplay.js)
-      if (this.level >= 2 && game.gear) game.gear.play.page('ברחתם מהמשטרה');
+      if (this.level >= 2 && game.gear) game.gear.play.page(tr('ברחתם מהמשטרה', 'You got away from the police'));
       this.clear();
       return;
     }
@@ -419,10 +420,10 @@ export class Police {
     // (a line every 20 s at most; the dispatcher's own news - more units, the hunt called off - 6 s apart)
     if (t - (this.radioAt || -99) < (force ? 6 : 20)) return;
     // (ROADMAP 11.28: the jammer - all noise)
-    if (this.jammed(1)) text = '…ששש… קררר… [הקשר משובש] …ששש…';
+    if (this.jammed(1)) text = tr('…ששש… קררר… [הקשר משובש] …ששש…', '…shhh… krrr… [the radio is jammed] …shhh…');
     this.radioAt = t;
     if (game.audio) game.audio.play('radio', 0.6);
-    if (game.hud && game.hud.subtitles !== false && game.voices && game.voices.subtitle) game.voices.subtitle(`קשר משטרתי — ${text}`);
+    if (game.hud && game.hud.subtitles !== false && game.voices && game.voices.subtitle) game.voices.subtitle(tr(`קשר משטרתי — ${text}`, `Police radio — ${text}`));
   }
 
   // where you were last seen, boxed in: each car on the case to a corner round it (and parked
@@ -471,7 +472,7 @@ export class Police {
       this.lastSeen.set(x, 0, z);
       this.searchT = Math.max(0, this.searchT - 6);
       for (const e of game.enemies.list) if (e.faction === 'police' && e.alive && !e.headless) e.squad.lastKnown.set(x, 0, z);
-      this.radio(`מוקד: עד ראייה מדווח על החשוד, ${cornerName(x, z)}.`);
+      this.radio(tr(`מוקד: עד ראייה מדווח על החשוד, ${cornerName(x, z)}.`, `Dispatch: a witness reports the suspect, ${cornerName(x, z)}.`));
       this.cordon();
     });
   }
@@ -484,8 +485,8 @@ export class Police {
     this.searchT = 0;
     this.searching = false;
     game.hud.setWanted(0, false);
-    game.hud.toast('המשטרה ויתרה — איבדו אותך', 'good', 2.6);
-    this.radio('מוקד: מבטלים את החיפוש. כל הניידות חוזרות לסיור.', true);
+    game.hud.toast(tr('המשטרה ויתרה — איבדו אותך', 'The police gave up — they lost you'), 'good', 2.6);
+    this.radio(tr('מוקד: מבטלים את החיפוש. כל הניידות חוזרות לסיור.', 'Dispatch: calling off the search. All units back on patrol.'), true);
     for (const c of game.traffic.list) if (c.police) c.cordon = null;
     for (const e of game.enemies.list) {
       if (e.faction !== 'police' || !e.alive) continue;

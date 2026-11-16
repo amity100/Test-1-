@@ -12,6 +12,7 @@ import { DrawOff, DOODLES, SUBJECTS } from './minigames/drawoff.js';
 import { worldAt } from '../ui/minigame.js';
 import { fairPlan, buildFair, paintFloor, paintProjection, paintLive } from './artfair.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 12.5) Paintwood's Walls, and Art Night in them. In the yard between the backs of the
 // rows of the walls' block (world/mainland/blocks.js), ten walls stand with a mural each - built
 // when you are near, every day. On Art Night (game/calendar.js) the yard fills: a stage at its
@@ -731,14 +732,14 @@ export class ArtNight {
   target() {
     if (!this.extra || !this.on) return null;
     const p = this.game.player.pos;
-    for (const s of this.stalls) if (Math.hypot(p.x - s.x, p.z - s.z) < 2.6) return { kind: s.kind, s, label: s.kind === 'cafe' ? 'E — CAFE CUBANO: קפה ומאפה' : 'E — PRINTS: הדפסים וציורים' };
-    if (p.x > ST.x0 && p.x < ST.x1 && p.z > ST.z0 - 6 && p.z < ST.z0 + 0.5) return { kind: 'contest', label: 'E — קרב ציור על הבמה ($5)' };
+    for (const s of this.stalls) if (Math.hypot(p.x - s.x, p.z - s.z) < 2.6) return { kind: s.kind, s, label: s.kind === 'cafe' ? tr('E — CAFE CUBANO: קפה ומאפה', 'E — CAFE CUBANO: coffee and a pastry') : tr('E — PRINTS: הדפסים וציורים', 'E — PRINTS: prints and paintings') };
+    if (p.x > ST.x0 && p.x < ST.x1 && p.z > ST.z0 - 6 && p.z < ST.z0 + 0.5) return { kind: 'contest', label: tr('E — קרב ציור על הבמה ($5)', 'E — a drawing battle on the stage ($5)') };
     const P = this.fair.plan;
-    if (p.x > P.bar.x + 0.3 && p.x < P.bar.x + 2.2 && p.z > P.bar.z0 && p.z < P.bar.z1) return { kind: 'bar', label: 'E — CHAMPAGNE: בר הבועות' };
-    if (p.x > P.photoWall.x + 0.2 && p.x < P.carpet.x1 && p.z > P.photoWall.z0 && p.z < P.photoWall.z1) return { kind: 'pose', label: 'E — להצטלם מול קיר הלוגואים' };
-    if (p.x > P.floor.x0 && p.x < P.floor.x1 && p.z > P.floor.z0 && p.z < P.floor.z1) return { kind: 'floor', label: 'E — לרקוד על רצפת האור' };
-    if (Math.hypot(p.x - (P.infinity.x - P.infinity.s / 2 - 0.8), p.z - P.infinity.z) < 1.4) return { kind: 'infinity', label: 'E — להיכנס לחדר האינסוף' };
-    for (const e of this.easels) if (Math.hypot(p.x - e.x, p.z - e.z) < 2.2) return { kind: 'easel', e, label: `E — הצייר/ת ליד הכן: ${e.subject.he}` };
+    if (p.x > P.bar.x + 0.3 && p.x < P.bar.x + 2.2 && p.z > P.bar.z0 && p.z < P.bar.z1) return { kind: 'bar', label: tr('E — CHAMPAGNE: בר הבועות', 'E — CHAMPAGNE: the bubble bar') };
+    if (p.x > P.photoWall.x + 0.2 && p.x < P.carpet.x1 && p.z > P.photoWall.z0 && p.z < P.photoWall.z1) return { kind: 'pose', label: tr('E — להצטלם מול קיר הלוגואים', 'E — get your picture taken at the logo wall') };
+    if (p.x > P.floor.x0 && p.x < P.floor.x1 && p.z > P.floor.z0 && p.z < P.floor.z1) return { kind: 'floor', label: tr('E — לרקוד על רצפת האור', 'E — dance on the light floor') };
+    if (Math.hypot(p.x - (P.infinity.x - P.infinity.s / 2 - 0.8), p.z - P.infinity.z) < 1.4) return { kind: 'infinity', label: tr('E — להיכנס לחדר האינסוף', 'E — go into the infinity room') };
+    for (const e of this.easels) if (Math.hypot(p.x - e.x, p.z - e.z) < 2.2) return { kind: 'easel', e, label: tr(`E — הצייר/ת ליד הכן: ${e.subject.he}`, `E — the painter at the easel: ${e.subject.he}`) };
     return null;
   }
 
@@ -767,13 +768,13 @@ export class ArtNight {
         if (r && r.won) {
           this.cheer = 1;
           g.hud.big('CHAMPION!', 2400);
-          g.hud.toast('ניצחתם בקרב הציור! כל החצר מוחאת כפיים, והציורים שלכם על המסך', 'good', 3.5);
-        } else if (r && r.place) g.hud.toast(`מקום ${r.place} בקרב הציור. הציורים שלכם על המסך מעל הבמה`, 'good', 3);
+          g.hud.toast(tr('ניצחתם בקרב הציור! כל החצר מוחאת כפיים, והציורים שלכם על המסך', 'You won the drawing battle! The whole courtyard applauds, and your drawings are on the screen'), 'good', 3.5);
+        } else if (r && r.place) g.hud.toast(tr(`מקום ${r.place} בקרב הציור. הציורים שלכם על המסך מעל הבמה`, `${r.place} place in the drawing battle. Your drawings are on the screen over the stage`), 'good', 3);
       }, { world });
       return true;
     }
     if (tg.kind === 'bar') {
-      const menu = [['קוקטייל בועות ורוד (+15 חיים)', 8, 15, [1, 0.6, 0.75]], ['מים מוגזים עם לימון (+5 חיים)', 2, 5, [0.85, 0.95, 0.8]]];
+      const menu = [[tr('קוקטייל בועות ורוד (+15 חיים)', 'Pink bubble cocktail (+15 health)'), 8, 15, [1, 0.6, 0.75]], [tr('מים מוגזים עם לימון (+5 חיים)', 'Sparkling water with lemon (+5 health)'), 2, 5, [0.85, 0.95, 0.8]]];
       g.dialog.show('CHAMPAGNE', 'Bubbles for the artists! What can I pour you?', menu.map(([label, price, hp, colr]) => ({
         label: `${label} · $${price}`,
         fn: () => {
@@ -783,7 +784,7 @@ export class ArtNight {
             pl.fig.belly = Math.min(1, pl.fig.belly + 0.15);
             pl.fig.bellyColor = colr;
             g.audio.play('coins', 0.5);
-            g.hud.toast(`${label.split(' (')[0]}! +${hp} חיים`, 'good', 2);
+            g.hud.toast(tr(`${label.split(' (')[0]}! +${hp} חיים`, `${label.split(' (')[0]}! +${hp} health`), 'good', 2);
           } else g.money.refuse('CHAMPAGNE', price);
         },
       })));
@@ -796,19 +797,19 @@ export class ArtNight {
       g.player.fig.armsUp = 1;
       g.inkwell.after(2.2, () => (g.player.fig.armsUp = 0));
       g.audio.play('click', 0.6);
-      g.hud.toast('הצלמים לא מפסיקים! מחר אתם בעמוד האמנות של העיתון', 'good', 3);
+      g.hud.toast(tr('הצלמים לא מפסיקים! מחר אתם בעמוד האמנות של העיתון', 'The photographers won\'t stop! Tomorrow you\'re on the paper\'s art page'), 'good', 3);
       return true;
     }
     if (tg.kind === 'floor') {
       g.player.fig.dance = 1;
       g.inkwell.after(9, () => (g.player.fig.dance = 0));
-      g.hud.toast('הרצפה נדלקת מתחת לכל צעד שלכם', 'good', 2.4);
+      g.hud.toast(tr('הרצפה נדלקת מתחת לכל צעד שלכם', 'The floor lights up under every step you take'), 'good', 2.4);
       return true;
     }
     if (tg.kind === 'infinity') {
       const I = this.fair.plan.infinity;
       g.player.spawn(I.x, I.z, Math.PI / 2);
-      g.hud.toast('אלפי נקודות אור, בלי סוף לכל כיוון. שקט פה.', 'info', 3);
+      g.hud.toast(tr('אלפי נקודות אור, בלי סוף לכל כיוון. שקט פה.', 'Thousands of points of light, endless in every direction. It\'s quiet here.'), 'info', 3);
       return true;
     }
     if (tg.kind === 'easel') {
@@ -818,22 +819,22 @@ export class ArtNight {
       const opts = [];
       if (e.k >= 0.7) {
         opts.push({
-          label: `לקנות את הציור (${e.subject.he}) · $120`,
+          label: tr(`לקנות את הציור (${e.subject.he}) · $120`, `Buy the painting (${e.subject.he}) · $120`),
           fn: () => {
-            if (!g.money || g.money.pay(120, 'ציור מהכן')) {
+            if (!g.money || g.money.pay(120, tr('ציור מהכן', 'A painting from the easel'))) {
               this.collect({ kind: 'painting', subject: e.subject.c, he: e.subject.he, by: ['ZEB', 'LUNA', 'KIRA', 'OTTO'][e.i % 4], price: 120 });
               g.audio.play('coins', 0.5);
-              g.hud.toast(`קניתם את הציור "${e.subject.he}"! הוא נשמר באוסף שלכם ויחכה בבית`, 'good', 3);
+              g.hud.toast(tr(`קניתם את הציור "${e.subject.he}"! הוא נשמר באוסף שלכם ויחכה בבית`, `You bought the painting "${e.subject.he}"! It's kept in your collection and will be waiting at home`), 'good', 3);
               this.newPainting(e);
             } else g.money.refuse('PAINTER', 120);
           },
         });
       }
-      g.dialog.show('PAINTER', `${lines[e.i % lines.length]} (${pct}%)`, opts.length ? opts : [{ label: 'לצפות עוד קצת', fn: () => {} }]);
+      g.dialog.show('PAINTER', `${lines[e.i % lines.length]} (${pct}%)`, opts.length ? opts : [{ label: tr('לצפות עוד קצת', 'Watch a little longer'), fn: () => {} }]);
       return true;
     }
     if (tg.kind === 'prints') {
-      const menu = [['הדפסה קטנה של ציור קיר', 25, 'print'], ['הדפסה גדולה על קנבס', 90, 'canvas'], ['ציור מקורי של אמן מהחצר', 250, 'original']];
+      const menu = [[tr('הדפסה קטנה של ציור קיר', 'A small print of a mural'), 25, 'print'], [tr('הדפסה גדולה על קנבס', 'A big print on canvas'), 90, 'canvas'], [tr('ציור מקורי של אמן מהחצר', 'An original painting by an artist from the courtyard'), 250, 'original']];
       g.dialog.show('PRINTS', 'Every wall in the yard, on paper. Take one home!', menu.map(([label, price, kind]) => ({
         label: `${label} · $${price}`,
         fn: () => {
@@ -841,15 +842,15 @@ export class ArtNight {
             const m = WALLS[Math.floor(Math.random() * WALLS.length)].mural;
             this.collect({ kind, mural: m, price });
             g.audio.play('coins', 0.5);
-            g.hud.toast(`${label}: נשמר באוסף שלכם, ויחכה על הקיר בבית`, 'good', 3);
+            g.hud.toast(tr(`${label}: נשמר באוסף שלכם, ויחכה על הקיר בבית`, `${label}: kept in your collection, and it'll be waiting on the wall at home`), 'good', 3);
           } else g.money.refuse('PRINTS', price);
         },
       })));
       return true;
     }
-    const menu = [['קפסיטו (קפה קובני)', 3, 10, [0.35, 0.2, 0.12]], ['פסטליטו גויאבה', 4, 15, [0.9, 0.6, 0.3]], ['לימונדה מנגו', 5, 15, [1, 0.75, 0.25]]];
+    const menu = [[tr('קפסיטו (קפה קובני)', 'Cafecito (Cuban coffee)'), 3, 10, [0.35, 0.2, 0.12]], [tr('פסטליטו גויאבה', 'Guava pastelito'), 4, 15, [0.9, 0.6, 0.3]], [tr('לימונדה מנגו', 'Mango lemonade'), 5, 15, [1, 0.75, 0.25]]];
     g.dialog.show('CAFE CUBANO', '¡Oye! Coffee to keep you up all night. What will it be?', menu.map(([label, price, hp, colr]) => ({
-      label: `${label} (+${hp} חיים) · $${price}`,
+      label: tr(`${label} (+${hp} חיים) · $${price}`, `${label} (+${hp} health) · \$${price}`),
       fn: () => {
         if (!g.money || g.money.pay(price, label)) {
           const pl = g.player;
@@ -857,7 +858,7 @@ export class ArtNight {
           pl.fig.belly = Math.min(1, pl.fig.belly + 0.2);
           pl.fig.bellyColor = colr;
           g.audio.play('coins', 0.5);
-          g.hud.toast(`${label}! +${hp} חיים`, 'good', 2);
+          g.hud.toast(tr(`${label}! +${hp} חיים`, `${label}! +${hp} health`), 'good', 2);
         } else g.money.refuse('CAFE CUBANO', price);
       },
     })));

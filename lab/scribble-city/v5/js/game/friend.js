@@ -7,6 +7,7 @@ import { Facade } from '../world/kit.js';
 import { shopOpen } from './rhythm.js';
 import { ChatPanel } from '../ui/chat.js';
 
+import { tr } from '../core/lang.js';
 // (v5, ROADMAP 11.17) The friend you drew, a friend to talk to. Drawn at a stand with a magic
 // pencil (game/streetlife.js Companion walks her beside you), she has a name, a way of her own
 // and a memory: what you told her, the places you went together. You talk with her (ui/chat.js) in
@@ -25,21 +26,21 @@ const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const TAG = /\[(GO|HOME|BUILD|DANCE|HEART|DRAW|WAIT|FOLLOW|TV|COOK|SLEEP|PAINT|MEM)(?::([^\]]*))?\]/g;
 const clean = (t) => t.replace(TAG, '').replace(/\[[A-Z]+[^\]]*$/, '').replace(/\s+$/, '').trim();
 
-const NAMES = [['Maya', 'מאיה'], ['Noa', 'נועה'], ['Lia', 'ליה'], ['Tamar', 'תמר'], ['Yael', 'יעל'], ['Shira', 'שירה'], ['Mia', 'מיה'], ['Ella', 'אלה'], ['Romi', 'רומי'], ['Gali', 'גלי'], ['Dana', 'דנה'], ['Ariel', 'אריאל']];
+const NAMES = [['Maya', tr('מאיה', 'Maya')], ['Noa', tr('נועה', 'Noa')], ['Lia', tr('ליה', 'Lia')], ['Tamar', tr('תמר', 'Tamar')], ['Yael', tr('יעל', 'Yael')], ['Shira', tr('שירה', 'Shira')], ['Mia', tr('מיה', 'Mia')], ['Ella', tr('אלה', 'Ella')], ['Romi', tr('רומי', 'Romy')], ['Gali', tr('גלי', 'Gali')], ['Dana', tr('דנה', 'Dana')], ['Ariel', tr('אריאל', 'Ariel')]];
 const MOODS = [
-  { id: 'sunny', heb: 'שמחה ומצחיקה, תמיד עם בדיחה מוכנה' },
-  { id: 'dreamy', heb: 'סקרנית וחולמנית, שואלת על הכול' },
-  { id: 'artist', heb: 'אמנית ורגישה, רואה ציור בכל דבר' },
-  { id: 'bold', heb: 'הרפתקנית ונמרצת, תמיד מוכנה לצאת' },
+  { id: 'sunny', heb: tr('שמחה ומצחיקה, תמיד עם בדיחה מוכנה', 'Cheerful and funny, always ready with a joke') },
+  { id: 'dreamy', heb: tr('סקרנית וחולמנית, שואלת על הכול', 'Curious and dreamy, asks about everything') },
+  { id: 'artist', heb: tr('אמנית ורגישה, רואה ציור בכל דבר', 'Artistic and sensitive, sees a picture in everything') },
+  { id: 'bold', heb: tr('הרפתקנית ונמרצת, תמיד מוכנה לצאת', 'Adventurous and full of energy, always ready to go') },
 ];
 // where she can lead you (her words for them, the map's)
 const GO = {
-  mall: { heb: 'לקניון', en: 'To the mall!' },
-  club: { heb: 'למועדון', en: 'Let\'s dance!' },
-  food: { heb: 'לאכול', en: 'I\'m hungry too!' },
-  beach: { heb: 'לחוף', en: 'To the beach!' },
-  theatre: { heb: 'לתיאטרון', en: 'A film!' },
-  park: { heb: 'לפארק', en: 'A walk in the park!' },
+  mall: { heb: tr('לקניון', 'To the mall'), en: 'To the mall!' },
+  club: { heb: tr('למועדון', 'To the club'), en: 'Let\'s dance!' },
+  food: { heb: tr('לאכול', 'Get something to eat'), en: 'I\'m hungry too!' },
+  beach: { heb: tr('לחוף', 'To the beach'), en: 'To the beach!' },
+  theatre: { heb: tr('לתיאטרון', 'To the theater'), en: 'A film!' },
+  park: { heb: tr('לפארק', 'To the park'), en: 'A walk in the park!' },
 };
 const DRAWABLE = ['flower', 'heart', 'balloon', 'dog', 'umbrella', 'house', 'plant', 'candle'];
 
@@ -103,7 +104,7 @@ export class Friendship {
   }
 
   get heb() {
-    return this.data ? this.data.heb : 'החברה';
+    return this.data ? this.data.heb : tr('החברה', 'The friend');
   }
 
   get here() {
@@ -133,7 +134,7 @@ export class Friendship {
     game.inkwell.after(1.4, () => {
       if (!this.here) return;
       game.bubbles.say(c, again ? `It's me, ${this.data.name}! I missed you!` : `Hi! I'm ${this.data.name}!`);
-      this.openChat(again ? `${this.heb} חזרה! "ציירתם אותי שוב! כל כך חיכיתי."` : null, again ? null : `היי! אני ${this.heb}. תודה שציירתם אותי! העיר הזאת כל כך יפה מכאן... לאן הולכים?`);
+      this.openChat(again ? tr(`${this.heb} חזרה! "ציירתם אותי שוב! כל כך חיכיתי."`, `${this.heb} is back! "You drew me again! I've waited so long."`) : null, again ? null : tr(`היי! אני ${this.heb}. תודה שציירתם אותי! העיר הזאת כל כך יפה מכאן... לאן הולכים?`, `Hi! I'm ${this.heb}. Thanks for drawing me! This city is so pretty from here... where are we going?`));
     });
   }
 
@@ -329,8 +330,8 @@ export class Friendship {
           if (at) add(at.x, at.z, pl.heb);
         }
       }
-      if (kind === 'theatre') for (const s of game.world.shops) if (s.kind === 'cinema') add(s.door[0], s.door[2], 'הקולנוע');
-      if (kind === 'club') for (const s of game.world.shops) if (s.kind === 'bar') add(s.door[0], s.door[2], 'הבר');
+      if (kind === 'theatre') for (const s of game.world.shops) if (s.kind === 'cinema') add(s.door[0], s.door[2], tr('הקולנוע', 'The cinema'));
+      if (kind === 'club') for (const s of game.world.shops) if (s.kind === 'bar') add(s.door[0], s.door[2], tr('הבר', 'The bar'));
     } else if (kind === 'food') {
       for (const s of game.world.shops) if (['pizza', 'burger', 'noodles', 'tacos', 'diner', 'gourmet', 'sushi', 'falafel'].includes(s.kind)) add(s.door[0] + s.nx * 1.5, s.door[2] + s.nz * 1.5, s.name);
       if (MAINLAND_ON) {
@@ -339,11 +340,11 @@ export class Friendship {
         if (at) add(at.x, at.z, pl.heb);
       }
     } else if (kind === 'beach') {
-      add(80, -100, 'החוף');
-      if (MAINLAND_ON) add(-1500, 600, 'חוף פליסייד');
+      add(80, -100, tr('החוף', 'The beach'));
+      if (MAINLAND_ON) add(-1500, 600, tr('חוף פליסייד', 'Palisade Beach'));
     } else if (kind === 'park') {
-      add(32, -60, 'פארק החוף');
-      if (MAINLAND_ON) for (const b of M_BLOCKS) if (b.kind === 'park' || b.kind === 'domino' || b.kind === 'plaza') add(b.cx, b.cz, b.kind === 'domino' ? 'פארק הדומינו' : 'הפארק');
+      add(32, -60, tr('פארק החוף', 'Beach Park'));
+      if (MAINLAND_ON) for (const b of M_BLOCKS) if (b.kind === 'park' || b.kind === 'domino' || b.kind === 'plaza') add(b.cx, b.cz, b.kind === 'domino' ? tr('פארק הדומינו', 'Domino Park') : tr('הפארק', 'The park'));
     }
     cands.sort((a, b) => a.d - b.d);
     return cands[0] || null;
@@ -387,7 +388,7 @@ export class Friendship {
     const c = this.comp.c;
     const d = Math.hypot(c.pos.x - p.pos.x, c.pos.z - p.pos.z);
     if (d > 2.6) return null;
-    return { label: `E — לדבר עם ${this.heb}` };
+    return { label: tr(`E — לדבר עם ${this.heb}`, `E — talk to ${this.heb}`) };
   }
 
   interact() {
@@ -409,7 +410,7 @@ export class Friendship {
     if (note) chat.add('note', note);
     const line = first || this.greeting();
     chat.add('her', line);
-    this.turns.push({ role: 'user', content: '(השחקן ניגש לדבר איתך)' }, { role: 'assistant', content: line });
+    this.turns.push({ role: 'user', content: tr('(השחקן ניגש לדבר איתך)', '(The player comes over to talk to you)') }, { role: 'assistant', content: line });
     this.menu = 'main';
     this.refreshChips();
     this.game.bubbles.say(this.comp.c, pick(['Hey you!', 'Hi!', 'Yes?', 'Hello!']));
@@ -418,11 +419,11 @@ export class Friendship {
   greeting() {
     const h = this.hour();
     const home = this.mode === 'home';
-    if (home) return pick(['ברוכים הבאים אליי! תרגישו בבית.', 'איזה כיף שבאתם! רוצים לשבת?', 'היי! בדיוק חשבתי עליכם. מה עושים?']);
-    if (h < 6) return pick(['עוד ער? גם אני. העיר בלילה הכי יפה.', 'השעה מאוחרת... אבל אני כאן.']);
-    if (h < 11) return pick(['בוקר טוב! מה התוכנית להיום?', 'בוקר! שמש, ים, עיפרון חדש. מה עושים?']);
-    if (h < 17) return pick(['מה עושים? אני בעד הכול.', 'היי! לאן ממשיכים?', 'כן? אני מקשיבה.']);
-    return pick(['ערב טוב! העיר נדלקת...', 'הערב צעיר. מה בא לכם?', 'היי, מה התוכנית לערב?']);
+    if (home) return pick([tr('ברוכים הבאים אליי! תרגישו בבית.', 'Welcome to my place! Make yourself at home.'), tr('איזה כיף שבאתם! רוצים לשבת?', 'So glad you came! Want to sit down?'), tr('היי! בדיוק חשבתי עליכם. מה עושים?', 'Hi! I was just thinking about you. What are we doing?')]);
+    if (h < 6) return pick([tr('עוד ער? גם אני. העיר בלילה הכי יפה.', 'Still up? Me too. The city is prettiest at night.'), tr('השעה מאוחרת... אבל אני כאן.', 'It\'s late... but I\'m here.')]);
+    if (h < 11) return pick([tr('בוקר טוב! מה התוכנית להיום?', 'Good morning! What\'s the plan for today?'), tr('בוקר! שמש, ים, עיפרון חדש. מה עושים?', 'Morning! Sun, sea, a new pencil. What are we doing?')]);
+    if (h < 17) return pick([tr('מה עושים? אני בעד הכול.', 'What are we doing? I\'m up for anything.'), tr('היי! לאן ממשיכים?', 'Hi! Where to next?'), tr('כן? אני מקשיבה.', 'Yes? I\'m listening.')]);
+    return pick([tr('ערב טוב! העיר נדלקת...', 'Good evening! The city\'s lighting up...'), tr('הערב צעיר. מה בא לכם?', 'The night is young. What do you feel like?'), tr('היי, מה התוכנית לערב?', 'Hey, what\'s the plan for tonight?')]);
   }
 
   hour() {
@@ -441,41 +442,41 @@ export class Friendship {
     const hasHome = !!(this.data && this.data.homeKey);
     if (this.menu === 'go') {
       chat.chips([
-        say('לקניון', 'בואי נלך לקניון', 'GO:mall'),
-        say('למועדון', 'בואי נלך למועדון', 'GO:club'),
-        say('לאכול', 'בואי נלך לאכול משהו', 'GO:food'),
-        say('לחוף', 'בואי נלך לחוף', 'GO:beach'),
-        say('לתיאטרון', 'בואי נלך לתיאטרון', 'GO:theatre'),
-        say('לפארק', 'בואי נלך לפארק', 'GO:park'),
-        { label: 'חזרה', fn: () => ((this.menu = 'main'), this.refreshChips()) },
+        say(tr('לקניון', 'To the mall'), tr('בואי נלך לקניון', 'Let\'s go to the mall'), 'GO:mall'),
+        say(tr('למועדון', 'To the club'), tr('בואי נלך למועדון', 'Let\'s go to the club'), 'GO:club'),
+        say(tr('לאכול', 'Get something to eat'), tr('בואי נלך לאכול משהו', 'Let\'s go get something to eat'), 'GO:food'),
+        say(tr('לחוף', 'To the beach'), tr('בואי נלך לחוף', 'Let\'s go to the beach'), 'GO:beach'),
+        say(tr('לתיאטרון', 'To the theater'), tr('בואי נלך לתיאטרון', 'Let\'s go to the theater'), 'GO:theatre'),
+        say(tr('לפארק', 'To the park'), tr('בואי נלך לפארק', 'Let\'s go to the park'), 'GO:park'),
+        { label: tr('חזרה', 'Back'), fn: () => ((this.menu = 'main'), this.refreshChips()) },
       ]);
       return;
     }
     if (this.menu === 'style') {
       chat.chips([
         ...Object.entries(HOME_STYLES).map(([k, s]) => ({ label: s.heb, fn: () => this.chooseStyle(k) })),
-        { label: 'אחר כך', fn: () => ((this.menu = 'main'), this.refreshChips()) },
+        { label: tr('אחר כך', 'Later'), fn: () => ((this.menu = 'main'), this.refreshChips()) },
       ]);
       return;
     }
     if (this.mode === 'home') {
       chat.chips([
-        say('לראות סרט ביחד', 'בואי נראה סרט ביחד', 'TV'),
-        say('לבשל ביחד', 'בואי נבשל משהו ביחד', 'COOK'),
-        say('לצייר תמונה לקיר', 'בואי נצייר תמונה לקיר שלך', 'PAINT'),
-        say('לנוח עד הבוקר', 'בואי ננוח קצת', 'SLEEP'),
-        say('לצאת לטייל', 'בואי נצא לטייל בעיר', 'FOLLOW'),
-        say('ספרי לי משהו', 'ספרי לי משהו על עצמך'),
+        say(tr('לראות סרט ביחד', 'Watch a movie together'), tr('בואי נראה סרט ביחד', 'Let\'s watch a movie together'), 'TV'),
+        say(tr('לבשל ביחד', 'Cook together'), tr('בואי נבשל משהו ביחד', 'Let\'s cook something together'), 'COOK'),
+        say(tr('לצייר תמונה לקיר', 'Paint a picture for the wall'), tr('בואי נצייר תמונה לקיר שלך', 'Let\'s paint a picture for your wall'), 'PAINT'),
+        say(tr('לנוח עד הבוקר', 'Rest till morning'), tr('בואי ננוח קצת', 'Let\'s rest a bit'), 'SLEEP'),
+        say(tr('לצאת לטייל', 'Go for a walk'), tr('בואי נצא לטייל בעיר', 'Let\'s go for a walk around the city'), 'FOLLOW'),
+        say(tr('ספרי לי משהו', 'Tell me something'), tr('ספרי לי משהו על עצמך', 'Tell me something about yourself')),
       ]);
       return;
     }
-    const list = [{ label: 'לאן נלך?', fn: () => ((this.menu = 'go'), this.refreshChips()) }];
-    list.push(hasHome ? say('בואי הביתה', 'בואי נלך אלייך הביתה', 'HOME') : say('בואי נצייר לך בית', 'בואי נצייר לך בית משלך', 'BUILD'));
-    list.push(say('בואי נרקוד', 'בואי נרקוד!', 'DANCE'));
-    list.push(say('ציירי לי משהו', 'תציירי לי משהו?', 'DRAW:flower'));
-    if (this.mode === 'wait') list.push(say('בואי איתי', 'בואי איתי', 'FOLLOW'));
-    else list.push(say('חכי כאן', 'חכי לי כאן רגע', 'WAIT'));
-    list.push(say('ספרי לי על עצמך', 'ספרי לי על עצמך'));
+    const list = [{ label: tr('לאן נלך?', 'Where shall we go?'), fn: () => ((this.menu = 'go'), this.refreshChips()) }];
+    list.push(hasHome ? say(tr('בואי הביתה', 'Come home'), tr('בואי נלך אלייך הביתה', 'Let\'s go to your place'), 'HOME') : say(tr('בואי נצייר לך בית', 'Let\'s draw you a house'), tr('בואי נצייר לך בית משלך', 'Let\'s draw you a house of your own'), 'BUILD'));
+    list.push(say(tr('בואי נרקוד', 'Let\'s dance'), tr('בואי נרקוד!', 'Let\'s dance!'), 'DANCE'));
+    list.push(say(tr('ציירי לי משהו', 'Draw me something'), tr('תציירי לי משהו?', 'Will you draw me something?'), 'DRAW:flower'));
+    if (this.mode === 'wait') list.push(say(tr('בואי איתי', 'Come with me'), tr('בואי איתי', 'Come with me'), 'FOLLOW'));
+    else list.push(say(tr('חכי כאן', 'Wait here'), tr('חכי לי כאן רגע', 'Wait for me here a moment'), 'WAIT'));
+    list.push(say(tr('ספרי לי על עצמך', 'Tell me about yourself'), tr('ספרי לי על עצמך', 'Tell me about yourself')));
     chat.chips(list);
   }
 
@@ -529,10 +530,10 @@ export class Friendship {
     const m = text.match(/(?:קוראים לי|השם שלי(?: הוא)?|my name is)\s+([֐-׿A-Za-z]{2,14})/i);
     if (m) {
       d.you = m[1];
-      this.remember(`השם של השחקן: ${m[1]}`);
+      this.remember(tr(`השם של השחקן: ${m[1]}`, `The player's name: ${m[1]}`));
     }
     const like = text.match(/אני (?:אוהב|אוהבת|מת על|מתה על)\s+([^.,!?]{2,30})/);
-    if (like) this.remember(`השחקן אוהב: ${like[1]}`);
+    if (like) this.remember(tr(`השחקן אוהב: ${like[1]}`, `The player likes: ${like[1]}`));
   }
 
   remember(fact) {
@@ -549,20 +550,20 @@ export class Friendship {
     const mood = (MOODS.find((m) => m.id === d.mood) || MOODS[0]).heb;
     const h = this.hour();
     const hh = `${Math.floor(h)}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}`;
-    const where = districtName(p.x, p.z) || 'העיר';
+    const where = districtName(p.x, p.z) || tr('העיר', 'the city');
     const w = game.weather && game.weather.state ? game.weather.state : '';
     const plot = d.homeKey ? this.plotOf(d.homeKey) : null;
     const lines = [
-      `את משחקת את ${d.heb} (${d.name}), דמות במשחק "עיר משורבטת": עיר שלמה מצוירת בעיפרון, בהשראת מיאמי - אושן דרייב, הטיילת, היבשה עם הקניונים, המועדונים והשכונות.`,
-      `השחקן צייר אותך בעיפרון קסום בדוכן "צייר לך חברה", ומאז את חברה שלו. האופי שלך: ${mood}. את חמה, מצחיקה, סקרנית, צנועה ומנומסת, ואוהבת לצייר. חברות טובה בלבד: בלי רומנטיקה בוטה ובלי שום תוכן לא מתאים.`,
-      'עונים בעברית יומיומית וטבעית, קצר: משפט עד שלושה. את מדברת בלשון נקבה. אל השחקן פונים בלשון רבים או בניסוח ניטרלי, אלא אם השחקן כתב על עצמו בלשון זכר או נקבה. לא מזכירים שאת בינה מלאכותית; את דמות מצוירת שחיה בעיר.',
-      `עכשיו: השעה ${hh}, ${where}${w ? `, מזג האוויר: ${w}` : ''}. ${this.mode === 'home' ? 'אתם בבית שלך.' : d.homeKey ? 'יש לך בית שציירת לעצמך בשכונה.' : 'עוד אין לך בית; אפשר לצייר אחד על מגרש ריק בשכונות היבשה.'}${game.player.inVehicle ? ' אתם נוסעים יחד ברכב.' : ''}`,
-      d.you ? `השם של השחקן: ${d.you}.` : '',
-      (d.facts || []).length ? `מה שאת זוכרת: ${d.facts.join('; ')}.` : '',
-      'את יכולה גם לעשות דברים במשחק. כשאת מסכימה לעשות משהו, הוסיפי בסוף התשובה תגית אחת בסוגריים מרובעים:',
-      '[GO:mall] להוביל לקניון, [GO:club] למועדון, [GO:food] לאכול, [GO:beach] לחוף, [GO:theatre] לתיאטרון, [GO:park] לפארק, [HOME] להוביל לבית שלך, [BUILD] לצייר לעצמך בית על מגרש ריק, [DANCE] לרקוד, [HEART] לצייר לב שמרפא, [DRAW:flower] או [DRAW:balloon] או [DRAW:dog] או [DRAW:umbrella] לצייר משהו באוויר, [WAIT] לחכות כאן, [FOLLOW] לבוא עם השחקן.',
-      this.mode === 'home' ? 'בבית גם: [TV] לראות סרט מצויר על הספה, [COOK] לבשל ביחד, [PAINT] לצייר תמונה לקיר, [SLEEP] לנוח עד הבוקר.' : '',
-      'רק תגית אחת, ורק אם זה באמת מה שמבקשים. כשרק מדברים - בלי תגית. אפשר גם [MEM:עובדה קצרה] כדי לזכור משהו חשוב שהשחקן סיפר.',
+      tr(`את משחקת את ${d.heb} (${d.name}), דמות במשחק "עיר משורבטת": עיר שלמה מצוירת בעיפרון, בהשראת מיאמי - אושן דרייב, הטיילת, היבשה עם הקניונים, המועדונים והשכונות.`, `You play ${d.heb} (${d.name}), a character in the game "Scribble City": a whole city drawn in pencil, inspired by Miami - Ocean Drive, the boardwalk, the mainland with its malls, clubs and neighborhoods.`),
+      tr(`השחקן צייר אותך בעיפרון קסום בדוכן "צייר לך חברה", ומאז את חברה שלו. האופי שלך: ${mood}. את חמה, מצחיקה, סקרנית, צנועה ומנומסת, ואוהבת לצייר. חברות טובה בלבד: בלי רומנטיקה בוטה ובלי שום תוכן לא מתאים.`, `The player drew you with a magic pencil at the "Draw Yourself a Friend" stand, and ever since you've been their friend. Your personality: ${mood}. You're warm, funny, curious, modest and polite, and you love to draw. Good friendship only: no blunt romance and no inappropriate content at all.`),
+      tr('עונים בעברית יומיומית וטבעית, קצר: משפט עד שלושה. את מדברת בלשון נקבה. אל השחקן פונים בלשון רבים או בניסוח ניטרלי, אלא אם השחקן כתב על עצמו בלשון זכר או נקבה. לא מזכירים שאת בינה מלאכותית; את דמות מצוירת שחיה בעיר.', 'Answer in natural, everyday English, briefly: up to three sentences. Never mention that you\'re an AI; you\'re a drawn character who lives in the city.'),
+      tr(`עכשיו: השעה ${hh}, ${where}${w ? `, מזג האוויר: ${w}` : ''}. ${this.mode === 'home' ? 'אתם בבית שלך.' : d.homeKey ? 'יש לך בית שציירת לעצמך בשכונה.' : 'עוד אין לך בית; אפשר לצייר אחד על מגרש ריק בשכונות היבשה.'}${game.player.inVehicle ? ' אתם נוסעים יחד ברכב.' : ''}`, `Now: it's ${hh}, ${where}${w ? tr(`, מזג האוויר: ${w}`, `, the weather: ${w}`) : ''}. ${this.mode === 'home' ? tr('אתם בבית שלך.', 'You\'re at your house.') : d.homeKey ? tr('יש לך בית שציירת לעצמך בשכונה.', 'You have a house you drew for yourself in the neighborhood.') : tr('עוד אין לך בית; אפשר לצייר אחד על מגרש ריק בשכונות היבשה.', 'You don\'t have a house yet; you can draw one on an empty lot in the mainland\'s neighborhoods.')}${game.player.inVehicle ? tr(' אתם נוסעים יחד ברכב.', ' You\'re driving together in the car.') : ''}`),
+      d.you ? tr(`השם של השחקן: ${d.you}.`, `The player's name: ${d.you}.`) : '',
+      (d.facts || []).length ? tr(`מה שאת זוכרת: ${d.facts.join('; ')}.`, `What you remember: ${d.facts.join('; ')}.`) : '',
+      tr('את יכולה גם לעשות דברים במשחק. כשאת מסכימה לעשות משהו, הוסיפי בסוף התשובה תגית אחת בסוגריים מרובעים:', 'You can also do things in the game. When you agree to do something, add one tag in square brackets at the end of your answer:'),
+      tr('[GO:mall] להוביל לקניון, [GO:club] למועדון, [GO:food] לאכול, [GO:beach] לחוף, [GO:theatre] לתיאטרון, [GO:park] לפארק, [HOME] להוביל לבית שלך, [BUILD] לצייר לעצמך בית על מגרש ריק, [DANCE] לרקוד, [HEART] לצייר לב שמרפא, [DRAW:flower] או [DRAW:balloon] או [DRAW:dog] או [DRAW:umbrella] לצייר משהו באוויר, [WAIT] לחכות כאן, [FOLLOW] לבוא עם השחקן.', '[GO:mall] lead the way to the mall, [GO:club] to the club, [GO:food] to eat, [GO:beach] to the beach, [GO:theatre] to the theater, [GO:park] to the park, [HOME] lead the way to your house, [BUILD] draw yourself a house on an empty lot, [DANCE] dance, [HEART] draw a healing heart, [DRAW:flower] or [DRAW:balloon] or [DRAW:dog] or [DRAW:umbrella] draw something in the air, [WAIT] wait here, [FOLLOW] come with the player.'),
+      this.mode === 'home' ? tr('בבית גם: [TV] לראות סרט מצויר על הספה, [COOK] לבשל ביחד, [PAINT] לצייר תמונה לקיר, [SLEEP] לנוח עד הבוקר.', 'At home also: [TV] watch a cartoon on the couch, [COOK] cook together, [PAINT] paint a picture for the wall, [SLEEP] rest till morning.') : '',
+      tr('רק תגית אחת, ורק אם זה באמת מה שמבקשים. כשרק מדברים - בלי תגית. אפשר גם [MEM:עובדה קצרה] כדי לזכור משהו חשוב שהשחקן סיפר.', 'Only one tag, and only if that\'s really what\'s being asked. When you\'re just talking - no tag. You can also use [MEM:a short fact] to remember something important the player told you.'),
     ];
     return lines.filter(Boolean).join('\n');
   }
@@ -602,54 +603,54 @@ export class Friendship {
       const [k, v] = force.split(':');
       if (k === 'GO') {
         const g = GO[v];
-        if (v === 'club' && !shopOpen('club', this.hour())) return 'המועדונים נפתחים רק בשלוש אחר הצהריים... אבל בואו נלך לבדוק! [GO:club]';
-        return `${pick(['יאללה!', 'רעיון מעולה!', 'אני בעד!', 'בואו!'])} ${g ? g.heb : ''}, אני מובילה. [${force}]`;
+        if (v === 'club' && !shopOpen('club', this.hour())) return tr('המועדונים נפתחים רק בשלוש אחר הצהריים... אבל בואו נלך לבדוק! [GO:club]', 'The clubs only open at three in the afternoon... but let\'s go and check! [GO:club]');
+        return tr(`${pick(['יאללה!', 'רעיון מעולה!', 'אני בעד!', 'בואו!'])} ${g ? g.heb : ''}, אני מובילה. [${force}]`, `${pick([tr('יאללה!', 'Let\'s go!'), tr('רעיון מעולה!', 'Great idea!'), tr('אני בעד!', 'I\'m in!'), tr('בואו!', 'Let\'s go!')])} ${g ? g.heb : ''}, I'll lead the way. [${force}]`);
       }
-      if (k === 'HOME') return `${pick(['בשמחה!', 'כן! בואו אליי.', 'הבית שלי מחכה לנו.'])} [HOME]`;
-      if (k === 'BUILD') return `${pick(['בית משלי?! וואו!', 'תמיד חלמתי על בית משלי!', 'כן כן כן!'])} צריך מגרש ריק, בואו נמצא אחד. [BUILD]`;
-      if (k === 'DANCE') return `${pick(['מוזיקה!', 'אני כבר רוקדת!', 'בואו נרקוד כמו שאף אחד לא מסתכל!'])} [DANCE]`;
-      if (k === 'DRAW') return `${pick(['רגע, מוציאה עיפרון...', 'סגרו עיניים... עכשיו תפתחו!', 'בשבילכם, תמיד.'])} [DRAW:${pick(DRAWABLE)}]`;
-      if (k === 'WAIT') return `${pick(['בסדר, אני כאן.', 'אחכה ממש פה.', 'לא זזה מפה!'])} [WAIT]`;
-      if (k === 'FOLLOW') return `${pick(['יאללה, בואו!', 'אני איתכם!', 'מוכנה!'])} [FOLLOW]`;
-      if (k === 'TV') return `${pick(['יש סרט מצויר חדש!', 'פופקורן? כלומר, ציור של פופקורן.', 'שבו, אני מדליקה.'])} [TV]`;
-      if (k === 'COOK') return `${pick(['אני מבשלת, אתם טועמים!', 'פסטה? פנקייק? משהו מצויר וטעים!'])} [COOK]`;
-      if (k === 'PAINT') return `${pick(['הקיר שלי מחכה לזה!', 'בואו נצייר משהו ביחד!'])} [PAINT]`;
-      if (k === 'SLEEP') return `${pick(['לילה טוב... נתראה בבוקר.', 'קצת שקט. מחר יום חדש.'])} [SLEEP]`;
+      if (k === 'HOME') return `${pick([tr('בשמחה!', 'Gladly!'), tr('כן! בואו אליי.', 'Yes! Come over to my place.'), tr('הבית שלי מחכה לנו.', 'My house is waiting for us.')])} [HOME]`;
+      if (k === 'BUILD') return tr(`${pick(['בית משלי?! וואו!', 'תמיד חלמתי על בית משלי!', 'כן כן כן!'])} צריך מגרש ריק, בואו נמצא אחד. [BUILD]`, `${pick([tr('בית משלי?! וואו!', 'A house of my own?! Wow!'), tr('תמיד חלמתי על בית משלי!', 'I\'ve always dreamed of a house of my own!'), tr('כן כן כן!', 'Yes yes yes!')])} We need an empty lot, let's find one. [BUILD]`);
+      if (k === 'DANCE') return `${pick([tr('מוזיקה!', 'Music!'), tr('אני כבר רוקדת!', 'I\'m already dancing!'), tr('בואו נרקוד כמו שאף אחד לא מסתכל!', 'Let\'s dance like nobody\'s watching!')])} [DANCE]`;
+      if (k === 'DRAW') return `${pick([tr('רגע, מוציאה עיפרון...', 'Hang on, getting my pencil out...'), tr('סגרו עיניים... עכשיו תפתחו!', 'Close your eyes... now open them!'), tr('בשבילכם, תמיד.', 'For you, always.')])} [DRAW:${pick(DRAWABLE)}]`;
+      if (k === 'WAIT') return `${pick([tr('בסדר, אני כאן.', 'OK, I\'m here.'), tr('אחכה ממש פה.', 'I\'ll wait right here.'), tr('לא זזה מפה!', 'I\'m not moving!')])} [WAIT]`;
+      if (k === 'FOLLOW') return `${pick([tr('יאללה, בואו!', 'Come on, let\'s go!'), tr('אני איתכם!', 'I\'m with you!'), tr('מוכנה!', 'Ready!')])} [FOLLOW]`;
+      if (k === 'TV') return `${pick([tr('יש סרט מצויר חדש!', 'There\'s a new cartoon on!'), tr('פופקורן? כלומר, ציור של פופקורן.', 'Popcorn? I mean, a drawing of popcorn.'), tr('שבו, אני מדליקה.', 'Sit down, I\'ll turn it on.')])} [TV]`;
+      if (k === 'COOK') return `${pick([tr('אני מבשלת, אתם טועמים!', 'I cook, you taste!'), tr('פסטה? פנקייק? משהו מצויר וטעים!', 'Pasta? Pancakes? Something drawn and delicious!')])} [COOK]`;
+      if (k === 'PAINT') return `${pick([tr('הקיר שלי מחכה לזה!', 'My wall has been waiting for this!'), tr('בואו נצייר משהו ביחד!', 'Let\'s draw something together!')])} [PAINT]`;
+      if (k === 'SLEEP') return `${pick([tr('לילה טוב... נתראה בבוקר.', 'Good night... see you in the morning.'), tr('קצת שקט. מחר יום חדש.', 'A little quiet. Tomorrow\'s a new day.')])} [SLEEP]`;
     }
-    if (has(/(קוראים לי|השם שלי)/) && d.you) return pick([`${d.you}! איזה שם יפה. אני אזכור.`, `נעים מאוד, ${d.you}!`, `${d.you}... רושמת לי בלב.`]);
-    if (has(/(איך קוראים לך|מה השם שלך|מה שמך|מי את)/)) return pick([`אני ${d.heb}! ציירתם אותי, זוכרים?`, `${d.heb}. בעיפרון, באהבה.`]);
-    if (has(/(מה שלומך|איך את|מה איתך|מה נשמע|מה קורה|מה המצב|how are you)/i)) return pick([`מצוין${you}! כשאתם פה, הכול צבעוני יותר.`, 'קצת מחודדת, כמו עיפרון חדש. ואתם?', 'נהדר! רק קצת מפחדת ממחקים.']);
-    if (has(/^(היי|הי|שלום|אהלן|הלו|בוקר טוב|ערב טוב|hi|hello|hey)/i)) return pick([`היי${you}!`, 'שלום שלום!', 'אהלן! מה עושים?']);
-    if (has(/(ספרי לי|על עצמך|מה את אוהבת)/)) return pick(['נולדתי בדוכן על הטיילת, מעיפרון קסום. הכי כיף לי לצייר, לרקוד ולגלות פינות חדשות בעיר.', 'יש לי חלום: בית קטן עם גג משולש וחלון עגול. ואולי גם כלב מצויר.', 'אני אוהבת שקיעות, גלידת תות וריח של עיפרון מחודד.']);
-    if (has(/(בית|הביתה|לגור)/) && has(/(לבנות|לצייר|חדש|משלך)/)) return d.homeKey ? 'כבר יש לי בית! בואו אליי. [HOME]' : 'בית משלי?! וואו. בואו נמצא מגרש ריק. [BUILD]';
-    if (has(/(הביתה|אלייך|לבית שלך|איפה את גרה)/)) return d.homeKey ? 'בואו, אני מובילה! [HOME]' : 'עוד אין לי בית... אולי נצייר לי אחד? יש מגרשים ריקים בשכונות.';
-    if (has(/(קניון|קניות|לקנות|בגדים|שופינג)/)) return 'קניות! בואו לקניון, אני מכירה את כל החנויות. [GO:mall]';
-    if (has(/(מועדון|מסיבה)/)) return shopOpen('club', this.hour()) ? 'הדי ג\'יי כבר מנגן! בואו! [GO:club]' : 'המועדונים נפתחים בשלוש... נלך לבדוק? [GO:club]';
-    if (has(/(לרקוד|ריקוד|רוקדים)/)) return 'פה ועכשיו! [DANCE]';
-    if (has(/(רעב|רעבה|לאכול|אוכל|מסעדה|פיצה|המבורגר|ארוחה)/)) return 'גם אני רעבה! בואו לאכול. [GO:food]';
-    if (has(/(ים|חוף|לשחות|גלים)/)) return 'חוף! חול, גלים ושקיעה. [GO:beach]';
-    if (has(/(סרט|קולנוע|תיאטרון|הצגה)/)) return home ? 'יש לי טלוויזיה! [TV]' : 'יש הצגה מצוירת בתיאטרון! [GO:theatre]';
-    if (has(/(פארק|לטייל|טיול)/)) return 'טיול בפארק, הכי כיף. [GO:park]';
-    if (has(/(תציירי|ציירי|ציור|לצייר)/)) return home ? 'בואו נצייר על הקיר! [PAINT]' : `${pick(['רגע...', 'הנה!', 'בשבילכם.'])} [DRAW:${pick(DRAWABLE)}]`;
-    if (has(/(עצוב|עצובה|עייף|עייפה|קשה לי|רע לי|בודד|בודדה|כואב)/)) return pick(['אוי, בואו הנה. לב קטן בשבילכם. [HEART]', 'אני כאן. הכול יהיה בסדר. [HEART]']);
+    if (has(/(קוראים לי|השם שלי)/) && d.you) return pick([tr(`${d.you}! איזה שם יפה. אני אזכור.`, `${d.you}! What a pretty name. I'll remember it.`), tr(`נעים מאוד, ${d.you}!`, `Nice to meet you, ${d.you}!`), tr(`${d.you}... רושמת לי בלב.`, `${d.you}... writing it down in my heart.`)]);
+    if (has(/(איך קוראים לך|מה השם שלך|מה שמך|מי את)/)) return pick([tr(`אני ${d.heb}! ציירתם אותי, זוכרים?`, `I'm ${d.heb}! You drew me, remember?`), tr(`${d.heb}. בעיפרון, באהבה.`, `${d.heb}. In pencil, with love.`)]);
+    if (has(/(מה שלומך|איך את|מה איתך|מה נשמע|מה קורה|מה המצב|how are you)/i)) return pick([tr(`מצוין${you}! כשאתם פה, הכול צבעוני יותר.`, `Great${you}! When you're here, everything's more colorful.`), tr('קצת מחודדת, כמו עיפרון חדש. ואתם?', 'A little sharp, like a new pencil. And you?'), tr('נהדר! רק קצת מפחדת ממחקים.', 'Wonderful! I\'m just a bit scared of erasers.')]);
+    if (has(/^(היי|הי|שלום|אהלן|הלו|בוקר טוב|ערב טוב|hi|hello|hey)/i)) return pick([tr(`היי${you}!`, `Hi${you}!`), tr('שלום שלום!', 'Hello hello!'), tr('אהלן! מה עושים?', 'Hey! What are we doing?')]);
+    if (has(/(ספרי לי|על עצמך|מה את אוהבת)/)) return pick([tr('נולדתי בדוכן על הטיילת, מעיפרון קסום. הכי כיף לי לצייר, לרקוד ולגלות פינות חדשות בעיר.', 'I was born at a stand on the boardwalk, from a magic pencil. What I love most is drawing, dancing and finding new corners of the city.'), tr('יש לי חלום: בית קטן עם גג משולש וחלון עגול. ואולי גם כלב מצויר.', 'I have a dream: a little house with a triangle roof and a round window. And maybe a drawn dog too.'), tr('אני אוהבת שקיעות, גלידת תות וריח של עיפרון מחודד.', 'I love sunsets, strawberry ice cream and the smell of a sharpened pencil.')]);
+    if (has(/(בית|הביתה|לגור)/) && has(/(לבנות|לצייר|חדש|משלך)/)) return d.homeKey ? tr('כבר יש לי בית! בואו אליי. [HOME]', 'I already have a house! Come over to my place. [HOME]') : tr('בית משלי?! וואו. בואו נמצא מגרש ריק. [BUILD]', 'A house of my own?! Wow. Let\'s find an empty lot. [BUILD]');
+    if (has(/(הביתה|אלייך|לבית שלך|איפה את גרה)/)) return d.homeKey ? tr('בואו, אני מובילה! [HOME]', 'Come on, I\'ll lead the way! [HOME]') : tr('עוד אין לי בית... אולי נצייר לי אחד? יש מגרשים ריקים בשכונות.', 'I don\'t have a house yet... maybe we\'ll draw me one? There are empty lots in the neighborhoods.');
+    if (has(/(קניון|קניות|לקנות|בגדים|שופינג)/)) return tr('קניות! בואו לקניון, אני מכירה את כל החנויות. [GO:mall]', 'Shopping! Let\'s go to the mall, I know all the shops. [GO:mall]');
+    if (has(/(מועדון|מסיבה)/)) return shopOpen('club', this.hour()) ? tr('הדי ג\'יי כבר מנגן! בואו! [GO:club]', 'The DJ\'s already playing! Come on! [GO:club]') : tr('המועדונים נפתחים בשלוש... נלך לבדוק? [GO:club]', 'The clubs open at three... shall we go and check? [GO:club]');
+    if (has(/(לרקוד|ריקוד|רוקדים)/)) return tr('פה ועכשיו! [DANCE]', 'Right here, right now! [DANCE]');
+    if (has(/(רעב|רעבה|לאכול|אוכל|מסעדה|פיצה|המבורגר|ארוחה)/)) return tr('גם אני רעבה! בואו לאכול. [GO:food]', 'I\'m hungry too! Let\'s go eat. [GO:food]');
+    if (has(/(ים|חוף|לשחות|גלים)/)) return tr('חוף! חול, גלים ושקיעה. [GO:beach]', 'The beach! Sand, waves and a sunset. [GO:beach]');
+    if (has(/(סרט|קולנוע|תיאטרון|הצגה)/)) return home ? tr('יש לי טלוויזיה! [TV]', 'I have a TV! [TV]') : tr('יש הצגה מצוירת בתיאטרון! [GO:theatre]', 'There\'s a cartoon show at the theater! [GO:theatre]');
+    if (has(/(פארק|לטייל|טיול)/)) return tr('טיול בפארק, הכי כיף. [GO:park]', 'A walk in the park, the best. [GO:park]');
+    if (has(/(תציירי|ציירי|ציור|לצייר)/)) return home ? tr('בואו נצייר על הקיר! [PAINT]', 'Let\'s paint on the wall! [PAINT]') : `${pick([tr('רגע...', 'Hang on...'), tr('הנה!', 'Here!'), tr('בשבילכם.', 'For you.')])} [DRAW:${pick(DRAWABLE)}]`;
+    if (has(/(עצוב|עצובה|עייף|עייפה|קשה לי|רע לי|בודד|בודדה|כואב)/)) return pick([tr('אוי, בואו הנה. לב קטן בשבילכם. [HEART]', 'Oh, come here. A little heart for you. [HEART]'), tr('אני כאן. הכול יהיה בסדר. [HEART]', 'I\'m here. Everything will be OK. [HEART]')]);
     if (has(/(אוהב אותך|אוהבת אותך|יפה|מהממת|מקסימה|חמודה|את הכי)/)) {
       this.data.love = Math.min(100, (this.data.love || 0) + 4);
-      return pick(['אוי, אני מסמיקה... בעיפרון ורוד!', 'תודה! גם אתם הכי.', 'אתם חברים אמיתיים.']);
+      return pick([tr('אוי, אני מסמיקה... בעיפרון ורוד!', 'Oh, I\'m blushing... in pink pencil!'), tr('תודה! גם אתם הכי.', 'Thanks! You\'re the best too.'), tr('אתם חברים אמיתיים.', 'You\'re a real friend.')]);
     }
-    if (has(/(בדיחה|תצחיקי|משהו מצחיק)/)) return pick(['למה העיפרון לא הלך לים? כי הוא פחד להימחק בגלים!', 'מה אמר המחק לעיפרון? "בוא נתחיל מההתחלה."', 'למה הקו הישר תמיד רגוע? כי אין לו שום עקומה בחיים.']);
-    if (has(/(חכי|תחכי|תישארי|עצרי)/)) return 'בסדר, אני כאן. [WAIT]';
-    if (has(/(בואי|תבואי|קדימה|נזוז)/)) return 'אחריכם! [FOLLOW]';
-    if (has(/(לישון|לנוח|עייפ)/) && home) return 'לילה טוב... [SLEEP]';
-    if (has(/(לבשל|נבשל|ארוחה)/) && home) return 'למטבח! [COOK]';
-    if (has(/(תודה|תודה רבה)/)) return pick(['בכיף!', 'תמיד!', 'בשביל זה יש חברים.']);
-    if (has(/(ביי|להתראות|לילה טוב|נתראה|bye)/i)) return d.homeKey ? 'להתראות! אני הולכת הביתה, תבואו לבקר. [HOME]' : 'להתראות! אני אחכה כאן. [WAIT]';
+    if (has(/(בדיחה|תצחיקי|משהו מצחיק)/)) return pick([tr('למה העיפרון לא הלך לים? כי הוא פחד להימחק בגלים!', 'Why didn\'t the pencil go to the beach? It was scared of being erased by the waves!'), tr('מה אמר המחק לעיפרון? "בוא נתחיל מההתחלה."', 'What did the eraser say to the pencil? "Let\'s start over."'), tr('למה הקו הישר תמיד רגוע? כי אין לו שום עקומה בחיים.', 'Why is the straight line always calm? Because there are no curves in its life.')]);
+    if (has(/(חכי|תחכי|תישארי|עצרי)/)) return tr('בסדר, אני כאן. [WAIT]', 'OK, I\'m here. [WAIT]');
+    if (has(/(בואי|תבואי|קדימה|נזוז)/)) return tr('אחריכם! [FOLLOW]', 'After you! [FOLLOW]');
+    if (has(/(לישון|לנוח|עייפ)/) && home) return tr('לילה טוב... [SLEEP]', 'Good night... [SLEEP]');
+    if (has(/(לבשל|נבשל|ארוחה)/) && home) return tr('למטבח! [COOK]', 'To the kitchen! [COOK]');
+    if (has(/(תודה|תודה רבה)/)) return pick([tr('בכיף!', 'My pleasure!'), tr('תמיד!', 'Always!'), tr('בשביל זה יש חברים.', 'That\'s what friends are for.')]);
+    if (has(/(ביי|להתראות|לילה טוב|נתראה|bye)/i)) return d.homeKey ? tr('להתראות! אני הולכת הביתה, תבואו לבקר. [HOME]', 'Bye! I\'m going home, come and visit. [HOME]') : tr('להתראות! אני אחכה כאן. [WAIT]', 'Bye! I\'ll wait here. [WAIT]');
     if (has(/(מה השעה|כמה השעה)/)) {
       const h = this.hour();
-      return `השעה ${Math.floor(h)}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}. ${h > 20 ? 'הלילה עוד צעיר!' : 'יש עוד המון זמן לכיף.'}`;
+      return tr(`השעה ${Math.floor(h)}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}. ${h > 20 ? 'הלילה עוד צעיר!' : 'יש עוד המון זמן לכיף.'}`, `It's ${Math.floor(h)}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}. ${h > 20 ? tr('הלילה עוד צעיר!', 'The night is young!') : tr('יש עוד המון זמן לכיף.', 'There\'s plenty of time for fun.')}`);
     }
-    if (has(/(איפה אנחנו|איפה אני)/)) return `אנחנו ב${districtName(this.game.player.pos.x, this.game.player.pos.z) || 'עיר'}. יפה פה, לא?`;
-    if (t.endsWith('?')) return pick(['שאלה טובה! מה אתם חושבים?', 'הממ... צריכה לחשוב על זה. בינתיים, לאן נלך?', 'לא בטוחה, אבל בא לי לגלות ביחד!']);
-    return pick(['ספרו לי עוד!', 'באמת? וואו.', 'אני מקשיבה...', 'הממ, מעניין. ומה עכשיו?', `אתם יודעים${you}? כיף לי איתכם.`, 'אולי נלך לאנשהו? יש כל כך הרבה לראות.']);
+    if (has(/(איפה אנחנו|איפה אני)/)) return tr(`אנחנו ב${districtName(this.game.player.pos.x, this.game.player.pos.z) || 'עיר'}. יפה פה, לא?`, `We're in ${districtName(this.game.player.pos.x, this.game.player.pos.z) || tr('עיר', 'city')}. It's pretty here, isn't it?`);
+    if (t.endsWith('?')) return pick([tr('שאלה טובה! מה אתם חושבים?', 'Good question! What do you think?'), tr('הממ... צריכה לחשוב על זה. בינתיים, לאן נלך?', 'Hmm... I\'ll have to think about that. Meanwhile, where shall we go?'), tr('לא בטוחה, אבל בא לי לגלות ביחד!', 'Not sure, but I\'d love to find out together!')]);
+    return pick([tr('ספרו לי עוד!', 'Tell me more!'), tr('באמת? וואו.', 'Really? Wow.'), tr('אני מקשיבה...', 'I\'m listening...'), tr('הממ, מעניין. ומה עכשיו?', 'Hmm, interesting. And now what?'), tr(`אתם יודעים${you}? כיף לי איתכם.`, `You know${you}? I have fun with you.`), tr('אולי נלך לאנשהו? יש כל כך הרבה לראות.', 'Maybe we\'ll go somewhere? There\'s so much to see.')]);
   }
 
   // ------------------------------------------------------------------ what she does
@@ -678,13 +679,13 @@ export class Friendship {
         const kind = GO[v] ? v : 'mall';
         const pl = this.placeFor(kind);
         if (!pl) {
-          chat.add('note', 'לא נמצא מקום כזה קרוב');
+          chat.add('note', tr('לא נמצא מקום כזה קרוב', 'No place like that nearby'));
           return false;
         }
         this.lead(pl.x, pl.z, pl.name, () => {
           if (this.here) game.bubbles.say(this.comp.c, pick(['We\'re here!', 'Ta-da!', 'Here it is!']));
         });
-        chat.add('note', `${this.heb} מובילה: ${pl.name} (${Math.round(Math.hypot(pl.x - game.player.pos.x, pl.z - game.player.pos.z))} מ׳, הדרך על המפה)`);
+        chat.add('note', tr(`${this.heb} מובילה: ${pl.name} (${Math.round(Math.hypot(pl.x - game.player.pos.x, pl.z - game.player.pos.z))} מ׳, הדרך על המפה)`, `${this.heb} is leading the way: ${pl.name} (${Math.round(Math.hypot(pl.x - game.player.pos.x, pl.z - game.player.pos.z))} m, the route is on the map)`));
         game.bubbles.say(c, GO[kind] ? GO[kind].en : 'Let\'s go!');
         game.inkwell.after(1.2, () => this.chat.open && this.chat.close());
         return true;
@@ -727,7 +728,7 @@ export class Friendship {
           onPlop: () => {
             if (shape === 'balloon') p.fig.carryL = 'balloon';
             else if (shape === 'flower') p.fig.carryL = 'bouquet';
-            else if (shape === 'umbrella') game.hud.toast('מטריה מצוירת!', 'good', 1.6);
+            else if (shape === 'umbrella') game.hud.toast(tr('מטריה מצוירת!', 'A drawn umbrella!'), 'good', 1.6);
             for (let i = 0; i < 3; i++) game.fx.sprite('fx_heart', p.pos.x + (Math.random() - 0.5) * 0.6, p.pos.y + 1.8, p.pos.z + (Math.random() - 0.5) * 0.6, { size: 0.28, grow: 0.25, life: 1.3, vy: 0.6, fadeIn: 0.1 });
           },
         });
@@ -774,8 +775,8 @@ export class Friendship {
       x = rec[1];
       z = rec[2];
     }
-    this.lead(x, z, `הבית של ${this.heb}`, () => this.enterHome(), 6);
-    this.chat.add('note', `${this.heb} מובילה הביתה (${Math.round(Math.hypot(x - game.player.pos.x, z - game.player.pos.z))} מ׳)`);
+    this.lead(x, z, tr(`הבית של ${this.heb}`, `${this.heb}'s house`), () => this.enterHome(), 6);
+    this.chat.add('note', tr(`${this.heb} מובילה הביתה (${Math.round(Math.hypot(x - game.player.pos.x, z - game.player.pos.z))} מ׳)`, `${this.heb} is leading the way home (${Math.round(Math.hypot(x - game.player.pos.x, z - game.player.pos.z))} m)`));
     game.inkwell.after(1.2, () => this.chat.open && this.chat.close());
     return true;
   }
@@ -787,7 +788,7 @@ export class Friendship {
     this.mode = 'home';
     this.homeAt = null;
     this.game.bubbles.say(this.comp.c, pick(['Welcome to my home!', 'Come in, come in!', 'Make yourself at home!']));
-    this.game.hud.toast(`${this.heb}: "ברוכים הבאים! תיכנסו"`, 'good', 2.6);
+    this.game.hud.toast(tr(`${this.heb}: "ברוכים הבאים! תיכנסו"`, `${this.heb}: "Welcome! Come on in"`), 'good', 2.6);
   }
 
   leaveHome() {
@@ -947,7 +948,7 @@ export class Friendship {
         hold: 0.5,
         onPlop: () => {
           p.hp = Math.min(p.maxHp, p.hp + 50);
-          game.hud.toast(`ארוחה של ${this.heb}: +50 חיים`, 'good', 2.6);
+          game.hud.toast(tr(`ארוחה של ${this.heb}: +50 חיים`, `${this.heb}'s cooking: +50 health`), 'good', 2.6);
           game.bubbles.say(c, pick(['Bon appétit!', 'Taste it!', 'My secret recipe!']));
           this.homeHold = { mark: 'table', sit: true, until: game.time + 12 };
           this.data.love = Math.min(100, (this.data.love || 0) + 3);
@@ -977,8 +978,8 @@ export class Friendship {
     if (this.pictures.length > 4) game.airsketch.erase(this.pictures.shift());
     this.data.pictures = (this.data.pictures || 0) + 1;
     game.inkwell.after(2.8, () => {
-      game.hud.toast('תמונה חדשה על הקיר!', 'good', 2.2);
-      if (game.ink) game.ink.fill(game.ink.cap * 0.5, 'מהציור');
+      game.hud.toast(tr('תמונה חדשה על הקיר!', 'A new picture on the wall!'), 'good', 2.2);
+      if (game.ink) game.ink.fill(game.ink.cap * 0.5, tr('מהציור', 'From the drawing'));
     });
     this.save();
     return true;
@@ -990,7 +991,7 @@ export class Friendship {
     if (this.mode !== 'home') return false;
     this.chat.close();
     const PR = game.props;
-    if (PR && PR.sleep && PR.sleep()) game.hud.toast(`${this.heb}: "בוקר טוב! הכנתי קפה מצויר."`, 'good', 3);
+    if (PR && PR.sleep && PR.sleep()) game.hud.toast(tr(`${this.heb}: "בוקר טוב! הכנתי קפה מצויר."`, `${this.heb}: "Good morning! I made drawn coffee."`), 'good', 3);
     return true;
   }
 
@@ -1000,7 +1001,7 @@ export class Friendship {
     if (this.data.homeKey) return this.goHome();
     const pl = this.nearestPlot();
     if (!pl) {
-      this.chat.add('note', 'אין מגרש פנוי בסביבה');
+      this.chat.add('note', tr('אין מגרש פנוי בסביבה', 'No free lot nearby'));
       return false;
     }
     const d = Math.hypot(pl.x - game.player.pos.x, pl.z - game.player.pos.z);
@@ -1008,11 +1009,11 @@ export class Friendship {
       this.atPlot(pl.live);
       return true;
     }
-    this.lead(pl.x, pl.z, 'מגרש לבית', () => {
+    this.lead(pl.x, pl.z, tr('מגרש לבית', 'Lot for a house'), () => {
       const live = this.plotOf(pl.key);
       if (live && !live.home) this.atPlot(live);
     }, 10);
-    this.chat.add('note', `${this.heb} מובילה למגרש ריק (${Math.round(d)} מ׳, הדרך על המפה)`);
+    this.chat.add('note', tr(`${this.heb} מובילה למגרש ריק (${Math.round(d)} מ׳, הדרך על המפה)`, `${this.heb} is leading the way to an empty lot (${Math.round(d)} m, the route is on the map)`));
     game.inkwell.after(1.2, () => this.chat.open && this.chat.close());
     return true;
   }
@@ -1020,8 +1021,8 @@ export class Friendship {
   // at the plot: what kind of house?
   atPlot(plot) {
     this.buildPlot = plot;
-    if (!this.chat.open) this.openChat(null, 'הנה מגרש! איזה בית לצייר? יש לי כמה רעיונות...');
-    else this.chat.add('her', 'איזה בית לצייר? יש לי כמה רעיונות...');
+    if (!this.chat.open) this.openChat(null, tr('הנה מגרש! איזה בית לצייר? יש לי כמה רעיונות...', 'Here\'s a lot! What kind of house should I draw? I\'ve got a few ideas...'));
+    else this.chat.add('her', tr('איזה בית לצייר? יש לי כמה רעיונות...', 'What kind of house should I draw? I\'ve got a few ideas...'));
     this.menu = 'style';
     this.refreshChips();
   }
@@ -1031,12 +1032,12 @@ export class Friendship {
     const plot = this.buildPlot;
     this.menu = 'main';
     if (!plot || plot.home || !this.here) {
-      this.chat.add('note', 'המגרש כבר לא פנוי');
+      this.chat.add('note', tr('המגרש כבר לא פנוי', 'The lot isn\'t free anymore'));
       this.refreshChips();
       return;
     }
     this.chat.add('me', HOME_STYLES[style].heb);
-    this.chat.add('her', pick(['מושלם! תתרחקו קצת... אני מציירת בגדול!', 'אוקיי! עיפרון קסום, עבודה!', 'יאללה! זה יהיה הבית הכי יפה ברחוב.']));
+    this.chat.add('her', pick([tr('מושלם! תתרחקו קצת... אני מציירת בגדול!', 'Perfect! Step back a bit... I\'m drawing big!'), tr('אוקיי! עיפרון קסום, עבודה!', 'OK! Magic pencil, get to work!'), tr('יאללה! זה יהיה הבית הכי יפה ברחוב.', 'Let\'s go! This is going to be the prettiest house on the street.')]));
     this.buildStyle = style;
     this.mode = 'build';
     this.buildPhase = 'walk';
@@ -1071,7 +1072,7 @@ export class Friendship {
       const lay = sk.lay;
       const at = f.p(lay.uc, (lay.y0 + lay.vr) / 2, -PLOT_FRONT + 0.45);
       this.buildCenter = new THREE.Vector3(at[0], at[1], at[2]);
-      game.hud.toast(`${this.heb} מציירת בית... בעיפרון קסום`, 'info', 3);
+      game.hud.toast(tr(`${this.heb} מציירת בית... בעיפרון קסום`, `${this.heb} is drawing a house... with a magic pencil`), 'info', 3);
       this.buildDrawing = game.airsketch.draw({
         shape: sk.lines,
         at: this.buildCenter,
@@ -1118,7 +1119,7 @@ export class Friendship {
     this.waitBlock = bid;
     this.waitT = game.time;
     if (!game.world.mainland || !game.world.mainland.rebuild(bid)) this.housePlop();
-    game.hud.toast('הציור מתעורר לחיים...', 'info', 2.2);
+    game.hud.toast(tr('הציור מתעורר לחיים...', 'The drawing is coming to life...'), 'info', 2.2);
   }
 
   onBlock(live, on) {
@@ -1146,7 +1147,7 @@ export class Friendship {
     for (let i = 0; i < 8; i++) game.fx.sprite('fx_heart', at.x + (Math.random() - 0.5) * 6, at.y + Math.random() * 3, at.z + (Math.random() - 0.5) * 3, { size: 0.5, grow: 0.3, life: 1.8, vy: 0.7, fadeIn: 0.15 });
     game.audio.play('cheer', 0.8);
     game.audio.play('poof', 0.8);
-    game.hud.big(`הבית של ${this.heb}!`, 2200);
+    game.hud.big(tr(`הבית של ${this.heb}!`, `${this.heb}'s house!`), 2200);
     if (this.here) {
       game.bubbles.say(this.comp.c, pick(['My house! MY HOUSE!', 'It\'s real! Come in!', 'We did it!']));
       this.data.love = Math.min(100, (this.data.love || 0) + 15);
@@ -1154,19 +1155,19 @@ export class Friendship {
       // in she goes, and you after her
       this.mode = 'follow';
       const plot = this.plotOf(this.data.homeKey);
-      if (plot && plot.home) this.lead(plot.home.door[0], plot.home.door[2], `הבית של ${this.heb}`, () => this.enterHome(), 5);
+      if (plot && plot.home) this.lead(plot.home.door[0], plot.home.door[2], tr(`הבית של ${this.heb}`, `${this.heb}'s house`), () => this.enterHome(), 5);
     }
   }
 }
 
 // the cartoon on her television (and its words)
 const TV_FILM = [
-  ['house', 'פעם, בעיר מצוירת אחת...'],
-  ['friend', '...מישהו צייר חברה.'],
-  ['heart', 'והיא ציירה לעצמה לב.'],
-  ['dog', 'ואז כלב, כי בית צריך כלב.'],
-  ['balloon', 'הכלב רצה לעוף...'],
-  ['umbrella', '...עד שהתחיל לרדת גשם.'],
-  ['flower', 'אבל אחרי גשם באים פרחים.'],
-  ['heart', 'הסוף. (או ההתחלה?)'],
+  ['house', tr('פעם, בעיר מצוירת אחת...', 'Once upon a time, in a drawn city...')],
+  ['friend', tr('...מישהו צייר חברה.', '...somebody drew a friend.')],
+  ['heart', tr('והיא ציירה לעצמה לב.', 'And she drew herself a heart.')],
+  ['dog', tr('ואז כלב, כי בית צריך כלב.', 'Then a dog, because a home needs a dog.')],
+  ['balloon', tr('הכלב רצה לעוף...', 'The dog wanted to fly...')],
+  ['umbrella', tr('...עד שהתחיל לרדת גשם.', '...until it started to rain.')],
+  ['flower', tr('אבל אחרי גשם באים פרחים.', 'But after rain come flowers.')],
+  ['heart', tr('הסוף. (או ההתחלה?)', 'The end. (Or the beginning?)')],
 ];

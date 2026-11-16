@@ -1,5 +1,6 @@
 import { Band, makeSong } from '../core/music.js';
 
+import { tr } from '../core/lang.js';
 // The car radio (ROADMAP 1.5): four stations, each with a sound of its own, on the air all the
 // time (tune in and you join a station wherever it is), with DJs between the songs and silly ads
 // for the city's shops, their words on the screen and in a voice of the radio's own (a burble of
@@ -162,7 +163,7 @@ export class Radio {
 
   show() {
     const game = this.game;
-    const txt = this.station < 0 ? 'הרדיו כבוי' : `📻 ${STATIONS[this.station].name}`;
+    const txt = this.station < 0 ? tr('הרדיו כבוי', 'The radio is off') : `📻 ${STATIONS[this.station].name}`;
     game.hud.radio(txt, null);
     this.labelT = 3;
   }

@@ -1,3 +1,4 @@
+import { tr } from '../../../core/lang.js';
 // (v5, ROADMAP 12.7) CLAW-SOME: the claw machine, played on the machine itself - no screen: the
 // claw over the toys in its box moves as you push the stick (game/arcade.js clawRig moves it in the
 // world), down it goes on the button, closes, rises; whatever it holds rides it to the chute, if it
@@ -8,9 +9,9 @@ const SPEED = 0.3;
 export class ClawGame {
   constructor(o = {}) {
     this.o = o;
-    this.title = 'CLAW-SOME · מכונת המנוף';
-    this.help = 'חצים להזיז את המנוף · רווח להוריד אותו · Esc לצאת';
-    this.helpTouch = 'החצים להזיז את המנוף · A להוריד אותו';
+    this.title = tr('CLAW-SOME · מכונת המנוף', 'CLAW-SOME · the claw machine');
+    this.help = tr('חצים להזיז את המנוף · רווח להוריד אותו · Esc לצאת', 'Arrows to move the claw · Space to drop it · Esc to leave');
+    this.helpTouch = tr('החצים להזיז את המנוף · A להוריד אותו', 'The arrows to move the claw · A to drop it');
     this.pad = 'pad';
   }
 
@@ -121,7 +122,7 @@ export class ClawGame {
       this.k += dt / 0.7;
       this.open = Math.min(1, this.k * 2);
       if (this.held && this.k > 0.3) {
-        this.prize = this.held.name || 'בובה';
+        this.prize = this.held.name || tr('בובה', 'Plushie');
         R.won(this.held);
         this.held = null;
         for (let i = 0; i < 4; i++) this.sfx([523, 659, 784, 1046][i], [523, 659, 784, 1046][i], 0.12, 0.05, i * 0.11);
