@@ -1583,6 +1583,85 @@ function defineAll(A) {
       title(g, ['SUNNY DAYS', 'ROBO BOLT', 'MOO FARM', 'GO FISH'][k], w / 2, h * 0.84, w * 0.86, 11, '#141418', { edge: false });
     });
   }
+  // (ROADMAP 26) the arcade of the new kind (world/arcaderoom.js): its band, the prize wall's, the token machine's face; over
+  // each cabinet its game's name lit; on each screen its game waiting for a coin
+  place('head.arcade', 'header', header('GAME  ZONE', '#1a0f33', '#ffd23f'));
+  place('head.prizes', 'header', header('PRIZES', '#e2335f', '#ffffff'));
+  A.place('arc.tokens', 96, 64, (g, w, h) => {
+    g.fillStyle = '#10223a';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#ffd23f';
+    g.beginPath();
+    g.arc(w * 0.22, h * 0.5, h * 0.24, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#10223a';
+    g.font = `800 ${Math.round(h * 0.26)}px Rubik, sans-serif`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('$', w * 0.22, h * 0.52);
+    title(g, 'TOKENS', w * 0.64, h * 0.36, w * 0.6, 15, '#3fe0ff', { edge: false, wt: 800 });
+    title(g, '6 FOR $5', w * 0.64, h * 0.7, w * 0.6, 12, '#ffffff', { edge: false });
+  });
+  const ARC = [['invaders', 'INK INVADERS', '#3fa9ff'], ['penman', 'PEN-MAN', '#ffd23f'], ['inktris', 'INKTRIS', '#b06cff'], ['snake', 'DOODLE SNAKE', '#4fe08a'], ['pong', 'PAPER PONG', '#f4f4f2'], ['bricks', 'BRICK SKETCH', '#ff8a2a']];
+  for (const [k, name, col] of ARC) {
+    A.place(`arc.mq.${k}`, 160, 40, (g, w, h) => {
+      g.fillStyle = '#0b0714';
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = col;
+      g.fillRect(0, h - 4, w, 4);
+      g.fillRect(0, 0, w, 3);
+      title(g, name, w / 2, h * 0.54, w * 0.9, h * 0.56, col, { edge: false, wt: 800 });
+    });
+    A.place(`arc.scr.${k}`, 128, 96, (g, w, h, rng) => {
+      g.fillStyle = '#060b1c';
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = col;
+      const px = (x, y, a = 4, b = 4) => g.fillRect(Math.round(x), Math.round(y), a, b);
+      if (k === 'invaders') {
+        for (let r = 0; r < 3; r++) for (let i = 0; i < 7; i++) { const x = 14 + i * 15; const y = 12 + r * 11; px(x, y, 8, 5); px(x - 2, y + 4, 3, 3); px(x + 7, y + 4, 3, 3); }
+        g.fillStyle = '#ffffff';
+        px(w / 2 - 6, h - 26, 12, 4);
+        px(w / 2 - 1, h - 31, 2, 5);
+        px(w / 2 - 1, h - 46, 2, 6);
+      } else if (k === 'penman') {
+        g.fillStyle = '#2f62d0';
+        for (const [x, y, a, b] of [[8, 8, w - 16, 3], [8, h - 30, w - 16, 3], [8, 8, 3, h - 38], [w - 11, 8, 3, h - 38], [34, 28, 24, 3], [70, 28, 24, 3], [50, 42, 28, 3]]) px(x, y, a, b);
+        g.fillStyle = '#ffe9a8';
+        for (let i = 0; i < 9; i++) px(18 + i * 11, 18, 2, 2);
+        g.fillStyle = col;
+        g.beginPath();
+        g.moveTo(40, 54);
+        g.arc(40, 54, 7, 0.6, Math.PI * 2 - 0.6);
+        g.fill();
+        g.fillStyle = '#ff6fb1';
+        px(78, 48, 9, 10);
+      } else if (k === 'inktris') {
+        const C = ['#b06cff', '#3fa9ff', '#ffd23f', '#4fe08a', '#ff6fb1'];
+        for (let r = 0; r < 4; r++) for (let i = 0; i < 10; i++) if (rng() < 0.82) { g.fillStyle = C[Math.floor(rng() * C.length)]; px(14 + i * 10, h - 30 - r * 9, 9, 8); }
+        g.fillStyle = col;
+        for (const [x, y] of [[54, 12], [64, 12], [74, 12], [64, 21]]) px(x, y, 9, 8);
+      } else if (k === 'snake') {
+        let x = 20;
+        let y = 40;
+        for (let i = 0; i < 22; i++) { px(x, y, 5, 5); if (i < 8) x += 5; else if (i < 13) y -= 5; else x += 5; }
+        g.fillStyle = '#ff4d4d';
+        px(100, 18, 6, 6);
+      } else if (k === 'pong') {
+        px(10, 26, 4, 22);
+        px(w - 14, 38, 4, 22);
+        for (let y = 6; y < h - 26; y += 8) px(w / 2 - 1, y, 2, 4);
+        px(78, 34, 4, 4);
+        title(g, '3   5', w / 2, 12, 60, 10, col, { edge: false });
+      } else if (k === 'bricks') {
+        const C = ['#ff4d4d', '#ff8a2a', '#ffd23f', '#4fe08a', '#3fa9ff'];
+        for (let r = 0; r < 5; r++) for (let i = 0; i < 9; i++) { g.fillStyle = C[r]; px(8 + i * 12.6, 8 + r * 7, 11, 5); }
+        g.fillStyle = '#ffffff';
+        px(54, h - 32, 22, 3);
+        px(70, 50, 4, 4);
+      }
+      title(g, 'INSERT COIN', w / 2, h - 12, w * 0.8, 10, '#ffffff', { edge: false, wt: 800 });
+    });
+  }
   A.place('card.new', 96, 64, (g, w, h) => {
     g.fillStyle = '#e2335f';
     g.fillRect(0, 0, w, h);

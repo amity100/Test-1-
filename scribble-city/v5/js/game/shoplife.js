@@ -11,6 +11,7 @@ import { TechLife } from './techlife.js';
 import { BeautyLife } from './beautylife.js';
 import { HobbyLife } from './hobbylife.js';
 import { ServiceLife } from './servicelife.js';
+import { ArcadeLife } from './arcadelife.js';
 import { waitBeat, stopWait } from './waiting.js';
 import { tr } from '../core/lang.js';
 
@@ -419,6 +420,18 @@ const GYM = {
   food: new Set(['water']),
   say: { ...HOBBY_SAY, shelf: ['Need a heavier pair.', 'Ugh, these are heavy.'], back: ['Later.'], keep: ['I\'ll take one.'], player: ['Hey! Ready to sweat?', 'Welcome! Talk to me about a session.'], found: ['Stay hydrated!'], thanks: ['Good workout!'], run: ['Save it for the treadmill!'], help: ['Keep your back straight.'] },
 };
+// (ROADMAP 26: the arcade - its people come to play, game/arcadelife.js; what can be bought, the soft toys on the prize wall)
+const ARCADE = {
+  flow: 'arcade',
+  baskets: 0,
+  items: [1, 1],
+  crowd: 6,
+  prices: { toy: 15 },
+  names: { toy: 'a soft toy' },
+  heb: { toy: tr('בובה רכה', 'A soft toy') },
+  food: new Set(),
+  say: { ...HOBBY_SAY, shelf: ['That one\'s cute.', 'I\'d rather win it.'], back: ['I\'ll win one instead.'], keep: ['This one, please.'], player: ['Hey! Tokens are by the door.', 'Welcome to the arcade! High scores on the wall.'], found: ['A classic.'], thanks: ['Have fun!', 'Good luck!'], run: ['Easy - mind the machines!'], help: ['The claw\'s generous today.'] },
+};
 // (an eatery: nothing taken off a shelf - ordered at the till, made, drawn, served: game/eaterylife.js)
 const FOOD = {
   flow: 'food',
@@ -442,7 +455,7 @@ const FOOD = {
     stock: [''],
   },
 };
-export const PROFILES = { grocery: GROCERY, deli: GROCERY, shop: GROCERY, pharmacy: GROCERY, fashion: FASHION, boutique: FASHION, surf: FASHION, electronics: TECH, phones: TECH, jewelry: JEWEL, shoes: SHOES, sports: SPORTS, perfume: PERFUME, optics: OPTICS, barber: BARBER, books: BOOKS, music: RECORDS, toys: TOYS, flowers: FLORIST, hardware: HARDWARE, laundry: LAUNDRY, gym: GYM, cafe: FOOD, bagel: FOOD, pizza: FOOD, burger: FOOD, tacos: FOOD, noodles: FOOD, diner: FOOD, juice: FOOD, icecream: FOOD, sushi: FOOD, falafel: FOOD };
+export const PROFILES = { grocery: GROCERY, deli: GROCERY, shop: GROCERY, pharmacy: GROCERY, fashion: FASHION, boutique: FASHION, surf: FASHION, electronics: TECH, phones: TECH, jewelry: JEWEL, shoes: SHOES, sports: SPORTS, perfume: PERFUME, optics: OPTICS, barber: BARBER, books: BOOKS, music: RECORDS, toys: TOYS, flowers: FLORIST, hardware: HARDWARE, laundry: LAUNDRY, gym: GYM, arcade: ARCADE, cafe: FOOD, bagel: FOOD, pizza: FOOD, burger: FOOD, tacos: FOOD, noodles: FOOD, diner: FOOD, juice: FOOD, icecream: FOOD, sushi: FOOD, falafel: FOOD };
 
 // ------------------------------------------------------------------ the things in motion
 // Every product, basket, bag and box in a hand, on the counter or on the floor: one geometry a pen
@@ -680,6 +693,8 @@ export class ShopLife {
     this.hobby = HobbyLife.for(this);
     // (ROADMAP 16.9: the washing loaded, waited for, folded; the bag hit, the barbell pressed)
     this.service = ServiceLife.for(this);
+    // (ROADMAP 26: the arcade's games played, the claw, the tokens, the prizes - game/arcadelife.js)
+    this.arcade = ArcadeLife.for(this);
     this.sync();
   }
 
@@ -788,6 +803,7 @@ export class ShopLife {
     if (this.tries) this.tries.plan(v, out);
     if (this.beauty) this.beauty.plan(v, out);
     if (this.service) this.service.plan(v, out);
+    if (this.arcade) this.arcade.plan(v, out);
     // (an electronics shop: a while before the wall of screens, now and then)
     if (this.prof.flow === 'tech' && Math.random() < 0.45) {
       const tv = this.room.browse.filter((b) => b.what === 'look');
@@ -914,7 +930,7 @@ export class ShopLife {
             return null;
           }
           // (the deli's counter, the pharmacy's window, the chair: game/counterlife.js)
-          if (q.svc && (this.counter || this.tries || this.beauty || this.hobby || this.service)) {
+          if (q.svc && (this.counter || this.tries || this.beauty || this.hobby || this.service || this.arcade)) {
             L.svc = q.svc;
             L.S = null;
             L.st = 'svc';
@@ -954,6 +970,7 @@ export class ShopLife {
         if (this.beauty && this.beauty.has(L.svc)) return this.beauty.visit(v, dt);
         if (this.hobby && this.hobby.has(L.svc)) return this.hobby.visit(v, dt);
         if (this.service && this.service.has(L.svc)) return this.service.visit(v, dt);
+        if (this.arcade && this.arcade.has(L.svc)) return this.arcade.visit(v, dt);
         if (!this.counter) {
           L.st = 'next';
           return null;
@@ -1840,6 +1857,7 @@ export class ShopLife {
     if (this.beauty) this.beauty.release(v);
     if (this.hobby) this.hobby.release(v);
     if (this.service) this.service.release(v);
+    if (this.arcade) this.arcade.release(v);
     const c = v.c;
     this.unwear(v);
     const qi = this.queue.indexOf(v);
@@ -2850,6 +2868,7 @@ export class ShopLife {
     if (this.beauty) this.beauty.update(dt);
     if (this.hobby) this.hobby.update(dt);
     if (this.service) this.service.update(dt);
+    if (this.arcade) this.arcade.update(dt);
     // (once its stock is in - the room is there round it - and not where they make food)
     if (!this.muralOn && this.live && this.open.open && this.shop.kind !== 'deli') {
       this.muralOn = true;
@@ -3319,6 +3338,7 @@ export class ShopLife {
     if (this.beauty) this.beauty.dispose();
     if (this.hobby) this.hobby.dispose();
     if (this.service) this.service.dispose();
+    if (this.arcade) this.arcade.dispose();
     // (whatever is in motion goes back where it came from)
     for (const it of [...this.movers.items]) {
       if (it.slot && (it.slot.state === 'held' || it.slot.state === 'aim')) this.setSlot(it.slot, 'shelf');

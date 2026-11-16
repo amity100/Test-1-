@@ -250,7 +250,8 @@ export function later(R, fn) {
 // after all that (R.solid: what was put there) is cut into places for freestanding fixtures: rows along the back wall, each
 // fixture long along it, an aisle all round; the way in from the door (R.lane) and the front by the window left clear.
 // fn(place, k) builds the k-th: place { u0, u1, d0, d1 } (u along the room, d from the back to the front). o: len, depth,
-// aisle (between them), edge (from the walls' fixtures), most (how many at most). Returns how many were placed.
+// aisle (between them), edge (from the walls' fixtures; edgeBack from the back wall's, when it differs), most (how many at
+// most). Returns how many were placed.
 export function fillFloor(R, front, fn, o = {}) {
   const len = o.len || 2.2;
   const dep = o.depth || 0.8;
@@ -259,7 +260,7 @@ export function fillFloor(R, front, fn, o = {}) {
   const most = o.most || (R.low ? 10 : 24);
   const uA = R.ua + 0.45 + edge;
   const uB = R.ub - 0.45 - edge;
-  const dB = R.db + 0.45 + edge;
+  const dB = R.db + 0.45 + (o.edgeBack === undefined ? edge : o.edgeBack);
   const dF = front - 0.35;
   if (uB - uA < len || dF - dB < dep) return 0;
   const lane = R.lane ? [R.lane[0] - 0.6, R.lane[1] + 0.6] : null;
