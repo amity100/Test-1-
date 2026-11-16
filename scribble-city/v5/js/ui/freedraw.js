@@ -23,7 +23,7 @@ import { matchCatalog, gradeOf, drawnWhole, tooEarly, MATCH_MIN, PICK_SLACK, SHE
 import { BLUEPRINTS, blueprintBounds } from '../game/blueprints.js';
 import { PEN_CATS, PEN_REST, PEN_REST_TOUCH, parList } from '../game/partpen.js';
 import { DRAWN_ON, WORLD_SAY } from '../game/gadgets.js';
-import { EARLY_KIT, isEarly } from '../game/drawlock.js';
+import { EARLY_KIT, isEarly, carParkHold } from '../game/drawlock.js';
 import { tr } from '../core/lang.js';
 
 // (ROADMAP 11.6, 11.7) Drawing freehand in the air, on the run. Q (the pencil on a phone, up on a
@@ -104,7 +104,7 @@ function resample(P, n) {
 // 11.8): the weapons, the vehicles by kind, on the water, in the air, the gear
 const CHOICES = {
   weapon: WEAPON_ORDER.map((k) => [k, KINDS[k].name]),
-  car: [['v:car', tr('מכונית', 'car')], ['v:truck', tr('משאית', 'Truck')], ['v:bus', tr('אוטובוס', 'Bus')], ['v:moto', tr('אופנוע', 'Motorbike')], ['v:bicycle', tr('אופניים', 'Bicycle')], ['v:tank', tr('טנק', 'Tank')], ['v:skate', tr('סקייטבורד', 'Skateboard')]],
+  car: [['v:car', tr('מכונית', 'Car')], ['v:truck', tr('משאית', 'Truck')], ['v:bus', tr('אוטובוס', 'Bus')], ['v:moto', tr('אופנוע', 'Motorbike')], ['v:bicycle', tr('אופניים', 'Bicycle')], ['v:tank', tr('טנק', 'Tank')], ['v:skate', tr('סקייטבורד', 'Skateboard')]],
   air: [['v:plane', tr('מטוס', 'Plane')], ['v:copter', tr('מסוק', 'Helicopter')], ['v:balloon', tr('כדור פורח', 'Hot-air balloon')]],
   sea: [['v:boat:sailboat', tr('סירת מפרש', 'Sailboat')], ['v:boat:speedboat', tr('סירת מנוע', 'Motorboat')], ['v:boat:canoe', tr('קאנו', 'Canoe')], ['v:boat:submarine', tr('צוללת', 'Submarine')], ['v:boat:cruise ship', tr('ספינה', 'Ship')]],
   gear: [['g:shield', tr('מגן', 'Shield')], ['g:parachute', tr('מצנח', 'Parachute')], ['g:umbrella', tr('מטרייה', 'Umbrella')], ['g:ladder', tr('סולם', 'Ladder')], ['g:ramp', tr('רמפה', 'Ramp')], ['g:bridge', tr('גשר', 'Bridge')], ['g:key', tr('מפתח', 'Key')], ['g:spring', tr('קפיץ', 'Spring')]],
@@ -1666,6 +1666,8 @@ export class FreeDraw {
 
   // (found, or all open: the album's own say - ui/album.js)
   bpOpen(id) {
+    // (ROADMAP 25: what flies waits for the jump, in the car park alone - game/drawlock.js)
+    if (carParkHold(this.game, id)) return false;
     const a = this.game.album;
     if (a && a.early) return a.has(id);
     return !a || a.allOpen || a.has(id);
@@ -1693,10 +1695,17 @@ export class FreeDraw {
     // (picked in the legend or by a chip; or drawn like one picked before - ROADMAP 11.37)
     const mem = this.force ? null : this.remembered();
     const ok = (k) => k && BLUEPRINTS[k] && shelfOf(BLUEPRINTS[k]) === shelf && this.bpOpen(k);
-    const pick = ok(this.force) ? this.force : ok(mem) ? mem : null;
+    let pick = ok(this.force) ? this.force : ok(mem) ? mem : null;
     const all = matchCatalog(this.strokes, ids);
     if (!all) return null;
     const top = all.best;
+    // (ROADMAP 25, the owner's word: things popping up as if he had tried to draw them) a drawing the pen remembers as another
+    // thing is that thing only while the catalog says it may be - not when the likeliest is plainly something else: a rifle
+    // picked once was what every long drawing lit up as from then on (tools/test-catalog.mjs MEMORY=1)
+    if (pick && pick === mem && pick !== top.id) {
+      const m = all.list.find((x) => x.id === pick);
+      if (!m || top.score > m.score + PICK_SLACK || top.rank > m.rank + 2 * PICK_SLACK) pick = null;
+    }
     const b = (pick && all.list.find((x) => x.id === pick)) || top;
     const bp = BLUEPRINTS[b.id];
     // (ROADMAP 11.43: no guessing from a line or two - the likeliest named only with half of it there)
@@ -1737,7 +1746,7 @@ export class FreeDraw {
     const lit = R && R.lit ? R.lit : '';
     const ids = on ? shelfIds(this.shelf) : [];
     const al = this.game.album;
-    const st = (id) => (!al ? 'k' : al.known(id) ? 'k' : al.toLearn(id) ? 'l' : this.bpOpen(id) ? 'k' : 'x');
+    const st = (id) => (carParkHold(this.game, id) ? 'h' : !al ? 'k' : al.known(id) ? 'k' : al.toLearn(id) ? 'l' : this.bpOpen(id) ? 'k' : 'x');
     const early = on && isEarly(this.game);
     const sig = `${on}|${early}|${this.shelf}|${lit}|${this.force || ''}|${this.world || ''}|${ids.map(st).join('')}|${early ? Object.values(EARLY_KIT).flat().map(st).join('') : ''}|${this.game.inventions ? this.game.inventions.list.map((o) => o.id + o.v).join() : ''}`;
     if (sig === this.legSig) return;
@@ -1771,10 +1780,10 @@ export class FreeDraw {
     const items = ids.map((id) => {
       const bp = BLUEPRINTS[id];
       const s = st(id);
-      const lock = s === 'x';
+      const lock = s === 'x' || s === 'h';
       const num = s === 'k' && n < 9 ? ++n : 0;
       const cls = ['fd-it', lit === id ? 'on' : '', this.force === id || this.world === id ? 'pick' : '', lock ? 'lock' : '', s === 'l' ? 'learn' : '', s === 'k' ? 'known' : ''].filter(Boolean).join(' ');
-      const tag = s === 'l' ? tr('✎ ללמוד', '✎ Learn') : lock ? tr('🔒 לא נמצא', '🔒 Not found') : tr(`${costOfBp(bp)} דיו`, `${costOfBp(bp)} ink`);
+      const tag = s === 'l' ? tr('✎ ללמוד', '✎ Learn') : s === 'h' ? tr('🔒 אחרי הקפיצה', '🔒 After the jump') : lock ? tr('🔒 לא נמצא', '🔒 Not found') : tr(`${costOfBp(bp)} דיו`, `${costOfBp(bp)} ink`);
       return `<div class="${cls}" data-i="${id}"${num ? ` data-n="${num}"` : ''}>${num ? `<em class="fd-n">${num}</em>` : ''}${bpSvg(bp)}<b>${bp.name}</b><i>${tag}</i></div>`;
     }).join('');
     const say = this.game.touch ? tr('נגיעה בדבר שאתם מכירים — והוא כאן. או ציירו אותו', 'Tap something you know — and it\'s here. Or draw it') : tr('נגיעה או 1–9: והוא כאן · ←→ מדפים · אפשר גם לצייר', 'Tap or 1–9: and it\'s here · ←→ shelves · you can draw too');
@@ -1790,6 +1799,11 @@ export class FreeDraw {
     const bp = BLUEPRINTS[id];
     const al = game.album;
     if (!bp || !al || !this.catalogOn() || game.player.mode !== 'foot') return false;
+    if (carParkHold(game, id)) {
+      game.hud.toast(tr(`${bp.name} — נפתח אחרי הקפיצה מהגג`, `${bp.name} — opens after the jump off the roof`), 'info', 2.4);
+      game.audio.play('click', 0.3);
+      return false;
+    }
     // (a ramp, a bridge, a barrier is drawn on the world each time: nothing to learn first)
     if (!inv && !al.known(id) && !(game.gadgets && DRAWN_ON.has(id) && !al.early)) {
       if (al.toLearn(id)) return this.learn(id);

@@ -222,12 +222,10 @@ export class Prologue {
     // (ROADMAP 18.9: everything the pen can make open while it is told - a helicopter, wings, a turbo
     // on the car, every weapon - whatever the settings say: the game's own again after, finish)
     if (g.setAllOpen) g.setAllOpen(true);
-    // (round 15, game/drawlock.js: a new player's short list - a few weapons, a few rides, each drawn
-    // by hand before it is theirs - till the jump off the roof; not for a scene from the jump on)
-    {
-      const sN = /^s(\d)$/.exec(this.param || '');
-      if (g.album && g.album.setEarly) g.album.setEarly(!(sN && +sN[1] >= 8));
-    }
+    // (ROADMAP 25, the owner's word: every option of what to draw open from the start of the game - round 15's short list, a
+    // few weapons and rides each drawn once before it was the player's, the rest opened only by the jump off the roof, is no
+    // more. What flies waits in the car park alone: game/drawlock.js carParkHold)
+    if (g.album && g.album.setEarly) g.album.setEarly(false);
     // (round 16: the language chosen on the start screen - core/lang.js; ?subs= as before)
     const sp = g.params.get('subs');
     const subs = sp === 'en' || sp === 'he' ? sp : lang();

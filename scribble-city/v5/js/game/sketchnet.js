@@ -19,9 +19,9 @@ export const CLASSES = NET.classes;
 const AS = {
   airplane: ['plane', tr('מטוס', 'Plane')],
   helicopter: ['copter', tr('מסוק', 'Helicopter')],
-  car: ['car', tr('מכונית', 'car')],
-  'police car': ['car', tr('מכונית', 'car')],
-  'pickup truck': ['car', tr('טנדר', 'pickup truck')],
+  car: ['car', tr('מכונית', 'Car')],
+  'police car': ['car', tr('מכונית', 'Car')],
+  'pickup truck': ['car', tr('טנדר', 'Pickup truck')],
   van: ['car', tr('מסחרית', 'Van')],
   ambulance: ['car', tr('אמבולנס', 'Ambulance')],
   truck: ['truck', tr('משאית', 'Truck')],
@@ -67,7 +67,7 @@ export const NAME_OF = (c) => (AS[c] ? AS[c][1] : null);
 export const VEHICLE_GROUPS = new Set(['plane', 'copter', 'car', 'truck', 'bus', 'moto', 'bicycle', 'tractor', 'tank', 'boat', 'balloon', 'skate']);
 // a car, a truck, a bus, a motorbike, a bicycle, a tractor: one family (all driven alike)
 export const CAR_FAMILY = new Set(['car', 'truck', 'bus', 'moto', 'bicycle', 'tractor']);
-export const GROUP_NAME = { plane: tr('מטוס', 'Plane'), copter: tr('מסוק', 'Helicopter'), car: tr('מכונית', 'car'), truck: tr('משאית', 'Truck'), bus: tr('אוטובוס', 'Bus'), moto: tr('אופנוע', 'Motorbike'), bicycle: tr('אופניים', 'Bicycle'), tractor: tr('טרקטור', 'Tractor'), tank: tr('טנק', 'Tank'), gun: tr('אקדח או רובה', 'Pistol or rifle'), sword: tr('חרב', 'Sword'), club: tr('פטיש', 'Hammer'), boomerang: tr('בומרנג', 'Boomerang'), bomb: tr('פצצה', 'Bomb'), boat: tr('סירה', 'Boat'), balloon: tr('כדור פורח', 'Hot-air balloon'), skate: tr('סקייטבורד', 'Skateboard'), shield: tr('מגן', 'Shield'), parachute: tr('מצנח', 'Parachute'), umbrella: tr('מטרייה', 'Umbrella'), ladder: tr('סולם', 'Ladder'), bridge: tr('גשר', 'Bridge'), key: tr('מפתח', 'Key'), spring: tr('קפיץ', 'Spring') };
+export const GROUP_NAME = { plane: tr('מטוס', 'Plane'), copter: tr('מסוק', 'Helicopter'), car: tr('מכונית', 'Car'), truck: tr('משאית', 'Truck'), bus: tr('אוטובוס', 'Bus'), moto: tr('אופנוע', 'Motorbike'), bicycle: tr('אופניים', 'Bicycle'), tractor: tr('טרקטור', 'Tractor'), tank: tr('טנק', 'Tank'), gun: tr('אקדח או רובה', 'Pistol or rifle'), sword: tr('חרב', 'Sword'), club: tr('פטיש', 'Hammer'), boomerang: tr('בומרנג', 'Boomerang'), bomb: tr('פצצה', 'Bomb'), boat: tr('סירה', 'Boat'), balloon: tr('כדור פורח', 'Hot-air balloon'), skate: tr('סקייטבורד', 'Skateboard'), shield: tr('מגן', 'Shield'), parachute: tr('מצנח', 'Parachute'), umbrella: tr('מטרייה', 'Umbrella'), ladder: tr('סולם', 'Ladder'), bridge: tr('גשר', 'Bridge'), key: tr('מפתח', 'Key'), spring: tr('קפיץ', 'Spring') };
 // (ROADMAP 11.8) what the player says they draw: five kinds of thing, any of them together
 export const CATEGORIES = {
   weapon: ['gun', 'sword', 'club', 'bomb', 'boomerang'],

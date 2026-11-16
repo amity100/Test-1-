@@ -1,5 +1,5 @@
 import { ITEMS, OPEN_ORDER, CATS, CAT_ORDER } from './itemcat.js';
-import { EARLY_GEAR, gearGone, isEarly, storyGift, chaseGear } from './drawlock.js';
+import { EARLY_GEAR, gearGone, isEarly, storyGift, chaseGear, carParkHold } from './drawlock.js';
 
 import { tr } from '../core/lang.js';
 // (ROADMAP 11.28) Not everything open: the things of the pen come as the game goes on.
@@ -52,6 +52,8 @@ export class GearPlay {
     // player's car, till the jump off the roof: the machine gun, the turbo, the armour)
     if (storyGift(this.game, id)) return true;
     if (gearGone(this.game, id)) return false;
+    // (ROADMAP 25: what flies waits for the jump, in the car park alone)
+    if (carParkHold(this.game, id)) return false;
     if (!this.lab && isEarly(this.game)) return EARLY_GEAR.includes(id) || chaseGear(this.game, id);
     return this.all() || this.state.open.includes(id);
   }
@@ -82,6 +84,7 @@ export class GearPlay {
   // (a drawing of a thing not open yet) what is said by it: its name and what it takes
   lockSay(id) {
     if (gearGone(this.game, id)) return tr('נפתח בהמשך', 'Opens later');
+    if (carParkHold(this.game, id)) return tr('נפתח אחרי הקפיצה מהגג', 'Opens after the jump off the roof');
     if (!this.lab && isEarly(this.game)) return tr('נפתח בהמשך הסיפור', 'Opens later in the story');
     const n = this.pagesTo(id);
     return n === 1 ? tr('עוד דף שרטוט אחד', 'One more blueprint page') : tr(`עוד ${n} דפי שרטוט`, `${n} more blueprint pages`);

@@ -24,7 +24,7 @@ import { tr } from '../core/lang.js';
 // off the mark, jets give it a boost, wings let it glide off a ramp). It rides as one of the kinds
 // the city has, with a model built from the drawing, in the colours it was drawn in.
 
-export const KIND_NAME = { car: tr('מכונית', 'car'), glider: tr('מכונית עם כנפיים', 'A car with wings'), jetcar: tr('מכונית סילון', 'A jet car'), copter: tr('מסוק', 'Helicopter'), plane: tr('מטוס', 'Plane'), still: tr('פסל', 'A statue'), bike: tr('אופנוע', 'Motorbike'), bus: tr('אוטובוס', 'Bus'), monster: tr('מכונית מפלצת', 'A monster car'), tank: tr('טנק', 'Tank'), boat: tr('סירה', 'Boat'), balloon: tr('כדור פורח', 'Hot-air balloon'), skate: tr('סקייטבורד', 'Skateboard') };
+export const KIND_NAME = { car: tr('מכונית', 'Car'), glider: tr('מכונית עם כנפיים', 'Winged car'), jetcar: tr('מכונית סילון', 'Jet car'), copter: tr('מסוק', 'Helicopter'), plane: tr('מטוס', 'Plane'), still: tr('פסל', 'Statue'), bike: tr('אופנוע', 'Motorbike'), bus: tr('אוטובוס', 'Bus'), monster: tr('מכונית מפלצת', 'Monster car'), tank: tr('טנק', 'Tank'), boat: tr('סירה', 'Boat'), balloon: tr('כדור פורח', 'Hot-air balloon'), skate: tr('סקייטבורד', 'Skateboard') };
 
 // ------------------------------------------------------------------ reading the lines
 // a stroke's shape: [z, y] points in metres (z forward, y up from the ground)

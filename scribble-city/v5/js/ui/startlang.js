@@ -32,12 +32,12 @@ const WORDS = {
     loading: 'Sharpening the pens…',
     cont: 'Continue where you left off',
     tips: [
-      'What you draw comes to life: draw a rifle, a sword or even a helicopter in the air - and it is in your hands.',
-      'Any car parked in the street can be yours. Just do not let the police see.',
-      'A turbo on the car - and it shoots forward.',
-      'Anything you have drawn once is kept - from then on it is ready at a touch.',
-      'Photograph the blueprint signs around the city and draw them. The better the drawing, the stronger the weapon.',
-      'Walk into any shop with its door open: to buy, to eat, or just to look.',
+      'What you draw becomes real: sketch a rifle, a sword, even a helicopter in the air — and it’s in your hands.',
+      'Any car parked on the street can be yours. Just don’t let the cops see you.',
+      'Draw a turbo on your car — and it rockets forward.',
+      'Anything you’ve drawn once is saved — after that it’s ready at a tap.',
+      'Photograph blueprint signs around the city and draw them. The better your drawing, the stronger the weapon.',
+      'Walk into any shop with an open door: buy, eat, or just look around.',
     ],
   },
 };

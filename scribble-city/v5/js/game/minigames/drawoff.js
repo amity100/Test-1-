@@ -27,7 +27,7 @@ export const SUBJECTS = [
   { c: 'hot air balloon', he: tr('כדור פורח', 'Hot-air balloon') },
   { c: 'key', he: tr('מפתח', 'Key') },
   { c: 'ladder', he: tr('סולם', 'Ladder') },
-  { c: 'car', he: tr('מכונית', 'car') },
+  { c: 'car', he: tr('מכונית', 'Car') },
   { c: 'airplane', he: tr('מטוס', 'Plane') },
   { c: 'bicycle', he: tr('אופניים', 'Bicycle') },
   { c: 'helicopter', he: tr('מסוק', 'Helicopter') },

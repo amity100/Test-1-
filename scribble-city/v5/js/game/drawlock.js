@@ -52,3 +52,15 @@ export function chaseGear(game, id) {
 export function isEarly(game) {
   return !!(game && game.album && game.album.early);
 }
+
+// (ROADMAP 25, the owner's word: "every option of what to draw open from the start of the game, so people get to try the
+// game") The short list above is not used any more: the story opens with every drawing and every part of the car's pen
+// (game/prologue/director.js). Only what flies waits - and only in the car park, from the gunmen to the jump off its roof
+// (scenes 5 to 7): a car flown out of the chase, or a helicopter drawn on foot, would leave the story waiting on the roof
+// for a car that is not coming. The car pen's ids (game/itemcat.js), the catalog's (game/blueprints.js)
+const FLY = new Set(['wing', 'rotor', 'balloon', 'jump', 'copter', 'plane']);
+export function carParkHold(game, id) {
+  const P = game && game.prologue;
+  if (!P || !P.active || game.lab || !FLY.has(id) || storyGift(game, id)) return false;
+  return P.sceneN >= 5 && P.sceneN < 8;
+}

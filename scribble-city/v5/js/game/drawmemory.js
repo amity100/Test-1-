@@ -79,12 +79,13 @@ export class DrawMemory {
     for (const m of this.list) {
       // (seen by the network as much the same - it may waver between two kinds the same way)
       const cp = cos(sig.p, m.p);
-      if (cp < 0.5) continue;
+      if (cp < 0.6) continue;
       // (as long for its height, give or take 40%)
       if (sig.a !== undefined && m.a !== undefined && Math.abs(sig.a - m.a) > 0.34) continue;
-      // (and its picture much the same: what tells your launcher from a rifle)
+      // (and its picture much the same: what tells your launcher from a rifle. ROADMAP 25: nine in ten, not 85 in a hundred - at
+      // that, most long drawings were like a rifle kept once, a sword's among them)
       const ci = cos(sig.pic, m.pic);
-      if (ci < 0.85) continue;
+      if (ci < 0.9) continue;
       const sim = cp * 0.6 + ci * 0.4;
       if (!best || sim > best.sim) best = { key: m.key, sim };
     }

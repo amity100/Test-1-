@@ -112,6 +112,7 @@ import { Fairground } from './fairground.js';
 import { ArenaGame } from './arenagame.js';
 
 import { tr } from '../core/lang.js';
+import { carParkHold } from './drawlock.js';
 // (the police helicopter's searchlight on the ground: ROADMAP 6.2)
 const HELI_LIGHT = [1.0, 0.95, 0.8];
 // (your headlights' colour on the road at night: ROADMAP 4.3)
@@ -1917,6 +1918,11 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
   beginDrawing(id) {
     const p = this.player;
     if (p.mode !== 'foot' || this.chute.open) return;
+    // (ROADMAP 25: what flies waits for the jump, in the car park alone - game/drawlock.js)
+    if (carParkHold(this, id)) {
+      this.hud.toast(tr('נפתח אחרי הקפיצה מהגג', 'Opens after the jump off the roof'), 'info', 2.4);
+      return;
+    }
     // (a ladder needs a wall in front of you, a ramp the road, a bridge an edge: said before the
     // ink is spent - ROADMAP 9.2)
     const why = this.gadgets ? this.gadgets.cannot(id) : null;
