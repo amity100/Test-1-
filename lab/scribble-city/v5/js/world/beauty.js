@@ -150,11 +150,15 @@ function bottleWall(R, run, len) {
 // them (live: a scent sprayed on a strip of paper - game/beautylife.js), the cups of strips, the jars of
 // coffee beans; places to stand on both sides
 function island(R, fr, front) {
-  const y0 = R.y0;
   const L = Math.min(2.4, fr.W - 3.4);
   if (L < 1.0 || front - R.db < 3.4) return;
-  const um = (R.ua + R.ub) / 2;
-  const dm = (R.db + 1.0 + front) / 2;
+  testerIsland(R, (R.ua + R.ub) / 2, (R.db + 1.0 + front) / 2, L, true);
+  // (ROADMAP 26) a big one: more of them in rows across the floor (the first one keeps the mark the spray is at)
+  fillFloor(R, front, (p) => testerIsland(R, (p.u0 + p.u1) / 2, (p.d0 + p.d1) / 2, p.u1 - p.u0, false), { len: 2.4, depth: 0.9, aisle: 1.5, edge: 1.4, most: R.low ? 8 : 12 });
+}
+
+function testerIsland(R, um, dm, L, first) {
+  const y0 = R.y0;
   const S = R.psoup(false);
   const top = y0 + 0.95;
   const run = new Run(R, um - L / 2, dm + 0.45, [1, 0], [0, 1]);
@@ -170,7 +174,7 @@ function island(R, fr, front) {
     spots.push({ run, s, sp: run.spot(s, 0.5, { shelf: [0.97], reach: run.at(s, top + 0.06, -0.24), what: 'tester' }) });
     spots.push({ run: back, s: L - s, sp: back.spot(L - s, 0.5, { shelf: [0.97], reach: back.at(L - s, top + 0.06, -0.24), what: 'tester' }) });
   }
-  mark(R, 'island', run, L / 2, -0.45, top, [0, 1]);
+  if (first) mark(R, 'island', run, L / 2, -0.45, top, [0, 1]);
   later(R, () => {
     for (const r of [run, back]) {
       const yaw = yawOut(R, r);

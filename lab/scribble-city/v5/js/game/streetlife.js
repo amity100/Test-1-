@@ -581,6 +581,18 @@ export class StreetLife {
         const st = svl.target(p);
         if (st) return { shop: a, ...st };
       }
+      // (ROADMAP 26: the treadmill - the gym's, the sports shop's: game/trylife.js)
+      const trl = a.life2.tries;
+      if (trl && trl.target && a.open && !(you && you.items.length)) {
+        const tt = trl.target(p);
+        if (tt) return { shop: a, ...tt };
+      }
+      // (ROADMAP 26: the record shop's listening post: game/hobbylife.js)
+      const hob = a.life2.hobby;
+      if (hob && hob.target && a.open && !(you && you.items.length)) {
+        const ht = hob.target(p);
+        if (ht) return { shop: a, ...ht };
+      }
       if (k && k.alive && Math.hypot(k.pos.x - p.pos.x, k.pos.z - p.pos.z) < 1.6) break;
       const slot = a.life2.target(p);
       if (slot) return { shop: a, slot, label: a.life2.label(slot) };
@@ -685,6 +697,14 @@ export class StreetLife {
     }
     if (t.svcYou) {
       t.shop.life2.service.act(t);
+      return true;
+    }
+    if (t.tryYou) {
+      t.shop.life2.tries.act(t);
+      return true;
+    }
+    if (t.hobYou) {
+      t.shop.life2.hobby.act(t);
       return true;
     }
     if (t.gift) {

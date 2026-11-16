@@ -250,7 +250,57 @@ export class HobbyLife {
   }
 
   // ---------------------------------------------------------------- every frame
+  // ---------------------------------------------------------------- you at the listening post (ROADMAP 26)
+  // E: the headphones on, a record on the deck - its tune in your ears, the head going with it - until E, or the side ends
+  target(p) {
+    const m = this.M.listen;
+    if (this.flow !== 'records' || !m) return null;
+    if (this.listener === 'you') return { hobYou: true, stop: true, label: tr('E — להוריד את האוזניות', 'E — take the headphones off') };
+    if (this.listener) return null;
+    if (Math.hypot(p.pos.x - m.x, p.pos.z - m.z) < 0.85) return { hobYou: true, listen: true, label: tr('E — להקשיב לתקליט', 'E — listen to a record') };
+    return null;
+  }
+
+  act(t) {
+    const g = this.game;
+    const p = g.player;
+    if (t.stop) return this.unlisten();
+    const m = this.M.listen;
+    this.listener = 'you';
+    this.youT = 0;
+    p.seat = { x: m.x, z: m.z, yaw: m.yaw, lock: true, stand: true, svc: 'listen' };
+    this.phones = this.life.movers.add({ line: 'headphones', model: 'headphones', cell: null, tint: [0.12, 0.12, 0.14] }, true);
+    this.phones.at = { c: p, how: 'head' };
+    if (g.audio && g.audio.music) g.audio.music(true, Math.floor(Math.random() * 16));
+    g.hud.toast(tr('האוזניות על הראש... (E — להוריד)', 'Headphones on... (E — take them off)'), 'info', 2.2);
+  }
+
+  unlisten() {
+    const g = this.game;
+    const p = g.player;
+    if (g.audio && g.audio.music) g.audio.music(false);
+    if (p.seat && p.seat.svc === 'listen') p.seat = null;
+    p.fig.lookAt = null;
+    if (this.phones) this.life.movers.remove(this.phones);
+    this.phones = null;
+    if (this.listener === 'you') this.listener = null;
+    if ((this.youT || 0) > 4) g.hud.toast(tr('איזה תקליט! הם בארגזים — משלמים בקופה', 'What a record! They are in the crates — pay at the till'), 'good', 2.6);
+    this.youT = 0;
+  }
+
   update(dt) {
+    // (you at the listening post: the head with the beat; off when the seat lets go, or the side is over)
+    if (this.listener === 'you') {
+      const p = this.game.player;
+      const m = this.M.listen;
+      if (!p.seat || p.seat.svc !== 'listen' || !m) this.unlisten();
+      else {
+        this.youT = (this.youT || 0) + dt;
+        const hc = p.fig.j.headC;
+        p.fig.lookAt = (this._look || (this._look = new THREE.Vector3())).set(hc.x + Math.sin(m.yaw) * 1.4, hc.y - 0.1 + Math.abs(Math.sin(this.youT * 4.6)) * 0.3, hc.z + Math.cos(m.yaw) * 1.4);
+        if (this.youT > 25) this.unlisten();
+      }
+    }
     this.t += dt;
     const P = this.game.player.pos;
     const c = this.life.room.center;
@@ -299,6 +349,7 @@ export class HobbyLife {
   }
 
   dispose() {
+    if (this.listener === 'you') this.unlisten();
     if (this.platter) this.life.movers.remove(this.platter);
     for (const it of this.cars) this.life.movers.remove(it);
     this.cars = [];

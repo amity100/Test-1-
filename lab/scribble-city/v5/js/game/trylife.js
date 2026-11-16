@@ -759,7 +759,53 @@ export class TryLife {
     this.game.hud.toast(tr(`הקופסה אצלכם (${fmt(req.price)}) — משלמים בקופה`, `The box is yours (${fmt(req.price)}) — pay at the till`), 'good', 2.6);
   }
 
+  // ---------------------------------------------------------------- you on the treadmill (ROADMAP 26)
+  // at its back, E: on the belt, walking (the belt running under you) until E again, or a while
+  target(p) {
+    const on = this.M['tread.on'];
+    const off = this.M['tread.off'];
+    if (!on || !off) return null;
+    if (this.tread === 'you') return { tryYou: true, stop: true, label: tr('E — לרדת מההליכון', 'E — step off the treadmill') };
+    if (this.tread) return null;
+    if (Math.hypot(p.pos.x - off.x, p.pos.z - off.z) < 0.9 || Math.hypot(p.pos.x - on.x, p.pos.z - on.z) < 0.7) return { tryYou: true, tread: true, label: tr('E — ללכת על ההליכון', 'E — walk on the treadmill') };
+    return null;
+  }
+
+  act(t) {
+    const p = this.game.player;
+    if (t.stop) return this.offTread();
+    const on = this.M['tread.on'];
+    this.tread = 'you';
+    this.youT = 0;
+    p.seat = { x: on.x, z: on.z, y: on.y, yaw: on.yaw, lock: true, stand: true, walk: 1.5, svc: 'tread' };
+    this.game.hud.toast(tr('החגורה רצה... (E — לרדת)', 'The belt is running... (E — step off)'), 'info', 2.2);
+  }
+
+  offTread() {
+    const p = this.game.player;
+    const off = this.M['tread.off'];
+    if (p.seat && p.seat.svc === 'tread') p.seat = null;
+    if (off) {
+      p.pos.x = off.x;
+      p.pos.z = off.z;
+    }
+    const m = Math.round((this.youT || 0) * 1.5);
+    if (this.tread === 'you') this.tread = null;
+    if (m > 5) this.game.hud.toast(tr(`הלכתם ${m} מטר על ההליכון`, `You walked ${m} m on the treadmill`), 'good', 2.4);
+    this.youT = 0;
+  }
+
   update(dt = 1 / 30) {
+    // (you on it: the belt kept running; off by E, or after a good while)
+    if (this.tread === 'you') {
+      const p = this.game.player;
+      if (!p.seat || p.seat.svc !== 'tread') this.tread = null;
+      else {
+        this.belt = 1.5;
+        this.youT = (this.youT || 0) + dt;
+        if (this.youT > 45) this.offTread();
+      }
+    }
     // (the treadmill's belt: running while somebody walks on it, slowing to a stop after)
     if (this.slats.length) {
       if (!this.tread) this.belt = Math.max(0, this.belt - dt * 1.5);
@@ -801,6 +847,11 @@ export class TryLife {
   }
 
   dispose() {
+    if (this.tread === 'you') {
+      const p = this.game.player;
+      if (p.seat && p.seat.svc === 'tread') p.seat = null;
+      this.tread = null;
+    }
     for (const q of this.slats) this.life.movers.remove(q.it);
     this.slats = [];
     for (const b of this.left) this.life.movers.remove(b);
