@@ -96,6 +96,9 @@ export class Album {
   known(id) {
     if (!BLUEPRINTS[id]) return false;
     if (this.early) return this.early.has(id);
+    // (the owner's word, again: every weapon and ride open from the start - ready at a touch, not first drawn over its lines
+    // to be learned; drawn by hand it is still read and made, as ever)
+    if (this.allOpen && !this.game.classic) return true;
     const it = this.items.get(id);
     return !!(it && it.best !== null);
   }
