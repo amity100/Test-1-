@@ -2057,3 +2057,17 @@ body.touch.phone-open .toast { max-width: 40vw; }
 /* (round 22: a phone, the radio's line one line high - a song's long name trailing off, not a second
    line up into the words said over it) */
 body.touch #radio { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* (the owner's word: the drawings bigger, easier to pick and to draw from) the catalog's cells and the picture to draw from */
+body.fd-catalog .fd-it { width: 96px; padding: 4px 2px 3px; }
+body.fd-catalog .fd-it svg { width: 74px; height: 46px; }
+body.fd-catalog .fd-it b { max-width: 92px; font-size: 12px; }
+body.fd-catalog .fd-it i { font-size: 10.5px; }
+body.touch.fd-catalog .fd-it { width: 88px; }
+body.touch.fd-catalog .fd-it svg { width: 68px; height: 42px; }
+body.touch.fd-catalog .fd-it b { max-width: 84px; font-size: 11px; }
+body.touch.fd-catalog .fd-it i { font-size: 9.5px; }
+body.touch.fd-catalog .fd-leg { left: 12px; }
+.fd-ref .fe-big { width: 170px; height: 104px; }
+.fd-ref .fe-what b { font-size: 16px; }
+body.touch .fd-ref .fe-big { width: 140px; height: 84px; }
