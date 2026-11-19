@@ -319,6 +319,8 @@ export class SaveGame {
     // the vehicles where they were left (and the one you sat in)
     const V = g.vehicles;
     for (const o of V.list) o.dispose();
+    // (ROADMAP 28.15: nothing is held by anything - the rides are put back each where it stood)
+    if (g.links) g.links.clear();
     V.list.length = 0;
     let mine = null;
     for (const it of s.vehicles || []) {

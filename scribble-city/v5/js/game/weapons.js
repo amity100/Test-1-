@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildPencilModel, PEN_BLUE } from './items.js';
+import { buildPencilModel, buildWeaponModel, PEN_BLUE } from './items.js';
 import { BLACK_INK, RED_INK } from '../render/LineBatch.js';
 import { groundHeight } from '../world/layout.js';
 import { blendMatrix } from './materialize.js';
@@ -511,6 +511,95 @@ export class Weapons {
     }
     this.projectiles.push(pr);
     return pr;
+  }
+
+  // ------------------------------------------------------------------ a gun of the hand on a ride (ROADMAP 28.15)
+  // which of them goes on a mount: a gun that fires things (not the pencil, not a blade, not a thing thrown, not a beam)
+  mountable(slot) {
+    const d = slot && slot.def;
+    return !!d && d.kind === 'gun' && !!d.projectile && !!d.rate && !d.beam;
+  }
+
+  // what a turret of it is to game/vehicles.js: as quick as it is in the hand
+  mountSpec(hand) {
+    const def = WEAPON_DEFS[hand.id] || WEAPON_DEFS.paint;
+    return { type: 'hand', hand, reload: 1 / def.rate, r: 0.05, len: 1, dmg: def.damage, speed: def.speed, spread: def.spread, quiet: !!def.quiet };
+  }
+
+  // out of the hand (onto the mount), and back into it
+  unhand(slot) {
+    this.removeModel(slot);
+    const i = this.slots.indexOf(slot);
+    if (i > 0) this.slots.splice(i, 1);
+    this.select(0);
+    this.game.hud.updateWeapon();
+  }
+
+  rehand(hand) {
+    const def = WEAPON_DEFS[hand.id];
+    if (!def) return;
+    this.add(def, hand.grade || 'good', buildWeaponModel(hand.id, hand.grade || 'good', { seed: hand.score || 0.8 }), hand.score);
+    this.current.popAt = this.game.time;
+    // (what was left in it)
+    if (hand.ammo > 0) this.current.ammo = hand.ammo;
+    this.game.hud.updateWeapon();
+  }
+
+  // fired from its mount: m its muzzle there, dir the way it points, car the ride it is on
+  fireMounted(hand, m, dir, car) {
+    const game = this.game;
+    const def = WEAPON_DEFS[hand.id];
+    if (!def) return;
+    const slot = hand.slot || (hand.slot = { def, grade: hand.grade || 'good', model: null });
+    const g = GRADE[slot.grade] || GRADE.good;
+    const sp = def.speed * g.speed;
+    const n = def.pellets || 1;
+    const spread = def.spread * g.spread;
+    for (let i = 0; i < n; i++) {
+      const d = _v.copy(dir);
+      d.x += (Math.random() - 0.5) * spread * 2;
+      d.y += (Math.random() - 0.5) * spread * 2;
+      d.z += (Math.random() - 0.5) * spread * 2;
+      d.normalize();
+      const extra = { ignoreCar: car };
+      if (def.projectile === 'plane') {
+        extra.homing = def.homing;
+        extra.life = 6;
+        extra.cruise = sp;
+      }
+      if (def.projectile === 'glue') extra.stick = def.stick;
+      if (def.projectile === 'inkbomb') {
+        extra.fuse = def.fuse || 1.5;
+        extra.life = extra.fuse + 0.3;
+        extra.spin = 0;
+      }
+      if (def.fat) extra.fat = def.fat;
+      if (def.reach) extra.life = Math.min(4, def.reach / sp);
+      if (def.projectile === 'staple') extra.pin = def.pin;
+      if (def.element) extra.el = def.element;
+      this.launch(slot, m.x, m.y, m.z, d.x * sp, d.y * sp, d.z * sp, extra);
+    }
+    game.fx.muzzle(m.x, m.y, m.z, def.quiet ? 0.35 : def.projectile === 'eraser' ? 1.8 : def.pellets ? 1.5 : 1);
+    this.muzzleFx(def, m, dir);
+    if (def.shell) this.eject(def, m, dir);
+    // (what it had in the hand is what it has up there: empty, it comes off its mount)
+    if (hand.ammo > 0 && --hand.ammo === 0) {
+      Promise.resolve().then(() => {
+        const part = car.fuse && car.fuse.parts.find((p) => p.hand === hand);
+        if (part && game.fuse) game.fuse.removeVeh(car, part, true);
+        game.hud.toast(tr(`ה${def.name} שעל הגג נגמר — אפשר לצייר אותו שוב`, `The ${def.name} on the roof ran out — you can draw it again`), 'info', 2.6);
+        if (game.tray) game.tray.sig = '';
+      });
+    }
+    if (def.quiet) game.audio.play('staple', 0.4);
+    else game.audio.play(def.sound || (def.projectile === 'paint' ? 'paint' : def.projectile === 'pencil' ? 'pencilShot' : 'bazooka'));
+    game.camRig.addShake((def.kick || (def.projectile === 'eraser' ? 0.35 : 0.04)) * 0.4);
+    if (def.quiet) game.enemies.noise(car.pos, 5);
+    else {
+      game.enemies.noise(car.pos, 32);
+      game.civilians.panic(car.pos, 40, 'shot', { by: 'player', armed: true });
+      game.onCrime('shoot', car.pos.x, car.pos.z);
+    }
   }
 
   fireGun(slot) {

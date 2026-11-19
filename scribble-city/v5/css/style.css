@@ -2150,6 +2150,20 @@ body.paused .bt-btn, body.fd-open .bt-btn, body.bt-open .bt-btn { display: none;
 /* the builds, the fusion book */
 .bt-panel { position: absolute; left: max(8px, env(safe-area-inset-left)); top: max(6px, env(safe-area-inset-top)); bottom: calc(max(6px, env(safe-area-inset-bottom)) + 108px); width: min(330px, 46vw); display: none; flex-direction: column; border-radius: 14px; border: 2.5px solid var(--ink); background: rgba(255, 250, 238, 0.97); box-shadow: 3px 4px 0 var(--ink); overflow: hidden; }
 .bt-panel.on { display: flex; }
+/* (ROADMAP 28.15, the garage) the three versions of this ride; the chosen part's nudge arrows */
+.bt-vers { display: flex; gap: 5px; padding: 6px 8px; border-bottom: 2px dashed rgba(26, 26, 42, 0.35); }
+.bt-vers button { position: relative; flex: 1; min-width: 0; height: 42px; padding: 2px 4px; border: 2px dashed var(--ink); border-radius: 9px; background: #fffdf4; color: var(--ink); font: 700 10px Rubik, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; touch-action: none; }
+.bt-vers button.got { border-style: solid; background: #d9f2d0; }
+.bt-vers button b { text-transform: uppercase; }
+.bt-vers button span { display: flex; gap: 1px; font-weight: 500; opacity: 0.8; white-space: nowrap; overflow: hidden; }
+.bt-vers button svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; }
+.bt-vers button i { position: absolute; top: -6px; inset-inline-end: -5px; width: 18px; height: 18px; border-radius: 50%; background: var(--ink); color: #fff; font: 700 10px/18px Rubik, sans-serif; font-style: normal; text-align: center; }
+.bt-nudge { display: inline-flex; gap: 3px; }
+.bt-selbar .bt-nudge button { min-width: 26px; padding: 5px 4px; }
+/* (the chosen part's row keeps clear of the buttons down the side, whatever is in it) */
+.bt-selbar { left: calc(50% - 36px); max-width: calc(100vw - 168px); overflow-x: auto; scrollbar-width: none; }
+.bt-selbar > * { flex: none; }
+.bt-selbar input[type="range"] { width: 104px; }
 .bt-ptitle { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 9px; border-bottom: 2px solid var(--ink); background: #fff3c4; }
 .bt-ptitle b { font: 800 13px Rubik, sans-serif; text-transform: uppercase; }
 .bt-ptitle em { font: 700 12px Rubik, sans-serif; font-style: normal; }
@@ -2230,6 +2244,9 @@ body.paused .bt, body.paused .bt-stage, body.paused .bt-fx, body.paused .bt-trac
 /* the mode button (the mode shift on the ride you are in): road, air */
 .bt-mode { position: fixed; z-index: 21; display: none; left: max(16px, env(safe-area-inset-left)); bottom: max(168px, calc(env(safe-area-inset-bottom) + 160px)); width: 62px; height: 46px; padding: 0; border-radius: 12px; border: 2.5px solid var(--ink); background: #cfe6ff; box-shadow: 2px 3px 0 var(--ink); color: var(--ink); font: 700 10px Rubik, sans-serif; align-items: center; justify-content: center; flex-direction: column; touch-action: none; }
 .bt-mode.on { display: flex; }
+/* (ROADMAP 28.15) the link button: tow, link, load - split, launch (game/links.js) */
+.ln-btn { bottom: max(222px, calc(env(safe-area-inset-bottom) + 214px)); background: #ffe9a8; }
+.ln-btn[data-act="split"], .ln-btn[data-act="launch"] { background: #ffc7b0; }
 .bt-mode.road { background: #e9e3d2; }
 .bt-mode svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .bt-mode b { text-transform: uppercase; line-height: 1; }

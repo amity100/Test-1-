@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Kit, itemMats, linC } from './items.js';
+import { Kit, itemMats, linC, buildWeaponModel } from './items.js';
 import { helixGeometry } from './drawncar.js';
 
 // (ROADMAP 11.20) The parts drawn onto things, as the city's own things: a real wheel with a tyre
@@ -680,4 +680,31 @@ export function linkModel(kind, D, paint) {
     K.box(M.metal, -w * 0.3, 0.1, -l, w * 0.3, 0.14, -l + 0.1, YEL);
   }
   return wrap(K.build({ seed: 0.57 }));
+}
+
+// (ROADMAP 28.15) a gun of the hand on a ride's roof: a short post, a swivel, and the gun itself on it - half as big again
+// as in the hand, to be seen up there. Its handles as a barrel's (pivot: what turns; muzzle and pivotPt in the pivot's frame)
+export function handMountModel(hand, k = 1.55) {
+  const M = itemMats();
+  const K = new Kit();
+  K.cyl(M.metal, 0.07, 0.05, 0, 0.2, DARK, { axis: 'y' });
+  K.box(M.metal, -0.12, 0, -0.12, 0.12, 0.03, 0.12, STEEL);
+  K.sphere(M.metal, 0.06, 0, 0.22, 0, CHROME);
+  const post = K.build({ seed: 0.91 });
+  const wm = buildWeaponModel(hand.id, hand.grade || 'good', { seed: hand.score || 0.8 });
+  const mz = wm.muzzle || new THREE.Vector3(0, 0.05, 0.4);
+  const hold = new THREE.Group();
+  hold.add(wm.group);
+  hold.scale.setScalar(k);
+  // (its grip over the post: a third of the way along it)
+  const back = Math.min(0.2, (wm.length || 0.5) * 0.3);
+  hold.position.set(0, 0.03, -back * k);
+  const pivot = new THREE.Group();
+  pivot.position.y = 0.26;
+  pivot.add(hold);
+  const g = new THREE.Group();
+  g.add(post);
+  g.add(pivot);
+  const my = 0.03 + mz.y * k;
+  return wrap(g, { pivot, muzzle: new THREE.Vector3(0, my, (mz.z - back) * k), pivotPt: new THREE.Vector3(0, my, 0), r: 0.05, len: (wm.length || 0.5) * k });
 }

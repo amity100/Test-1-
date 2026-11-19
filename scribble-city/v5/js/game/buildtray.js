@@ -123,7 +123,7 @@ export class BuildTray {
 
   // ------------------------------------------------------------------ kept
   load() {
-    const out = { learned: {}, fav: {}, builds: [], recent: [], book: [], tab: 'func', size: {} };
+    const out = { learned: {}, fav: {}, builds: [], recent: [], book: [], tab: 'func', size: {}, vers: {} };
     try {
       const o = JSON.parse(localStorage.getItem(KEY) || 'null');
       if (o && typeof o === 'object') {
@@ -251,6 +251,8 @@ export class BuildTray {
     const g = this.game;
     const play = g.gear && g.gear.play;
     if (ITEMS[id] && play && !play.isOpen(id)) return tr('עוד נעול', 'Still locked');
+    // (the gun mount: a gun in the hand to put on it - or one on it already)
+    if (id === 'handgun' && !g.weapons.mountable(g.weapons.current) && !(v && v.fuse && v.fuse.parts.some((p) => p.hand))) return tr('צריך נשק ביד', 'Needs a gun in your hand');
     return null;
   }
 
@@ -286,7 +288,11 @@ export class BuildTray {
       g.audio.play('rubber', 0.4);
       return null;
     }
-    for (const q of on) fz.removeVeh(v, q, true);
+    for (const q of on) {
+      // (another gun onto the mount: the one that was on it back in your hand, after the new one is out of it)
+      if (q.hand) setTimeout(() => g.weapons.rehand(q.hand), 0);
+      fz.removeVeh(v, q, true);
+    }
     const size = clamp(o.size || this.store.size[id] || 1, 0.6, 1.7);
     const inkI = (g.freedraw && g.freedraw.ink) || 0;
     const made = [];
@@ -372,6 +378,19 @@ export class BuildTray {
       fz.justAdded = null;
       fz.popDelay = 0;
       if (!res) return null;
+    } else if (it.hand) {
+      // (ROADMAP 28.15: the gun out of your hand, on a swivel on the roof - what it is, kept with the part)
+      const slot = g.weapons.current;
+      if (!g.weapons.mountable(slot)) return null;
+      const roof = K ? K.roofY : D.h;
+      part = { type: 'barrel', v: 'turret', n: { len: 1, r: 0.05 }, at: [0, r2(roof), r2(-D.hl * 0.05)], ink: inkI, t0: g.time, cost: 0, id: rnd(), hand: { id: slot.def.id, grade: slot.grade, score: slot.score === undefined ? 0.8 : slot.score, mods: slot.mods ? [...slot.mods] : null, ammo: Number.isFinite(slot.ammo) ? slot.ammo : -1 } };
+      fz.justAdded = part;
+      fz.popDelay = 120 + pop;
+      const res = fz.onVehicle(v, part);
+      fz.justAdded = null;
+      fz.popDelay = 0;
+      if (!res) return null;
+      g.weapons.unhand(slot);
     } else if (it.link) {
       part = { type: 'link', v: it.link, n: { size: 1 }, at: linkAt(it.link, D, K), ink: inkI, t0: g.time, cost: 0, id: rnd() };
       fz.justAdded = part;
@@ -407,6 +426,8 @@ export class BuildTray {
     let also = [];
     if (id === 'coupler' && needsCoupler(v)) also = v.fuse.parts.filter((p) => trayIdOf(p) !== 'coupler');
     for (const q of [...on, ...also]) {
+      // (the gun off its mount: back in your hand)
+      if (q.hand) g.weapons.rehand(q.hand);
       const [ax, ay, az] = q.at || [0, 1, 0];
       const c = Math.cos(v.yaw);
       const s = Math.sin(v.yaw);
@@ -509,7 +530,8 @@ export class BuildTray {
   capture(v) {
     const fz = this.game.fuse;
     const saved = fz.saveVeh(v);
-    const parts = Array.isArray(saved) ? saved : saved && saved.parts ? saved.parts : [];
+    // (a gun of the hand on its mount is not part of a build: it is that one gun)
+    const parts = (Array.isArray(saved) ? saved : saved && saved.parts ? saved.parts : []).filter((q) => !q.hand);
     return { base: { bp: v.bp ? v.bp.id : v.kind === 'car' ? 'car' : v.kind, kind: v.kind, carKind: v.carKind || null }, parts: JSON.parse(JSON.stringify(parts)), ids: [...trayIdsOn(v)] };
   }
 
@@ -547,7 +569,68 @@ export class BuildTray {
   }
 
   findBuild(id) {
+    if (typeof id === 'string' && id.startsWith('ver:')) {
+      const [, key, i] = id.split(':');
+      const L = this.store.vers[key];
+      return (L && L[+i]) || null;
+    }
     return this.store.builds.find((b) => b.id === id) || this.store.recent.find((b) => b.id === id) || null;
+  }
+
+  // (ROADMAP 28.15, the garage) three versions of each ride - a racer, a fighter, a flyer - each kept with all its parts:
+  // a touch on an empty one keeps what is on the ride now; on a kept one, puts it on
+  verKey(v = this.v) {
+    return v ? (v.bp ? v.bp.id : v.kind === 'car' ? 'car' : v.kind) : '';
+  }
+
+  version(i) {
+    const g = this.game;
+    const v = this.v;
+    if (!v) return false;
+    const key = this.verKey(v);
+    const L = this.store.vers[key] || (this.store.vers[key] = [null, null, null]);
+    if (L[i]) return this.applyBuild(`ver:${key}:${i}`);
+    const c = this.capture(v);
+    if (!c.parts.length) {
+      g.hud.toast(tr('אין מה לשמור — קודם שמים רכיבים', 'Nothing to keep — put some parts on first'), 'info', 2);
+      return false;
+    }
+    L[i] = { id: `ver:${key}:${i}`, name: VER_NAME[i], t: Date.now(), ...c };
+    this.save();
+    g.audio.play('cheer', 0.4);
+    g.hud.toast(tr(`נשמר כגרסת ${VER_NAME[i]}`, `Kept as the ${VER_NAME[i]} version`), 'good', 2);
+    this.sig = '';
+    return true;
+  }
+
+  dropVersion(i) {
+    const L = this.store.vers[this.verKey()];
+    if (!L || !L[i]) return false;
+    L[i] = null;
+    this.save();
+    this.game.audio.play('rubber', 0.4);
+    this.sig = '';
+    return true;
+  }
+
+  // (the garage's fine hand) the chosen part a little along the ride or across it - the ones that sit where they are put
+  nudgable(p) {
+    return !!p && (!!p.par || (p.type === 'barrel' && p.v === 'turret')) && Array.isArray(p.at);
+  }
+
+  nudge(dir) {
+    const g = this.game;
+    const v = this.v;
+    const p = this.sel;
+    if (!v || !this.nudgable(p)) return false;
+    const D = g.fuse.drawCtx(v).D;
+    const d = dir === 'f' ? [0, 0.15] : dir === 'b' ? [0, -0.15] : dir === 'l' ? [-0.1, 0] : [0.1, 0];
+    p.at[0] = r2(clamp(p.at[0] + d[0], -D.hw * 0.7, D.hw * 0.7));
+    p.at[2] = r2(clamp(p.at[2] + d[1], -D.hl - 0.1, D.hl * 0.7));
+    g.fuse.applyVeh(v);
+    g.fuse.buildVeh(v);
+    g.audio.play('click', 0.25);
+    return true;
   }
 
   dropBuild(id) {
@@ -1110,6 +1193,8 @@ export class BuildTray {
     // (the tray takes the bottom third: the ride fitted into what is left over it)
     // (how much of the picture's height it takes seen from this high: its own height, and its length and breadth laid
     // back by the angle)
+    // (the garage's stage: the ride turning slowly under the eye)
+    if (this.stage && on && !this.tracing && !this.drag) this.camYaw += rdt * 0.4;
     const yw = v.yaw + this.camYaw;
     const cp = Math.cos(this.camPitch);
     const sp = Math.sin(this.camPitch);
@@ -1247,7 +1332,7 @@ export class BuildTray {
     this.chipsEl = tray.querySelector('.bt-chips');
     this.panelEl = tray.querySelector('.bt-panel');
     this.metersEl.innerHTML = METERS.map((m) => `<div class="bt-m" data-m="${m.k}">${svgIcon(m.icon)}<b>${m.name}</b><i><u></u><s></s></i></div>`).join('');
-    this.sideEl.innerHTML = `<button data-a="undo" aria-label="${tr('ביטול', 'Undo')}">${svgIcon('<path d="M9 7 L4 12 L9 17 M4 12 H14 A4.5 4.5 0 0 1 14 21 H10"/>')}<b>${tr('ביטול', 'Undo')}</b></button><button data-a="mirror" aria-label="${tr('זוגות', 'Pairs')}">${svgIcon('<path d="M12 3 V21 M9 7 L4 12 L9 17 Z M15 7 L20 12 L15 17 Z"/>')}<b>${tr('זוגות', 'Pairs')}</b></button><button data-a="builds" aria-label="${tr('בניות', 'Builds')}">${svgIcon('<path d="M5 4 H16 L19 7 V20 H5 Z M8 4 V9 H15 V4 M8 20 V14 H16 V20"/>')}<b>${tr('בניות', 'Builds')}</b></button><button data-a="book" aria-label="${tr('הכלאות', 'Fusions')}">${svgIcon('<path d="M4 5 C7 3.5 10 3.5 12 5 C14 3.5 17 3.5 20 5 V19 C17 17.5 14 17.5 12 19 C10 17.5 7 17.5 4 19 Z M12 5 V19"/>')}<b>${tr('הכלאות', 'Fusions')}</b></button><button data-a="pen" aria-label="${tr('ציור חופשי', 'Free draw')}">${svgIcon('<path d="M4 20l1.2-4.6L16.6 4a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8z"/>')}<b>${tr('ציור', 'Draw')}</b></button><button data-a="done" class="bt-done" aria-label="${tr('סיום', 'Done')}">${svgIcon('<path d="M7 5 L19 12 L7 19 Z"/>')}<b>${tr('סיום', 'Done')}</b></button>`;
+    this.sideEl.innerHTML = `<button data-a="undo" aria-label="${tr('ביטול', 'Undo')}">${svgIcon('<path d="M9 7 L4 12 L9 17 M4 12 H14 A4.5 4.5 0 0 1 14 21 H10"/>')}<b>${tr('ביטול', 'Undo')}</b></button><button data-a="mirror" aria-label="${tr('זוגות', 'Pairs')}">${svgIcon('<path d="M12 3 V21 M9 7 L4 12 L9 17 Z M15 7 L20 12 L15 17 Z"/>')}<b>${tr('זוגות', 'Pairs')}</b></button><button data-a="builds" aria-label="${tr('בניות', 'Builds')}">${svgIcon('<path d="M5 4 H16 L19 7 V20 H5 Z M8 4 V9 H15 V4 M8 20 V14 H16 V20"/>')}<b>${tr('בניות', 'Builds')}</b></button><button data-a="book" aria-label="${tr('הכלאות', 'Fusions')}">${svgIcon('<path d="M4 5 C7 3.5 10 3.5 12 5 C14 3.5 17 3.5 20 5 V19 C17 17.5 14 17.5 12 19 C10 17.5 7 17.5 4 19 Z M12 5 V19"/>')}<b>${tr('הכלאות', 'Fusions')}</b></button><button data-a="stage" aria-label="${tr('במה', 'Stage')}">${svgIcon('<path d="M4 15 C4 12 20 12 20 15 C20 18 4 18 4 15 Z M17 7 A6 4 0 0 0 7 7 M7 7 L7 4 M7 7 L10 7"/>')}<b>${tr('במה', 'Stage')}</b></button><button data-a="pen" aria-label="${tr('ציור חופשי', 'Free draw')}">${svgIcon('<path d="M4 20l1.2-4.6L16.6 4a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8z"/>')}<b>${tr('ציור', 'Draw')}</b></button><button data-a="done" class="bt-done" aria-label="${tr('סיום', 'Done')}">${svgIcon('<path d="M7 5 L19 12 L7 19 Z"/>')}<b>${tr('סיום', 'Done')}</b></button>`;
     this.tabsEl.innerHTML = TABS.map((t) => `<button data-t="${t}" aria-label="${TAB_NAME[t]}">${svgIcon(TAB_ICON[t])}<b>${TAB_NAME[t]}</b></button>`).join('');
 
     tray.addEventListener('pointerdown', (e) => {
@@ -1443,6 +1528,17 @@ export class BuildTray {
       return true;
     }
     if (a === 'save') return this.saveBuild();
+    // (ROADMAP 28.15, the garage: the stage, the three versions, the fine hand)
+    if (a === 'stage') {
+      this.stage = !this.stage;
+      g.audio.play('click', 0.3);
+      g.hud.toast(this.stage ? tr('במה: הרכב מסתובב לאט מול העין', 'Stage: the ride turns slowly in front of you') : tr('הבמה נעצרה', 'The stage stopped'), 'info', 1.6);
+      this.sig = '';
+      return true;
+    }
+    if (a.startsWith('verx')) return this.dropVersion(+a.slice(4));
+    if (a.startsWith('ver')) return this.version(+a.slice(3));
+    if (a.startsWith('nudge-')) return this.nudge(a.slice(6));
     if (a === 'off' && this.sel) {
       const id = trayIdOf(this.sel);
       if (id) return this.remove(id);
@@ -1508,7 +1604,7 @@ export class BuildTray {
       const it = id ? info(id) : null;
       const mounts = id ? this.mountsOf(id, v).filter((m) => m.key) : [];
       const size = Math.round((sel.traySize || 1) * 100);
-      this.selEl.innerHTML = `<b>${it ? it.name : tr('רכיב', 'Part')}</b>${id && SIZED.has(id) ? `<label>${tr('גודל', 'Size')}<input type="range" data-size="1" min="60" max="170" step="5" value="${size}"></label>` : ''}${mounts.length > 1 ? mounts.map((m) => `<button data-mount="${m.key}" class="${(sel.trayMount || mounts[0].key) === m.key ? 'on' : ''}">${m.name}</button>`).join('') : ''}<button data-a="off" class="bt-off">${tr('להוריד', 'Take off')}</button>`;
+      this.selEl.innerHTML = `<b>${it ? it.name : tr('רכיב', 'Part')}</b>${id && SIZED.has(id) ? `<label>${tr('גודל', 'Size')}<input type="range" data-size="1" min="60" max="170" step="5" value="${size}"></label>` : ''}${mounts.length > 1 ? mounts.map((m) => `<button data-mount="${m.key}" class="${(sel.trayMount || mounts[0].key) === m.key ? 'on' : ''}">${m.name}</button>`).join('') : ''}${this.nudgable(sel) ? `<span class="bt-nudge"><button data-a="nudge-l" aria-label="${tr('שמאלה', 'Left')}">◀</button><button data-a="nudge-f" aria-label="${tr('קדימה', 'Forward')}">▲</button><button data-a="nudge-b" aria-label="${tr('אחורה', 'Back')}">▼</button><button data-a="nudge-r" aria-label="${tr('ימינה', 'Right')}">▶</button></span>` : ''}<button data-a="off" class="bt-off">${tr('להוריד', 'Take off')}</button>`;
       this.selEl.classList.add('on');
     } else {
       this.selEl.classList.remove('on');
@@ -1519,7 +1615,9 @@ export class BuildTray {
       const row = (b, rec) => `<div class="bt-build" data-b="${b.id}"><b>${rec ? tr('אחרונה', 'Recent') : b.name}</b><span>${b.ids.map((id) => (info(id) ? svgIcon(info(id).icon) : '')).join('')}</span><i data-x="${b.id}" aria-label="${tr('למחוק', 'Delete')}">✕</i></div>`;
       const B = this.store.builds;
       const R = this.store.recent;
-      this.panelEl.innerHTML = `<div class="bt-ptitle"><b>${tr('בניות', 'Builds')}</b><button data-a="save">${tr('✦ לשמור את מה שעל הרכב', '✦ Save what is on the ride')}</button></div><div class="bt-plist">${B.map((b) => row(b, false)).join('')}${R.map((b) => row(b, true)).join('')}${B.length + R.length ? '' : `<p>${tr('עוד אין בניות. מה שתבנו נשמר לבד — חמש האחרונות', 'No builds yet. What you build keeps itself — the last five')}</p>`}</div>`;
+      const VL = (v && this.store.vers[this.verKey(v)]) || [null, null, null];
+      const vers = `<div class="bt-vers">${[0, 1, 2].map((i) => `<button data-a="ver${i}" class="${VL[i] ? 'got' : ''}"><b>${VER_NAME[i]}</b><span>${VL[i] ? VL[i].ids.slice(0, 5).map((id) => (info(id) ? svgIcon(info(id).icon) : '')).join('') : tr('+ לשמור כאן', '+ keep here')}</span>${VL[i] ? `<i data-a="verx${i}" aria-label="${tr('למחוק', 'Delete')}">✕</i>` : ''}</button>`).join('')}</div>`;
+      this.panelEl.innerHTML = `<div class="bt-ptitle"><b>${tr('בניות', 'Builds')}</b><button data-a="save">${tr('✦ לשמור את מה שעל הרכב', '✦ Save what is on the ride')}</button></div>${vers}<div class="bt-plist">${B.map((b) => row(b, false)).join('')}${R.map((b) => row(b, true)).join('')}${B.length + R.length ? '' : `<p>${tr('עוד אין בניות. מה שתבנו נשמר לבד — חמש האחרונות', 'No builds yet. What you build keeps itself — the last five')}</p>`}</div>`;
       this.panelEl.classList.add('on');
     } else if (this.panel === 'book') {
       const book = this.store.book;
@@ -1656,6 +1754,8 @@ const METERS = [
   { k: 'lift', name: tr('עילוי', 'Lift'), icon: '<path d="M12 21 V4 M6 10 L12 4 L18 10"/>' },
   { k: 'float', name: tr('ציפה', 'Float'), icon: '<path d="M2 14 C5 11 7 17 10 14 C13 11 15 17 18 14 C20 12.5 21 13 22 14 M2 19 C5 16 7 22 10 19 C13 16 15 22 18 19 C20 17.5 21 18 22 19"/>' },
 ];
+
+const VER_NAME = [tr('מרוץ', 'Race'), tr('קרב', 'Combat'), tr('תעופה', 'Flight')];
 
 // where a link holds on the ride (its frame: x to its left, z to its nose)
 function linkAt(kind, D, K) {

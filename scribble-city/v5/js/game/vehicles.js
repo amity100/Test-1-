@@ -486,6 +486,18 @@ class Vehicle {
       pop = Math.max(0.1, 1 + 2.70158 * k * k * k + 1.70158 * k * k);
     }
     this.pop = pop;
+    // (ROADMAP 28.15: held by another ride - on its cable, clamped to it, on its roof: game/links.js puts it where
+    // its holder takes it)
+    if (this.held && this.game.links) {
+      this.game.links.hold(this, dt);
+      this.wheelSpin += (this.speed * dt) / 0.36;
+      if (this.kind === 'car') return;
+      this.group.position.copy(this.pos);
+      this.group.rotation.set(0, this.yaw, 0);
+      this.group.scale.setScalar(pop);
+      if (this.kind === 'bike') for (const w of this.wheels) w.rotation.x = this.wheelSpin;
+      return;
+    }
     // (v5, ROADMAP 18: somebody else at the wheel - the prologue's men in the dark car, driving after
     // you with a hand of their own on it: game/prologue/chase.js)
     const input = this.driver ? this.game.input : this.ai || null;
@@ -834,6 +846,12 @@ class Vehicle {
       // that gives way (the prologue's gang) is pushed off by the player's, never the other way round)
       if (Math.abs(this.pos.y - v.pos.y) > 2.2) continue;
       if (v.yields && this.driver) continue;
+      // (ROADMAP 28.15: what it holds - on its cable, clamped to it, on its roof - is part of it: game/links.js)
+      if (v.held) {
+        let r = v.held.a;
+        while (r.held) r = r.held.a;
+        if (r === this) continue;
+      }
       const dx = this.pos.x - v.pos.x;
       const dz = this.pos.z - v.pos.z;
       const d = Math.hypot(dx, dz);
@@ -945,8 +963,10 @@ class Vehicle {
     this.boosting = boost;
     // (ROADMAP 11.20: a jet drawn onto it - as strong as it is long, game/fuse.js)
     const jk = this.fz ? this.fz.jetK || 1 : 1;
-    const top = (this.racing ? 33 : H.top) * q.speed * (U ? 1 + 0.06 * U.engine : 1) * (dry ? 0.35 : 1) * (1 + 0.4 * boost * jk);
-    const power = H.power * q.accel * (U ? 1 + 0.12 * U.engine : 1) * (dry ? 0.3 : 1) * (1 + 1.2 * boost * jk);
+    // (ROADMAP 28.15: what it pulls, what is clamped to it, what is on its roof - game/links.js)
+    const LK = this.linkK;
+    const top = (this.racing ? 33 : H.top) * q.speed * (U ? 1 + 0.06 * U.engine : 1) * (dry ? 0.35 : 1) * (1 + 0.4 * boost * jk) * (LK ? LK.top : 1);
+    const power = H.power * q.accel * (U ? 1 + 0.12 * U.engine : 1) * (dry ? 0.3 : 1) * (1 + 1.2 * boost * jk) * (LK ? LK.power : 1);
     // (ROADMAP 11.12: a jet pointing forward - it brakes hard)
     const brakeK = (U ? 1 + 0.18 * U.brakes : 1) * (H.brake || 1);
     // (the driving skill: ROADMAP 5.6)
@@ -1393,6 +1413,11 @@ class Vehicle {
     along.subVectors(mw, along).normalize();
     const dir = (this._aimAt || game.weapons.aimPoint).clone().sub(mw).normalize();
     if (dir.dot(along) < Math.cos(Math.min(Math.PI, t.arc + 0.45))) dir.copy(along);
+    // (ROADMAP 28.15: a gun of the hand on its mount - it fires what it fires in the hand, game/weapons.js)
+    if (g.type === 'hand') {
+      game.weapons.fireMounted(g.hand, mw, dir, this);
+      return;
+    }
     // (the chase's gun: hotter with every shot)
     if (g.type === 'mg' && game.prologue && game.prologue.chaseGun) {
       this.gunHeat = (this.gunHeat || 0) + g.reload / 3.1;

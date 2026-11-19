@@ -22,7 +22,7 @@ export const TAB_ICON = {
 
 export const TRAY = {
   func: ['turbo', 'jet', 'prop', 'wing', 'rotor', 'balloon', 'jump', 'chute', 'water', 'tracks', 'monster', 'rewind'],
-  weapon: ['mg', 'missiles', 'harpoon', 'net', 'tesla'],
+  weapon: ['mg', 'handgun', 'missiles', 'harpoon', 'net', 'tesla'],
   armor: ['armor', 'bullbar', 'smoke', 'repair', 'jammer', 'repaint'],
   link: ['coupler', 'modeshift', 'duallink', 'cargo'],
 };
@@ -38,6 +38,11 @@ export const EXTRA = {
     cat: 'func', par: 'prop', name: tr('מדחף', 'Propeller'), does: tr('דוחף בעדינות כל הזמן — ביבשה, במים ובאוויר', 'A gentle push all the time — on land, on water, in the air'), use: 'always',
     icon: '<circle cx="12" cy="12" r="2"/><path d="M12 10 C9 6 9 3 12 2 C15 3 15 6 12 10 Z M12 14 C15 18 15 21 12 22 C9 21 9 18 12 14 Z M14 12 C18 9 21 9 22 12 C21 15 18 15 14 12 Z M10 12 C6 15 3 15 2 12 C3 9 6 9 10 12 Z"/>',
   },
+  // (ROADMAP 28.15) the gun in your hand, on the roof: it fires there what it fires in the hand
+  handgun: {
+    cat: 'weapon', hand: true, name: tr('מעמד לנשק', 'Gun Mount'), does: tr('הנשק שביד עולה לגג ויורה משם — לאן שמכוונים. להוריד מחזיר אותו ליד', 'The gun in your hand goes up on the roof and fires from there — where you aim. Taking it off puts it back in your hand'), use: 'fire',
+    icon: '<path d="M3 9 H17 L20 8 V11 H17 V12 H11 L10 15 H7 L8 12 H3 Z M12 15 V19 M8 19 H16"/>',
+  },
   coupler: {
     cat: 'link', link: 'coupler', name: tr('מצמד אוניברסלי', 'Universal Coupler'), does: tr('כל רכיב על כל כלי — צריח על סירה, שריון על מסוק. מגיע עם הרכבים החדשים', 'Any part on any ride — a turret on a boat, armor on a helicopter. Comes with the new rides'), use: 'always', soon: true,
     icon: '<circle cx="8" cy="12" r="5"/><circle cx="16" cy="12" r="5"/><path d="M11 12 H13"/>',
@@ -47,11 +52,11 @@ export const EXTRA = {
     icon: '<path d="M4 8 H17 M14 5 L17 8 L14 11 M20 16 H7 M10 13 L7 16 L10 19"/>',
   },
   duallink: {
-    cat: 'link', link: 'dual', name: tr('חיבור שלדה כפול', 'Dual Chassis Link'), does: tr('מחבר שני רכבים לאחד — מגיע עם החיבורים הגדולים', 'Joins two rides into one — comes with the big links'), use: 'always', soon: true,
+    cat: 'link', link: 'dual', name: tr('חיבור שלדה כפול', 'Dual Chassis Link'), does: tr('מחבר שני רכבים לאחד: שני מנועים, יותר כוח. ליד רכב אחר — כפתור "חבר"', 'Joins two rides into one: two engines, more power. By another ride — the "Link" button'), use: 'always',
     icon: '<rect x="2" y="7" width="8" height="10" rx="2"/><rect x="14" y="7" width="8" height="10" rx="2"/><path d="M10 10 H14 M10 14 H14"/>',
   },
   cargo: {
-    cat: 'link', link: 'cargo', name: tr('מנשא מטען', 'Cargo Mount'), does: tr('נושא רכב קטן על הגג ומשגר אותו — מגיע עם החיבורים הגדולים', 'Carries a small ride on the roof and launches it — comes with the big links'), use: 'always', soon: true,
+    cat: 'link', link: 'cargo', name: tr('מנשא מטען', 'Cargo Mount'), does: tr('נושא רכב קטן על הגג ומשגר אותו: ליד רכב קטן — "העמס", ואז "שגר"', 'Carries a small ride on the roof and launches it: by a small ride — "Load", then "Launch"'), use: 'always',
     icon: '<path d="M3 17 H21 M5 17 V13 H19 V17 M8 13 V8 H16 V13 M8 10.5 H16"/>',
   },
 };

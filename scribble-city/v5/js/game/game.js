@@ -18,6 +18,7 @@ import { Album, ALL_OPEN } from '../ui/album.js';
 import { Inventions } from './inventions.js';
 import { BuildTray } from './buildtray.js';
 import { GunMods } from './gunmods.js';
+import { Links } from './links.js';
 import { Clouds } from './clouds.js';
 import { setSlabRes } from './designbuild.js';
 import { Materialize } from './materialize.js';
@@ -242,6 +243,8 @@ export class Game {
     if (this.touch) setSlabRes(0.6);
     // (ROADMAP 28.9) what goes on a gun in the hand: a scope, a suppressor, a longer magazine, a bayonet, a launcher
     this.gunmods = this.classic ? null : new GunMods(this);
+    // (ROADMAP 28.15: a ride on a cable, clamped to another, on its roof - game/links.js)
+    this.links = this.classic ? null : new Links(this);
     this.album.onAdd = (id) => this.onAlbumAdd(id);
     this.airdraw = new AirDraw(this);
     this.airsketch = new AirSketches(this);
@@ -1552,6 +1555,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       this.tray.cam(this.realDt);
     }
     if (this.gunmods) this.gunmods.update();
+    if (this.links) this.links.update();
     if (this.smokes && this.smokes !== this.signs) this.smokes.update();
     const tipsy = this.inkwell.tipsy;
     if (tipsy > 0.05 && this.state === 'play') {
