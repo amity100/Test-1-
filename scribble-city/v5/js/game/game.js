@@ -1347,7 +1347,18 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       const iv = this.pendingInv;
       if (iv && !iv.materializing) {
         this.pendingInv = null;
-        if (!iv.dead && this.fuse) {
+        if (!iv.dead && this.fuse && iv.pendingFull) {
+          // (ROADMAP 28: a build of the parts tray made again - each part as it was kept, the pen's things and all)
+          iv.pendingParts.forEach((q, i) => {
+            const part = { ...JSON.parse(JSON.stringify(q)), t0: this.time, id: Math.random().toString(36).slice(2, 8) };
+            this.fuse.justAdded = part;
+            this.fuse.popDelay = 120 + i * 180;
+            this.fuse.onVehicle(iv, part);
+            this.fuse.justAdded = null;
+            this.fuse.popDelay = 0;
+          });
+          if (iv.invName) this.hud.toast(tr(`✦ ${iv.invName} — מוכנה`, `✦ ${iv.invName} — ready`), 'good', 2.6);
+        } else if (!iv.dead && this.fuse) {
           iv.pendingParts.forEach((q, i) => {
             const part = { ...q, n: { ...q.n }, at: q.at ? q.at.slice() : [0, 1, 0], dir: q.dir ? q.dir.slice() : null, par: true, t0: this.time, cost: 0, id: Math.random().toString(36).slice(2, 8) };
             this.fuse.justAdded = part;

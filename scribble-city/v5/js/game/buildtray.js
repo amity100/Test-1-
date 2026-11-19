@@ -538,6 +538,8 @@ export class BuildTray {
     this.store.builds.length = Math.min(12, this.store.builds.length);
     this.save();
     this.stats.builds++;
+    // (and on the pen's "inventions" shelf: from there it comes whole, ride and all, when there is none by you)
+    if (g.inventions && g.inventions.storeFull) g.inventions.storeFull(b.name, { bp: b.base.bp && b.base.bp !== 'bike' ? b.base.bp : b.base.kind === 'bike' ? 'bike' : 'car' }, JSON.parse(JSON.stringify(b.parts)));
     g.audio.play('cheer', 0.45);
     g.hud.toast(tr(`✦ נשמרה: ${b.name} — נגיעה בה ב"בניות" מחזירה אותה`, `✦ Saved: ${b.name} — a touch on it under "Builds" brings it back`), 'good', 3);
     this.sig = '';

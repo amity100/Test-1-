@@ -1830,7 +1830,7 @@ export class FreeDraw {
     this.bake();
     this.render();
     const R = { bp, kind: id, grade: 'perfect', score: 1, cost, remembered: false };
-    this.makeCatalog(R, { speed: 1.45, front: bp.kind === 'vehicle', parts: inv ? inv.parts : null, name: inv ? inv.name : null });
+    this.makeCatalog(R, { speed: 1.45, front: bp.kind === 'vehicle', parts: inv ? inv.parts : null, name: inv ? inv.name : null, full: !!(inv && inv.full) });
     this.stats.quick = (this.stats.quick || 0) + 1;
     return true;
   }
@@ -2055,6 +2055,8 @@ export class FreeDraw {
     if (opts.parts && plan.vehicle) {
       plan.vehicle.pendingParts = opts.parts;
       plan.vehicle.invName = opts.name || null;
+      // (ROADMAP 28: a build kept from the parts tray - every part of it as it was, game/buildtray.js)
+      plan.vehicle.pendingFull = !!opts.full;
       game.pendingInv = plan.vehicle;
     }
     // (ROADMAP 15.5: the world answers) a war machine made in the street - a tank, an armoured car:
