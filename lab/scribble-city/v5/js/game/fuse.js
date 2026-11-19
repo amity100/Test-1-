@@ -3,7 +3,7 @@ import { readMark, asType, shapeOf, onItAll } from './fusemark.js';
 import { readDrawing, buildDrawn, floatK, wingGlide, rotorLift, takeoffOf, WING_TOP } from './fusedraw.js';
 import { PartPen } from './partpen.js';
 import { boxOf, along, pathLen } from './signshape.js';
-import { wheelModel, wingModel, rotorModel, jetModel, packModel, springModel, bumperModel, barrelModel, ramModel, sideBladeModel, bladeModel, carArmorModel, vestModel, balloonModel, magnetModel, starModel, boltModel, smokeModel, chuteModel, floatModel, propModel, spikesModel, linkModel, paintOf } from './fusemodel.js';
+import { wheelModel, wingModel, rotorModel, jetModel, packModel, springModel, bumperModel, barrelModel, ramModel, sideBladeModel, bladeModel, carArmorModel, vestModel, balloonModel, magnetModel, starModel, boltModel, smokeModel, chuteModel, floatModel, propModel, spikesModel, linkModel, handMountModel, paintOf } from './fusemodel.js';
 import { isWater } from './rides.js';
 import { KINDS, skinHit } from '../render/cars.js';
 import { INKS } from './freeform.js';
@@ -1211,7 +1211,8 @@ export class Fuse {
         // (the gun itself: game/partsum.js's, as long and as thick as drawn, of its ink)
         const r = n.thick ? clamp(n.r, 0.11, 0.24) : clamp(n.r || 0.06, 0.04, 0.1);
         // (ROADMAP 11.27: drawn pointing up - a mortar; three barrels or more - a minigun)
-        p.gun = gunOf({ r, len: clamp(n.len || 1, 0.5, 3), el: INK_EL[p.ink] || undefined, barrels: n.barrels, mortar: n.mortar });
+        // (ROADMAP 28.15: a gun of the hand on a mount - what it is in the hand, game/weapons.js)
+        p.gun = p.hand ? this.game.weapons.mountSpec(p.hand) : gunOf({ r, len: clamp(n.len || 1, 0.5, 3), el: INK_EL[p.ink] || undefined, barrels: n.barrels, mortar: n.mortar });
         v.fuseGuns = true;
       } else if (p.type === 'blade') {
         const len = clamp(n.len || 1, 0.4, 3);
@@ -1421,7 +1422,7 @@ export class Fuse {
         }
       } else if (p.type === 'barrel') {
         const kind = p.v === 'turret' ? 'turret' : 'fixed';
-        const m = barrelModel(p.n.len || 1.2, p.gun.r, kind, col);
+        const m = p.hand ? handMountModel(p.hand) : barrelModel(p.n.len || 1.2, p.gun.r, kind, col);
         const roof = K ? K.roofY : D.h;
         if (p.v === 'turret') m.position.set(clamp(p.at[0], -D.hw * 0.4, D.hw * 0.4), roof - 0.04, clamp(p.at[2], -D.hl * 0.45, D.hl * 0.35));
         else if (p.v === 'front') m.position.set(clamp(p.at[0], -D.hw * 0.6, D.hw * 0.6), K ? K.hood.y - 0.05 : D.h * 0.55, K ? K.hood.z : D.hl * 0.6);
@@ -3237,7 +3238,7 @@ export class Fuse {
   saveVeh(v) {
     const R = v.fuse;
     if (!R || !(R.parts.length || (R.decor && R.decor.length))) return undefined;
-    const parts = R.parts.filter((p) => !p.until).map((p) => ({ type: p.type, v: p.v, n: p.n, at: p.at, dir: p.dir, ink: p.ink, cost: p.cost, ...(p.shape ? { shape: p.shape } : {}), ...(p.item ? { item: p.item } : {}), ...(p.par ? { par: true } : {}), ...(p.lv ? { lv: p.lv } : {}), ...(p.tray ? { tray: p.tray, traySize: p.traySize, trayMount: p.trayMount } : {}) }));
+    const parts = R.parts.filter((p) => !p.until).map((p) => ({ type: p.type, v: p.v, n: p.n, at: p.at, dir: p.dir, ink: p.ink, cost: p.cost, ...(p.shape ? { shape: p.shape } : {}), ...(p.item ? { item: p.item } : {}), ...(p.hand ? { hand: { id: p.hand.id, grade: p.hand.grade, score: p.hand.score, mods: p.hand.mods || null, ammo: p.hand.ammo === undefined ? -1 : p.hand.ammo } } : {}), ...(p.par ? { par: true } : {}), ...(p.lv ? { lv: p.lv } : {}), ...(p.tray ? { tray: p.tray, traySize: p.traySize, trayMount: p.trayMount } : {}) }));
     return R.decor && R.decor.length ? { parts, decor: R.decor } : parts;
   }
 
