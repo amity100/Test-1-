@@ -2034,8 +2034,10 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     } else if (bp.kind === 'gear') {
       toHero('back', () => {
         // the parachute: on your back from now on
-        p.parachute = { grade };
-        this.hud.toast(this.touch ? tr('יש לכם מצנח! קפצו מהמסוק בגובה — הוא ייפתח לבד, או לחצו על כפתור הקפיצה', 'You\'ve got a parachute! Jump from the helicopter up high — it opens by itself, or tap the jump button') : tr('יש לכם מצנח! קפצו מהמסוק בגובה — הוא ייפתח לבד, או לחצו רווח', 'You\'ve got a parachute! Jump from the helicopter up high — it opens by itself, or press Space'), 'good', 4);
+        // (ROADMAP 28.3: the Driftfan - a motor with it)
+        p.parachute = bp.id === 'paramotor' ? { grade, powered: true } : { grade };
+        if (bp.id === 'paramotor') this.hud.toast(this.touch ? tr('יש לכם מצנח ממונע! רצים, קופצים ומחזיקים את כפתור הקפיצה — וממריאים', 'You\'ve got a powered paraglider! Run, jump and hold the jump button — and up you go') : tr('יש לכם מצנח ממונע! רצים, קופצים ומחזיקים רווח — וממריאים', 'You\'ve got a powered paraglider! Run, jump and hold Space — and up you go'), 'good', 4);
+        else this.hud.toast(this.touch ? tr('יש לכם מצנח! קפצו מהמסוק בגובה — הוא ייפתח לבד, או לחצו על כפתור הקפיצה', 'You\'ve got a parachute! Jump from the helicopter up high — it opens by itself, or tap the jump button') : tr('יש לכם מצנח! קפצו מהמסוק בגובה — הוא ייפתח לבד, או לחצו רווח', 'You\'ve got a parachute! Jump from the helicopter up high — it opens by itself, or press Space'), 'good', 4);
         this.audio.play('cheer');
       });
     } else if (bp.kind === 'tool' && this.gadgets) {
@@ -2082,7 +2084,9 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
         // (ROADMAP 15.2: summoned with a touch - you are in it the moment it is real)
         if (plan.autoEnter) this.autoEnterV = v;
       } else v = this.vehicles.spawn(bp.id, grade, res.score);
-      const getIn = bp.the ? tr(`לעלות על ${bp.the}`, `get on the ${bp.the}`) : tr(`להיכנס ל${bp.name}`, `get into the ${bp.name}`);
+      // ("The Streetline" in a sentence: "get into the Streetline")
+      const theEn = bp.the ? String(bp.the).replace(/^The /, 'the ') : '';
+      const getIn = bp.the ? tr(`לעלות על ${bp.the}`, `${v.kind === 'car' ? 'get into' : 'get on'} ${theEn}`) : tr(`להיכנס ל${bp.name}`, `get into the ${bp.name}`);
       if (!(plan && plan.autoEnter)) say(this.touch ? tr(`לחצו על כפתור הרכב הירוק כדי ${getIn}`, `Tap the green car button to ${getIn}`) : tr(`לחצו E כדי ${getIn}`, `Press E to ${getIn}`), 'info', 3);
       v.strokes = strokes;
       if (bp.id === 'car') this.goalFlags.car = true;
@@ -2395,18 +2399,27 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       const d = v.halfWid + 1.2;
       const x = v.pos.x + sx * d;
       const z = v.pos.z + sz * d;
+      // (ROADMAP 28.3: a helicopter down on a roof - out onto the roof beside it, not over its edge)
+      if (v.onRoof) {
+        if (!this.world.collision.pointInside(x, v.onRoof + 1, z, 0.4) && this.world.collision.pointInside(x, v.onRoof - 0.4, z, 0)) {
+          p.pos.set(x, v.onRoof, z);
+          placed = true;
+          break;
+        }
+        continue;
+      }
       if (!this.world.collision.pointInside(x, 1, z, 0.4)) {
         p.pos.set(x, Math.max(0, v.flies ? v.pos.y : 0), z);
         placed = true;
         break;
       }
     }
-    if (!placed) p.pos.set(v.pos.x, v.pos.y + 2, v.pos.z);
+    if (!placed) p.pos.set(v.pos.x, v.pos.y + (v.onRoof ? 0.1 : 2), v.pos.z);
     if (shore) p.pos.set(shore.x, shore.y, shore.z);
     // (off the saddle: the legs walk again)
     p.fig.ride = 0;
     p.vel.set(0, 0, 0);
-    if (v.flies && v.alt > 3) {
+    if (v.flies && v.alt > 3 && !v.onRoof) {
       p.vel.y = 0;
       // out of the helicopter high over the city
       if (v.alt > 9) this.hud.toast(p.parachute ? tr('קופצים! המצנח ייפתח בעוד רגע', 'Jumping! The parachute will open in a moment') : tr('קפצתם בלי מצנח! (יש שלט של מצנח ליד המסוק)', 'You jumped without a parachute! (There\'s a parachute sign by the helicopter)'), p.parachute ? 'info' : 'bad', 2.6);

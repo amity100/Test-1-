@@ -802,7 +802,8 @@ export class Audio {
   }
 
   // call every frame while a vehicle is driven
-  engine(level, kind) {
+  // (voice, ROADMAP 28.3: a ride's own - f: how high its engine sings of the kind's, lp: how bright, vol: how loud)
+  engine(level, kind, voice = null) {
     if (!this.ctx || !this.enabled) return;
     const t = this.ctx.currentTime;
     this.engineT = performance.now();
@@ -841,6 +842,11 @@ export class Audio {
       f = 440 + Math.sin(t * 30) * 60;
       vol = 0.05;
       this.engFilter.frequency.setTargetAtTime(2000, t, 0.05);
+    }
+    if (voice) {
+      f *= voice.f || 1;
+      vol *= voice.vol || 1;
+      if (voice.lp && kind === 'car') this.engFilter.frequency.setTargetAtTime((500 + level * 900) * voice.lp, t, 0.05);
     }
     this.engOsc.frequency.setTargetAtTime(f, t, 0.05);
     this.engOsc2.frequency.setTargetAtTime(f * 0.5, t, 0.05);

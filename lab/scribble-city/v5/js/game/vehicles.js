@@ -55,6 +55,16 @@ export const CAR_BP = {
   armored: { kind: 'armored', color: [0.17, 0.18, 0.2], extra: 'armored', hp: 2.6, armor: 0.6, ram: { k: 2, shield: true } },
   limo: { kind: 'limo', color: [0.04, 0.04, 0.05], extra: 'limo', hp: 1.3 },
   firetruck: { kind: 'firetruck', color: [0.82, 0.08, 0.06], extra: 'fire', hp: 2.2, ram: { k: 1.5 } },
+  // (ROADMAP 28.3) the rides of the start, each its own to drive (handling: as HANDLING's rows) and its own engine's voice
+  // (voice: f - how high it sings of the car's own, lp - how bright, vol - how loud): a family saloon that does everything
+  // well enough; a night coupe that grips; a 4x4 that shrugs off kerbs and knocks; a van that goes sideways; a lorry that
+  // nothing stops; an unmarked pursuit car with a turbo
+  streetline: { kind: 'sedan', color: [0.2, 0.42, 0.78], hp: 1.05, handling: { mass: 1.2, power: 15, top: 31, grip: 8.6, slide: 1.02, steer: 1.45, roll: 0.7, pitch: 0.5 }, voice: { f: 0.95, lp: 0.9, vol: 0.9 } },
+  nightshift: { kind: 'coupe', color: [0.1, 0.1, 0.17], hp: 1.0, handling: { mass: 1.15, power: 18.5, top: 39, grip: 10.2, slide: 1.06, steer: 1.55, roll: 0.42, pitch: 0.4 }, voice: { f: 1.12, lp: 1.25, vol: 1 } },
+  trailforge: { kind: 'trail', color: [0.74, 0.5, 0.2], hp: 1.7, armor: 0.15, handling: { mass: 1.9, power: 15.5, top: 30, grip: 8.4, slide: 0.95, steer: 1.25, roll: 1.1, pitch: 0.85 }, voice: { f: 0.74, lp: 0.75, vol: 1.15 } },
+  driftvan: { kind: 'van', color: [0.94, 0.8, 0.26], hp: 1.4, handling: { mass: 1.65, power: 14.5, top: 29, grip: 5.6, slide: 1.55, steer: 1.4, roll: 1.2, pitch: 0.7 }, voice: { f: 0.86, lp: 0.85, vol: 1 } },
+  cargobrute: { kind: 'truck', color: [0.3, 0.42, 0.36], hp: 2.6, armor: 0.2, ram: { k: 1.7 }, handling: { mass: 3.0, power: 10.5, top: 24, grip: 5.8, slide: 0.83, steer: 0.88, roll: 1.2, pitch: 0.55 }, voice: { f: 0.55, lp: 0.6, vol: 1.3 } },
+  interceptor: { kind: 'sedan', color: [0.07, 0.07, 0.09], hp: 1.25, jets: 1, handling: { mass: 1.3, power: 19, top: 41, grip: 9.2, slide: 1.05, steer: 1.5, roll: 0.6, pitch: 0.45 }, voice: { f: 1.05, lp: 1.1, vol: 1.05 } },
 };
 
 const QUALITY = {
@@ -380,6 +390,9 @@ class Vehicle {
         if (cb.crush) this.crush = true;
         if (cb.armor) this.armor = cb.armor;
         if (cb.ram) this.ram = { ...cb.ram };
+        // (ROADMAP 28.3: its own way of driving, its own engine)
+        if (cb.handling) this.handling = { ...cb.handling };
+        if (cb.voice) this.voice = cb.voice;
       }
     } else if (this.model) {
       const m = MODELS[this.model](grade);
@@ -1142,7 +1155,7 @@ class Vehicle {
     }
     this.runOver();
     // (a bicycle's, a scooter's: no engine; a bicycle's bell on H)
-    if (input && !input.ai) this.game.audio.engine(this.speedAbs / top, PEDAL.has(this.model) ? 'pedal' : bike && !this.drawn ? 'bike' : 'car');
+    if (input && !input.ai) this.game.audio.engine(this.speedAbs / top, PEDAL.has(this.model) ? 'pedal' : bike && !this.drawn ? 'bike' : 'car', this.voice || VOICE[this.carKind] || null);
     if (input && this.model === 'bicycle' && input.wasPressed('KeyH')) this.game.audio.play('bikebell', 0.7);
   }
 
@@ -1597,6 +1610,25 @@ class Vehicle {
     this.speedAbs = Math.hypot(this.vx, this.vz);
     const col = game.world.collision;
     const p = new THREE.Vector3(this.pos.x, this.pos.y + 0.3, this.pos.z);
+    // (ROADMAP 28.3: it lands on what is under it - a roof as well as the street; a roof is a thing wide enough to stand
+    // a helicopter on, not a lamp post's top)
+    let roof = 0;
+    const hx = this.pos.x;
+    const hz = this.pos.z;
+    const hy = this.pos.y;
+    col.forEachIn(hx - 0.5, hz - 0.5, hx + 0.5, hz + 0.5, (b) => {
+      if (b.tag === 'water' || b.x1 - b.x0 < 4 || b.z1 - b.z0 < 4) return false;
+      if (hx < b.x0 || hx > b.x1 || hz < b.z0 || hz > b.z1) return false;
+      if (b.y1 > g + 0.6 && hy + 0.8 >= b.y1 && b.y1 > roof) roof = b.y1;
+      return false;
+    });
+    if (roof && this.pos.y < roof) {
+      this.pos.y = roof;
+      this.alt = roof - g + 1.0;
+      if (this.vy < 0) this.vy = 0;
+    }
+    this.onRoof = roof && this.pos.y - roof < 1.2 ? roof : 0;
+    p.y = this.pos.y + 0.3;
     const res = col.resolveCylinder(p, 2.8, 2.6, 0);
     if (res.hitWall) {
       this.pos.x = p.x;
@@ -1667,6 +1699,9 @@ const BIG_STOCK = new Set(['truck', 'garbage', 'limo', 'classic', 'ambulance', '
 // How each kind handles (ROADMAP 4.3; not with ?classic): how heavy (slow to start turning, slow
 // to stop turning), how strong, how fast, how much the tyres grip sideways (and with the
 // handbrake on: a drift), how quick the steering, how much the body rolls and pitches
+// (ROADMAP 28.3) the catalog's older cars' engines, by their body: a muscle car's rumble, a hypercar's howl
+const VOICE = { muscle: { f: 0.7, lp: 0.95, vol: 1.25 }, hyper: { f: 1.3, lp: 1.5, vol: 1 }, monster: { f: 0.6, lp: 0.7, vol: 1.3 }, armored: { f: 0.58, lp: 0.6, vol: 1.2 } };
+
 export const HANDLING = {
   sports: { mass: 1.0, power: 16, top: 33, grip: 9.5, slide: 1.12, steer: 1.6, roll: 0.45, pitch: 0.35 },
   sedan: { mass: 1.25, power: 14, top: 28, grip: 8, slide: 1.01, steer: 1.4, roll: 0.75, pitch: 0.5 },

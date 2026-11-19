@@ -2726,9 +2726,14 @@ export class FreeDraw {
     const game = this.game;
     const G = game.gadgets;
     const k = R.kind;
-    if (k === 'parachute') {
+    if (k === 'parachute' || k === 'paramotor') {
       return this.toHero(canopyModel(R.grade, R.colors), where, 'back', () => {
-        game.player.parachute = { grade: R.grade, colours: R.colors.length ? R.colors : null };
+        game.player.parachute = { grade: R.grade, colours: R.colors.length ? R.colors : null, powered: k === 'paramotor' };
+        if (k === 'paramotor') {
+          game.hud.toast(game.touch ? tr('יש לכם מצנח ממונע! רצים, קופצים ומחזיקים את כפתור הקפיצה — וממריאים', 'You\'ve got a powered paraglider! Run, jump and hold the jump button — and up you go') : tr('יש לכם מצנח ממונע! רצים, קופצים ומחזיקים רווח — וממריאים', 'You\'ve got a powered paraglider! Run, jump and hold Space — and up you go'), 'good', 4);
+          game.audio.play('cheer', 0.6);
+          return;
+        }
         game.hud.toast(game.touch ? tr('יש לכם מצנח! בקפיצה מגובה הוא נפתח לבד, או בכפתור הקפיצה', 'You\'ve got a parachute! Jump from up high and it opens by itself, or with the jump button') : tr('יש לכם מצנח! בקפיצה מגובה הוא נפתח לבד, או ברווח', 'You\'ve got a parachute! Jump from up high and it opens by itself, or with Space'), 'good', 3.6);
         game.audio.play('cheer', 0.6);
       });

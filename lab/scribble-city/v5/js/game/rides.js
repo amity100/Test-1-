@@ -336,8 +336,9 @@ export function updateBoat(v, dt, input) {
   const q = v.q;
   const game = v.game;
   const jet = v.jet;
-  const top = (jet ? 24 : 19) * q.speed;
-  const power = (jet ? 10 : 7) * q.accel;
+  // (ROADMAP 28.3: the Coastrunner faster than the speedboat it was - a jet ski is still the quicker off the mark)
+  const top = (jet ? 24 : 38) * q.speed;
+  const power = (jet ? 10 : 8.6) * q.accel;
   let throttle = 0;
   let steer = 0;
   if (input) {

@@ -176,9 +176,26 @@ const KINDS = {
     glass: { tA: 0.03, tB: 0.05, tC: 0.66, tD: 0.73, R: 2.62, w0: 0.99, w1: 0.96, pillars: [0.14, 0.26, 0.38, 0.5], frame: 0.09 },
     tail: { y: -0.5, w: 0.7, low: 1.0 }, head: { y: -0.1, w: 0.34, h: 0.1 },
   },
+  // (ROADMAP 28.3) the start's own: a grand tourer - a long hood, its cabin set back, a fastback roof down to the tail,
+  // wide over its rear wheels
+  coupe: {
+    len: 4.85, W: 1.96, r: 0.36, wheels: [0.19, 0.8], clear: 0.2, n: 3.5,
+    halfW: [[0, 0.8], [0.05, 0.96], [0.2, 1.0], [0.38, 0.96], [0.6, 0.93], [0.8, 0.97], [0.94, 0.9], [1, 0.72]],
+    belt: [[0, 0.78], [0.04, 0.9], [0.2, 0.94], [0.36, 0.9], [0.6, 0.84], [0.82, 0.78], [0.95, 0.7], [1, 0.56]],
+    glass: { tA: 0.08, tB: 0.36, tC: 0.5, tD: 0.64, R: 1.26, w0: 0.9, w1: 0.66, pillars: [0.45] },
+    tail: { y: -0.12, w: 0.94 }, head: { y: -0.1, w: 0.3, h: 0.06 },
+  },
+  // a 4x4: a square box high over big tyres, an upright screen, a flat roof to its square tail
+  trail: {
+    len: 4.6, W: 1.98, r: 0.46, wheels: [0.18, 0.8], clear: 0.46, n: 5,
+    halfW: [[0, 0.94], [0.03, 1.0], [0.95, 1.0], [1, 0.92]],
+    belt: [[0, 1.22], [0.02, 1.3], [0.62, 1.3], [0.66, 1.26], [0.9, 1.22], [0.98, 1.14], [1, 1.0]],
+    glass: { tA: 0.04, tB: 0.08, tC: 0.58, tD: 0.68, R: 2.0, w0: 0.97, w1: 0.9, pillars: [0.3] },
+    tail: { y: -0.2, w: 0.86 }, head: { y: -0.12, w: 0.4, h: 0.1 },
+  },
 };
 // (only ever drawn by the player: a few of each)
-const DRAWN_ONLY = new Set(['hyper', 'muscle', 'monster', 'armored']);
+const DRAWN_ONLY = new Set(['hyper', 'muscle', 'monster', 'armored', 'coupe', 'trail']);
 
 // the colours of the city's cars (sRGB), and which kinds they come in
 export const CAR_COLORS = [

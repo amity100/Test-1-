@@ -337,7 +337,9 @@ export class Player {
     // at a press of the jump button, high enough)
     if (this.parachute && chute && !chute.open && !this.onGround) {
       const above = this.pos.y - groundHeight(this.pos.x, this.pos.z);
-      if (above > 5 && this.vel.y < -3 && (input.wasPressed('Space') || (this.vel.y < -13 && above > 8))) chute.deploy(this.parachute.grade, this.parachute.colours);
+      if (above > 5 && this.vel.y < -3 && (input.wasPressed('Space') || (this.vel.y < -13 && above > 8))) chute.deploy(this.parachute.grade, this.parachute.colours, !!this.parachute.powered);
+      // (ROADMAP 28.3: the Driftfan off the ground - a run and a jump with the button held, and it takes you up)
+      else if (this.parachute.powered && above > 0.7 && this.vel.y > 0 && (input.keys.has('Space') || input.flyUp) && Math.hypot(this.vel.x, this.vel.z) > 4.5) chute.deploy(this.parachute.grade, this.parachute.colours, true);
     }
     const gliding = chute && chute.open;
     // (ROADMAP 5.3, not with ?classic) down low with C, close up against what is beside you; up
@@ -372,7 +374,7 @@ export class Player {
     // (ROADMAP 11.20: wheels drawn under your feet - game/fuse.js)
     const fuse = this.game.fuse;
     const skate = fuse && !this.crouched ? fuse.heroSpeedK(sprint) : 1;
-    const speed = gliding ? chute.fly.speed * Math.min(1, wl) : (this.crouched ? 2.3 : weapons.guarding ? 2.6 : sprint ? (8.2 + (skills ? skills.sprintBonus : 0)) * (this.energyT > 0 ? 1.15 : 1) * (this.runShoes ? 1.1 : 1) : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1) * (fists && fists.busy ? 0.5 : 1) * skate;
+    const speed = gliding ? chute.fly.speed * (chute.powered ? 1.2 : 1) * Math.min(1, wl) : (this.crouched ? 2.3 : weapons.guarding ? 2.6 : sprint ? (8.2 + (skills ? skills.sprintBonus : 0)) * (this.energyT > 0 ? 1.15 : 1) * (this.runShoes ? 1.1 : 1) : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1) * (fists && fists.busy ? 0.5 : 1) * skate;
     const accel = gliding ? 7 : this.onGround ? 40 : 9;
     const tx = wx * speed;
     const tz = wz * speed;
@@ -414,7 +416,13 @@ export class Player {
     const fuseAir = !gliding && fuse && !drawing ? fuse.heroAir(this, dt, input) : false;
     if (fuseAir) {
       // (game/fuse.js set how you fall)
-    } else if (gliding) this.vel.y = damp(this.vel.y, -chute.fly.sink, 2.5, dt);
+    } else if (gliding) {
+      // (ROADMAP 28.3: a motor on your back - the jump button held climbs, up to the height of the towers)
+      const up = !!chute.powered && (input.keys.has('Space') || !!input.flyUp) && this.pos.y - groundHeight(this.pos.x, this.pos.z) < 75;
+      chute.thrust = up;
+      this.vel.y = damp(this.vel.y, up ? 3.6 : -chute.fly.sink * (chute.powered ? 0.8 : 1), 2.5, dt);
+      if (chute.powered && this.game.audio.engine) this.game.audio.engine(up ? 0.85 : 0.3, 'prop');
+    }
     else if (brolly !== null) this.vel.y = damp(this.vel.y, -brolly, 6, dt);
     else if (chuteHeld !== null) this.vel.y = damp(this.vel.y, -chuteHeld, 4, dt);
     else this.vel.y -= GRAVITY * dt;

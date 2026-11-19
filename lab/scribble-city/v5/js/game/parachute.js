@@ -14,12 +14,37 @@ const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 
 // how a drawn parachute flies: how fast it sinks and how well it steers
+// (ROADMAP 28.3: a paraglider now - it sinks slowly and goes a long way; a badly drawn one still drops)
 const FLY = {
-  perfect: { sink: 2.6, speed: 8.5 },
-  good: { sink: 3.2, speed: 7.5 },
-  wonky: { sink: 4.6, speed: 6 },
-  fail: { sink: 6.5, speed: 4 },
+  perfect: { sink: 1.5, speed: 12 },
+  good: { sink: 2.0, speed: 10.5 },
+  wonky: { sink: 3.8, speed: 7 },
+  fail: { sink: 6.2, speed: 4.5 },
 };
+
+// (ROADMAP 28.3) the Driftfan's motor: a cage with a propeller in it, on your back
+function fanModel() {
+  const K = new Kit();
+  const M = canopyMat();
+  const dark = linC(0.16, 0.16, 0.2);
+  K.torus(M, 0.42, 0.02, 0, 0, 0, dark, 0, 0);
+  K.torus(M, 0.3, 0.012, 0, 0, 0, dark, 0, 0);
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + 0.4;
+    K.box(M, Math.cos(a) * 0.06 - 0.008, Math.sin(a) * 0.06 - 0.008, -0.01, Math.cos(a) * 0.42 + 0.008, Math.sin(a) * 0.42 + 0.008, 0.01, dark);
+  }
+  K.box(M, -0.09, -0.12, 0.02, 0.09, 0.12, 0.16, linC(0.86, 0.3, 0.2));
+  const cage = K.build({ seed: 0.31 });
+  cage.matrixAutoUpdate = true;
+  const P = new Kit();
+  P.box(M, -0.36, -0.035, -0.012, 0.36, 0.035, 0.012, linC(0.9, 0.82, 0.55));
+  const prop = P.build({ seed: 0.32 });
+  prop.matrixAutoUpdate = true;
+  prop.position.z = -0.03;
+  cage.add(prop);
+  cage.userData.prop = prop;
+  return cage;
+}
 
 let MAT = null;
 function canopyMat() {
@@ -67,17 +92,22 @@ export class Parachute {
     return FLY[this.grade] || FLY.good;
   }
 
-  deploy(grade, colours = null) {
+  // (powered, ROADMAP 28.3: the Driftfan - the jump button held climbs)
+  deploy(grade, colours = null, powered = false) {
     if (this.open) return;
     const game = this.game;
     this.grade = grade || 'good';
+    this.powered = !!powered;
+    if (this.fan) game.scene.remove(this.fan);
+    this.fan = this.powered ? fanModel() : null;
+    if (this.fan) game.scene.add(this.fan);
     if (this.group) game.scene.remove(this.group);
     this.group = canopyModel(this.grade, colours);
     game.scene.add(this.group);
     this.open = true;
     this.k = 0;
     game.audio.play('chute');
-    game.hud.toast(game.touch ? tr('המצנח נפתח! מנווטים עם הג׳ויסטיק', 'The parachute opened! Steer with the joystick') : tr('המצנח נפתח! מנווטים עם WASD', 'The parachute opened! Steer with WASD'), 'good', 2.4);
+    game.hud.toast(this.powered ? (game.touch ? tr('המנוע עובד! ג׳ויסטיק לניווט, כפתור הקפיצה מוחזק — לטפס', 'The motor is running! Joystick to steer, hold the jump button to climb') : tr('המנוע עובד! WASD לניווט, רווח מוחזק — לטפס', 'The motor is running! WASD to steer, hold Space to climb')) : game.touch ? tr('המצנח נפתח! מנווטים עם הג׳ויסטיק', 'The parachute opened! Steer with the joystick') : tr('המצנח נפתח! מנווטים עם WASD', 'The parachute opened! Steer with WASD'), 'good', 2.4);
   }
 
   // feet on the ground: the canopy sinks and folds away
@@ -89,6 +119,11 @@ export class Parachute {
     p.fig.reachR = null;
     p.fig.reachL = null;
     this.fold = 1;
+    if (this.fan) {
+      this.game.scene.remove(this.fan);
+      this.fan = null;
+    }
+    this.thrust = false;
   }
 
   update(dt) {
@@ -106,6 +141,12 @@ export class Parachute {
       g.position.set(p.pos.x - p.vel.x * 0.05, p.pos.y + 3.3, p.pos.z - p.vel.z * 0.05);
       g.rotation.set(-Math.min(0.25, sp * 0.025), p.yaw, 0, 'YXZ');
       g.scale.setScalar(Math.max(0.15, s));
+      if (this.fan) {
+        const f = this.fan;
+        f.position.set(p.pos.x - Math.sin(p.yaw) * 0.32, p.pos.y + 1.12, p.pos.z - Math.cos(p.yaw) * 0.32);
+        f.rotation.set(0, p.yaw, 0);
+        f.userData.prop.rotation.z += dt * (this.thrust ? 46 : 16);
+      }
       // the hands hold the toggles over the shoulders
       const j = p.fig.j;
       p.fig.reachR = _a.copy(j.shoulderR).add(_b.set(0, 0.55, 0)).clone();
