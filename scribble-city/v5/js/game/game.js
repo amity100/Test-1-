@@ -17,7 +17,6 @@ import { HUD } from '../ui/hud.js';
 import { Album, ALL_OPEN } from '../ui/album.js';
 import { Inventions } from './inventions.js';
 import { BuildTray } from './buildtray.js';
-import { GunMods } from './gunmods.js';
 import { Links } from './links.js';
 import { Clouds } from './clouds.js';
 import { setSlabRes } from './designbuild.js';
@@ -241,8 +240,6 @@ export class Game {
     this.tray = this.classic ? null : new BuildTray(this);
     // (ROADMAP 28.6: a phone makes the designed parts' big surfaces coarser - under half their triangles, the same to look at)
     if (this.touch) setSlabRes(0.6);
-    // (ROADMAP 28.9) what goes on a gun in the hand: a scope, a suppressor, a longer magazine, a bayonet, a launcher
-    this.gunmods = this.classic ? null : new GunMods(this);
     // (ROADMAP 28.15: a ride on a cable, clamped to another, on its roof - game/links.js)
     this.links = this.classic ? null : new Links(this);
     this.album.onAdd = (id) => this.onAlbumAdd(id);
@@ -375,7 +372,7 @@ export class Game {
     // quick signs
     this.lab = !this.classic && (this.params.has('lab') || (typeof window !== 'undefined' && !!window.SC_LAB));
     this.signs = this.lab ? new Signs(this) : null;
-    // (ROADMAP 28: clouds nobody sees through, in the game itself - the lab's own are its signs')
+    // (ROADMAP 28: clouds nobody sees through, in the game itself - a car's smoke screen; the lab's own are its signs')
     this.smokes = this.signs || new Clouds(this);
     // (ROADMAP 11.20) a part drawn onto a thing - your car, you, your gun, a police car (since 11.30
     // drawing on your car is in the regular game too, asked for; the rest of the lab stays there)
@@ -669,7 +666,7 @@ export class Game {
           this.hud.toast(this.touch ? tr('העיפרון ✏ — ציירו באוויר נשק או רכב: כל המסך הוא הדף', 'The pencil ✏ — draw a weapon or a ride in the air: the whole screen is your page') : tr('Q — ציירו באוויר נשק או רכב, גם תוך כדי ריצה', 'Q — draw a weapon or a ride in the air, even on the run'), 'info', 4.2);
           // (v5, ROADMAP 11.36) and the library of the drawn city's own weapons, as at the start of
           // the game it always was: picked, then drawn in the air
-          setTimeout(() => this.hud.toast(this.touch ? tr('ובעיפרון ← 📒 שרטוטים: P-09 אינקבולט, C-16 גרפיט, RL-7 מחק, להב הסרגל — בוחרים ומציירים', 'And in the pencil → 📒 Blueprints: P-09 Inkbolt, C-16 Graphite, RL-7 Eraser, Ruler Edge — pick one and draw it') : tr('T — ספריית השרטוטים: P-09 אינקבולט, C-16 גרפיט, RL-7 מחק, להב הסרגל — בוחרים ומציירים', 'T — the blueprint library: P-09 Inkbolt, C-16 Graphite, RL-7 Eraser, Ruler Edge — pick one and draw it'), 'info', 5), 4600);
+          setTimeout(() => this.hud.toast(this.touch ? tr('ובעיפרון ← 📒 שרטוטים: אקדח צבע, רובה עפרונות, בזוקת מחקים, חרב סרגל — בוחרים ומציירים', 'And in the pencil → 📒 Blueprints: paint gun, pencil rifle, eraser bazooka, ruler sword — pick one and draw it') : tr('T — ספריית השרטוטים: אקדח צבע, רובה עפרונות, בזוקת מחקים, חרב סרגל — בוחרים ומציירים', 'T — the blueprint library: paint gun, pencil rifle, eraser bazooka, ruler sword — pick one and draw it'), 'info', 5), 4600);
         }
         else if (this.album.allOpen) this.hud.toast(this.touch ? tr(`כל השרטוטים פתוחים: לוחצים על ${this.drawTap} ובוחרים מה לצייר`, `All blueprints are open: tap ${this.drawTap} and pick what to draw`) : tr(`כל השרטוטים פתוחים: ${this.drawKey} — בוחרים מה לצייר`, `All blueprints are open: ${this.drawKey} — pick what to draw`), 'info', 4);
         else if (!this.album.has('paint')) this.hud.toast(this.touch ? tr('צלמו את השרטוט שממול (כפתור המצלמה)', 'Photograph the blueprint in front of you (the camera button)') : tr('צלמו את השרטוט שממול (F)', 'Photograph the blueprint in front of you (F)'), 'info', 3.5);
@@ -1554,7 +1551,6 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       this.tray.update(this.realDt);
       this.tray.cam(this.realDt);
     }
-    if (this.gunmods) this.gunmods.update();
     if (this.links) this.links.update();
     if (this.smokes && this.smokes !== this.signs) this.smokes.update();
     const tipsy = this.inkwell.tipsy;
@@ -2823,7 +2819,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     // (ROADMAP 11.6: with the free drawing, drawing comes first; ROADMAP 11.40: from the catalog by
     // the pen - and one drawn just as it is there)
     const all = this.freedraw ? [
-      { text: this.touch ? tr('לצייר נשק מהמקרא שליד העט — אקדח, רובה, מטול... (עיפרון), גם בריצה', 'Draw a weapon from the guide next to the pen — a pistol, a rifle, a launcher... (pencil), even on the run') : tr('לצייר נשק מהמקרא שליד העט — אקדח, רובה, מטול... (Q), גם בריצה', 'Draw a weapon from the guide next to the pen — a pistol, a rifle, a launcher... (Q), even on the run'), done: f.drew },
+      { text: this.touch ? tr('לצייר נשק מהמקרא שליד העט — אקדח צבע, בזוקה... (עיפרון), גם בריצה', 'Draw a weapon from the guide next to the pen — paint gun, bazooka... (pencil), even on the run') : tr('לצייר נשק מהמקרא שליד העט — אקדח צבע, בזוקה... (Q), גם בריצה', 'Draw a weapon from the guide next to the pen — paint gun, bazooka... (Q), even on the run'), done: f.drew },
       { text: tr('לצייר נשק "מושלם" — בדיוק כמו במקרא, עם כל החלקים', 'Draw a "perfect" weapon — exactly like the guide, with every part'), done: f.perfect },
       { text: tr('להתחבא ליד תא טלפון, פח אשפה או שיח', 'Hide next to a phone booth, a trash can or a bush'), done: f.hidden },
       { text: tr('לקפוץ ל-Neon Bar (בשדרה הראשונה, כמה דלתות צפונה)', 'Drop in at the Neon Bar (on the first avenue, a few doors north)'), done: f.bar },

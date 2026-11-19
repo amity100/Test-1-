@@ -165,141 +165,23 @@ const BUILD = {
     return { tip: new THREE.Vector3(0, 0, 1.0), length: 1.1 };
   },
   // the paint blaster: a candy-coloured pistol with a glass ball of paint on top
-  // (ROADMAP 28.9) the P-09: a pistol whose slide is a fountain pen - deep blue lacquer, a gold band and clip, the nib its
-  // muzzle; a cartridge of ink for a magazine, its end out of the grip
   paint(K, M) {
-    const blue = C(0.13, 0.22, 0.56);
-    const gold = C(0.9, 0.72, 0.28);
-    const dark = C(0.14, 0.15, 0.2);
-    // the frame, and the pen along the top of it
-    K.box(M.matte, -0.026, 0.0, -0.075, 0.026, 0.05, 0.16, dark);
-    K.cyl(M.paint, 0.032, 0.032, -0.09, 0.2, blue, { y: 0.07, segs: 12 });
-    K.cyl(M.paint, 0.033, 0.03, -0.11, -0.09, blue, { y: 0.07, segs: 12 });
-    K.cyl(M.metal, 0.0335, 0.0335, 0.1, 0.125, gold, { y: 0.07, segs: 12 });
-    // the clip down its side
-    K.box(M.metal, 0.03, 0.062, -0.07, 0.036, 0.078, 0.08, gold);
-    // the section and the nib
-    K.cyl(M.matte, 0.03, 0.022, 0.2, 0.25, dark, { y: 0.07, segs: 12 });
-    const nib = new THREE.ConeGeometry(0.02, 0.07, 4);
-    nib.rotateX(Math.PI / 2);
-    nib.scale(1, 0.45, 1);
-    nib.translate(0, 0.07, 0.285);
-    K.add(M.metal, nib, gold);
-    // the grip, the ink cartridge out of its foot, the trigger and its guard
-    const grip = new THREE.BoxGeometry(0.05, 0.14, 0.062);
-    grip.rotateX(-0.26);
-    grip.translate(0, -0.06, -0.04);
-    K.add(M.matte, grip, C(0.2, 0.2, 0.26));
-    K.cyl(M.glass, 0.016, 0.016, -0.155, -0.125, C(0.35, 0.6, 0.95), { axis: 'y', z: -0.06, segs: 8 });
-    K.torus(M.metal, 0.028, 0.005, 0, -0.02, 0.035, C(0.7, 0.7, 0.76), 0, Math.PI / 2);
-    K.box(M.metal, -0.005, -0.03, 0.03, 0.005, 0.0, 0.04, gold);
-    // its sights
-    K.box(M.matte, -0.008, 0.1, -0.08, 0.008, 0.112, -0.06, dark);
-    K.box(M.matte, -0.004, 0.1, 0.17, 0.004, 0.112, 0.185, dark);
-    return { muzzle: new THREE.Vector3(0, 0.07, 0.32), length: 0.42 };
-  },
-  // (ROADMAP 28.9) the D-50: a heavy revolver whose barrel is a thick marker - white body, a red band, its fat cap at
-  // the mouth and the felt tip out of it; a steel frame and drum, a grip of pencil cedar
-  magnum(K, M) {
-    const steel = C(0.7, 0.72, 0.78);
-    const dark = C(0.15, 0.15, 0.19);
-    const red = C(0.82, 0.13, 0.15);
-    K.box(M.metal, -0.03, 0.0, -0.08, 0.03, 0.095, 0.11, steel);
-    K.cyl(M.metal, 0.047, 0.047, -0.015, 0.085, C(0.56, 0.58, 0.64), { y: 0.052, segs: 12 });
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      K.cyl(M.matte, 0.011, 0.011, 0.083, 0.087, dark, { x: Math.cos(a) * 0.03, y: 0.052 + Math.sin(a) * 0.03, segs: 6 });
-    }
-    const grip = new THREE.BoxGeometry(0.056, 0.16, 0.072);
-    grip.rotateX(-0.34);
-    grip.translate(0, -0.07, -0.045);
-    K.add(M.paint, grip, C(0.6, 0.36, 0.2));
-    K.torus(M.metal, 0.03, 0.006, 0, -0.022, 0.04, steel, 0, Math.PI / 2);
-    K.box(M.metal, -0.008, 0.095, -0.085, 0.008, 0.13, -0.06, dark);
-    // the marker
-    K.cyl(M.paint, 0.037, 0.037, 0.11, 0.36, C(0.95, 0.95, 0.91), { y: 0.058, segs: 14 });
-    K.cyl(M.paint, 0.0375, 0.0375, 0.16, 0.23, red, { y: 0.058, segs: 14 });
-    K.cyl(M.matte, 0.042, 0.042, 0.36, 0.45, red, { y: 0.058, segs: 14 });
-    K.cyl(M.matte, 0.043, 0.043, 0.36, 0.372, dark, { y: 0.058, segs: 14 });
-    K.cyl(M.round, 0.02, 0.011, 0.45, 0.485, C(0.1, 0.1, 0.12), { y: 0.058, segs: 8 });
-    K.box(M.matte, -0.005, 0.095, 0.4, 0.005, 0.115, 0.42, dark);
-    return { muzzle: new THREE.Vector3(0, 0.058, 0.5), length: 0.6 };
-  },
-  // (ROADMAP 28.9) the K-47: pencil cedar for its stock and handguard (a pencil's yellow paint and brass band on them),
-  // a receiver black as charcoal, a curved magazine, and a stick of charcoal for a barrel
-  ak(K, M) {
-    const wood = C(0.74, 0.5, 0.28);
-    const coal = C(0.11, 0.11, 0.13);
-    const yellow = C(0.98, 0.8, 0.22);
-    const brass = C(0.86, 0.66, 0.3);
-    const stock = new THREE.BoxGeometry(0.044, 0.105, 0.3);
-    stock.translate(0, -0.012, -0.27);
-    K.add(M.paint, stock, wood);
-    K.box(M.paint, -0.023, 0.03, -0.4, 0.023, 0.042, -0.14, yellow);
-    K.box(M.metal, -0.0235, -0.066, -0.425, 0.0235, 0.044, -0.41, brass);
-    K.box(M.matte, -0.03, -0.03, -0.12, 0.03, 0.065, 0.2, coal);
-    K.box(M.metal, -0.031, 0.065, -0.11, 0.031, 0.08, 0.19, C(0.2, 0.2, 0.24));
-    const grip = new THREE.BoxGeometry(0.042, 0.12, 0.05);
-    grip.rotateX(-0.32);
-    grip.translate(0, -0.085, -0.03);
-    K.add(M.paint, grip, wood);
-    // the magazine, curving forward
-    for (let i = 0; i < 4; i++) {
-      const seg = new THREE.BoxGeometry(0.036, 0.055, 0.06);
-      seg.rotateX(-0.18 - i * 0.16);
-      seg.translate(0, -0.05 - i * 0.046, 0.095 + i * i * 0.011);
-      K.add(M.metal, seg, C(0.24, 0.24, 0.28));
-    }
-    K.box(M.metal, -0.012, -0.045, 0.02, 0.012, -0.03, 0.06, C(0.2, 0.2, 0.24));
-    // the handguard, the gas tube over it, the charcoal
-    K.box(M.paint, -0.028, -0.012, 0.2, 0.028, 0.05, 0.42, wood);
-    K.box(M.paint, -0.0285, 0.018, 0.22, 0.0285, 0.03, 0.4, yellow);
-    K.cyl(M.metal, 0.012, 0.012, 0.2, 0.47, C(0.22, 0.22, 0.26), { y: 0.066, segs: 8 });
-    K.cyl(M.round, 0.017, 0.016, 0.42, 0.7, coal, { y: 0.024, segs: 7 });
-    K.box(M.matte, -0.005, 0.03, 0.62, 0.005, 0.1, 0.64, coal);
-    K.box(M.matte, -0.012, 0.08, 0.14, 0.012, 0.1, 0.17, coal);
-    return { muzzle: new THREE.Vector3(0, 0.024, 0.72), length: 1.18 };
-  },
-  // (ROADMAP 28.9) the GL-79: a stubby break-open launcher - a short wooden stock, a fat olive barrel with a bottle of ink
-  // looking out of its mouth, a leaf sight up on top
-  launcher(K, M) {
-    const olive = C(0.34, 0.42, 0.32);
-    const dark = C(0.17, 0.18, 0.22);
-    const wood = C(0.56, 0.36, 0.22);
-    const stock = new THREE.BoxGeometry(0.044, 0.11, 0.26);
-    stock.translate(0, -0.012, -0.25);
-    K.add(M.paint, stock, wood);
-    K.box(M.matte, -0.034, -0.03, -0.12, 0.034, 0.09, 0.09, dark);
-    const grip = new THREE.BoxGeometry(0.044, 0.13, 0.052);
+    const body = C(0.2, 0.78, 0.76);
+    K.box(M.paint, -0.035, 0.0, -0.08, 0.035, 0.09, 0.2, body);
+    K.sphere(M.paint, 0.045, 0, 0.045, -0.08, body, 0.78, 1, 0.6);
+    const grip = new THREE.BoxGeometry(0.06, 0.14, 0.065);
     grip.rotateX(-0.28);
-    grip.translate(0, -0.085, -0.03);
-    K.add(M.matte, grip, dark);
-    K.torus(M.metal, 0.03, 0.006, 0, -0.035, 0.05, C(0.6, 0.6, 0.66), 0, Math.PI / 2);
-    K.cyl(M.paint, 0.064, 0.064, 0.09, 0.42, olive, { y: 0.04, segs: 16 });
-    K.cyl(M.paint, 0.07, 0.07, 0.09, 0.12, C(0.26, 0.32, 0.25), { y: 0.04, segs: 16 });
-    K.cyl(M.paint, 0.07, 0.07, 0.39, 0.42, C(0.26, 0.32, 0.25), { y: 0.04, segs: 16 });
-    // the bottle of ink in its mouth: glass, a paper label, a cork
-    K.cyl(M.glass, 0.05, 0.05, 0.4, 0.47, C(0.12, 0.16, 0.42), { y: 0.04, segs: 12 });
-    K.cyl(M.round, 0.051, 0.051, 0.425, 0.45, C(0.97, 0.95, 0.88), { y: 0.04, segs: 12 });
-    K.cyl(M.glass, 0.03, 0.024, 0.47, 0.5, C(0.12, 0.16, 0.42), { y: 0.04, segs: 10 });
-    K.cyl(M.round, 0.02, 0.02, 0.5, 0.52, C(0.66, 0.48, 0.3), { y: 0.04, segs: 8 });
-    // the leaf sight, the hinge pin
-    K.box(M.metal, -0.014, 0.104, 0.2, 0.014, 0.17, 0.208, C(0.7, 0.7, 0.76));
-    K.cyl(M.metal, 0.012, 0.012, -0.04, 0.04, C(0.7, 0.7, 0.76), { axis: 'y', z: 0.1, segs: 8 });
-    return { muzzle: new THREE.Vector3(0, 0.04, 0.54), length: 1.0 };
-  },
-  // (ROADMAP 28.9) graphite smoke: a grey tin of graphite dust - two darker bands, a lid, a lever down its side and the
-  // ring through its pin
-  smokebomb(K, M) {
-    const tin = C(0.48, 0.5, 0.54);
-    const dark = C(0.2, 0.21, 0.25);
-    K.cyl(M.metal, 0.042, 0.042, -0.07, 0.07, tin, { axis: 'y', segs: 12 });
-    K.cyl(M.matte, 0.0428, 0.0428, -0.02, 0.0, dark, { axis: 'y', segs: 12 });
-    K.cyl(M.matte, 0.0428, 0.0428, 0.03, 0.045, dark, { axis: 'y', segs: 12 });
-    K.cyl(M.metal, 0.032, 0.036, 0.07, 0.095, dark, { axis: 'y', segs: 12 });
-    K.box(M.metal, 0.038, -0.03, -0.008, 0.046, 0.1, 0.008, C(0.7, 0.7, 0.76));
-    K.torus(M.metal, 0.018, 0.004, -0.03, 0.105, 0, C(0.8, 0.8, 0.86), 0, 0);
-    return { muzzle: new THREE.Vector3(0, 0.07, 0.04), length: 0.2 };
+    grip.translate(0, -0.06, -0.035);
+    K.add(M.matte, grip, C(0.42, 0.24, 0.58));
+    K.torus(M.metal, 0.03, 0.006, 0, -0.02, 0.03, C(0.75, 0.75, 0.8), 0, Math.PI / 2);
+    // the tank of paint
+    K.cyl(M.metal, 0.018, 0.018, 0.0, 0.06, C(0.75, 0.75, 0.8), { axis: 'y', z: 0.04, segs: 8 });
+    K.sphere(M.glass, 0.062, 0, 0.15, 0.04, C(0.85, 0.92, 1.0));
+    K.sphere(M.paint, 0.05, 0, 0.14, 0.04, C(1.0, 0.36, 0.62), 1, 0.85, 1);
+    // the nozzle and its ring of glowing paint
+    K.cyl(M.metal, 0.02, 0.016, 0.2, 0.29, C(0.8, 0.8, 0.86), { y: 0.045 });
+    K.torus(M.glow, 0.019, 0.006, 0, 0.045, 0.285, C(1.0, 0.3, 0.6));
+    return { muzzle: new THREE.Vector3(0, 0.045, 0.31), length: 0.4 };
   },
   // the pencil rifle: a wooden stock, a scope, and a long pencil for a barrel
   rifle(K, M) {
@@ -314,10 +196,7 @@ const BUILD = {
     grip.rotateX(-0.3);
     grip.translate(0, -0.08, -0.02);
     K.add(M.matte, grip, dark);
-    // (ROADMAP 28.9: its magazine a box of sharpened pencils, their points showing at its foot)
-    K.box(M.paint, -0.021, -0.19, 0.055, 0.021, -0.03, 0.125, C(0.98, 0.8, 0.22));
-    K.box(M.metal, -0.022, -0.06, 0.054, 0.022, -0.045, 0.126, C(0.6, 0.6, 0.66));
-    for (const z of [0.07, 0.09, 0.11]) K.cyl(M.round, 0.008, 0.002, -0.215, -0.19, C(0.93, 0.8, 0.62), { axis: 'y', z, segs: 6 });
+    K.box(M.metal, -0.02, -0.17, 0.06, 0.02, -0.03, 0.12, C(0.6, 0.6, 0.66));
     // the scope
     K.cyl(M.paint, 0.024, 0.024, -0.04, 0.18, C(0.12, 0.12, 0.16), { y: 0.13 });
     K.cyl(M.glow, 0.02, 0.02, 0.18, 0.186, C(0.4, 0.9, 1.0), { y: 0.13 });
@@ -401,45 +280,18 @@ const BUILD = {
     return { muzzle: new THREE.Vector3(0, 0.03, 0.68), length: 1.0 };
   },
   // the stapler gun: a big red stapler, its jaw for a muzzle
-  // (ROADMAP 28.10) the L-249: a machine gun built on a long office stapler - its red arm the top cover, the staple rail
-  // under it running out as the barrel, a box of staples hung beneath, a short stock, a bipod folded under the barrel
   stapler(K, M) {
-    const red = C(0.86, 0.17, 0.2);
-    const dark = C(0.18, 0.18, 0.22);
-    const steel = C(0.78, 0.79, 0.85);
-    // the stock and the frame
-    const stock = new THREE.BoxGeometry(0.042, 0.1, 0.24);
-    stock.translate(0, 0.0, -0.23);
-    K.add(M.matte, stock, dark);
-    K.box(M.matte, -0.034, -0.02, -0.11, 0.034, 0.03, 0.34, dark);
-    // the stapler's arm over it, hinged at the back
-    const arm = new THREE.BoxGeometry(0.066, 0.055, 0.46);
-    arm.translate(0, 0, 0.23);
-    arm.rotateX(-0.035);
-    arm.translate(0, 0.06, -0.11);
-    K.add(M.paint, arm, red);
-    K.sphere(M.paint, 0.034, 0, 0.06, -0.11, red, 1, 0.9, 1, 10);
-    K.box(M.metal, -0.027, 0.03, -0.06, 0.027, 0.037, 0.36, steel);
-    // the carry handle
-    K.box(M.matte, -0.008, 0.09, 0.02, 0.008, 0.13, 0.035, dark);
-    K.box(M.matte, -0.008, 0.09, 0.16, 0.008, 0.13, 0.175, dark);
-    K.box(M.matte, -0.01, 0.125, 0.02, 0.01, 0.14, 0.175, dark);
-    // the grip, the box of staples and the belt up into the gun
-    const grip = new THREE.BoxGeometry(0.042, 0.12, 0.05);
-    grip.rotateX(-0.3);
-    grip.translate(0, -0.075, -0.03);
-    K.add(M.matte, grip, dark);
-    K.box(M.metal, -0.05, -0.15, 0.06, 0.05, -0.02, 0.2, C(0.5, 0.55, 0.62));
-    K.box(M.metal, -0.045, -0.02, 0.09, 0.045, 0.0, 0.17, steel);
-    // the barrel and its bipod
-    K.cyl(M.metal, 0.016, 0.016, 0.34, 0.66, C(0.3, 0.31, 0.36), { y: 0.012, segs: 8 });
-    K.cyl(M.metal, 0.022, 0.022, 0.62, 0.66, steel, { y: 0.012, segs: 8 });
-    for (const sx of [-1, 1]) {
-      const leg = new THREE.BoxGeometry(0.01, 0.01, 0.2);
-      leg.translate(sx * 0.02, -0.02, 0.44);
-      K.add(M.metal, leg, steel);
-    }
-    return { muzzle: new THREE.Vector3(0, 0.012, 0.68), length: 1.15 };
+    K.box(M.matte, -0.035, -0.02, -0.06, 0.035, 0.02, 0.28, C(0.22, 0.22, 0.26));
+    const arm = new THREE.BoxGeometry(0.06, 0.05, 0.34);
+    arm.translate(0, 0.0, 0.17);
+    arm.rotateX(-0.06);
+    arm.translate(0, 0.055, -0.05);
+    K.add(M.paint, arm, C(0.9, 0.18, 0.22));
+    K.sphere(M.paint, 0.03, 0, 0.055, -0.05, C(0.9, 0.18, 0.22), 1, 0.9, 1, 10);
+    K.box(M.metal, -0.026, 0.024, 0.0, 0.026, 0.03, 0.27, C(0.8, 0.8, 0.86));
+    K.box(M.metal, -0.03, 0.02, 0.26, 0.03, 0.05, 0.29, C(0.8, 0.8, 0.86));
+    K.box(M.matte, -0.022, -0.13, -0.04, 0.022, -0.02, 0.02, C(0.14, 0.14, 0.18));
+    return { muzzle: new THREE.Vector3(0, 0.035, 0.31), length: 0.45 };
   },
   // the ruler sword: a long wooden ruler with its marks, a black grip, a gold guard
   katana(K, M) {
@@ -591,37 +443,27 @@ const BUILD = {
     return { muzzle: new THREE.Vector3(0, 0.015, 0.69), length: 1.1 };
   },
   // the paint machine gun: three cans of paint on its back, a nozzle ringed with colour
-  // (ROADMAP 28.9) the P-5: a short machine pistol - a marker pushed up into it for a magazine (white, a blue cap at its
-  // foot), a felt tip for a muzzle, a wire stock folded out behind
   paintmg(K, M) {
-    const dark = C(0.16, 0.17, 0.22);
-    const steel = C(0.6, 0.62, 0.68);
-    const blue = C(0.2, 0.5, 0.92);
-    K.box(M.matte, -0.03, -0.02, -0.1, 0.03, 0.07, 0.26, dark);
-    K.box(M.metal, -0.031, 0.07, -0.08, 0.031, 0.08, 0.24, steel);
-    K.box(M.paint, -0.0315, 0.01, 0.0, 0.0315, 0.03, 0.2, blue);
-    // the shroud with its holes, the felt tip
-    K.cyl(M.metal, 0.022, 0.022, 0.26, 0.42, steel, { y: 0.03, segs: 8 });
-    for (const z of [0.3, 0.34, 0.38]) K.box(M.matte, -0.0235, 0.022, z - 0.008, 0.0235, 0.038, z + 0.008, dark);
-    K.cyl(M.round, 0.018, 0.007, 0.42, 0.47, C(0.95, 0.4, 0.7), { y: 0.03, segs: 8 });
-    // the marker for a magazine
-    // (the marker up through its grip: the hand holds the magazine itself)
-    const mag = new THREE.BoxGeometry(0.036, 0.24, 0.05);
-    mag.rotateX(-0.1);
-    mag.translate(0, -0.13, -0.02);
-    K.add(M.paint, mag, C(0.95, 0.95, 0.91));
-    const cap = new THREE.BoxGeometry(0.04, 0.06, 0.054);
-    cap.rotateX(-0.1);
-    cap.translate(0, -0.24, -0.009);
-    K.add(M.paint, cap, blue);
-    K.torus(M.metal, 0.028, 0.005, 0, -0.03, 0.05, steel, 0, Math.PI / 2);
-    // the wire stock
-    for (const y of [0.05, -0.01]) K.cyl(M.metal, 0.007, 0.007, -0.36, -0.1, steel, { y, segs: 6 });
-    K.box(M.metal, -0.012, -0.03, -0.375, 0.012, 0.07, -0.36, steel);
-    // its sights
-    K.box(M.matte, -0.006, 0.08, 0.2, 0.006, 0.1, 0.215, dark);
-    K.box(M.matte, -0.01, 0.08, -0.06, 0.01, 0.098, -0.045, dark);
-    return { muzzle: new THREE.Vector3(0, 0.03, 0.49), length: 0.86 };
+    const body = C(0.24, 0.3, 0.44);
+    const dark = C(0.2, 0.2, 0.25);
+    K.box(M.paint, -0.045, -0.03, -0.18, 0.045, 0.07, 0.3, body);
+    const stock = new THREE.BoxGeometry(0.05, 0.1, 0.26);
+    stock.translate(0, -0.01, -0.31);
+    K.add(M.matte, stock, dark);
+    const grip = new THREE.BoxGeometry(0.045, 0.13, 0.05);
+    grip.rotateX(-0.3);
+    grip.translate(0, -0.08, -0.05);
+    K.add(M.matte, grip, dark);
+    const cans = [C(0.92, 0.3, 0.36), C(0.98, 0.8, 0.22), C(0.25, 0.62, 0.86)];
+    cans.forEach((c, i) => {
+      const z = -0.11 + i * 0.12;
+      K.cyl(M.paint, 0.042, 0.042, 0.07, 0.19, c, { axis: 'y', z, segs: 12 });
+      K.cyl(M.metal, 0.044, 0.044, 0.19, 0.205, C(0.75, 0.75, 0.8), { axis: 'y', z, segs: 12 });
+    });
+    K.cyl(M.metal, 0.022, 0.022, 0.3, 0.6, C(0.55, 0.56, 0.62), { y: 0.025, segs: 10 });
+    K.torus(M.glow, 0.026, 0.008, 0, 0.025, 0.6, C(1.0, 0.35, 0.6));
+    K.cyl(M.paint, 0.03, 0.02, 0.6, 0.66, C(0.98, 0.8, 0.22), { y: 0.025, segs: 10 });
+    return { muzzle: new THREE.Vector3(0, 0.025, 0.68), length: 1.05 };
   },
   // the cardboard shield: a flat of a box with tape and a handle (its face is the x side)
   shield(K, M) {
