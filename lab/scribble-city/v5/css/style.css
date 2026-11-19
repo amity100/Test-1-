@@ -2253,23 +2253,3 @@ body.paused .bt, body.paused .bt-stage, body.paused .bt-fx, body.paused .bt-trac
 .bt-mode kbd { position: absolute; right: -6px; top: -6px; font: 700 10px Rubik, sans-serif; background: var(--ink); color: var(--paper-2); border-radius: 5px; padding: 1px 4px; }
 body.paused .bt-mode, body.fd-open .bt-mode, body.bt-open .bt-mode, body.phone-cam .bt-mode, body.phone-cam .bt-btn { display: none; }
 body:not(.touch) .bt-mode { left: auto; right: 24px; bottom: 150px; }
-
-/* ---------- (ROADMAP 28.9) guns: the aim button, the add-ons' strip, the launcher's button ---------- */
-.bt-aim { position: fixed; z-index: 21; right: max(22px, env(safe-area-inset-right)); bottom: max(172px, calc(env(safe-area-inset-bottom) + 164px)); width: 52px; height: 52px; padding: 0; border-radius: 50%; border: 2.5px solid var(--ink); background: rgba(255, 253, 246, 0.94); box-shadow: 2px 3px 0 var(--ink); color: var(--ink); font: 700 9.5px Rubik, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; touch-action: none; }
-.bt-aim.hidden { display: none; }
-.bt-aim.on { background: #ffd23f; }
-.bt-aim svg, .ga-btn svg, .ga-lob svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.bt-aim b, .ga-btn b { line-height: 1; margin-top: -1px; }
-.ga-btn { position: fixed; z-index: 21; display: none; left: max(16px, env(safe-area-inset-left)); bottom: max(168px, calc(env(safe-area-inset-bottom) + 160px)); width: 60px; height: 46px; padding: 0; border-radius: 12px; border: 2.5px solid var(--ink); background: #ffe9a8; box-shadow: 2px 3px 0 var(--ink); color: var(--ink); font: 700 10px Rubik, sans-serif; flex-direction: column; align-items: center; justify-content: center; touch-action: none; }
-.ga-btn.on { display: flex; }
-.ga-lob { position: fixed; z-index: 21; display: none; right: max(84px, calc(env(safe-area-inset-right) + 76px)); bottom: max(172px, calc(env(safe-area-inset-bottom) + 164px)); width: 52px; height: 52px; padding: 0; border-radius: 50%; border: 2.5px solid var(--ink); background: #cfe0ff; box-shadow: 2px 3px 0 var(--ink); color: var(--ink); font: 800 12px Rubik, sans-serif; align-items: center; justify-content: center; gap: 1px; touch-action: none; }
-.ga-lob.on { display: flex; }
-.ga { position: fixed; z-index: 23; display: none; left: 50%; transform: translateX(-50%); bottom: max(8px, env(safe-area-inset-bottom)); padding: 6px 8px 8px; border-radius: 16px; border: 2.5px solid var(--ink); background: rgba(255, 250, 238, 0.96); box-shadow: 3px 4px 0 var(--ink); color: var(--ink); font-family: Rubik, sans-serif; user-select: none; -webkit-user-select: none; max-width: 96vw; touch-action: none; }
-.ga.on { display: block; }
-.ga svg { fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-.ga-title { display: flex; align-items: baseline; gap: 8px; padding: 0 4px 5px; }
-.ga-title b { font: 800 14px Rubik, sans-serif; text-transform: uppercase; }
-.ga-title span { font: 500 11.5px Rubik, sans-serif; opacity: 0.75; flex: 1; }
-.ga-title i { font: 700 13px Rubik, sans-serif; font-style: normal; width: 26px; height: 26px; line-height: 23px; text-align: center; border-radius: 50%; border: 2px solid var(--ink); background: var(--paper-2); }
-.ga-row { display: flex; gap: 7px; }
-body.paused .bt-aim, body.paused .ga, body.paused .ga-btn, body.paused .ga-lob, body.fd-open .ga-btn, body.fd-open .ga-lob, body.fd-open .bt-aim, body.bt-open .ga-btn, body.bt-open .ga-lob, body.bt-open .bt-aim, body.phone-cam .ga-btn, body.phone-cam .ga-lob, body.phone-cam .bt-aim { display: none !important; }

@@ -381,7 +381,7 @@ export class FreeDraw {
         <div class="fd-ink" aria-label="Ink"><i id="fd-ink-fill"></i><i id="fd-ink-cost"></i></div>
         <button class="fd-btn" id="fd-undo" title="Undo the last line (Z)">↶</button>
         <button class="fd-btn" id="fd-clear" title="Clear (Delete)">Clear</button>
-        <button class="fd-btn fd-album" id="fd-album" title="The blueprint library: pistols, rifles, launchers... (T)">📒 Blueprints</button>
+        <button class="fd-btn fd-album" id="fd-album" title="The blueprint library: paint gun, pencil rifle, eraser bazooka... (T)">📒 Blueprints</button>
         <button class="fd-btn" id="fd-close" title="Close, the drawing is kept (Esc)">✕</button>
         <button class="fd-btn primary" id="fd-make">✓ Make it!</button>
       </div>`);
@@ -1813,8 +1813,9 @@ export class FreeDraw {
     }
     // (ROADMAP 15.4) a ramp, a bridge, a barrier: drawn on the world - the next line, where it goes
     if (!inv && game.gadgets && DRAWN_ON.has(id)) return this.worldMode(id);
-    // (ROADMAP 28.8) the first time it is drawn - over its own blueprint, big (game/buildtray.js); a touch from then on
-    if (!inv && game.tray && game.tray.firstWanted(id)) {
+    // (ROADMAP 28.8) the first time a ride or a tool is drawn - over its own blueprint, big (game/buildtray.js); a touch from
+    // then on. Not the guns: they are made as they always were (ROADMAP 28.16, the owner's word)
+    if (!inv && bp.kind !== 'weapon' && game.tray && game.tray.firstWanted(id)) {
       game.tray.firstDraw(bp, () => this.quick(id));
       return false;
     }

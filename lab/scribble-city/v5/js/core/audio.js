@@ -647,43 +647,6 @@ export class Audio {
         this.hiss(0.06, 0.1 * v, 5200, 1.4, 'highpass', 0.05);
         this.tone('triangle', 1700 + Math.random() * 500, 1500, 0.07, 0.025 * v, 0.03);
         break;
-      // (ROADMAP 28.9) the start's guns, each its own voice - a crack (how sharp), a thump (how heavy), the air after it
-      // (how long), and what is its own: a marker's cap popping, a carbine's dry snap, a belt of staples rattling
-      case 'magnum':
-        this.hiss(0.07, 0.8 * v, 1900, 0.7, 'bandpass', 0, 600);
-        this.tone('sine', 120, 38, 0.24, 0.6 * v);
-        this.tone('triangle', 420, 140, 0.06, 0.2 * v);
-        this.hiss(0.75, 0.2 * v, 700, 0.6, 'lowpass', 0.06, 130);
-        this.tone('square', 1900, 1500, 0.02, 0.05 * v, 0.012);
-        break;
-      case 'carbine':
-        this.hiss(0.04, 0.6 * v, 3100, 0.9, 'bandpass', 0, 1100);
-        this.tone('sine', 170, 62, 0.09, 0.36 * v);
-        this.hiss(0.28, 0.1 * v, 1100, 0.7, 'lowpass', 0.04, 240);
-        break;
-      case 'ak':
-        this.hiss(0.055, 0.7 * v, 2000, 0.8, 'bandpass', 0, 700);
-        this.tone('sine', 135, 46, 0.13, 0.5 * v);
-        this.tone('sawtooth', 300, 110, 0.05, 0.1 * v);
-        this.hiss(0.4, 0.13 * v, 800, 0.6, 'lowpass', 0.05, 170);
-        break;
-      case 'smg':
-        this.hiss(0.03, 0.42 * v, 3600, 1.1, 'bandpass', 0, 1500);
-        this.tone('sine', 230, 90, 0.06, 0.24 * v);
-        this.hiss(0.14, 0.06 * v, 1500, 0.8, 'lowpass', 0.03, 400);
-        break;
-      case 'lmg':
-        this.hiss(0.045, 0.6 * v, 2500, 0.9, 'bandpass', 0, 900);
-        this.tone('sine', 150, 52, 0.1, 0.42 * v);
-        this.tone('square', 1400, 760, 0.025, 0.07 * v, 0.02);
-        this.hiss(0.3, 0.1 * v, 900, 0.6, 'lowpass', 0.05, 200);
-        break;
-      case 'thump':
-        this.tone('sine', 190, 52, 0.22, 0.6 * v);
-        this.hiss(0.12, 0.4 * v, 600, 0.7, 'lowpass', 0, 160);
-        this.tone('triangle', 620, 300, 0.05, 0.12 * v, 0.02);
-        this.hiss(0.2, 0.08 * v, 2400, 1.5, 'bandpass', 0.09, 900);
-        break;
       // (ROADMAP 18) a handgun across a car park: the crack, its thump, the echo off the concrete
       case 'pistol':
         this.hiss(0.06, 0.55 * v, 2600, 0.8, 'bandpass', 0, 900);
