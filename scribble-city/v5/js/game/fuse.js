@@ -3,12 +3,13 @@ import { readMark, asType, shapeOf, onItAll } from './fusemark.js';
 import { readDrawing, buildDrawn, floatK, wingGlide, rotorLift, takeoffOf, WING_TOP } from './fusedraw.js';
 import { PartPen } from './partpen.js';
 import { boxOf, along, pathLen } from './signshape.js';
-import { wheelModel, wingModel, rotorModel, jetModel, packModel, springModel, bumperModel, barrelModel, ramModel, sideBladeModel, bladeModel, carArmorModel, vestModel, balloonModel, magnetModel, starModel, boltModel, smokeModel, chuteModel, floatModel, propModel, spikesModel, paintOf } from './fusemodel.js';
+import { wheelModel, wingModel, rotorModel, jetModel, packModel, springModel, bumperModel, barrelModel, ramModel, sideBladeModel, bladeModel, carArmorModel, vestModel, balloonModel, magnetModel, starModel, boltModel, smokeModel, chuteModel, floatModel, propModel, spikesModel, linkModel, paintOf } from './fusemodel.js';
 import { isWater } from './rides.js';
 import { KINDS, skinHit } from '../render/cars.js';
 import { INKS } from './freeform.js';
 import { gunOf } from './partsum.js';
 import { applyPar, finishPar, airPar, preDrivePar } from './inkparts.js';
+import { fusionApply } from './traycat.js';
 import { HANDLING } from './vehicles.js';
 import { groundHeight, WATER_X, WEST_EDGE } from '../world/layout.js';
 import { clamp, damp } from '../core/util.js';
@@ -67,12 +68,14 @@ export const PARTS = {
   deco3: { name: tr('קישוט', 'Decoration'), mark: '', cost: 6, col: [0.94, 0.92, 0.86] },
   // (ROADMAP 11.28) a thing of the pen with its own behaviour (game/gear.js)
   gear: { name: tr('מתקן', 'Gadget'), mark: '', cost: 10, col: [0.6, 0.62, 0.66] },
+  // (ROADMAP 28) what joins things - the coupler, the mode shift, the chassis link, the cargo mount (game/buildtray.js)
+  link: { name: tr('חיבור', 'Link'), mark: '', cost: 6, col: [0.5, 0.52, 0.57] },
 };
 export const PART_ORDER = ['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float', 'spike'];
 
 // what a part can be put on
 const ALLOW = {
-  veh: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float', 'spike', 'deco3', 'gear', 'prop']),
+  veh: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float', 'spike', 'deco3', 'gear', 'prop', 'link']),
   hero: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'chute']),
   weapon: new Set(['barrel', 'blade', 'spring', 'magnet', 'jet', 'wing', 'armor', 'rotor']),
   car: new Set(['balloon', 'rotor', 'jet', 'spring', 'magnet', 'wheel', 'barrel', 'wing']),
@@ -87,6 +90,11 @@ const WHY_NOT = {
 };
 // (what goes on yours: how many of them)
 const MAX_ON_VEH = 8;
+// (ROADMAP 28: what the mode shift folds away on the road)
+const FOLDS = new Set(['wing', 'rotor', 'balloon']);
+// (ROADMAP 28.6) a ride this far from the camera: its parts stand still; this far, they are not drawn
+const PARTS_STILL = 90;
+const PARTS_GONE = 220;
 // (ROADMAP 11.22) more drawn onto the part just made, over it, within this long (ms): one drawing
 // with it - its other half, the lines inside it
 const MERGE_MS = 6000;
@@ -1014,7 +1022,8 @@ export class Fuse {
     const R = (v.fuse = v.fuse || { parts: [], root: null, models: [] });
     // (one of each, but two guns and three things of your own; a wheel replaces the wheels - the
     // part pen's, ROADMAP 11.25: one of each of its things, a flamethrower and a jet both on)
-    const same = R.parts.filter((p) => p.type === part.type && (p.item || '') === (part.item || ''));
+    // (ROADMAP 28: the links are four different things of one kind - one of each)
+    const same = R.parts.filter((p) => p.type === part.type && (p.item || '') === (part.item || '') && (part.type !== 'link' || p.v === part.v));
     const keep = part.type === 'barrel' ? 1 : part.type === 'deco3' ? 2 : part.par && (part.type === 'jet' || part.type === 'prop') ? 1 : 0;
     while (same.length > keep) this.removeVeh(v, same.shift(), true);
     if (R.parts.length >= MAX_ON_VEH) this.removeVeh(v, R.parts[0], true);
@@ -1120,7 +1129,11 @@ export class Fuse {
     v.spikes = null;
     const has = {};
     const r0 = vehWheelR(v);
+    // (ROADMAP 28: the mode shift on it, set to the road - what flies is folded away: it does nothing, it is not seen)
+    const fold = !!v.fzFold && R.parts.some((q) => q.type === 'link' && q.v === 'mode');
     for (const p of R.parts) {
+      p.folded = fold && FOLDS.has(p.type) && p.v !== 'spoiler';
+      if (p.folded) continue;
       has[p.type] = p;
       const n = p.n;
       // (ROADMAP 15.3) chosen, then drawn: as big as drawn, where drawn, the way drawn
@@ -1277,9 +1290,13 @@ export class Fuse {
       fz.wingFly = fz.takeoff <= H.top * WING_TOP;
     }
     // (ROADMAP 11.28: and what they make of each other)
-    if (this.game.gear) this.game.gear.finish(v, R.parts, H, fz);
+    if (this.game.gear) this.game.gear.finish(v, fold ? R.parts.filter((q) => !q.folded) : R.parts, H, fz);
     // (ROADMAP 15.3: the drawn ones, together - their lift for its weight, the names of what they make)
     finishPar(v, H, fz);
+    // (ROADMAP 28: the fusion book's - two parts that make something of each other, game/traycat.js)
+    fusionApply(v, fold ? R.parts.filter((q) => !q.folded) : R.parts, H, fz);
+    fz.fold = fold;
+    fz.modes = R.parts.some((q) => q.type === 'link' && q.v === 'mode');
     v.handling = H;
     v.spaceIsMine = B.spaceIsMine || !!(fz.jump || fz.rotor || fz.balloon || fz.vtol || fz.wingFly);
     v.fuseUp = !!(fz.jump || fz.rotor >= 1 || fz.balloon >= 1 || fz.vtol || fz.wingFly);
@@ -1292,11 +1309,24 @@ export class Fuse {
   // group)
   buildVeh(v) {
     const R = v.fuse;
+    const old = R.models || [];
     if (R.root) {
       if (R.root.parent) R.root.parent.remove(R.root);
       R.root = null;
     }
     R.models = [];
+    // (ROADMAP 28.6: once the new ones are made, what the old ones were made of and is not used again is let go of)
+    if (old.length) {
+      Promise.resolve().then(() => {
+        const live = new Set((v.fuse ? v.fuse.models : []).map((o) => o.m));
+        for (const o of old) {
+          if (live.has(o.m) || (o.p && this.looks.has(o.p))) continue;
+          o.m.traverse((x) => {
+            if (x.geometry && x.geometry.dispose) x.geometry.dispose();
+          });
+        }
+      });
+    }
     if (!R.parts.length && !(R.decor && R.decor.length)) return;
     const root = new THREE.Group();
     const D = vehDims(v);
@@ -1475,6 +1505,11 @@ export class Fuse {
         if (p.dir) m.quaternion.setFromUnitVectors(_jetAxis, _jetDir.set(p.dir[0], p.dir[1], p.dir[2]).normalize());
         root.add(m);
         R.models.push({ p, m, role: 'prop' });
+      } else if (p.type === 'link') {
+        const m = linkModel(p.v, D, col);
+        m.position.set(p.at[0], p.at[1], p.at[2]);
+        root.add(m);
+        R.models.push({ p, m, role: 'link' });
       } else if (p.type === 'spike') {
         const m = spikesModel(D, clamp(p.n.len || 1, 0.4, 3), K ? K.clear : 0.25);
         root.add(m);
@@ -2769,12 +2804,28 @@ export class Fuse {
       const R = v.fuse;
       if (!R || !R.root) continue;
       // (its frame as it is this frame, not the last: what is drawn from it keeps up at speed)
+      // (ROADMAP 28.6: far from the camera, and not the one you are in - its parts stand still; farther, not drawn)
+      if (v.driver !== g.player) {
+        const cp = g.camera.position;
+        const far2 = (v.pos.x - cp.x) ** 2 + (v.pos.z - cp.z) ** 2;
+        R.root.visible = far2 < PARTS_GONE * PARTS_GONE;
+        if (far2 > PARTS_STILL * PARTS_STILL) continue;
+      } else R.root.visible = true;
       if (v.kind === 'car') R.root.updateMatrixWorld(true);
       else if (v.group) v.group.updateMatrixWorld(true);
       const fz = v.fz || {};
       const r0 = (fz.wheels && fz.wheels.r) || 0.34;
       for (const o of R.models) {
         const ud = o.m.userData;
+        // (ROADMAP 28: folded away by the mode shift)
+        if (o.p && o.p.folded) {
+          o.m.visible = false;
+          ud.foldHid = true;
+          continue;
+        } else if (ud.foldHid) {
+          o.m.visible = true;
+          ud.foldHid = false;
+        }
         // (ROADMAP 23.21: the story's landed rotor out of the film's pictures from inside the car - game/prologue/director.js
         // rotorHide: whatever it is made of, the stock blades or the bands of the drawing itself. Still, a hand over their
         // heads, they were pale lines across both faces in every close picture of the ending)
@@ -3186,7 +3237,7 @@ export class Fuse {
   saveVeh(v) {
     const R = v.fuse;
     if (!R || !(R.parts.length || (R.decor && R.decor.length))) return undefined;
-    const parts = R.parts.filter((p) => !p.until).map((p) => ({ type: p.type, v: p.v, n: p.n, at: p.at, dir: p.dir, ink: p.ink, cost: p.cost, ...(p.shape ? { shape: p.shape } : {}), ...(p.item ? { item: p.item } : {}) }));
+    const parts = R.parts.filter((p) => !p.until).map((p) => ({ type: p.type, v: p.v, n: p.n, at: p.at, dir: p.dir, ink: p.ink, cost: p.cost, ...(p.shape ? { shape: p.shape } : {}), ...(p.item ? { item: p.item } : {}), ...(p.par ? { par: true } : {}), ...(p.lv ? { lv: p.lv } : {}), ...(p.tray ? { tray: p.tray, traySize: p.traySize, trayMount: p.trayMount } : {}) }));
     return R.decor && R.decor.length ? { parts, decor: R.decor } : parts;
   }
 

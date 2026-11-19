@@ -26,7 +26,7 @@ export const GUARD = {
           const spread = (i - (n - 1) / 2) * 0.35 + side * 0.5;
           const back = 7 + i * 1.6 + (lv - 1) * 2;
           const yaw = v.yaw + Math.PI + spread * 0.32;
-          G.live.push({ kit: 'smokecan', x: _a.x, y: _a.y, z: _a.z, vx: Math.sin(yaw) * back + Math.sin(v.yaw) * sp * 0.9, vy: 5.5, vz: Math.cos(yaw) * back + Math.cos(v.yaw) * sp * 0.9, t0: g.time, dur: SMOKE_S[lv - 1], lv });
+          G.live.push({ kit: 'smokecan', x: _a.x, y: _a.y, z: _a.z, vx: Math.sin(yaw) * back + Math.sin(v.yaw) * sp * 0.9, vy: 5.5, vz: Math.cos(yaw) * back + Math.cos(v.yaw) * sp * 0.9, t0: g.time, dur: SMOKE_S[lv - 1] * ((v.fz && v.fz.smokeK) || 1), lv });
         }
       }
       g.audio.play('pop', 0.8);

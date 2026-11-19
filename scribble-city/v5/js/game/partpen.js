@@ -688,7 +688,8 @@ export class PartPen {
       const mine = v.fuse.parts.filter((q) => q.item && q.item !== item && ITEMS[q.item] && ITEMS[q.item].cat === cat);
       while (mine.length && mine.length >= G.play.slots(cat)) fz.removeVeh(v, mine.shift(), true);
     }
-    const { part, L } = itemPart(item, n, fz.drawCtx(v), inkI, this.game.time, d, G ? G.level(item) : 1);
+    // (ROADMAP 28: the tray's nitro is the bottle and the exhausts - the big engine is a part of its own: lvCap)
+    const { part, L } = itemPart(item, n, fz.drawCtx(v), inkI, this.game.time, d, Math.min(G ? G.level(item) : 1, this.lvCap || 3));
     // (ROADMAP 23.19: in the story's chase a machine gun goes on the roof and turns all the way round - they are behind him;
     // on the hood it turns only a little, ahead: game/fuse.js arc)
     if (item === 'mg' && this.game.prologue && this.game.prologue.chaseGun) {
