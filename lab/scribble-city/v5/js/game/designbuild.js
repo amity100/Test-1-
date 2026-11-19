@@ -66,6 +66,13 @@ function cutProf(prof, y0, y1) {
   return out;
 }
 
+// (ROADMAP 28.6) how fine a slab's grid is made, of what its design asks (1: as asked): a phone makes them coarser -
+// a wing, a rotor's blades, a parachute's canopy were 14 to 26 thousand triangles each (game/game.js sets it)
+let SLAB_K = 1;
+export function setSlabRes(k) {
+  SLAB_K = Math.max(0.3, Math.min(1, k || 1));
+}
+
 // one primitive into a kit, round o (its origin, the car's frame)
 function addPrim(Kt, q, o, mat, col, matOf, colOf) {
   switch (q.t) {
@@ -97,7 +104,7 @@ function addPrim(Kt, q, o, mat, col, matOf, colOf) {
     }
     case 'slab': {
       // (ROADMAP 11.28: a small one finer than it need be - its own grid, coarser: game/gearlook.js)
-      const B = inflateShape(q.ol, q.W, { n: q.edge || 3, R: (q.W / 2) * 0.9, res: q.res || 40 });
+      const B = inflateShape(q.ol, q.W, { n: q.edge || 3, R: (q.W / 2) * 0.9, res: Math.max(12, Math.round((q.res || 40) * SLAB_K)) });
       if (!B) break;
       const { n, e1, e2 } = AX[q.ax];
       const m4 = new THREE.Matrix4().makeBasis(new THREE.Vector3(...n), new THREE.Vector3(...e2), new THREE.Vector3(...e1));

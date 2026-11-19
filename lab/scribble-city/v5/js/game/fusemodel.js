@@ -636,3 +636,48 @@ export function floatModel(len, hw, paint) {
   }
   return wrap(K.build({ seed: 0.97 }), { L, r });
 }
+
+// ------------------------------------------------------------------ links (ROADMAP 28)
+// what joins things, each at its own place on the ride (game/buildtray.js linkAt), its foot at the origin: the coupler -
+// a tow bar out of the tail with a clamp ring on it, its pin through; the mode shift - a switch box with its lever and
+// three lamps; the chassis link - two arms out of the side with a locking plate; the cargo mount - a rack on the roof,
+// two rails and a stop at its front
+export function linkModel(kind, D, paint) {
+  const M = itemMats();
+  const K = new Kit();
+  const YEL = linC(0.98, 0.78, 0.16);
+  if (kind === 'coupler') {
+    K.box(M.metal, -0.07, -0.05, -0.16, 0.07, 0.05, 0.18, STEEL);
+    K.box(M.metal, -0.14, -0.09, 0.1, 0.14, 0.09, 0.18, DARK);
+    K.torus(M.metal, 0.13, 0.035, 0, 0.0, -0.27, CHROME, Math.PI / 2, 0);
+    K.cyl(M.metal, 0.028, 0.028, -0.12, 0.16, YEL, { axis: 'y', z: -0.16 });
+    K.sphere(M.metal, 0.05, 0, 0.18, -0.16, YEL);
+    K.box(M.matte, -0.09, -0.07, -0.02, 0.09, 0.07, 0.04, paint);
+  } else if (kind === 'mode') {
+    K.box(M.metal, -0.16, 0, -0.2, 0.16, 0.1, 0.2, DARK);
+    K.box(M.matte, -0.13, 0.1, -0.17, 0.13, 0.12, 0.17, paint);
+    K.cyl(M.metal, 0.02, 0.02, 0.1, 0.34, CHROME, { axis: 'y', z: 0.02 });
+    K.sphere(M.metal, 0.05, 0, 0.36, 0.02, YEL);
+    K.sphere(M.matte, 0.03, -0.08, 0.13, -0.12, linC(0.3, 0.85, 0.4));
+    K.sphere(M.matte, 0.03, 0, 0.13, -0.12, linC(0.35, 0.65, 1));
+    K.sphere(M.matte, 0.03, 0.08, 0.13, -0.12, linC(1, 0.5, 0.2));
+  } else if (kind === 'dual') {
+    for (const z of [-0.55, 0.55]) {
+      K.box(M.metal, 0, -0.04, z - 0.05, 0.42, 0.04, z + 0.05, STEEL);
+      K.cyl(M.metal, 0.06, 0.06, z - 0.07, z + 0.07, YEL, { x: 0.42 });
+    }
+    K.box(M.metal, 0.38, -0.12, -0.62, 0.46, 0.12, 0.62, DARK);
+    K.box(M.matte, 0.46, -0.08, -0.3, 0.48, 0.08, 0.3, paint);
+  } else {
+    const w = Math.min(0.62, D.hw * 0.72);
+    const l = Math.min(0.9, D.hl * 0.42);
+    for (const s of [-1, 1]) {
+      K.box(M.metal, s * w - 0.03, 0.06, -l, s * w + 0.03, 0.1, l, CHROME);
+      for (const z of [-l * 0.8, l * 0.8]) K.box(M.metal, s * w - 0.03, 0, z - 0.03, s * w + 0.03, 0.06, z + 0.03, DARK);
+    }
+    for (const z of [-l * 0.6, 0, l * 0.6]) K.box(M.metal, -w, 0.07, z - 0.025, w, 0.1, z + 0.025, STEEL);
+    K.box(M.matte, -w, 0.1, l - 0.06, w, 0.22, l, paint);
+    K.box(M.metal, -w * 0.3, 0.1, -l, w * 0.3, 0.14, -l + 0.1, YEL);
+  }
+  return wrap(K.build({ seed: 0.57 }));
+}

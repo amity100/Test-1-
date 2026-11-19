@@ -129,7 +129,7 @@ export class Gear {
     const g = this.game;
     const rdt = g.realDt || dt;
     const v = g.player.inVehicle;
-    const parts = v && !v.dead && v.fuse ? v.fuse.parts.filter((p) => p.item && KIT[p.item]) : [];
+    const parts = v && !v.dead && v.fuse ? v.fuse.parts.filter((p) => p.item && KIT[p.item] && !p.folded) : [];
     const K = v && g.state === 'play' && !(g.freedraw && g.freedraw.isOpen) ? this.keys() : null;
     this.jam = 0;
     for (const p of parts) {

@@ -16,6 +16,8 @@ import { Traffic } from './traffic.js';
 import { HUD } from '../ui/hud.js';
 import { Album, ALL_OPEN } from '../ui/album.js';
 import { Inventions } from './inventions.js';
+import { BuildTray } from './buildtray.js';
+import { setSlabRes } from './designbuild.js';
 import { Materialize } from './materialize.js';
 import { Signals } from './signals.js';
 import { Perf } from './perf.js';
@@ -232,6 +234,10 @@ export class Game {
     await breath('init');
     // (ROADMAP 15.5) the inventions you made and kept (not with ?classic)
     this.inventions = new Inventions(this);
+    // (ROADMAP 28) the parts tray: how things are put on a ride (not with ?classic)
+    this.tray = this.classic ? null : new BuildTray(this);
+    // (ROADMAP 28.6: a phone makes the designed parts' big surfaces coarser - under half their triangles, the same to look at)
+    if (this.touch) setSlabRes(0.6);
     this.album.onAdd = (id) => this.onAlbumAdd(id);
     this.airdraw = new AirDraw(this);
     this.airsketch = new AirSketches(this);
@@ -1264,7 +1270,8 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     const fd = this.freedraw;
     const penSlow = !!(fd && fd.isOpen) && this.state === 'play' && (this.lab || fd.carOpen || (this.police && this.police.level > 0) || this.time - this.player.lastHurt < 3);
     this.penSlowT = penSlow ? (this.penSlowT || 0) + dt : 0;
-    if (this.fuse) dt *= this.fuse.timeK(dt, penSlow && this.penSlowT < 6);
+    // (ROADMAP 28: and while a ride is built on from the parts tray, or its quick wheel is out - game/buildtray.js)
+    if (this.fuse) dt *= this.fuse.timeK(dt, (penSlow && this.penSlowT < 6) || (!!this.tray && this.tray.slow()));
     // (ROADMAP 11.28: frozen while the rewind runs back, slow a moment after it - game/gear.js)
     if (this.gear) dt *= this.gear.timeK(this.realDt);
     // (v5, ROADMAP 18: the prologue's slow motion - the drawing, the top of the jump)
@@ -1522,6 +1529,11 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     player.camNear = !player.inVehicle && !!hc && this.camera.position.distanceTo(hc) < 0.3;
     // (ROADMAP 11.21) the pen out in the car you drive: the camera close by it, held in its frame
     if (this.fuse && player.inVehicle) this.fuse.sketchCam(player.inVehicle, this.realDt);
+    // (ROADMAP 28) the parts tray out: the camera round the ride that is built on
+    if (this.tray) {
+      this.tray.update(this.realDt);
+      this.tray.cam(this.realDt);
+    }
     const tipsy = this.inkwell.tipsy;
     if (tipsy > 0.05 && this.state === 'play') {
       // a few drinks in: the page sways
@@ -1687,7 +1699,17 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     // (ROADMAP 11.6, 11.7) Q: the pen out, to draw freehand in the air on the move
     // (ui/freedraw.js) - again, and what is drawn becomes the thing; the album's drawing is T
     if (this.freedraw) {
-      if (input.wasPressed('KeyQ')) this.freedraw.toggle();
+      // (ROADMAP 28: in a ride the pencil is the parts tray's - game/buildtray.js; the pen that draws straight on the
+      // car is in the tray, and stays the pencil's own through the story's drawing lessons)
+      if (input.wasPressed('KeyQ')) {
+        const T = this.tray;
+        // (a phone: the pencil button's own touch has it - a touch the tray, held the quick wheel)
+        if (T && T.pencilTaken()) {
+          // (nothing more to do with it)
+        } else if (T && T.isOpen) T.close();
+        else if (T && p.inVehicle && !this.freedraw.isOpen && T.can()) T.open();
+        else this.freedraw.toggle();
+      }
       if (input.wasPressed('KeyT')) this.freedraw.close();
     }
     if (input.wasPressed('KeyF')) this.takePhoto();
