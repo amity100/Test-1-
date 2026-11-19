@@ -605,19 +605,16 @@ const BUILD = {
     for (const z of [0.3, 0.34, 0.38]) K.box(M.matte, -0.0235, 0.022, z - 0.008, 0.0235, 0.038, z + 0.008, dark);
     K.cyl(M.round, 0.018, 0.007, 0.42, 0.47, C(0.95, 0.4, 0.7), { y: 0.03, segs: 8 });
     // the marker for a magazine
-    const mag = new THREE.BoxGeometry(0.03, 0.2, 0.04);
-    mag.rotateX(-0.08);
-    mag.translate(0, -0.12, 0.1);
+    // (the marker up through its grip: the hand holds the magazine itself)
+    const mag = new THREE.BoxGeometry(0.036, 0.24, 0.05);
+    mag.rotateX(-0.1);
+    mag.translate(0, -0.13, -0.02);
     K.add(M.paint, mag, C(0.95, 0.95, 0.91));
-    const cap = new THREE.BoxGeometry(0.034, 0.05, 0.044);
-    cap.rotateX(-0.08);
-    cap.translate(0, -0.215, 0.108);
+    const cap = new THREE.BoxGeometry(0.04, 0.06, 0.054);
+    cap.rotateX(-0.1);
+    cap.translate(0, -0.24, -0.009);
     K.add(M.paint, cap, blue);
-    const grip = new THREE.BoxGeometry(0.042, 0.12, 0.05);
-    grip.rotateX(-0.3);
-    grip.translate(0, -0.075, -0.04);
-    K.add(M.matte, grip, dark);
-    K.torus(M.metal, 0.028, 0.005, 0, -0.03, 0.02, steel, 0, Math.PI / 2);
+    K.torus(M.metal, 0.028, 0.005, 0, -0.03, 0.05, steel, 0, Math.PI / 2);
     // the wire stock
     for (const y of [0.05, -0.01]) K.cyl(M.metal, 0.007, 0.007, -0.36, -0.1, steel, { y, segs: 6 });
     K.box(M.metal, -0.012, -0.03, -0.375, 0.012, 0.07, -0.36, steel);
