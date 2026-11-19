@@ -381,7 +381,7 @@ export class FreeDraw {
         <div class="fd-ink" aria-label="Ink"><i id="fd-ink-fill"></i><i id="fd-ink-cost"></i></div>
         <button class="fd-btn" id="fd-undo" title="Undo the last line (Z)">↶</button>
         <button class="fd-btn" id="fd-clear" title="Clear (Delete)">Clear</button>
-        <button class="fd-btn fd-album" id="fd-album" title="The blueprint library: paint gun, pencil rifle, eraser bazooka... (T)">📒 Blueprints</button>
+        <button class="fd-btn fd-album" id="fd-album" title="The blueprint library: pistols, rifles, launchers... (T)">📒 Blueprints</button>
         <button class="fd-btn" id="fd-close" title="Close, the drawing is kept (Esc)">✕</button>
         <button class="fd-btn primary" id="fd-make">✓ Make it!</button>
       </div>`);
@@ -1813,6 +1813,11 @@ export class FreeDraw {
     }
     // (ROADMAP 15.4) a ramp, a bridge, a barrier: drawn on the world - the next line, where it goes
     if (!inv && game.gadgets && DRAWN_ON.has(id)) return this.worldMode(id);
+    // (ROADMAP 28.8) the first time it is drawn - over its own blueprint, big (game/buildtray.js); a touch from then on
+    if (!inv && game.tray && game.tray.firstWanted(id)) {
+      game.tray.firstDraw(bp, () => this.quick(id));
+      return false;
+    }
     const why = game.gadgets ? game.gadgets.cannot(id) : null;
     if (why) {
       game.hud.toast(why, 'info', 2.8);
@@ -1830,7 +1835,7 @@ export class FreeDraw {
     this.bake();
     this.render();
     const R = { bp, kind: id, grade: 'perfect', score: 1, cost, remembered: false };
-    this.makeCatalog(R, { speed: 1.45, front: bp.kind === 'vehicle', parts: inv ? inv.parts : null, name: inv ? inv.name : null });
+    this.makeCatalog(R, { speed: 1.45, front: bp.kind === 'vehicle', parts: inv ? inv.parts : null, name: inv ? inv.name : null, full: !!(inv && inv.full) });
     this.stats.quick = (this.stats.quick || 0) + 1;
     return true;
   }
@@ -2055,6 +2060,8 @@ export class FreeDraw {
     if (opts.parts && plan.vehicle) {
       plan.vehicle.pendingParts = opts.parts;
       plan.vehicle.invName = opts.name || null;
+      // (ROADMAP 28: a build kept from the parts tray - every part of it as it was, game/buildtray.js)
+      plan.vehicle.pendingFull = !!opts.full;
       game.pendingInv = plan.vehicle;
     }
     // (ROADMAP 15.5: the world answers) a war machine made in the street - a tank, an armoured car:

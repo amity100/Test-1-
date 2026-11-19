@@ -63,6 +63,27 @@ export class Inventions {
     return { ok: true, o };
   }
 
+  // (ROADMAP 28) a build kept from the parts tray: every part on the ride as it is (the pen's things, the links, the
+  // drawn ones) - made again whole from the pen's "inventions" shelf when there is no ride by you
+  storeFull(name, base, parts) {
+    if (!parts || !parts.length) return null;
+    name = String(name || '').trim().slice(0, 28) || tr('בנייה', 'Build');
+    let o = this.list.find((x) => x.name === name);
+    if (o) {
+      o.base = base;
+      o.parts = parts;
+      o.full = true;
+      o.v = (o.v || 1) + 1;
+      o.t = Date.now();
+    } else {
+      o = { id: Math.random().toString(36).slice(2, 8), name, base, parts, full: true, v: 1, t: Date.now() };
+      this.list.unshift(o);
+      if (this.list.length > MAX) this.list.length = MAX;
+    }
+    this.save();
+    return o;
+  }
+
   remove(id) {
     const i = this.list.findIndex((o) => o.id === id);
     if (i < 0) return false;

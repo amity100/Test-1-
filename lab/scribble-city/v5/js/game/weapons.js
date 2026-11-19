@@ -12,20 +12,21 @@ import { tr } from '../core/lang.js';
 // blueprints on the billboards around the city.
 export const WEAPON_DEFS = {
   pencil: { id: 'pencil', name: tr('עיפרון-מחק', 'Pencil-eraser'), kind: 'melee', damage: 34, rate: 2.4, range: 2.7 },
-  paint: { id: 'paint', name: tr('אקדח צבע', 'Paint gun'), kind: 'gun', projectile: 'paint', damage: 10, rate: 7.5, speed: 46, gravity: 6, spread: 0.016, ammo: 90, hands: 1 },
-  rifle: { id: 'rifle', name: tr('רובה עפרונות', 'Pencil rifle'), kind: 'gun', projectile: 'pencil', damage: 27, rate: 3.4, speed: 92, gravity: 2.5, spread: 0.005, ammo: 40, hands: 2 },
-  bazooka: { id: 'bazooka', name: tr('בזוקת מחקים', 'Eraser bazooka'), kind: 'gun', projectile: 'eraser', damage: 150, radius: 6.5, rate: 0.8, speed: 36, gravity: 4, spread: 0.004, ammo: 8, hands: 2 },
+  // (ROADMAP 28.9: real guns in build and feel, made of what one draws with - the ids as they were)
+  paint: { id: 'paint', name: tr('P-09 אינקבולט', 'P-09 Inkbolt'), kind: 'gun', projectile: 'ink', damage: 14, rate: 6.5, speed: 82, gravity: 3, spread: 0.008, ammo: 105, hands: 1, semi: true, kick: 0.07, reach: 55, sound: 'pistol', shell: 'cart' },
+  rifle: { id: 'rifle', name: tr('C-16 גרפיט', 'C-16 Graphite'), kind: 'gun', projectile: 'pencil', damage: 16, rate: 8.5, speed: 96, gravity: 2.2, spread: 0.009, ammo: 180, hands: 2, kick: 0.06, reach: 110, sound: 'carbine', shell: 'shaving' },
+  bazooka: { id: 'bazooka', name: tr('RL-7 מחק', 'RL-7 Eraser'), kind: 'gun', projectile: 'eraser', damage: 150, radius: 6.5, rate: 0.8, speed: 36, gravity: 4, spread: 0.004, ammo: 8, hands: 2 },
   // police gear you can pick up
   pen: { id: 'pen', name: tr('עט-אקדח', 'Pen pistol'), kind: 'gun', projectile: 'ink', damage: 15, rate: 4, speed: 78, gravity: 3, spread: 0.008, ammo: 24, hands: 1, gear: true },
   m4: { id: 'm4', name: tr('רובה צבע M4', 'M4 paint rifle'), kind: 'gun', projectile: 'paint', damage: 8, rate: 10, speed: 64, gravity: 4, spread: 0.02, ammo: 60, hands: 2, gear: true },
   bigEraser: { id: 'bigEraser', name: tr('מחק בית-ספר ענק', 'Giant school eraser'), kind: 'melee', damage: 62, rate: 1.7, range: 2.8, uses: 30, gear: true },
   // the new arsenal
-  shotgun: { id: 'shotgun', name: tr('רובה ציד צבעוני', 'Colorful shotgun'), kind: 'gun', projectile: 'crayon', pellets: 8, damage: 11, rate: 1.3, speed: 72, gravity: 3, spread: 0.07, ammo: 30, hands: 2, kick: 0.22, sound: 'shotgun' },
-  stapler: { id: 'stapler', name: tr('אקדח שדכן', 'Stapler pistol'), kind: 'gun', projectile: 'staple', damage: 8, rate: 9, speed: 88, gravity: 1.2, spread: 0.02, ammo: 160, hands: 1, pin: 0.45, sound: 'staple' },
-  katana: { id: 'katana', name: tr('חרב סרגל', 'Ruler sword'), kind: 'melee', damage: 78, rate: 2.6, range: 3.3, arc: 1.5, slash: true },
+  shotgun: { id: 'shotgun', name: tr('S-12 וקסשוט', 'S-12 Waxshot'), kind: 'gun', projectile: 'crayon', pellets: 8, damage: 11, rate: 1.3, semi: true, reach: 30, shell: 'crayon', speed: 72, gravity: 3, spread: 0.07, ammo: 30, hands: 2, kick: 0.22, sound: 'shotgun' },
+  stapler: { id: 'stapler', name: tr('L-249 סטייפל', 'L-249 Staple'), kind: 'gun', projectile: 'staple', damage: 9, rate: 13, speed: 92, gravity: 1.2, spread: 0.024, ammo: 300, hands: 2, pin: 0.45, kick: 0.05, reach: 90, sound: 'lmg', shell: 'staple' },
+  katana: { id: 'katana', name: tr('להב הסרגל', 'Ruler Edge'), kind: 'melee', damage: 78, rate: 2.6, range: 3.3, arc: 1.5, slash: true },
   planes: { id: 'planes', name: tr('משגר מטוסי נייר', 'Paper plane launcher'), kind: 'gun', projectile: 'plane', damage: 70, radius: 3.4, rate: 1.6, speed: 21, gravity: 0, spread: 0.03, ammo: 18, hands: 2, homing: 3.4, sound: 'whoosh' },
-  inkbomb: { id: 'inkbomb', name: tr('רימון דיו', 'Ink grenade'), kind: 'throw', projectile: 'inkbomb', damage: 125, radius: 5.5, rate: 1.1, speed: 17, gravity: 16, ammo: 6, hands: 1, fuse: 1.6 },
-  glue: { id: 'glue', name: tr('אקדח דבק', 'Glue gun'), kind: 'gun', projectile: 'glue', damage: 6, rate: 3.2, speed: 40, gravity: 8, spread: 0.012, ammo: 40, hands: 1, stick: 4.5, sound: 'glue' },
+  inkbomb: { id: 'inkbomb', name: tr('F-1 אינקבומב', 'F-1 Inkbomb'), kind: 'throw', projectile: 'inkbomb', damage: 125, radius: 5.5, rate: 1.1, speed: 17, gravity: 16, ammo: 6, hands: 1, fuse: 1.6 },
+  glue: { id: 'glue', name: tr('G-09 גלולוק', 'G-09 Gluelock'), kind: 'gun', projectile: 'glue', damage: 6, rate: 3.2, semi: true, speed: 40, gravity: 8, spread: 0.012, ammo: 40, hands: 1, stick: 4.5, sound: 'glue' },
   laser: { id: 'laser', name: tr('לייזר מרקר זוהר', 'Glowing marker laser'), kind: 'beam', damage: 95, range: 90, ammo: 14, hands: 2 },
   boomerang: { id: 'boomerang', name: tr('מספריים בומרנג', 'Boomerang scissors'), kind: 'throw', projectile: 'scissors', damage: 58, rate: 1.4, speed: 27, gravity: 0, range: 22, hands: 1 },
   minigun: { id: 'minigun', name: tr('מיניגאן מחדדים', 'Sharpener minigun'), kind: 'gun', projectile: 'shaving', damage: 9, rate: 20, speed: 96, gravity: 2, spread: 0.04, ammo: 450, hands: 2, spin: true, sound: 'mini' },
@@ -33,7 +34,13 @@ export const WEAPON_DEFS = {
   // the machine guns that rub the city out: correction fluid, little erasers, paint
   tippex: { id: 'tippex', name: tr('מקלע טיפקס', 'White-out machine gun'), kind: 'gun', projectile: 'tippex', damage: 13, rate: 11, speed: 64, gravity: 5, spread: 0.026, ammo: 280, hands: 2, sound: 'tippex' },
   erasermg: { id: 'erasermg', name: tr('מקלע מחקים', 'Eraser machine gun'), kind: 'gun', projectile: 'rubber', damage: 15, rate: 12, speed: 82, gravity: 3, spread: 0.03, ammo: 320, hands: 2, sound: 'rubber' },
-  paintmg: { id: 'paintmg', name: tr('מקלע צבע', 'Paint machine gun'), kind: 'gun', projectile: 'paintmg', damage: 11, rate: 14, speed: 58, gravity: 5, spread: 0.034, ammo: 380, hands: 2, sound: 'paint' },
+  paintmg: { id: 'paintmg', name: tr('P-5 סטריק', 'P-5 Streak'), kind: 'gun', projectile: 'paintmg', damage: 9, rate: 15, speed: 64, gravity: 4.5, spread: 0.03, ammo: 300, hands: 2, kick: 0.035, reach: 45, sound: 'smg', shell: 'tip' },
+  // (ROADMAP 28.9, 28.10) the new ones of the start: a magnum whose barrel is a thick marker, an assault rifle of pencil
+  // wood and charcoal, a launcher of ink bottles, a can of graphite dust that hides you
+  magnum: { id: 'magnum', name: tr('D-50 מרקר', 'D-50 Marker'), kind: 'gun', projectile: 'ink', damage: 48, rate: 2.4, speed: 104, gravity: 1.5, spread: 0.004, ammo: 42, hands: 1, semi: true, kick: 0.24, reach: 80, sound: 'magnum', shell: 'cap', colors: [[0.07, 0.07, 0.09], [0.82, 0.12, 0.14], [0.1, 0.25, 0.75]], fat: 1.7 },
+  ak: { id: 'ak', name: tr('K-47 בלקלד', 'K-47 Blacklead'), kind: 'gun', projectile: 'pencil', damage: 22, rate: 9.2, speed: 86, gravity: 2.6, spread: 0.02, ammo: 150, hands: 2, kick: 0.1, reach: 95, sound: 'ak', shell: 'shaving', colors: [[0.13, 0.13, 0.15]] },
+  launcher: { id: 'launcher', name: tr('GL-79 אינקברסט', 'GL-79 Inkburst'), kind: 'gun', projectile: 'inkbomb', damage: 100, radius: 4.8, rate: 1.1, speed: 34, gravity: 15, spread: 0.008, ammo: 12, hands: 2, semi: true, fuse: 1.6, kick: 0.26, sound: 'thump' },
+  smokebomb: { id: 'smokebomb', name: tr('עשן גרפיט', 'Graphite Smoke'), kind: 'throw', projectile: 'inkbomb', damage: 0, radius: 7.5, rate: 0.9, speed: 16, gravity: 16, ammo: 4, hands: 1, fuse: 1.2, smoke: 10 },
 };
 
 export const GRADE = {
@@ -50,6 +57,15 @@ const GLUE = [0.97, 0.97, 0.94];
 const WHITE_OUT = [1.0, 1.0, 0.98];
 const WHITE_TINT = [1.15, 1.15, 1.12];
 const STEEL = [0.78, 0.8, 0.86];
+// (ROADMAP 28: what the guns throw out - a marker's cap, a curl of pencil wood, a felt tip)
+// (ROADMAP 28: how near the crosshair somebody must be for a phone's shot to go to them - about three degrees)
+const AIM_CONE = 0.055;
+const MAX_SHOTS = 260;
+const PENCIL_HEAD = [0.9, 0.55, 0.62];
+const PENCIL_BODY = [0.86, 0.72, 0.3];
+const SHELL_CAP = [0.82, 0.12, 0.14];
+const SHELL_WOOD = [0.86, 0.68, 0.42];
+const SHELL_TIP = [0.95, 0.4, 0.7];
 const HIGHLIGHT = [2.6, 3.2, 0.55]; // brighter than white: the beam glows
 const HIGHLIGHT_CORE = [3.4, 3.6, 2.4];
 // (ROADMAP 11.11, parts 2) what a drawn thing's ink is, as it flies and where it lands
@@ -290,7 +306,68 @@ export class Weapons {
     const along = (p.x - o.x) * dir.x + (p.y + 1.4 - o.y) * dir.y + (p.z - o.z) * dir.z;
     if (t < along + 1.5) t = along + 1.5;
     this.aimPoint.set(o.x + dir.x * t, o.y + dir.y * t, o.z + dir.z * t);
+    // (ROADMAP 28) a phone, a pad: a shot that would pass close by somebody goes to them - a small cone round the
+    // crosshair, nobody behind a wall, not the things that burst; the picture itself is not moved
+    const G = this.game;
+    const cd = this.current && this.current.def;
+    if (!this.aimHitEnemy && cd && cd.kind === 'gun' && !cd.radius && (G.touch || (G.pad && G.pad.active)) && G.enemies.list.length) {
+      const reach = Math.min(t + 0.5, cd.reach || 90);
+      let best = null;
+      let ba = AIM_CONE;
+      for (const en of G.enemies.list) {
+        if (!en.alive) continue;
+        const c = en.fig.center;
+        const dx = c.x - o.x;
+        const dy = c.y - o.y;
+        const dz = c.z - o.z;
+        const d = Math.hypot(dx, dy, dz);
+        if (d > reach || d < along + 1.5) continue;
+        const a = Math.acos(clamp((dx * dir.x + dy * dir.y + dz * dir.z) / d, -1, 1));
+        if (a < ba) {
+          ba = a;
+          best = en;
+        }
+      }
+      if (best) {
+        this.aimPoint.copy(best.fig.center);
+        this.aimHitEnemy = best;
+        this.assisted = G.time;
+      }
+    }
     return this.aimPoint;
+  }
+
+  // (ROADMAP 28) a phone: the aim button - a touch brings the gun up to the eye (the picture in, the look slower, a
+  // scope's zoom if it has one), a touch again lets it down; there only on foot with a gun in the hand
+  aimUi(def, on) {
+    const g = this.game;
+    if (!g.touch || typeof document === 'undefined') return;
+    let el = this.aimEl;
+    if (!el) {
+      el = this.aimEl = document.createElement('button');
+      el.id = 'btn-aim';
+      el.className = 'bt-aim hidden';
+      el.setAttribute('aria-label', tr('כיוון', 'Aim'));
+      el.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2 V8 M12 16 V22 M2 12 H8 M16 12 H22"/></svg><b>${tr('כיוון', 'Aim')}</b>`;
+      el.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.aimHeld = !this.aimHeld;
+        g.input.aim = this.aimHeld;
+        el.classList.toggle('on', this.aimHeld);
+      }, { passive: false });
+      document.body.appendChild(el);
+    }
+    const show = !!on && def.kind === 'gun' && !(g.freedraw && g.freedraw.isOpen) && !(g.tray && g.tray.isOpen);
+    if (show !== this.aimShown) {
+      this.aimShown = show;
+      el.classList.toggle('hidden', !show);
+      if (!show && this.aimHeld) {
+        this.aimHeld = false;
+        g.input.aim = false;
+        el.classList.remove('on');
+      }
+    }
   }
 
   update(dt) {
@@ -362,7 +439,8 @@ export class Weapons {
         this.cooldown = 0.6;
         game.audio.play('slash');
       // (not while it reloads, nor with its magazine empty: ROADMAP 6.6)
-      } else if (input.fire && this.cooldown <= 0 && ready && !out && (!game.arsenal || game.arsenal.ready(slot))) {
+      // (ROADMAP 28: a pistol, a shotgun, a launcher fire once a press - on a phone the button held goes on firing, at its rate)
+      } else if ((def.semi && !game.touch ? input.firePressed : input.fire) && this.cooldown <= 0 && ready && !out && (!game.arsenal || game.arsenal.ready(slot))) {
         if (this.jam > 0) {
           // still jammed
         } else if (Math.random() < GRADE[slot.grade].jam) {
@@ -396,6 +474,7 @@ export class Weapons {
         this.stab = false;
       }
     }
+    this.aimUi(def, onFoot && canAct);
     player.fig.melee = this.swingT;
     player.fig.aim = this.shootOut ? 1 : (def.kind === 'gun' || def.kind === 'beam') && this.isAiming() && canAct ? def.hands : 0;
     this.updateProjectiles(dt);
@@ -425,6 +504,11 @@ export class Weapons {
       bounce: def.bounce || 0,
       ...extra,
     };
+    // (ROADMAP 28.6: no more in the air at once than this - the oldest of yours goes, as one out of its range would)
+    if (this.projectiles.length >= MAX_SHOTS) {
+      const i = this.projectiles.findIndex((q) => q.owner === 'player' && !q.radius && q.kind !== 'scissors');
+      if (i >= 0) this.projectiles.splice(i, 1);
+    }
     this.projectiles.push(pr);
     return pr;
   }
@@ -472,6 +556,15 @@ export class Weapons {
           extra.cruise = sp;
         }
         if (def.projectile === 'glue') extra.stick = def.stick;
+        // (ROADMAP 28: a bottle of ink out of a launcher - fused as the thrown one is)
+        if (def.projectile === 'inkbomb') {
+          extra.fuse = def.fuse || 1.5;
+          extra.life = extra.fuse + 0.3;
+          extra.spin = 0;
+        }
+        if (def.fat) extra.fat = def.fat;
+        // (its range: gone at the end of it)
+        if (def.reach && !sad) extra.life = Math.min(4, def.reach / spe);
         if (def.projectile === 'staple') extra.pin = def.pin;
         if (el) {
           extra.el = el;
@@ -501,7 +594,12 @@ export class Weapons {
     // (a silencer on it: a soft click, and nobody further off hears it - no panic, no police)
     if (def.quiet) game.audio.play('staple', 0.4);
     else game.audio.play(def.sound || (def.projectile === 'paint' ? 'paint' : def.projectile === 'pencil' ? 'pencilShot' : 'bazooka'));
-    game.camRig.addShake((def.kick || (def.projectile === 'eraser' ? 0.35 : 0.04)) * (game.skills ? game.skills.kickMul : 1));
+    const kickK = (def.kick || (def.projectile === 'eraser' ? 0.35 : 0.04)) * (game.skills ? game.skills.kickMul : 1);
+    game.camRig.addShake(kickK * 0.6);
+    // (ROADMAP 28: the gun back and up in the hand, the picture up with it - and back; a spent thing out of its side)
+    this.recoil = Math.min(1.5, (this.recoil || 0) + 0.4 + kickK * 2.6);
+    if (game.camRig.kick) game.camRig.kick(0.006 + kickK * 0.14);
+    if (def.shell && muzzle) this.eject(def, muzzle, _md.copy(this.aimPoint).sub(muzzle).normalize());
     const at = player.inVehicle ? player.inVehicle.pos : player.pos;
     if (def.quiet) game.enemies.noise(at, 5);
     else {
@@ -622,10 +720,10 @@ export class Weapons {
       const G = def.gravity;
       const ty = Math.max(to.y, groundHeight(from.x + hx * dh, from.z + hz * dh));
       const vy = (ty - from.y + 0.5 * G * T * T) / T;
-      this.launch(slot, from.x, from.y, from.z, hx * sh, vy, hz * sh, { fuse: def.fuse, life: def.fuse + 0.3, spin: 0, el: def.element || null });
+      this.launch(slot, from.x, from.y, from.z, hx * sh, vy, hz * sh, { fuse: def.fuse, life: def.fuse + 0.3, spin: 0, el: def.element || null, smoke: def.smoke || 0 });
       slot.ammo--;
       game.audio.play('swing');
-      if (slot.ammo <= 0) this.drop(slot, tr('נגמרו בקבוקי הדיו — אפשר לצייר עוד', 'The ink bottles ran out — you can draw more'));
+      if (slot.ammo <= 0) this.drop(slot, def.smoke ? tr('נגמרו פחיות העשן — אפשר לצייר עוד', 'The smoke cans ran out — you can draw more') : tr('נגמרו בקבוקי הדיו — אפשר לצייר עוד', 'The ink bottles ran out — you can draw more'));
     } else {
       // the scissors: straight out to the aim (or as far as they go), then home
       const dir = _v.copy(to).sub(from).normalize();
@@ -1008,9 +1106,84 @@ export class Weapons {
         m.multiply(_sm.makeScale(...Array(3).fill(Math.max(0.05, 1 + 2.70158 * k * k * k + 1.70158 * k * k))));
       } else slot.popAt = undefined;
     }
+    // (ROADMAP 28: the kick - back along itself and its mouth up, a pistol more than a long gun; gone in a moment)
+    if (this.recoil > 0.004) {
+      const r = this.recoil;
+      if (def.kind === 'gun') {
+        const two = def.hands === 2;
+        m.multiply(_sm.makeTranslation(0, r * 0.01, -r * (two ? 0.045 : 0.06)));
+        m.multiply(_sm.makeRotationX(-r * (two ? 0.06 : 0.17)));
+      }
+      this.recoil = r * Math.exp(-(this.game.realDt || 1 / 60) * 15);
+    }
     slot.model.group.matrix.copy(m);
     slot.model.group.matrixWorldNeedsUpdate = true;
     slot.model.group.updateMatrixWorld(true);
+  }
+
+  // (ROADMAP 28) what a gun throws out of its side with each shot - an ink cartridge, a marker's cap, a curl of pencil
+  // shaving, a bent staple, a stub of crayon, a felt tip: twenty of them at most, the same twenty used again and again
+  eject(def, m, d) {
+    const L = this.shells || (this.shells = Array.from({ length: 20 }, () => ({ on: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, t: 0, c: STEEL, seed: 0, len: 0.05, w: 3, hit: false })));
+    this.shellI = ((this.shellI || 0) + 1) % L.length;
+    const s = L[this.shellI];
+    const back = def.hands === 2 ? 0.5 : 0.22;
+    // (its right: x is the left of things here)
+    const rx = -d.z;
+    const rz = d.x;
+    s.on = true;
+    s.hit = false;
+    s.t = 0;
+    s.x = m.x - d.x * back + rx * 0.05;
+    s.y = m.y - d.y * back + 0.03;
+    s.z = m.z - d.z * back + rz * 0.05;
+    const k = 1.8 + Math.random() * 1.2;
+    s.vx = rx * k - d.x * 0.7;
+    s.vy = 2.2 + Math.random() * 1.2;
+    s.vz = rz * k - d.z * 0.7;
+    s.seed = Math.random() * 50;
+    const kind = def.shell;
+    s.c = kind === 'cart' ? PEN_BLUE : kind === 'cap' ? SHELL_CAP : kind === 'shaving' ? SHELL_WOOD : kind === 'crayon' ? CRAYONS[Math.floor(Math.random() * CRAYONS.length)] : kind === 'tip' ? SHELL_TIP : STEEL;
+    s.len = kind === 'cap' ? 0.07 : kind === 'crayon' ? 0.06 : kind === 'staple' ? 0.035 : 0.045;
+    s.w = kind === 'cap' ? 6 : kind === 'crayon' ? 5 : kind === 'staple' ? 2 : 3.5;
+  }
+
+  stepShells(dt, fr) {
+    const L = this.shells;
+    if (!L) return;
+    for (let i = 0; i < L.length; i++) {
+      const s = L[i];
+      if (!s.on) continue;
+      s.t += dt;
+      if (s.t > 1.1) {
+        s.on = false;
+        continue;
+      }
+      s.vy -= 15 * dt;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.z += s.vz * dt;
+      const gy = groundHeight(s.x, s.z) * 0.5 + 0.02;
+      if (s.y < gy) {
+        s.y = gy;
+        if (s.hit) {
+          s.vx = 0;
+          s.vy = 0;
+          s.vz = 0;
+        } else {
+          s.hit = true;
+          s.vy = -s.vy * 0.32;
+          s.vx *= 0.45;
+          s.vz *= 0.45;
+        }
+      }
+      // (tumbling: its two ends about its middle)
+      const a = s.seed + s.t * (s.hit ? 6 : 22);
+      const ex = Math.cos(a) * s.len;
+      const ey = Math.sin(a) * s.len * 0.8;
+      const ez = Math.sin(a * 0.7) * s.len;
+      fr.lineXYZ(s.x - ex, s.y - ey, s.z - ez, s.x + ex, s.y + ey, s.z + ez, s.c, s.w, s.seed, s.t > 0.85 ? (1.1 - s.t) * 4 : 1, 0.01, 0);
+    }
   }
 
   // ------------------------------------------------------------------ projectiles
@@ -1100,7 +1273,10 @@ export class Weapons {
     const game = this.game;
     const col = game.world.collision;
     const fr = game.figures;
-    const keep = [];
+    // (ROADMAP 28.6: the same two lists turn about, frame after frame - none made anew)
+    const keep = this.keepList || (this.keepList = []);
+    keep.length = 0;
+    const was = this.projectiles;
     for (const pr of this.projectiles) {
       pr.t += dt;
       if (pr.kind === 'scissors') {
@@ -1259,6 +1435,8 @@ export class Weapons {
       this.drawProjectile(fr, pr);
     }
     this.projectiles = keep;
+    this.keepList = was;
+    this.stepShells(dt, fr);
     if (this.beam) this.drawBeam(fr, this.beam);
     if (this.burning.length || this.puddles.length || this.streaks.length) this.updateInks(dt, fr);
   }
@@ -1266,6 +1444,8 @@ export class Weapons {
   // the ink bottle goes off: a huge blot that rubs out everyone around it
   inkBurst(pr, x, y, z) {
     const game = this.game;
+    // (ROADMAP 28: a can of graphite dust - no blast: a grey cloud nobody sees through, a while)
+    if (pr.smoke) return this.smokeBurst(pr, x, y, z);
     game.explosion(x, y, z, pr.radius || 5, pr.damage, pr.owner);
     // (a bomb drawn in colour: its ink all round, ROADMAP 11.11)
     if (pr.el) this.inkRound(pr.el, x, y, z, pr.radius || 5, pr.damage);
@@ -1384,8 +1564,10 @@ export class Weapons {
     } else if (pr.kind === 'pencil') {
       // flies eraser first
       const L = 0.55;
-      fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.08, pr.y - uy * 0.08, pr.z - uz * 0.08, [0.9, 0.55, 0.62], 6, pr.seed, 1, 0.01, 0);
-      fr.lineXYZ(pr.x - ux * 0.08, pr.y - uy * 0.08, pr.z - uz * 0.08, pr.x - ux * L, pr.y - uy * L, pr.z - uz * L, [0.86, 0.72, 0.3], 5, pr.seed + 1, 1, 0.01, 0);
+      // (ROADMAP 28: a stick of charcoal out of the K-47 - dark all through, no eraser on it)
+      const coal = pr.owner === 'player' && pr.color && pr.color[0] < 0.3 && pr.slot && pr.slot.def.colors;
+      fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.08, pr.y - uy * 0.08, pr.z - uz * 0.08, coal ? pr.color : PENCIL_HEAD, 6, pr.seed, 1, 0.01, 0);
+      fr.lineXYZ(pr.x - ux * 0.08, pr.y - uy * 0.08, pr.z - uz * 0.08, pr.x - ux * L, pr.y - uy * L, pr.z - uz * L, coal ? pr.color : PENCIL_BODY, 5, pr.seed + 1, 1, 0.01, 0);
       fr.lineXYZ(pr.x - ux * L, pr.y - uy * L, pr.z - uz * L, pr.x - ux * (L + 0.1), pr.y - uy * (L + 0.1), pr.z - uz * (L + 0.1), BLACK_INK, 3, pr.seed + 2, 1, 0.01, 0);
       fr.lineXYZ(pr.x - ux * 0.7, pr.y - uy * 0.7, pr.z - uz * 0.7, pr.x - ux * 1.6, pr.y - uy * 1.6, pr.z - uz * 1.6, BLACK_INK, 1, pr.seed + 3, 0.35, 0.02, 0);
     } else if (pr.kind === 'crayon') {
@@ -1483,9 +1665,11 @@ export class Weapons {
       fr.lineXYZ(pr.x - ux * s, pr.y - uy * s, pr.z - uz * s, pr.x - ux * 2.4, pr.y - uy * 2.4, pr.z - uz * 2.4, BLACK_INK, 1.4, pr.seed + 1, 0.4, 0.05, 0);
       if (Math.random() < 0.3) this.game.fx.smoke(pr.x - ux, pr.y - uy, pr.z - uz, 0.6);
     } else if (pr.kind === 'ink') {
-      // a blot of ballpoint ink
-      fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.1, pr.y - uy * 0.1, pr.z - uz * 0.1, PEN_BLUE, 8, pr.seed, 1, 0.05, 0);
-      fr.lineXYZ(pr.x - ux * 0.1, pr.y - uy * 0.1, pr.z - uz * 0.1, pr.x - ux * 0.9, pr.y - uy * 0.9, pr.z - uz * 0.9, PEN_BLUE, 1.4, pr.seed + 1, 0.55, 0.04, 0);
+      // a blot of ink (ROADMAP 28: in its gun's colour - a fountain pen's blue, a marker's black or red - and as fat)
+      const ic = pr.color || PEN_BLUE;
+      const fat = pr.fat || 1;
+      fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.1 * fat, pr.y - uy * 0.1 * fat, pr.z - uz * 0.1 * fat, ic, 8 * fat, pr.seed, 1, 0.05, 0);
+      fr.lineXYZ(pr.x - ux * 0.1, pr.y - uy * 0.1, pr.z - uz * 0.1, pr.x - ux * 0.9 * fat, pr.y - uy * 0.9 * fat, pr.z - uz * 0.9 * fat, ic, 1.4 * fat, pr.seed + 1, 0.55, 0.04, 0);
     } else if (pr.kind === 'marker') {
       // (ROADMAP 11.43) the police marksman's round: a stroke of red marker, long and fast
       fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.16, pr.y - uy * 0.16, pr.z - uz * 0.16, MARKER_RED, 8, pr.seed, 1, 0.02, 0);
@@ -1540,7 +1724,7 @@ export class Weapons {
       // (a hit of yours: the shooting skill, ROADMAP 5.6)
       if (game.skills && pr.owner === 'player' && e.alive) game.skills.add('shoot', Math.min(1.5, pr.damage / 25));
       game.enemies.damage(e, hit.part, pr.damage, new THREE.Vector3(hit.x, hit.y, hit.z), new THREE.Vector3(ux, uy, uz), hurtKind);
-      if (kind === 'paint' || kind === 'ink' || kind === 'crayon' || kind === 'paintmg' || kind === 'tippex') e.paint(kind === 'ink' ? PEN_BLUE : pr.color);
+      if (kind === 'paint' || kind === 'ink' || kind === 'crayon' || kind === 'paintmg' || kind === 'tippex') e.paint(kind === 'ink' ? pr.color || PEN_BLUE : pr.color);
       if (kind === 'staple') e.pinT = Math.max(e.pinT || 0, pr.pin || 0.4);
       if (kind === 'glue') {
         e.glueT = pr.stick || 4;
@@ -1892,6 +2076,24 @@ export class Weapons {
   }
 
   // (purple) a cloud of ink there: nobody sees through it (game/signs.js's clouds)
+  // (ROADMAP 28) graphite smoke: the cloud that hides (game/signs.js puff - the police and the gangs do not see through
+  // it), grey puffs rolling out of where the can lies, a smear of graphite on the ground
+  smokeBurst(pr, x, y, z) {
+    const game = this.game;
+    const r = pr.radius || 7;
+    const secs = pr.smoke || 9;
+    if (game.smokes) game.smokes.puff(x, z, r, secs);
+    const gy = groundHeight(x, z) + 0.02;
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.sqrt(Math.random()) * r * 0.75;
+      game.fx.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', x + Math.cos(a) * d, gy + 0.5 + Math.random() * 2.2, z + Math.sin(a) * d, { size: 2.6, grow: 0.3, life: Math.min(8, secs), vy: 0.05, alpha: 0.92, tint: [0.32, 0.32, 0.36], fadeIn: 0.3 });
+    }
+    game.fx.decal('splat0', x, gy, z, r * 0.7, [0.25, 0.25, 0.28], 0.6, [1, 0, 0], [0, 0, -1]);
+    game.fx.crumbs(x, y + 0.3, z, 14, 3, true);
+    game.audio.play('whoosh', 0.6);
+  }
+
   inkCloud(x, z, r) {
     const game = this.game;
     if (game.time - this.cloudT < 0.7) return;

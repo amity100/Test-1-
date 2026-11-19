@@ -147,7 +147,12 @@ export class CameraRig {
       cam.position.y += (Math.random() - 0.5) * s;
       cam.position.z += (Math.random() - 0.5) * s;
     }
-    cam.rotation.set(this.pitch, this.yaw + Math.PI, 0, 'YXZ');
+    // (ROADMAP 28: a gun's kick - the picture up a little with the shot, and back down by itself)
+    if (this.kickP) {
+      this.kickP *= Math.exp(-dt * 9);
+      if (this.kickP < 0.0004) this.kickP = 0;
+    }
+    cam.rotation.set(this.pitch + (this.kickP || 0), this.yaw + Math.PI, 0, 'YXZ');
     const fov = this.baseFov * (opts.aim ? 0.8 : 1) * (opts.fovMul || 1);
     if (Math.abs(cam.fov - fov) > 0.05) {
       cam.fov = damp(cam.fov, fov, 10, dt);
@@ -183,6 +188,11 @@ export class CameraRig {
       cam.fov = damp(cam.fov, want, 6, dt);
       cam.updateProjectionMatrix();
     }
+  }
+
+  // (ROADMAP 28) a gun's kick: a (radians) more of it, to a ceiling
+  kick(a) {
+    this.kickP = Math.min(0.09, (this.kickP || 0) + a);
   }
 
   addShake(a) {
