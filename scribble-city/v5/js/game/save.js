@@ -101,7 +101,7 @@ export class SaveGame {
       where: districtName(at.x, at.z) || '',
       clock: g.daynight ? g.daynight.clock : '',
       playTime: Math.round(this.playTime),
-      player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, hp: p.hp, maxHp: p.maxHp, parachute: p.parachute ? { grade: p.parachute.grade, colours: p.parachute.colours || null } : null, armor: p.armor || 0, perks: perksOf(p) },
+      player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, hp: p.hp, maxHp: p.maxHp, parachute: p.parachute ? { grade: p.parachute.grade, colours: p.parachute.colours || null, powered: !!p.parachute.powered } : null, armor: p.armor || 0, perks: perksOf(p) },
       hero: { hair: L.hair.style !== 'none' ? { style: L.hair.style, color: L.hair.color } : null, bald: L.hair.style === 'none', hat: L.hat || null, glasses: L.face.glasses, bulk: p.fig.bulk, maxHp: p.maxHp },
       // (one drawn freehand: its drawing, to make it again - ROADMAP 11.6)
       weapons: g.weapons.slots.slice(g.weapons.keep).map((s) => ({ id: s.def.id, grade: s.grade, ammo: Number.isFinite(s.ammo) ? s.ammo : -1, uses: s.uses === undefined ? null : s.uses, score: s.score === undefined ? null : s.score, free: s.free || null })),
@@ -125,7 +125,7 @@ export class SaveGame {
       // (what is on the free drawing's page: ROADMAP 11.6)
       free: g.freedraw ? g.freedraw.save() : null,
       vehicles: g.vehicles.list.filter((o) => !o.dead).map((o) => ({
-        kind: o.model || o.kind, grade: o.grade, score: o.score, stock: o.stock ? { ...o.stock } : null,
+        kind: o.carBp || o.model || o.kind, grade: o.grade, score: o.score, stock: o.stock ? { ...o.stock } : null,
         x: o.pos.x, y: o.pos.y, z: o.pos.z, yaw: o.yaw, hp: o.hp, alt: o.alt || 0, mine: o === v,
         // (the garage's work, the tank, the dust, your parking: ROADMAP 4.6)
         paint: o.kind === 'car' && o.color ? o.color.slice() : null, design: o.design || null, up: o.up || null,
@@ -241,7 +241,7 @@ export class SaveGame {
     p.maxHp = P.maxHp || p.maxHp;
     p.hp = Math.max(1, Math.min(p.maxHp, P.hp));
     p.invuln = 3;
-    p.parachute = P.parachute ? { grade: P.parachute.grade, colours: Array.isArray(P.parachute.colours) ? P.parachute.colours : null } : null;
+    p.parachute = P.parachute ? { grade: P.parachute.grade, colours: Array.isArray(P.parachute.colours) ? P.parachute.colours : null, powered: !!P.parachute.powered } : null;
     // (ROADMAP 16.4-16.6: what the shops' things do for you - kept)
     const K = P.perks || {};
     p.kits = K.kits || 0;

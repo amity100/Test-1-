@@ -95,8 +95,8 @@ export const BLUEPRINTS = {
   },
   car: {
     id: 'car',
-    name: tr('מכונית שרבוט', 'Scribble Car'),
-    nameEn: 'SCRIBBLE CAR',
+    name: tr('סקריבל 1', 'Scribble One'),
+    nameEn: 'SCRIBBLE ONE',
     kind: 'vehicle',
     difficulty: 2,
     desc: tr('נוהגים בה ברחבי העיר ודורסים אויבים.', 'Drive it around the city and run over enemies.'),
@@ -449,8 +449,8 @@ export const BLUEPRINTS = {
   },
   bike: {
     id: 'bike',
-    name: tr('אופנוע שרבוט', 'Scribble Bike'),
-    nameEn: 'SCRIBBLE BIKE',
+    name: tr('אינקראנר R', 'Inkrunner R'),
+    nameEn: 'INKRUNNER R',
     kind: 'vehicle',
     difficulty: 3,
     desc: tr('אופנוע מהיר וזריז. משתחל בין המכוניות ונוטה בפניות.', 'A fast, nimble motorbike. Weaves between cars and leans in the turns.'),
@@ -474,8 +474,8 @@ export const BLUEPRINTS = {
   },
   copter: {
     id: 'copter',
-    name: tr('מסוק נייר', 'Paper Copter'),
-    nameEn: 'PAPER COPTER',
+    name: tr('אינקהוק H1', 'Inkhawk H1'),
+    nameEn: 'INKHAWK H1',
     kind: 'vehicle',
     difficulty: 4,
     desc: tr('מסוק מקופל מדף מחברת. טס מעל הגגות ומטיל מטוסי נייר.', 'A helicopter folded from a notebook page. Flies over the rooftops and drops paper planes.'),
@@ -578,11 +578,11 @@ Object.assign(BLUEPRINTS, {
   },
   parachute: {
     id: 'parachute',
-    name: tr('מצנח', 'Parachute'),
-    nameEn: 'PARACHUTE',
+    name: tr('פולדגלייד P1', 'Foldglide P1'),
+    nameEn: 'FOLDGLIDE P1',
     kind: 'gear',
     difficulty: 2,
-    desc: tr('קופצים מהמסוק או מגובה — המצנח נפתח (או לוחצים רווח / קפיצה) ודואים בשקט מעל העיר.', 'Jump from the helicopter or from up high — the parachute opens (or press Space / jump) and you glide quietly over the city.'),
+    desc: tr('מצנח רחיפה מתקפל: קופצים מגג, פותחים (רווח), ומנווטים רחוק מעל העיר.', 'A folding paraglider: jump off a roof, open it (jump), and steer a long way over the city.'),
     strokes: [
       { label: tr('כיפה', 'canopy'), en: 'canopy', pts: [...CANOPY_TOP, ...CANOPY_HEM.slice(1)] },
       { label: tr('תפר', 'seam'), en: 'seam', pts: [[50, 8], [50, 38]] },
@@ -650,10 +650,10 @@ Object.assign(BLUEPRINTS, {
   },
   jetski: {
     id: 'jetski',
-    name: tr('אופנוע ים', 'Jet Ski'),
-    the: tr('אופנוע הים', 'The jet ski'),
+    name: tr('וייק-01', 'Wake-01'),
+    the: tr('הוייק-01', 'The Wake-01'),
     g: 'm',
-    nameEn: 'JET SKI',
+    nameEn: 'WAKE-01',
     kind: 'vehicle',
     difficulty: 3,
     desc: tr('אופנוע ים מהיר. מציירים אותו ליד החוף או המזח, והוא נוחת במים. מקפץ על הגלים ומתיז רסס.', 'A fast jet ski. Draw it near the beach or the pier, and it lands in the water. It bounces on the waves and throws up spray.'),
@@ -672,10 +672,10 @@ Object.assign(BLUEPRINTS, {
   },
   boat: {
     id: 'boat',
-    name: tr('סירת מנוע', 'Motorboat'),
-    the: tr('סירת המנוע', 'The motorboat'),
+    name: tr('קוסטראנר S', 'Coastrunner S'),
+    the: tr('הקוסטראנר', 'The Coastrunner'),
     g: 'f',
-    nameEn: 'SPEEDBOAT',
+    nameEn: 'COASTRUNNER S',
     kind: 'vehicle',
     difficulty: 4,
     desc: tr('סירת מנוע קטנה. נוחתת במים ליד החוף או המזח, ושטה בכל האוקיינוס.', 'A small motorboat. It lands in the water near the beach or the pier, and sails all over the ocean.'),
@@ -695,10 +695,10 @@ Object.assign(BLUEPRINTS, {
   },
   plane: {
     id: 'plane',
-    name: tr('מטוס קל', 'Light plane'),
-    the: tr('המטוס הקל', 'The light plane'),
+    name: tr('פייפרווינג C1', 'Paperwing C1'),
+    the: tr('הפייפרווינג', 'The Paperwing'),
     g: 'm',
-    nameEn: 'LIGHT PLANE',
+    nameEn: 'PAPERWING C1',
     kind: 'vehicle',
     difficulty: 5,
     desc: tr('מטוס קל עם מדחף. צריך מסלול ישר וארוך להמראה (השדרה, החוף), מהירות, ואז רווח כדי לעלות.', 'A light plane with a propeller. It needs a long, straight runway to take off (the avenue, the beach), speed, then Space to climb.'),
@@ -862,10 +862,10 @@ for (let x = 8; x <= 64; x += 8) RUNGS.push(...(((x - 8) / 8) % 2 ? [[x, 23], [x
 Object.assign(BLUEPRINTS, {
   hyper: {
     id: 'hyper',
-    name: tr('היפר־קאר נאון', 'Neon Hypercar'),
-    the: tr('ההיפר־קאר', 'The hypercar'),
+    name: tr('אפקסליין S6', 'Apexline S6'),
+    the: tr('האפקסליין', 'The Apexline'),
     g: 'm',
-    nameEn: 'NEON HYPERCAR',
+    nameEn: 'APEXLINE S6',
     kind: 'vehicle',
     difficulty: 4,
     desc: tr('נמוכה כמו ברך, כנף מאחור ונאון מתחת. הכי מהירה בעיר, עם טורבו.', 'Knee-high, a wing at the back and neon underneath. The fastest in the city, with a turbo.'),
@@ -892,10 +892,10 @@ Object.assign(BLUEPRINTS, {
   },
   muscle: {
     id: 'muscle',
-    name: tr('מכונית שרירים', 'Muscle Car'),
-    the: tr('מכונית השרירים', 'The muscle car'),
+    name: tr('איירונראש V8', 'Ironrush V8'),
+    the: tr('האיירונראש', 'The Ironrush'),
     g: 'f',
-    nameEn: 'MUSCLE CAR',
+    nameEn: 'IRONRUSH V8',
     kind: 'vehicle',
     difficulty: 3,
     desc: tr('מנוע ענק מתחת למכסה, עם פתח אוויר. מחליקה יפה בפניות, עם טורבו.', 'A huge engine under the hood, with an air scoop. Slides beautifully in the turns, with a turbo.'),
@@ -1141,12 +1141,208 @@ Object.assign(BLUEPRINTS, {
   },
 });
 
+// ------------------------------------------------------------------ (ROADMAP 28.3) the new rides of the start
+const STREETLINE = [[4, 48], [4, 33], [24, 32], [30, 14], [66, 14], [72, 32], [96, 34], [96, 48]];
+const NIGHTSHIFT = [[3, 46], [3, 36], [12, 31], [38, 23], [52, 23], [66, 33], [97, 38], [97, 46]];
+const TRAILFORGE = [[6, 42], [6, 14], [60, 14], [66, 28], [94, 30], [94, 42]];
+const DRIFTVAN = [[6, 46], [6, 14], [70, 14], [86, 28], [94, 34], [94, 46]];
+const INTERCEPTOR = [[6, 46], [6, 34], [22, 33], [32, 21], [62, 21], [73, 33], [92, 35], [92, 46]];
+Object.assign(BLUEPRINTS, {
+  streetline: {
+    id: 'streetline',
+    name: tr('סטריטליין S4', 'Streetline S4'),
+    the: tr('הסטריטליין', 'The Streetline'),
+    g: 'f',
+    nameEn: 'STREETLINE S4',
+    kind: 'vehicle',
+    difficulty: 2,
+    desc: tr('מכונית משפחתית עם ארבע דלתות: עושה הכול טוב מספיק, ולא מושכת עין.', 'A four-door family saloon: does everything well enough, and turns no heads.'),
+    strokes: [
+      { label: tr('גוף', 'Body'), en: 'body', pts: close(STREETLINE) },
+      { label: tr('קו חלונות', 'window line'), en: 'window line', pts: [[24, 32], [72, 32]] },
+      { label: tr('דלת', 'door'), en: 'door', pts: [[40, 14], [40, 48]] },
+      { label: tr('דלת', 'door'), en: 'door', pts: [[56, 14], [56, 48]] },
+      { label: tr('גלגל', 'Wheel'), en: 'wheel', pts: circle(24, 50, 8) },
+      { label: tr('גלגל', 'Wheel'), en: 'wheel', pts: circle(76, 50, 8) },
+    ],
+    fills: [
+      { poly: STREETLINE, color: '#5d86c9' },
+      { poly: [[26, 31], [31, 16], [39, 16], [39, 31]], color: '#c3d6ea' },
+      { poly: [[41, 31], [41, 16], [55, 16], [55, 31]], color: '#c3d6ea' },
+      { poly: [[57, 31], [57, 16], [65, 16], [70, 31]], color: '#c3d6ea' },
+      { poly: circle(24, 50, 8), color: '#6e6e78' },
+      { poly: circle(76, 50, 8), color: '#6e6e78' },
+    ],
+    wheels: [[24, 50, 8], [76, 50, 8]],
+    scale: 4.75,
+  },
+  nightshift: {
+    id: 'nightshift',
+    name: tr('נייטשיפט R9', 'Nightshift R9'),
+    the: tr('הנייטשיפט', 'The Nightshift'),
+    g: 'f',
+    nameEn: 'NIGHTSHIFT R9',
+    kind: 'vehicle',
+    difficulty: 3,
+    desc: tr('קופה לילית: מכסה מנוע ארוך, גג שיורד עד הזנב. נצמדת לכביש בפניות.', 'A night coupe: a long hood, a roof that runs down to the tail. Holds the road through the turns.'),
+    strokes: [
+      { label: tr('גוף', 'Body'), en: 'body', pts: close(NIGHTSHIFT) },
+      { label: tr('חלון', 'window'), en: 'window', pts: close([[22, 31], [39, 25], [51, 25], [61, 33]]) },
+      { label: tr('פס צד', 'side skirt'), en: 'side skirt', pts: [[32, 40], [68, 40]] },
+      { label: tr('כנף', 'wing'), en: 'wing', pts: [[10, 31], [10, 22], [1, 22], [17, 22]] },
+      { label: tr('גלגל', 'Wheel'), en: 'wheel', pts: circle(22, 48, 8) },
+      { label: tr('גלגל', 'Wheel'), en: 'wheel', pts: circle(78, 48, 8) },
+    ],
+    fills: [
+      { poly: NIGHTSHIFT, color: '#3b3d5c' },
+      { poly: [[22, 31], [39, 25], [51, 25], [61, 33]], color: '#9fb6d8' },
+      { poly: circle(22, 48, 8), color: '#6e6e78' },
+      { poly: circle(78, 48, 8), color: '#6e6e78' },
+    ],
+    wheels: [[22, 48, 8], [78, 48, 8]],
+    scale: 4.85,
+  },
+  trailforge: {
+    id: 'trailforge',
+    name: tr('טריילפורג׳ X4', 'Trailforge X4'),
+    the: tr('הטריילפורג׳', 'The Trailforge'),
+    g: 'm',
+    nameEn: 'TRAILFORGE X4',
+    kind: 'vehicle',
+    difficulty: 3,
+    desc: tr('רכב שטח מרובע על צמיגים גדולים, גגון על הגג. סופג מכות ולא מתרגש ממדרכות.', 'A square 4x4 on big tyres, a rack on its roof. Soaks up knocks and shrugs at kerbs.'),
+    strokes: [
+      { label: tr('גוף', 'Body'), en: 'body', pts: close(TRAILFORGE) },
+      { label: tr('קו חלונות', 'window line'), en: 'window line', pts: [[6, 28], [66, 28]] },
+      { label: tr('עמוד', 'pillar'), en: 'pillar', pts: [[36, 14], [36, 28]] },
+      { label: tr('גגון', 'roof rack'), en: 'roof rack', pts: [[12, 14], [12, 8], [54, 8], [54, 14]] },
+      { label: tr('גלגל', 'Wheel'), en: 'wheel', pts: circle(24, 47, 11) },
+      { label: tr('גלגל', 'Wheel'), en: 'wheel', pts: circle(76, 47, 11) },
+    ],
+    fills: [
+      { poly: TRAILFORGE, color: '#c98f45' },
+      { poly: [[8, 27], [8, 16], [35, 16], [35, 27]], color: '#c3d6ea' },
+      { poly: [[37, 27], [37, 16], [59, 16], [64, 27]], color: '#c3d6ea' },
+      { poly: circle(24, 47, 11), color: '#55555e' },
+      { poly: circle(76, 47, 11), color: '#55555e' },
+    ],
+    wheels: [[24, 47, 11], [76, 47, 11]],
+    scale: 4.6,
+  },
+  driftvan: {
+    id: 'driftvan',
+    name: tr('דריפט-ואן', 'Driftvan'),
+    the: tr('הדריפט-ואן', 'The Driftvan'),
+    g: 'm',
+    nameEn: 'DRIFTVAN',
+    kind: 'vehicle',
+    difficulty: 2,
+    desc: tr('ואן צהוב שהזנב שלו בורח: מחליק לרוחב בכל פנייה. מקום לכל החבורה.', 'A yellow van whose tail steps out: it goes sideways through every turn. Room for the whole crew.'),
+    strokes: [
+      { label: tr('גוף', 'Body'), en: 'body', pts: close(DRIFTVAN) },
+      { label: tr('שמשה', 'windshield'), en: 'windshield', pts: [[70, 14], [70, 30], [88, 30]] },
+      { label: tr('דלת הזזה', 'sliding door'), en: 'sliding door', pts: [[30, 18], [30, 44], [52, 44], [52, 18]] },
+      { label: tr('פס', 'stripe'), en: 'stripe', pts: [[6, 36], [30, 36]] },
+      { label: tr('גלגל', 'Wheel'), en: 'wheel', pts: circle(24, 48, 8) },
+      { label: tr('גלגל', 'Wheel'), en: 'wheel', pts: circle(76, 48, 8) },
+    ],
+    fills: [
+      { poly: DRIFTVAN, color: '#e8c84a' },
+      { poly: [[71, 16], [71, 29], [86, 29]], color: '#c3d6ea' },
+      { poly: circle(24, 48, 8), color: '#6e6e78' },
+      { poly: circle(76, 48, 8), color: '#6e6e78' },
+    ],
+    wheels: [[24, 48, 8], [76, 48, 8]],
+    scale: 5.0,
+  },
+  cargobrute: {
+    id: 'cargobrute',
+    name: tr('קרגו-ברוט', 'Cargobrute'),
+    the: tr('הקרגו-ברוט', 'The Cargobrute'),
+    g: 'f',
+    nameEn: 'CARGOBRUTE',
+    kind: 'vehicle',
+    difficulty: 3,
+    desc: tr('משאית כבדה על שלושה סרנים: איטית, ושום דבר לא עוצר אותה. הבסיס לבנייה גדולה.', 'A heavy lorry on three axles: slow, and nothing stops it. The base for a big build.'),
+    strokes: [
+      { label: tr('ארגז', 'cargo box'), en: 'cargo box', pts: close([[4, 46], [4, 20], [64, 20], [64, 46]]) },
+      { label: tr('תא נהג', 'cab'), en: 'cab', pts: close([[66, 46], [66, 14], [84, 14], [92, 28], [96, 32], [96, 46]]) },
+      { label: tr('חלון', 'window'), en: 'window', pts: close([[70, 18], [82, 18], [88, 28], [70, 28]]) },
+      { label: tr('גלגל', 'Wheel'), en: 'wheel', pts: circle(16, 49, 7) },
+      { label: tr('גלגל', 'Wheel'), en: 'wheel', pts: circle(32, 49, 7) },
+      { label: tr('גלגל', 'Wheel'), en: 'wheel', pts: circle(82, 49, 7) },
+    ],
+    fills: [
+      { poly: [[4, 46], [4, 20], [64, 20], [64, 46]], color: '#6f8f7c' },
+      { poly: [[66, 46], [66, 14], [84, 14], [92, 28], [96, 32], [96, 46]], color: '#4f6b5c' },
+      { poly: [[70, 18], [82, 18], [88, 28], [70, 28]], color: '#c3d6ea' },
+      { poly: circle(16, 49, 7), color: '#55555e' },
+      { poly: circle(32, 49, 7), color: '#55555e' },
+      { poly: circle(82, 49, 7), color: '#55555e' },
+    ],
+    wheels: [[16, 49, 7], [32, 49, 7], [82, 49, 7]],
+    scale: 7.4,
+  },
+  interceptor: {
+    id: 'interceptor',
+    name: tr('מטרו אינטרספטור', 'Metro Interceptor'),
+    the: tr('האינטרספטור', 'The Interceptor'),
+    g: 'm',
+    nameEn: 'METRO INTERCEPTOR',
+    kind: 'vehicle',
+    difficulty: 3,
+    desc: tr('ניידת מרדף לא מסומנת: שחורה, מהירה, עם טורבו ופגוש דחיפה.', 'An unmarked pursuit car: black, quick, with a turbo and a push bar.'),
+    strokes: [
+      { label: tr('גוף', 'Body'), en: 'body', pts: close(INTERCEPTOR) },
+      { label: tr('קו חלונות', 'window line'), en: 'window line', pts: [[22, 33], [73, 33]] },
+      { label: tr('פס אורות', 'light bar'), en: 'light bar', pts: close([[40, 16], [54, 16], [54, 21], [40, 21]]) },
+      { label: tr('פגוש דחיפה', 'push bar'), en: 'push bar', pts: [[92, 33], [98, 33], [98, 46], [92, 46]] },
+      { label: tr('אנטנה', 'aerial'), en: 'aerial', pts: [[12, 34], [7, 12]] },
+      { label: tr('גלגל', 'Wheel'), en: 'wheel', pts: circle(24, 48, 8) },
+      { label: tr('גלגל', 'Wheel'), en: 'wheel', pts: circle(74, 48, 8) },
+    ],
+    fills: [
+      { poly: INTERCEPTOR, color: '#2b2b33' },
+      { poly: [[24, 32], [33, 23], [61, 23], [71, 32]], color: '#9fb6d8' },
+      { poly: [[40, 16], [54, 16], [54, 21], [40, 21]], color: '#5d86c9' },
+      { poly: circle(24, 48, 8), color: '#6e6e78' },
+      { poly: circle(74, 48, 8), color: '#6e6e78' },
+    ],
+    wheels: [[24, 48, 8], [74, 48, 8]],
+    scale: 4.75,
+  },
+});
+
+Object.assign(BLUEPRINTS, {
+  paramotor: {
+    id: 'paramotor',
+    name: tr('דריפטפאן P2', 'Driftfan P2'),
+    nameEn: 'DRIFTFAN P2',
+    kind: 'gear',
+    difficulty: 3,
+    desc: tr('מצנח רחיפה עם מנוע על הגב: רצים, קופצים ומחזיקים את כפתור הקפיצה — וממריאים מהרחוב. המנוע מטפס, הכנף גולשת.', 'A paraglider with a motor on your back: run, jump and hold the jump button — and take off from the street. The motor climbs, the wing glides.'),
+    strokes: [
+      { label: tr('כנף', 'wing'), en: 'wing', pts: close([[6, 26], [20, 12], [50, 6], [80, 12], [94, 26], [50, 20]]) },
+      { label: tr('חבל', 'A rope'), en: 'line', pts: [[12, 24], [46, 62]] },
+      { label: tr('חבל', 'A rope'), en: 'line', pts: [[88, 24], [54, 62]] },
+      { label: tr('כלוב המדחף', 'fan cage'), en: 'fan cage', pts: circle(50, 74, 14) },
+      { label: tr('מדחף', 'propeller'), en: 'propeller', pts: [[38, 74], [62, 74]] },
+      { label: tr('מנוע', 'motor'), en: 'motor', pts: close([[46, 68], [54, 68], [54, 80], [46, 80]]) },
+    ],
+    fills: [
+      { poly: [[6, 26], [20, 12], [50, 6], [80, 12], [94, 26], [50, 20]], color: '#3fa7d6' },
+      { poly: [[46, 68], [54, 68], [54, 80], [46, 80]], color: '#d9513a' },
+    ],
+    scale: 2.6,
+  },
+});
+
 // (ROADMAP 28) put away: not on the pen's shelves, not read from a drawing - the ids, the models and what already holds
 // one are as they were. later: a later tier's. ?allgear=1 brings them all back to the shelves
 const ALL_GEAR = typeof location !== 'undefined' && /[?&]allgear=1/.test(location.search);
 if (!ALL_GEAR) {
   for (const id of ['boomerang', 'erasermg', 'umbrella', 'bicycle', 'scooter', 'firetruck']) if (BLUEPRINTS[id]) BLUEPRINTS[id].hidden = true;
-  for (const id of ['planes', 'laser', 'minigun', 'tippex', 'shield']) {
+  for (const id of ['planes', 'laser', 'minigun', 'tippex', 'shield', 'tank', 'armored', 'limo', 'monster']) {
     if (!BLUEPRINTS[id]) continue;
     BLUEPRINTS[id].hidden = true;
     BLUEPRINTS[id].later = true;
@@ -1157,9 +1353,9 @@ export const BLUEPRINT_ORDER = ['paint', 'rifle', 'car', 'bazooka', 'tank', 'shi
 // (ROADMAP 4.8: in the album, not with ?classic - and no boards of their own in the city)
 export const BLUEPRINT_MORE = ['scooter', 'bicycle', 'jetski', 'boat', 'plane'];
 // (ROADMAP 28: the new guns of the start - in the album and on the pen's shelf; no boards of their own in the city)
-export const BLUEPRINT_NEW = ['magnum', 'ak', 'launcher', 'smokebomb'];
+export const BLUEPRINT_NEW = ['magnum', 'ak', 'launcher', 'smokebomb', 'paramotor'];
 // (ROADMAP 11.41: the catalog's cars - in the album, not with ?classic; no boards of their own)
-export const BLUEPRINT_CARS = ['muscle', 'limo', 'hyper', 'monster', 'armored', 'firetruck'];
+export const BLUEPRINT_CARS = ['streetline', 'muscle', 'nightshift', 'hyper', 'trailforge', 'driftvan', 'cargobrute', 'interceptor', 'limo', 'monster', 'armored', 'firetruck'];
 // (ROADMAP 9.2: in the album, not with ?classic; to be had in the shops, no boards of their own)
 export const BLUEPRINT_TOOLS = ['ladder', 'ramp', 'bridge', 'barrier', 'umbrella', 'key'];
 
