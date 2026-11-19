@@ -358,7 +358,8 @@ export class HUD {
       : s.uses !== undefined ? tr(`נשארו ${s.uses} מחיקות`, `${s.uses} erasures left`)
       : d.kind === 'beam' ? tr(`${Math.ceil(s.ammo)} שניות של אור`, `${Math.ceil(s.ammo)} seconds of light`)
       : d.projectile === 'scissors' ? (s.out ? tr('באוויר… חוזרים אליך', 'In the air… coming back to you') : tr('זורקים — וחוזרים', 'Throw it — and it comes back'))
-      : d.projectile === 'inkbomb' ? tr(`${s.ammo} בקבוקי דיו`, `${s.ammo} ink bottles`)
+      : d.smoke ? tr(`${s.ammo} פחיות עשן`, `${s.ammo} smoke cans`)
+      : d.projectile === 'inkbomb' && d.kind === 'throw' ? tr(`${s.ammo} בקבוקי דיו`, `${s.ammo} ink bottles`)
       : drawOnly ? (this.game.touch ? tr('לצייר: כפתור העיפרון', 'To draw: the pencil button') : tr('לצייר: Q', 'To draw: Q'))
       : s.ammo === Infinity ? tr('תמיד איתך', 'Always with you') : (this.game.arsenal && this.game.arsenal.ammoText(s)) || tr(`${s.ammo} יריות`, `${s.ammo} shots`);
     this.weaponGrade.className = s.def.id === 'pencil' || s.def.gear || d.bare || d.free ? '' : s.grade;

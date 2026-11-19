@@ -61,7 +61,7 @@ export const GUARD = {
       o.wall = (o.wall || 0) - dt;
       if (o.wall <= 0 && t < o.dur) {
         o.wall = 0.6;
-        if (g.signs) g.signs.puff(o.x, o.z, 3 + o.lv * 0.6, 3);
+        if (g.smokes) g.smokes.puff(o.x, o.z, 3 + o.lv * 0.6, 3);
       }
       return t > o.dur + 1.5;
     },

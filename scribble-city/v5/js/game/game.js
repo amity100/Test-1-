@@ -17,6 +17,8 @@ import { HUD } from '../ui/hud.js';
 import { Album, ALL_OPEN } from '../ui/album.js';
 import { Inventions } from './inventions.js';
 import { BuildTray } from './buildtray.js';
+import { GunMods } from './gunmods.js';
+import { Clouds } from './clouds.js';
 import { setSlabRes } from './designbuild.js';
 import { Materialize } from './materialize.js';
 import { Signals } from './signals.js';
@@ -238,6 +240,8 @@ export class Game {
     this.tray = this.classic ? null : new BuildTray(this);
     // (ROADMAP 28.6: a phone makes the designed parts' big surfaces coarser - under half their triangles, the same to look at)
     if (this.touch) setSlabRes(0.6);
+    // (ROADMAP 28.9) what goes on a gun in the hand: a scope, a suppressor, a longer magazine, a bayonet, a launcher
+    this.gunmods = this.classic ? null : new GunMods(this);
     this.album.onAdd = (id) => this.onAlbumAdd(id);
     this.airdraw = new AirDraw(this);
     this.airsketch = new AirSketches(this);
@@ -368,6 +372,8 @@ export class Game {
     // quick signs
     this.lab = !this.classic && (this.params.has('lab') || (typeof window !== 'undefined' && !!window.SC_LAB));
     this.signs = this.lab ? new Signs(this) : null;
+    // (ROADMAP 28: clouds nobody sees through, in the game itself - the lab's own are its signs')
+    this.smokes = this.signs || new Clouds(this);
     // (ROADMAP 11.20) a part drawn onto a thing - your car, you, your gun, a police car (since 11.30
     // drawing on your car is in the regular game too, asked for; the rest of the lab stays there)
     this.fuse = this.classic ? null : new Fuse(this);
@@ -1545,6 +1551,8 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       this.tray.update(this.realDt);
       this.tray.cam(this.realDt);
     }
+    if (this.gunmods) this.gunmods.update();
+    if (this.smokes && this.smokes !== this.signs) this.smokes.update();
     const tipsy = this.inkwell.tipsy;
     if (tipsy > 0.05 && this.state === 'play') {
       // a few drinks in: the page sways

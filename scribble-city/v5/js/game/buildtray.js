@@ -595,15 +595,21 @@ export class BuildTray {
   }
 
   // ------------------------------------------------------------------ the first time: drawn over its guide
+  // (o.it: something that is not a part of the tray - its name, its picture or its lines (o.guide), its word (o.say);
+  // o.then: what is done once it is drawn, instead of putting it on a ride)
   trace(id, o = {}) {
-    const it = info(id);
+    const it = o.it || info(id);
     const el = this.traceEl;
     if (!el || !it) return;
     this.endDrag(false);
-    const guide = iconLines(it.icon);
+    const guide = o.guide || iconLines(it.icon);
+    if (!guide.length) {
+      if (o.then) o.then();
+      return;
+    }
     this.tracing = { id, o, guide, B: boxOf(guide), strokes: [], cur: null, hit: new Set(), t0: performance.now(), done: false };
     el.querySelector('b').textContent = it.name;
-    el.querySelector('span').textContent = tr('מציירים פעם אחת מעל הקווים — ומאז הוא במגש', 'Draw it once over the lines — and from then on it is in the tray');
+    el.querySelector('span').textContent = o.say || tr('מציירים פעם אחת מעל הקווים — ומאז הוא במגש', 'Draw it once over the lines — and from then on it is in the tray');
     el.classList.add('on');
     this.traceLayout();
     this.traceDraw();
@@ -633,18 +639,29 @@ export class BuildTray {
     T.ox = r.width / 2 - T.B.cx * k;
     T.oy = r.height / 2 - T.B.cy * k;
     T.tol = Math.max(16, Math.max(T.B.w, T.B.h) * k * 0.085);
-    // (the guide's own points on the card, about a finger's width apart: what is ticked off as it is drawn over)
+    // (the guide's own points on the card, about half a finger's width apart all along its lines - a long straight
+    // line of two corners as much as a curve of many: what is ticked off as it is drawn over)
     T.pts = [];
+    const step = T.tol * 0.5;
     for (const L of T.guide) {
-      let acc = 1e9;
+      let left = 0;
       for (let i = 0; i < L.length; i++) {
         const x = T.ox + L[i][0] * k;
         const y = T.oy + L[i][1] * k;
-        if (i) acc += Math.hypot(x - (T.ox + L[i - 1][0] * k), y - (T.oy + L[i - 1][1] * k));
-        if (acc >= T.tol * 0.5) {
+        if (!i) {
           T.pts.push([x, y]);
-          acc = 0;
+          left = step;
+          continue;
         }
+        const px = T.ox + L[i - 1][0] * k;
+        const py = T.oy + L[i - 1][1] * k;
+        const d = Math.hypot(x - px, y - py);
+        let at = left;
+        while (at <= d) {
+          T.pts.push([px + ((x - px) * at) / d, py + ((y - py) * at) / d]);
+          at += step;
+        }
+        left = at - d;
       }
     }
   }
@@ -726,6 +743,10 @@ export class BuildTray {
     const { id, o } = T;
     setTimeout(() => {
       this.cancelTrace();
+      if (o.then) {
+        o.then();
+        return;
+      }
       if (this.isOpen) this.attach(id, o);
       else if (o.wheel && this.target()) {
         this.v = this.target();
@@ -752,6 +773,24 @@ export class BuildTray {
     });
     this.store.learned[id] = { M };
     this.save();
+  }
+
+  // (ROADMAP 28.8, the owner's word: "to get a thing at first you have to draw it") a thing of the pen's shelf - a gun, a
+  // ride, a tool - the first time: drawn over its own blueprint, big, on the card; from then on a touch makes it
+  // (ui/freedraw.js quick). Not in the story's opening (its own drawing lessons), not in a test unless it asks
+  firstWanted(id) {
+    const g = this.game;
+    if (this.store.learned[`bp:${id}`] || g.classic) return false;
+    const P = g.params;
+    if (P && P.get('test') === '1' && P.get('firstdraw') !== '1') return false;
+    if (P && P.get('firstdraw') === '0') return false;
+    if (g.prologue && g.prologue.active && !g.lab) return false;
+    return true;
+  }
+
+  firstDraw(bp, then) {
+    const guide = (bp.strokes || []).map((s) => s.pts.map((q) => [q[0], q[1]])).filter((L) => L.length > 1);
+    this.trace(`bp:${bp.id}`, { it: { name: bp.name }, guide, say: tr('מציירים פעם אחת מעל הקווים — ומאז נגיעה אחת יוצרת אותו', 'Draw it once over the lines — and from then on one touch makes it'), then });
   }
 
   // (the tests, and a build made again that has a part not drawn yet: learned as its guide is)
@@ -971,7 +1010,7 @@ export class BuildTray {
   // ------------------------------------------------------------------ each frame
   // (game/game.js) the city slowed while it is built on - with the police after you, twelve seconds of it
   slow() {
-    if (this.wheel) return true;
+    if (this.wheel || this.tracing) return true;
     if (!this.isOpen) return false;
     const pol = this.game.police;
     return !(pol && pol.level > 0) || this.openT < 12;

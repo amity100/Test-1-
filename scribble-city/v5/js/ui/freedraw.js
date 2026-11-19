@@ -1813,6 +1813,11 @@ export class FreeDraw {
     }
     // (ROADMAP 15.4) a ramp, a bridge, a barrier: drawn on the world - the next line, where it goes
     if (!inv && game.gadgets && DRAWN_ON.has(id)) return this.worldMode(id);
+    // (ROADMAP 28.8) the first time it is drawn - over its own blueprint, big (game/buildtray.js); a touch from then on
+    if (!inv && game.tray && game.tray.firstWanted(id)) {
+      game.tray.firstDraw(bp, () => this.quick(id));
+      return false;
+    }
     const why = game.gadgets ? game.gadgets.cannot(id) : null;
     if (why) {
       game.hud.toast(why, 'info', 2.8);

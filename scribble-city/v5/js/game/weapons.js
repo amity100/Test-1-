@@ -58,6 +58,9 @@ const WHITE_OUT = [1.0, 1.0, 0.98];
 const WHITE_TINT = [1.15, 1.15, 1.12];
 const STEEL = [0.78, 0.8, 0.86];
 // (ROADMAP 28: what the guns throw out - a marker's cap, a curl of pencil wood, a felt tip)
+// (ROADMAP 28: how near the crosshair somebody must be for a phone's shot to go to them - about three degrees)
+const AIM_CONE = 0.055;
+const MAX_SHOTS = 260;
 const PENCIL_HEAD = [0.9, 0.55, 0.62];
 const PENCIL_BODY = [0.86, 0.72, 0.3];
 const SHELL_CAP = [0.82, 0.12, 0.14];
@@ -303,7 +306,68 @@ export class Weapons {
     const along = (p.x - o.x) * dir.x + (p.y + 1.4 - o.y) * dir.y + (p.z - o.z) * dir.z;
     if (t < along + 1.5) t = along + 1.5;
     this.aimPoint.set(o.x + dir.x * t, o.y + dir.y * t, o.z + dir.z * t);
+    // (ROADMAP 28) a phone, a pad: a shot that would pass close by somebody goes to them - a small cone round the
+    // crosshair, nobody behind a wall, not the things that burst; the picture itself is not moved
+    const G = this.game;
+    const cd = this.current && this.current.def;
+    if (!this.aimHitEnemy && cd && cd.kind === 'gun' && !cd.radius && (G.touch || (G.pad && G.pad.active)) && G.enemies.list.length) {
+      const reach = Math.min(t + 0.5, cd.reach || 90);
+      let best = null;
+      let ba = AIM_CONE;
+      for (const en of G.enemies.list) {
+        if (!en.alive) continue;
+        const c = en.fig.center;
+        const dx = c.x - o.x;
+        const dy = c.y - o.y;
+        const dz = c.z - o.z;
+        const d = Math.hypot(dx, dy, dz);
+        if (d > reach || d < along + 1.5) continue;
+        const a = Math.acos(clamp((dx * dir.x + dy * dir.y + dz * dir.z) / d, -1, 1));
+        if (a < ba) {
+          ba = a;
+          best = en;
+        }
+      }
+      if (best) {
+        this.aimPoint.copy(best.fig.center);
+        this.aimHitEnemy = best;
+        this.assisted = G.time;
+      }
+    }
     return this.aimPoint;
+  }
+
+  // (ROADMAP 28) a phone: the aim button - a touch brings the gun up to the eye (the picture in, the look slower, a
+  // scope's zoom if it has one), a touch again lets it down; there only on foot with a gun in the hand
+  aimUi(def, on) {
+    const g = this.game;
+    if (!g.touch || typeof document === 'undefined') return;
+    let el = this.aimEl;
+    if (!el) {
+      el = this.aimEl = document.createElement('button');
+      el.id = 'btn-aim';
+      el.className = 'bt-aim hidden';
+      el.setAttribute('aria-label', tr('כיוון', 'Aim'));
+      el.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2 V8 M12 16 V22 M2 12 H8 M16 12 H22"/></svg><b>${tr('כיוון', 'Aim')}</b>`;
+      el.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.aimHeld = !this.aimHeld;
+        g.input.aim = this.aimHeld;
+        el.classList.toggle('on', this.aimHeld);
+      }, { passive: false });
+      document.body.appendChild(el);
+    }
+    const show = !!on && def.kind === 'gun' && !(g.freedraw && g.freedraw.isOpen) && !(g.tray && g.tray.isOpen);
+    if (show !== this.aimShown) {
+      this.aimShown = show;
+      el.classList.toggle('hidden', !show);
+      if (!show && this.aimHeld) {
+        this.aimHeld = false;
+        g.input.aim = false;
+        el.classList.remove('on');
+      }
+    }
   }
 
   update(dt) {
@@ -410,6 +474,7 @@ export class Weapons {
         this.stab = false;
       }
     }
+    this.aimUi(def, onFoot && canAct);
     player.fig.melee = this.swingT;
     player.fig.aim = this.shootOut ? 1 : (def.kind === 'gun' || def.kind === 'beam') && this.isAiming() && canAct ? def.hands : 0;
     this.updateProjectiles(dt);
@@ -439,6 +504,11 @@ export class Weapons {
       bounce: def.bounce || 0,
       ...extra,
     };
+    // (ROADMAP 28.6: no more in the air at once than this - the oldest of yours goes, as one out of its range would)
+    if (this.projectiles.length >= MAX_SHOTS) {
+      const i = this.projectiles.findIndex((q) => q.owner === 'player' && !q.radius && q.kind !== 'scissors');
+      if (i >= 0) this.projectiles.splice(i, 1);
+    }
     this.projectiles.push(pr);
     return pr;
   }
@@ -1203,7 +1273,10 @@ export class Weapons {
     const game = this.game;
     const col = game.world.collision;
     const fr = game.figures;
-    const keep = [];
+    // (ROADMAP 28.6: the same two lists turn about, frame after frame - none made anew)
+    const keep = this.keepList || (this.keepList = []);
+    keep.length = 0;
+    const was = this.projectiles;
     for (const pr of this.projectiles) {
       pr.t += dt;
       if (pr.kind === 'scissors') {
@@ -1362,6 +1435,7 @@ export class Weapons {
       this.drawProjectile(fr, pr);
     }
     this.projectiles = keep;
+    this.keepList = was;
     this.stepShells(dt, fr);
     if (this.beam) this.drawBeam(fr, this.beam);
     if (this.burning.length || this.puddles.length || this.streaks.length) this.updateInks(dt, fr);
@@ -2008,7 +2082,7 @@ export class Weapons {
     const game = this.game;
     const r = pr.radius || 7;
     const secs = pr.smoke || 9;
-    if (game.signs && game.signs.puff) game.signs.puff(x, z, r, secs);
+    if (game.smokes) game.smokes.puff(x, z, r, secs);
     const gy = groundHeight(x, z) + 0.02;
     for (let i = 0; i < 12; i++) {
       const a = Math.random() * Math.PI * 2;
