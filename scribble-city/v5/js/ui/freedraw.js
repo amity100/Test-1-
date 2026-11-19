@@ -381,7 +381,7 @@ export class FreeDraw {
         <div class="fd-ink" aria-label="Ink"><i id="fd-ink-fill"></i><i id="fd-ink-cost"></i></div>
         <button class="fd-btn" id="fd-undo" title="Undo the last line (Z)">↶</button>
         <button class="fd-btn" id="fd-clear" title="Clear (Delete)">Clear</button>
-        <button class="fd-btn fd-album" id="fd-album" title="The blueprint library: paint gun, pencil rifle, eraser bazooka... (T)">📒 Blueprints</button>
+        <button class="fd-btn fd-album" id="fd-album" title="The blueprint library: pistols, rifles, launchers... (T)">📒 Blueprints</button>
         <button class="fd-btn" id="fd-close" title="Close, the drawing is kept (Esc)">✕</button>
         <button class="fd-btn primary" id="fd-make">✓ Make it!</button>
       </div>`);

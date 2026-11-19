@@ -47,31 +47,33 @@ function stadium(x0, y0, x1, y1) {
 export const BLUEPRINTS = {
   paint: {
     id: 'paint',
-    name: tr('אקדח צבע', 'Paint gun'),
-    nameEn: 'PAINT BLASTER',
+    name: tr('P-09 אינקבולט', 'P-09 Inkbolt'),
+    nameEn: 'P-09 INKBOLT',
     kind: 'weapon',
     difficulty: 1,
-    desc: tr('יורה בלוני צבע צבעוניים. קל לצייר.', 'Fires colorful paint balloons. Easy to draw.'),
+    desc: tr('אקדח שגופו עט נובע: יורה כדורי דיו כחול, ירייה בכל לחיצה. מחסנית של 15.', 'A pistol with a fountain pen for a body: fires bolts of blue ink, one a press. Fifteen in a magazine.'),
     strokes: [
-      { label: tr('גוף', 'Body'), en: 'body', pts: close([[8, 30], [62, 30], [66, 34], [66, 42], [34, 42], [30, 64], [16, 64], [20, 42], [8, 42]]) },
-      { label: tr('מיכל צבע', 'paint tank'), en: 'paint tank', pts: circle(36, 21, 8) },
-      { label: tr('טיפת צבע', 'paint drop'), en: 'paint drop', pts: circle(77, 36, 5, 12) },
+      { label: tr('גוף', 'Body'), en: 'body', pts: close([[10, 28], [60, 28], [60, 40], [34, 42], [30, 64], [16, 64], [20, 42], [10, 40]]) },
+      { label: tr('ציפורן', 'nib'), en: 'nib', pts: close([[60, 28], [76, 34], [60, 40]]) },
+      { label: tr('קליפס העט', 'pen clip'), en: 'pen clip', pts: [[18, 28], [18, 23], [44, 23], [46, 28]] },
+      { label: tr('מחסנית דיו', 'ink cartridge'), en: 'ink cartridge', pts: close([[17, 64], [29, 64], [29, 71], [17, 71]]) },
+      { label: tr('הדק', 'trigger'), en: 'trigger', pts: [[34, 42], [39, 50], [31, 53]] },
     ],
     fills: [
-      { poly: [[8, 30], [62, 30], [66, 34], [66, 42], [34, 42], [30, 64], [16, 64], [20, 42], [8, 42]], color: '#d99a7e' },
-      { poly: circle(36, 21, 8), color: '#93b4dc' },
-      { poly: circle(77, 36, 5, 12), color: '#93b4dc' },
+      { poly: [[10, 28], [60, 28], [60, 40], [34, 42], [30, 64], [16, 64], [20, 42], [10, 40]], color: '#2f4f9e' },
+      { poly: [[60, 28], [76, 34], [60, 40]], color: '#e2c25a' },
+      { poly: [[17, 64], [29, 64], [29, 71], [17, 71]], color: '#7fb0e8' },
     ],
-    anchors: { muzzle: [66, 36], grip: [24, 52] },
+    anchors: { muzzle: [76, 34], grip: [23, 54] },
     scale: 0.85,
   },
   rifle: {
     id: 'rifle',
-    name: tr('רובה עפרונות', 'Pencil rifle'),
-    nameEn: 'PENCIL RIFLE',
+    name: tr('C-16 גרפיט', 'C-16 Graphite'),
+    nameEn: 'C-16 GRAPHITE',
     kind: 'weapon',
     difficulty: 2,
-    desc: tr('יורה עפרונות עם מחק שמוחקים חלקים מהאויבים.', 'Fires pencils with erasers that erase parts of enemies.'),
+    desc: tr('רובה סער: מחסנית של 30 עפרונות מחודדים, יורה ברצף, והעיפרון ננעץ במה שהוא פוגע.', 'An assault rifle: a magazine of thirty sharpened pencils, fired in a stream - and the pencil sticks in what it hits.'),
     strokes: [
       { label: tr('קת', 'Stock'), en: 'stock', pts: close([[4, 34], [18, 28], [64, 28], [64, 40], [30, 40], [26, 56], [18, 56], [20, 40], [4, 46]]) },
       { label: tr('קנה-עיפרון', 'pencil barrel'), en: 'pencil barrel', pts: [[64, 30], [86, 30], [86, 38], [64, 38]] },
@@ -117,8 +119,8 @@ export const BLUEPRINTS = {
   },
   bazooka: {
     id: 'bazooka',
-    name: tr('בזוקת מחקים', 'Eraser bazooka'),
-    nameEn: 'ERASER BAZOOKA',
+    name: tr('RL-7 מחק', 'RL-7 Eraser'),
+    nameEn: 'RL-7 ERASER',
     kind: 'weapon',
     difficulty: 3,
     desc: tr('משגרת מחק ענק שמוחק כל מה שמסביב.', 'Launches a giant eraser that erases everything around.'),
@@ -178,8 +180,8 @@ export const BLUEPRINTS = {
   // ------------------------------------------------------------------ the new arsenal
   shotgun: {
     id: 'shotgun',
-    name: tr('רובה ציד צבעוני', 'Colorful shotgun'),
-    nameEn: 'CRAYON SHOTGUN',
+    name: tr('S-12 וקסשוט', 'S-12 Waxshot'),
+    nameEn: 'S-12 WAXSHOT',
     kind: 'weapon',
     difficulty: 2,
     desc: tr('יורה מטח של שמונה עפרונות שעווה. הורס מקרוב.', 'Fires a volley of eight wax crayons. Devastating up close.'),
@@ -205,32 +207,34 @@ export const BLUEPRINTS = {
   },
   stapler: {
     id: 'stapler',
-    name: tr('אקדח שדכן', 'Stapler pistol'),
-    nameEn: 'STAPLE GUN',
+    name: tr('L-249 סטייפל', 'L-249 Staple'),
+    nameEn: 'L-249 STAPLE',
     kind: 'weapon',
-    difficulty: 1,
-    desc: tr('מכונת יריה של סיכות. כל סיכה מסמררת את האויב למקום לרגע.', 'A staple machine gun. Every staple pins the enemy in place for a moment.'),
+    difficulty: 3,
+    desc: tr('מקלע שגופו שדכן ארוך: סרט של סיכות, מאה במחסנית. כל סיכה מסמררת את מי שנפגע לרגע.', 'A machine gun with a long stapler for a body: a belt of staples, a hundred in the box. Every staple pins whoever it hits for a moment.'),
     strokes: [
-      { label: tr('זרוע', 'top arm'), en: 'top arm', pts: close([[8, 24], [78, 24], [86, 29], [86, 36], [8, 36]]) },
-      { label: tr('בסיס', 'base'), en: 'base', pts: close([[8, 40], [90, 40], [90, 47], [8, 47]]) },
-      { label: tr('ציר', 'hinge'), en: 'hinge', pts: circle(12, 38, 5, 12) },
-      { label: tr('ידית', 'Handle'), en: 'grip', pts: [[30, 47], [26, 66], [38, 66], [42, 47]] },
-      { label: tr('סיכה', 'staple'), en: 'staple', pts: [[89, 30], [89, 35], [97, 35], [97, 30]] },
+      { label: tr('קת', 'Stock'), en: 'stock', pts: close([[2, 32], [18, 30], [18, 44], [2, 46]]) },
+      { label: tr('גוף שדכן', 'stapler body'), en: 'stapler body', pts: close([[18, 26], [70, 26], [74, 30], [74, 38], [18, 42]]) },
+      { label: tr('קופסת סיכות', 'staple box'), en: 'staple box', pts: close([[36, 42], [56, 42], [56, 58], [36, 58]]) },
+      { label: tr('ידית', 'Handle'), en: 'grip', pts: close([[22, 42], [30, 42], [28, 58], [20, 58]]) },
+      { label: tr('קנה', 'barrel'), en: 'barrel', pts: [[74, 31], [95, 31], [95, 37], [74, 37]] },
+      { label: tr('רגלית', 'bipod'), en: 'bipod', pts: [[78, 56], [84, 37], [92, 56]] },
+      { label: tr('ידית נשיאה', 'carry handle'), en: 'carry handle', pts: [[40, 26], [44, 18], [56, 18], [60, 26]] },
     ],
     fills: [
-      { poly: [[8, 24], [78, 24], [86, 29], [86, 36], [8, 36]], color: '#d23c46' },
-      { poly: [[8, 40], [90, 40], [90, 47], [8, 47]], color: '#373a46' },
-      { poly: circle(12, 38, 5, 12), color: '#a2a8b4' },
-      { poly: [[30, 47], [26, 66], [38, 66], [42, 47]], color: '#373a46' },
+      { poly: [[2, 32], [18, 30], [18, 44], [2, 46]], color: '#373a46' },
+      { poly: [[18, 26], [70, 26], [74, 30], [74, 38], [18, 42]], color: '#d23c46' },
+      { poly: [[36, 42], [56, 42], [56, 58], [36, 58]], color: '#8a94a6' },
+      { poly: [[22, 42], [30, 42], [28, 58], [20, 58]], color: '#373a46' },
+      { poly: [[74, 31], [95, 31], [95, 37], [74, 37]], color: '#a2a8b4' },
     ],
-    anchors: { muzzle: [90, 33], grip: [34, 60] },
-    scale: 0.72,
-    thickness: 0.05,
+    anchors: { muzzle: [95, 34], grip: [25, 50] },
+    scale: 1.3,
   },
   katana: {
     id: 'katana',
-    name: tr('חרב סרגל', 'Ruler sword'),
-    nameEn: 'RULER KATANA',
+    name: tr('להב הסרגל', 'Ruler Edge'),
+    nameEn: 'RULER EDGE',
     kind: 'weapon',
     difficulty: 2,
     desc: tr('סרגל של שלושים סנטימטר שהושחז לחרב. חותך גפיים במכה אחת.', 'A thirty-centimeter ruler sharpened into a sword. Cuts off limbs in one blow.'),
@@ -280,8 +284,8 @@ export const BLUEPRINTS = {
   },
   inkbomb: {
     id: 'inkbomb',
-    name: tr('רימון דיו', 'Ink grenade'),
-    nameEn: 'INK GRENADE',
+    name: tr('F-1 אינקבומב', 'F-1 Inkbomb'),
+    nameEn: 'F-1 INKBOMB',
     kind: 'weapon',
     difficulty: 2,
     desc: tr('בקבוק דיו עם פתיל. זורקים, והוא מתפוצץ בכתם ענק שמוחק את כל מי שבסביבה.', 'An ink bottle with a fuse. Throw it, and it bursts into a giant blot that erases everyone around.'),
@@ -304,8 +308,8 @@ export const BLUEPRINTS = {
   },
   glue: {
     id: 'glue',
-    name: tr('אקדח דבק', 'Glue gun'),
-    nameEn: 'GLUE GUN',
+    name: tr('G-09 גלולוק', 'G-09 Gluelock'),
+    nameEn: 'G-09 GLUELOCK',
     kind: 'weapon',
     difficulty: 2,
     desc: tr('יורה טיפות דבק חם. מי שנדבק — לא זז לשום מקום.', 'Fires drops of hot glue. Whoever gets stuck — isn\'t going anywhere.'),
@@ -549,10 +553,10 @@ Object.assign(BLUEPRINTS, {
   },
   paintmg: {
     id: 'paintmg',
-    name: tr('מקלע צבע', 'Paint machine gun'),
-    nameEn: 'PAINT MG',
+    name: tr('P-5 סטריק', 'P-5 Streak'),
+    nameEn: 'P-5 STREAK',
     kind: 'weapon',
-    difficulty: 3,
+    difficulty: 2,
     desc: tr('שלוש פחיות צבע ומקלע אחד: מרסס צבע על כל העיר, וחפצים שנצבעים מספיק — נמסים מהדף.', 'Three paint cans and one machine gun: sprays paint all over the city, and things that get painted enough — melt off the page.'),
     strokes: [
       { label: tr('גוף', 'Body'), en: 'body', pts: close([[6, 36], [66, 36], [66, 50], [40, 50], [36, 68], [24, 68], [28, 50], [6, 50]]) },
@@ -1038,9 +1042,123 @@ Object.assign(BLUEPRINTS, {
   },
 });
 
+// ------------------------------------------------------------------ (ROADMAP 28.9, 28.10) the new guns of the start
+Object.assign(BLUEPRINTS, {
+  magnum: {
+    id: 'magnum',
+    name: tr('D-50 מרקר', 'D-50 Marker'),
+    nameEn: 'D-50 MARKER',
+    kind: 'weapon',
+    difficulty: 1,
+    desc: tr('מגנום שהקנה שלו טוש עבה: כתם דיו כבד שמוחק חתיכה גדולה. שבע בתוף, רתע חזק.', 'A magnum with a thick marker for a barrel: a heavy blot that rubs out a big piece. Seven in the drum, a hard kick.'),
+    strokes: [
+      { label: tr('גוף', 'Body'), en: 'body', pts: close([[14, 28], [40, 26], [40, 44], [30, 46], [26, 66], [12, 66], [16, 44], [10, 40]]) },
+      { label: tr('קנה טוש', 'marker barrel'), en: 'marker barrel', pts: close([[40, 27], [82, 27], [82, 41], [40, 41]]) },
+      { label: tr('פקק', 'cap'), en: 'cap', pts: close([[82, 24], [95, 24], [95, 44], [82, 44]]) },
+      { label: tr('תוף', 'drum'), en: 'drum', pts: circle(31, 36, 8) },
+      { label: tr('הדק', 'trigger'), en: 'trigger', pts: [[30, 46], [36, 54], [28, 57]] },
+    ],
+    fills: [
+      { poly: [[14, 28], [40, 26], [40, 44], [30, 46], [26, 66], [12, 66], [16, 44], [10, 40]], color: '#8a5a3a' },
+      { poly: [[40, 27], [82, 27], [82, 41], [40, 41]], color: '#f1efe6' },
+      { poly: [[82, 24], [95, 24], [95, 44], [82, 44]], color: '#c9262b' },
+      { poly: circle(31, 36, 8), color: '#9aa0ad' },
+    ],
+    anchors: { muzzle: [95, 34], grip: [19, 56] },
+    scale: 0.95,
+  },
+  ak: {
+    id: 'ak',
+    name: tr('K-47 בלקלד', 'K-47 Blacklead'),
+    nameEn: 'K-47 BLACKLEAD',
+    kind: 'weapon',
+    difficulty: 2,
+    desc: tr('רובה סער מעץ עיפרון ופחם: יורה מקלות פחם כבדים, פחות מדויק ויותר חזק.', 'An assault rifle of pencil wood and charcoal: fires heavy sticks of charcoal - less accurate, harder hitting.'),
+    strokes: [
+      { label: tr('קת', 'Stock'), en: 'stock', pts: close([[2, 34], [20, 30], [20, 42], [2, 48]]) },
+      { label: tr('גוף', 'Body'), en: 'body', pts: close([[20, 28], [58, 28], [58, 42], [20, 42]]) },
+      { label: tr('ידית', 'Handle'), en: 'grip', pts: close([[24, 42], [32, 42], [30, 58], [22, 58]]) },
+      { label: tr('מחסנית מעוקלת', 'curved magazine'), en: 'curved magazine', pts: close([[40, 42], [38, 54], [44, 65], [52, 62], [48, 53], [50, 42]]) },
+      { label: tr('מגן יד', 'handguard'), en: 'handguard', pts: close([[58, 30], [77, 30], [77, 40], [58, 40]]) },
+      { label: tr('קנה פחם', 'charcoal barrel'), en: 'charcoal barrel', pts: [[77, 33], [96, 33], [96, 37], [77, 37]] },
+      { label: tr('כוונת', 'Sight'), en: 'sight', pts: [[90, 33], [90, 26], [94, 26]] },
+    ],
+    fills: [
+      { poly: [[2, 34], [20, 30], [20, 42], [2, 48]], color: '#c8935a' },
+      { poly: [[20, 28], [58, 28], [58, 42], [20, 42]], color: '#2c2c33' },
+      { poly: [[24, 42], [32, 42], [30, 58], [22, 58]], color: '#c8935a' },
+      { poly: [[40, 42], [38, 54], [44, 65], [52, 62], [48, 53], [50, 42]], color: '#4a4a55' },
+      { poly: [[58, 30], [77, 30], [77, 40], [58, 40]], color: '#c8935a' },
+      { poly: [[77, 33], [96, 33], [96, 37], [77, 37]], color: '#1f1f25' },
+    ],
+    anchors: { muzzle: [96, 35], grip: [27, 50] },
+    scale: 1.25,
+  },
+  launcher: {
+    id: 'launcher',
+    name: tr('GL-79 אינקברסט', 'GL-79 Inkburst'),
+    nameEn: 'GL-79 INKBURST',
+    kind: 'weapon',
+    difficulty: 2,
+    desc: tr('מטול קצר ועבה שיורה בקבוקוני דיו בקשת: מתפוצצים בכתם ענק. אחד בקנה.', 'A short, fat launcher that lobs bottles of ink: they burst in a huge blot. One in the barrel.'),
+    strokes: [
+      { label: tr('קת', 'Stock'), en: 'stock', pts: close([[4, 34], [22, 30], [22, 44], [4, 48]]) },
+      { label: tr('גוף', 'Body'), en: 'body', pts: close([[22, 28], [44, 28], [44, 46], [22, 46]]) },
+      { label: tr('קנה עבה', 'fat barrel'), en: 'fat barrel', pts: close([[44, 23], [80, 23], [80, 49], [44, 49]]) },
+      { label: tr('בקבוקון דיו', 'ink bottle'), en: 'ink bottle', pts: close([[80, 28], [89, 28], [93, 32], [93, 40], [89, 44], [80, 44]]) },
+      { label: tr('ידית', 'Handle'), en: 'grip', pts: close([[28, 46], [36, 46], [34, 62], [26, 62]]) },
+      { label: tr('כוונת עלה', 'leaf sight'), en: 'leaf sight', pts: [[52, 23], [57, 14], [62, 23]] },
+    ],
+    fills: [
+      { poly: [[4, 34], [22, 30], [22, 44], [4, 48]], color: '#8a5a3a' },
+      { poly: [[22, 28], [44, 28], [44, 46], [22, 46]], color: '#3a3f4a' },
+      { poly: [[44, 23], [80, 23], [80, 49], [44, 49]], color: '#5f7a5a' },
+      { poly: [[80, 28], [89, 28], [93, 32], [93, 40], [89, 44], [80, 44]], color: '#27337a' },
+      { poly: [[28, 46], [36, 46], [34, 62], [26, 62]], color: '#3a3f4a' },
+    ],
+    anchors: { muzzle: [93, 36], grip: [31, 54] },
+    scale: 1.05,
+  },
+  smokebomb: {
+    id: 'smokebomb',
+    name: tr('עשן גרפיט', 'Graphite Smoke'),
+    nameEn: 'GRAPHITE SMOKE',
+    kind: 'weapon',
+    difficulty: 1,
+    desc: tr('פחית אבק גרפיט: זורקים, וענן אפור מסתיר אתכם מהמשטרה ומהכנופיות לעשר שניות. לא פוגע באף אחד.', 'A can of graphite dust: throw it, and a grey cloud hides you from the police and the gangs for ten seconds. Hurts nobody.'),
+    strokes: [
+      { label: tr('פחית', 'can'), en: 'can', pts: close([[34, 32], [66, 32], [66, 78], [34, 78]]) },
+      { label: tr('מכסה', 'lid'), en: 'lid', pts: close([[38, 24], [62, 24], [62, 32], [38, 32]]) },
+      { label: tr('טבעת', 'ring'), en: 'ring', pts: circle(73, 22, 6, 12) },
+      { label: tr('מנוף', 'lever'), en: 'lever', pts: [[62, 26], [70, 32], [70, 54]] },
+      { label: tr('פס', 'band'), en: 'band', pts: [[34, 50], [66, 50]] },
+    ],
+    fills: [
+      { poly: [[34, 32], [66, 32], [66, 78], [34, 78]], color: '#7d8088' },
+      { poly: [[38, 24], [62, 24], [62, 32], [38, 32]], color: '#4a4c54' },
+    ],
+    anchors: { muzzle: [50, 24], grip: [50, 60] },
+    scale: 0.42,
+  },
+});
+
+// (ROADMAP 28) put away: not on the pen's shelves, not read from a drawing - the ids, the models and what already holds
+// one are as they were. later: a later tier's. ?allgear=1 brings them all back to the shelves
+const ALL_GEAR = typeof location !== 'undefined' && /[?&]allgear=1/.test(location.search);
+if (!ALL_GEAR) {
+  for (const id of ['boomerang', 'erasermg', 'umbrella', 'bicycle', 'scooter', 'firetruck']) if (BLUEPRINTS[id]) BLUEPRINTS[id].hidden = true;
+  for (const id of ['planes', 'laser', 'minigun', 'tippex', 'shield']) {
+    if (!BLUEPRINTS[id]) continue;
+    BLUEPRINTS[id].hidden = true;
+    BLUEPRINTS[id].later = true;
+  }
+}
+
 export const BLUEPRINT_ORDER = ['paint', 'rifle', 'car', 'bazooka', 'tank', 'shield', 'stapler', 'bandage', 'shotgun', 'katana', 'glue', 'inkbomb', 'boomerang', 'planes', 'bike', 'laser', 'copter', 'minigun', 'tippex', 'erasermg', 'paintmg', 'parachute'];
 // (ROADMAP 4.8: in the album, not with ?classic - and no boards of their own in the city)
 export const BLUEPRINT_MORE = ['scooter', 'bicycle', 'jetski', 'boat', 'plane'];
+// (ROADMAP 28: the new guns of the start - in the album and on the pen's shelf; no boards of their own in the city)
+export const BLUEPRINT_NEW = ['magnum', 'ak', 'launcher', 'smokebomb'];
 // (ROADMAP 11.41: the catalog's cars - in the album, not with ?classic; no boards of their own)
 export const BLUEPRINT_CARS = ['muscle', 'limo', 'hyper', 'monster', 'armored', 'firetruck'];
 // (ROADMAP 9.2: in the album, not with ?classic; to be had in the shops, no boards of their own)
