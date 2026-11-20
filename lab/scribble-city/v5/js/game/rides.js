@@ -3,6 +3,7 @@ import { Kit, itemMats, warpFor, linC } from './items.js';
 import { groundHeight, WATER_X, PIER, PROM_X1 } from '../world/layout.js';
 import { clamp, damp } from '../core/util.js';
 import { RIDE } from './doodle.js';
+import { RIDEKITS } from './ridemodels.js';
 
 import { tr } from '../core/lang.js';
 // (ROADMAP 4.8; never with ?classic: they are drawn only from the album's new pages) The new
@@ -42,6 +43,24 @@ function wheel(M, r, tw, color, spokes = 6) {
   const w = W.build();
   w.matrixAutoUpdate = true;
   return w;
+}
+
+// (ROADMAP 28.22) what a builder of game/ridemodels.js drew, made a ride's body: its kit built, and each part of it
+// that turns - a propeller, a wheel - a group of its own in the body, where it turns
+export function made(id, grade, seed) {
+  const M = itemMats();
+  const K = new Kit();
+  const info = RIDEKITS[id](K, M) || {};
+  const body = K.build({ warp: warpFor(grade, seed) });
+  const parts = {};
+  for (const [name, q] of Object.entries(info.parts || {})) {
+    const g = q.kit.build();
+    g.matrixAutoUpdate = true;
+    g.position.set(q.at[0], q.at[1], q.at[2]);
+    body.add(g);
+    parts[name] = g;
+  }
+  return { body, parts };
 }
 
 // ------------------------------------------------------------------ the bicycle
@@ -119,115 +138,24 @@ function scooterModel(grade) {
 
 // ------------------------------------------------------------------ the jet ski
 function jetskiModel(grade) {
-  const M = itemMats();
-  const K = new Kit();
-  const yellow = linC(1.0, 0.82, 0.25);
-  const ink = linC(0.12, 0.12, 0.16);
-  const white = linC(0.95, 0.95, 0.93);
-  // the hull: a wedge, sharp at the bow
-  const hull = new THREE.CylinderGeometry(0.62, 0.62, 2.9, 6, 1);
-  hull.rotateX(Math.PI / 2);
-  hull.scale(1, 0.5, 1);
-  hull.translate(0, 0.25, 0);
-  K.add(M.paint, hull, white);
-  const bow = new THREE.ConeGeometry(0.62, 0.9, 6);
-  bow.rotateX(Math.PI / 2);
-  bow.scale(1, 0.5, 1);
-  bow.translate(0, 0.25, 1.9);
-  K.add(M.paint, bow, white);
-  K.box(M.paint, -0.5, 0.42, -1.2, 0.5, 0.62, 1.2, yellow);
-  K.box(M.matte, -0.22, 0.62, -1.05, 0.22, 0.86, 0.2, ink);
-  tube(K, M.matte, [0, 0.62, 0.55], [0, 1.06, 0.4], 0.07, yellow);
-  tube(K, M.matte, [-0.34, 1.08, 0.4], [0.34, 1.08, 0.4], 0.03, ink);
-  K.box(M.glow, -0.1, 0.5, -1.47, 0.1, 0.56, -1.44, linC(1, 0.2, 0.25));
-  const body = K.build({ warp: warpFor(grade, 3) });
+  // (its model: game/ridemodels.js)
+  const { body } = made('jetski', grade, 3);
   return { body, pose: 'astride', seatAt: [0, 0.86, -0.45], bar: [0, 1.08, 0.4], grip: 0.3, halfLen: 1.5, halfWid: 0.6, heightM: 1.2, radius: 1.3, jet: true };
 }
 
 // ------------------------------------------------------------------ the speedboat
 function boatModel(grade) {
-  const M = itemMats();
-  const K = new Kit();
-  const white = linC(0.96, 0.95, 0.91);
-  const red = linC(0.86, 0.2, 0.24);
-  const ink = linC(0.12, 0.12, 0.16);
-  const wood = linC(0.62, 0.42, 0.26);
-  // the hull: a long hexagon, its bow drawn to a point, a red stripe along it
-  const hull = new THREE.CylinderGeometry(1.15, 1.0, 4.8, 6, 1);
-  hull.rotateX(Math.PI / 2);
-  hull.scale(1, 0.48, 1);
-  hull.translate(0, 0.42, -0.2);
-  K.add(M.paint, hull, white);
-  const bow = new THREE.ConeGeometry(1.15, 1.5, 6);
-  bow.rotateX(Math.PI / 2);
-  bow.scale(1, 0.48, 1);
-  bow.translate(0, 0.42, 2.95);
-  K.add(M.paint, bow, white);
-  for (const s of [-1, 1]) K.box(M.paint, s * 1.06, 0.48, -2.4, s * 1.12, 0.62, 2.0, red);
-  // the deck, the seats, the console with its wheel, the windscreen, the outboard motor
-  K.box(M.matte, -0.95, 0.78, -2.5, 0.95, 0.82, 1.8, wood);
-  for (const s of [-1, 1]) K.box(M.matte, s * 0.45 - 0.3, 0.82, -0.9, s * 0.45 + 0.3, 1.18, -0.3, white);
-  K.box(M.paint, -0.85, 0.82, 0.1, -0.15, 1.3, 0.55, white);
-  K.box(M.glass, -0.95, 1.3, 0.55, 0.95, 1.85, 0.62, linC(0.62, 0.78, 0.92));
-  // (the outboard: a round grey cowling over the transom, a red band, its leg down in the water)
-  K.sphere(M.paint, 0.3, 0, 1.25, -2.82, linC(0.42, 0.43, 0.47), 0.75, 1.3, 0.9, 10);
-  K.box(M.paint, -0.2, 1.02, -3.0, 0.2, 1.08, -2.64, red);
-  K.box(M.matte, -0.07, -0.35, -2.86, 0.07, 0.95, -2.74, ink);
-  K.box(M.matte, -0.16, -0.12, -2.95, 0.16, -0.09, -2.66, ink);
-  K.cyl(M.metal, 0.18, 0.18, 1.2, 1.32, linC(0.2, 0.2, 0.24), { axis: 'y', x: -0.5, z: 0.32, segs: 12 });
-  for (const s of [-1, 1]) tube(K, M.metal, [s * 0.95, 1.2, 1.8], [s * 0.4, 1.2, 3.2], 0.025, linC(0.82, 0.82, 0.86));
-  K.box(M.glow, 0.82, 0.92, 2.5, 0.9, 0.98, 2.56, linC(0.3, 1.0, 0.4));
-  K.box(M.glow, -0.9, 0.92, 2.5, -0.82, 0.98, 2.56, linC(1.0, 0.25, 0.25));
-  const body = K.build({ warp: warpFor(grade, 4) });
+  // (its model: game/ridemodels.js; its propeller turns - game/vehicles.js)
+  const { body, parts } = made('boat', grade, 4);
   // (its driver on the right, at the wheel)
-  return { body, pose: 'helm', seatAt: [-0.5, 1.1, -0.2], bar: [-0.5, 1.32, 0.32], grip: 0.16, halfLen: 2.9, halfWid: 1.15, heightM: 1.9, radius: 2.4 };
+  return { body, screw: parts.screw, pose: 'helm', seatAt: [-0.5, 1.1, -0.2], bar: [-0.5, 1.32, 0.32], grip: 0.16, halfLen: 2.9, halfWid: 1.15, heightM: 1.9, radius: 2.4 };
 }
 
 // ------------------------------------------------------------------ the light plane
 function planeModel(grade) {
-  const M = itemMats();
-  const K = new Kit();
-  const white = linC(0.96, 0.95, 0.91);
-  const red = linC(0.86, 0.25, 0.22);
-  const ink = linC(0.12, 0.12, 0.16);
-  const glass = linC(0.62, 0.78, 0.92);
-  // the fuselage: thick at the cabin, thin to the tail
-  K.cyl(M.paint, 0.6, 0.75, -0.6, 1.6, white, { y: 1.35, segs: 12 });
-  K.cyl(M.paint, 0.22, 0.6, -4.4, -0.6, white, { y: 1.5, segs: 10 });
-  K.cyl(M.paint, 0.75, 0.42, 1.6, 2.5, white, { y: 1.3, segs: 12 });
-  K.cyl(M.metal, 0.42, 0.16, 2.5, 2.85, linC(0.3, 0.3, 0.34), { y: 1.3, segs: 10 });
-  // the cabin's glass, a red stripe, the wing on top, its struts, the tail
-  K.sphere(M.glass, 0.62, 0, 1.95, 0.75, glass, 0.95, 0.75, 1.5, 14);
-  K.box(M.paint, -0.62, 1.15, -4.3, 0.62, 1.25, 1.6, red);
-  K.box(M.paint, -5.0, 2.05, 0.15, 5.0, 2.2, 1.55, white);
-  for (const s of [-1, 1]) {
-    K.box(M.paint, s * 4.2, 2.06, 0.13, s * 5.02, 2.21, 1.57, red);
-    tube(K, M.metal, [s * 0.6, 1.05, 0.9], [s * 2.6, 2.05, 0.9], 0.035, linC(0.7, 0.7, 0.74));
-  }
-  K.box(M.paint, -1.7, 1.55, -4.4, 1.7, 1.65, -3.6, white);
-  K.box(M.paint, -0.05, 1.6, -4.5, 0.05, 2.9, -3.7, red);
-  // the landing gear
-  for (const s of [-1, 1]) tube(K, M.metal, [s * 0.5, 0.9, 0.9], [s * 1.0, 0.3, 0.9], 0.04, ink);
-  tube(K, M.metal, [0, 0.95, 2.2], [0, 0.25, 2.3], 0.04, ink);
-  K.box(M.glow, -5.02, 2.08, 0.6, -4.98, 2.17, 0.75, linC(1, 0.2, 0.25));
-  K.box(M.glow, 4.98, 2.08, 0.6, 5.02, 2.17, 0.75, linC(0.3, 1, 0.4));
-  const body = K.build({ warp: warpFor(grade, 6) });
-  const wheels = [];
-  for (const [x, y, z, r] of [[1.0, 0.26, 0.9, 0.26], [-1.0, 0.26, 0.9, 0.26], [0, 0.18, 2.3, 0.18]]) {
-    const w = wheel(M, r, 0.07, linC(0.85, 0.85, 0.9), 4);
-    w.position.set(x, y, z);
-    body.add(w);
-    wheels.push(w);
-  }
-  // the propeller (a blur when it turns)
-  const P = new Kit();
-  P.box(M.matte, -0.06, -1.0, -0.03, 0.06, 1.0, 0.03, ink);
-  P.sphere(M.metal, 0.14, 0, 0, 0.06, linC(0.85, 0.2, 0.2), 1, 1, 1.4, 10);
-  const prop = P.build();
-  prop.matrixAutoUpdate = true;
-  prop.position.set(0, 1.3, 2.9);
-  body.add(prop);
-  return { body, wheels, prop, pose: 'pilot', seatAt: [0, 1.32, 0.55], bar: [0, 1.5, 1.05], grip: 0.1, halfLen: 3.8, halfWid: 1.1, span: 5.0, heightM: 2.9, radius: 3.0 };
+  // (its model: game/ridemodels.js; the propeller and the three wheels turn)
+  const { body, parts } = made('plane', grade, 6);
+  return { body, wheels: [parts.w0, parts.w1, parts.w2], prop: parts.prop, pose: 'pilot', seatAt: [0, 1.32, 0.55], bar: [0, 1.5, 1.05], grip: 0.1, halfLen: 3.8, halfWid: 1.1, span: 5.0, heightM: 2.9, radius: 3.0 };
 }
 
 export const MODELS = { bicycle: bicycleModel, scooter: scooterModel, jetski: jetskiModel, boat: boatModel, plane: planeModel };

@@ -166,6 +166,74 @@ export function rod(p0, p1, r0, r1 = r0, segs = 8) {
   return g;
 }
 
+// (ROADMAP 28.22) a body's section at z, for a skin lofted over several (loft): a rounded box hw half-wide, from y0 up
+// to y1, widest at o.cy (its middle unless said). o.e: how round its upper half is (1: an ellipse, 0.5: nearly a box,
+// 2: a diamond), o.eb: its lower half (a boat's V: 1.5); o.n: its points; o.x: off the middle
+export function ring(z, hw, y0, y1, o = {}) {
+  const n = o.n || 16;
+  const e = o.e === undefined ? 0.7 : o.e;
+  const eb = o.eb === undefined ? e : o.eb;
+  const cy = o.cy === undefined ? (y0 + y1) / 2 : o.cy;
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const c = Math.cos(a);
+    const sn = Math.sin(a);
+    const ee = sn >= 0 ? e : eb;
+    const x = Math.sign(c) * Math.pow(Math.abs(c), ee) * hw + (o.x || 0);
+    const y = sn >= 0 ? cy + Math.pow(sn, ee) * (y1 - cy) : cy - Math.pow(-sn, ee) * (cy - y0);
+    pts.push([x, y, z]);
+  }
+  return pts;
+}
+
+// a skin over rings (each of the same count of points, going round the same way; the rings in order of rising z): a
+// hull, a fuselage, a fuel tank. o.caps: false - its two ends left open; o.flat: its faces flat (a folded sheet)
+export function loft(rings, o = {}) {
+  const n = rings[0].length;
+  const pos = [];
+  for (const r of rings) for (const p of r) pos.push(p[0], p[1], p[2]);
+  const idx = [];
+  for (let i = 0; i < rings.length - 1; i++) {
+    for (let k = 0; k < n; k++) {
+      const a = i * n + k;
+      const b = i * n + ((k + 1) % n);
+      const c = (i + 1) * n + k;
+      const d = (i + 1) * n + ((k + 1) % n);
+      idx.push(a, b, c, b, d, c);
+    }
+  }
+  if (o.caps !== false) {
+    for (const end of [0, rings.length - 1]) {
+      const r = rings[end];
+      let cx = 0;
+      let cy = 0;
+      for (const p of r) {
+        cx += p[0] / n;
+        cy += p[1] / n;
+      }
+      const ci = pos.length / 3;
+      pos.push(cx, cy, r[0][2]);
+      for (let k = 0; k < n; k++) {
+        const a = end * n + k;
+        const b = end * n + ((k + 1) % n);
+        if (end) idx.push(a, b, ci);
+        else idx.push(b, a, ci);
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  if (o.flat) {
+    const f = g.toNonIndexed();
+    f.computeVertexNormals();
+    return f;
+  }
+  g.computeVertexNormals();
+  return g.toNonIndexed();
+}
+
 // a bar of n flat sides along z (a pencil's body: six), r0 thick at z0 and r1 at z1 - a sharpened cone, if r1 is less.
 // Flat faces, sharp edges (a lathe's are rounded). o: { x, y, sides, turn }
 export function hexbar(z0, z1, r0, r1 = r0, o = {}) {

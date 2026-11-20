@@ -3,7 +3,7 @@ import { BLUEPRINTS } from './blueprints.js';
 import { Kit, itemMats, warpFor, linC } from './items.js';
 import { groundHeight, worldEdge, pageDist, PAGE } from '../world/layout.js';
 import { drawWipers, wiperSweep, KINDS, sidePoint } from '../render/cars.js';
-import { MODELS, RIDES, PEDAL, seatOn, updateBoat, updatePlane, drawWake } from './rides.js';
+import { MODELS, RIDES, PEDAL, seatOn, updateBoat, updatePlane, drawWake, made } from './rides.js';
 import { hybridStep, updateBalloon } from './hybrid.js';
 import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 
@@ -77,146 +77,21 @@ const QUALITY = {
 // ------------------------------------------------------------------ the drawn ones' models
 // (a car's own frame: x right, y up, z forward; on the ground at y = 0)
 function tankModel(grade) {
-  const M = itemMats();
-  const hull = new Kit();
-  const olive = linC(0.62, 0.7, 0.44);
-  const dark = linC(0.32, 0.32, 0.36);
-  // the tracks, each a long rounded band with five wheels showing
-  for (const sx of [-1, 1]) {
-    hull.box(M.matte, sx * 1.6 - 0.32, 0.18, -2.8, sx * 1.6 + 0.32, 0.95, 2.8, dark);
-    hull.cyl(M.matte, 0.39, 0.39, sx * 1.6 - 0.32, sx * 1.6 + 0.32, dark, { axis: 'z', segs: 14 });
-    for (let k = 0; k < 5; k++) {
-      const z = -2.2 + k * 1.1;
-      const g = new THREE.CylinderGeometry(0.34, 0.34, 0.08, 14).rotateZ(Math.PI / 2);
-      g.translate(sx * (1.6 + 0.33), 0.5, z);
-      hull.add(M.metal, g, linC(0.6, 0.6, 0.64));
-    }
-    for (const z of [-2.8, 2.8]) {
-      const g = new THREE.CylinderGeometry(0.39, 0.39, 0.64, 14).rotateZ(Math.PI / 2);
-      g.translate(sx * 1.6, 0.57, z);
-      hull.add(M.matte, g, dark);
-    }
-  }
-  // the hull, sloping at the front, a plough like a big eraser blade
-  hull.box(M.paint, -1.3, 0.75, -2.7, 1.3, 1.55, 2.4, olive);
-  const nose = new THREE.BoxGeometry(2.6, 0.7, 0.9);
-  nose.rotateX(-0.6);
-  nose.translate(0, 1.1, 2.7);
-  hull.add(M.paint, nose, olive);
-  hull.box(M.round, -1.9, 0.12, 3.25, 1.9, 0.75, 3.45, linC(0.93, 0.55, 0.6));
-  hull.box(M.matte, -1.3, 1.55, -2.7, 1.3, 1.62, -1.8, linC(0.45, 0.5, 0.36));
-  const body = hull.build({ warp: warpFor(grade, 3) });
-  // the turret, its long barrel, the hatch, the antenna and its little flag
-  const tur = new Kit();
-  tur.cyl(M.paint, 1.15, 1.0, 0, 0.8, linC(0.56, 0.66, 0.4), { axis: 'y', segs: 18 });
-  tur.cyl(M.metal, 0.2, 0.18, 0.6, 4.2, linC(0.42, 0.46, 0.36), { y: 0.45, segs: 12 });
-  tur.cyl(M.metal, 0.26, 0.26, 4.0, 4.35, linC(0.3, 0.32, 0.3), { y: 0.45, segs: 12 });
-  tur.cyl(M.matte, 0.38, 0.38, 0.8, 0.95, linC(0.45, 0.5, 0.36), { axis: 'y', x: -0.35, segs: 12 });
-  tur.cyl(M.metal, 0.02, 0.02, 0.8, 2.6, linC(0.3, 0.3, 0.34), { axis: 'y', x: 0.6, z: -0.5, segs: 5 });
-  const flag = new THREE.BoxGeometry(0.03, 0.4, 0.6);
-  flag.translate(0.6, 2.35, -0.8);
-  tur.add(M.paint, flag, linC(0.98, 0.45, 0.5));
-  const turret = tur.build({ warp: warpFor(grade, 4) });
-  turret.matrixAutoUpdate = true;
-  turret.position.set(0, 1.55, -0.2);
-  body.add(turret);
-  return { body, turret, muzzle: new THREE.Vector3(0, 0.45, 4.4), wheelsZ: [] };
+  // (ROADMAP 28.22: its model - game/ridemodels.js; the turret turns)
+  const { body, parts } = made('tank', grade, 3);
+  return { body, turret: parts.turret, muzzle: new THREE.Vector3(0, 0.45, 4.4), wheelsZ: [] };
 }
 
 function bikeModel(grade) {
-  const M = itemMats();
-  const K = new Kit();
-  const red = linC(0.88, 0.25, 0.22);
-  const dark = linC(0.18, 0.18, 0.22);
-  // the frame, the tank and the fairing in glossy red, the seat, the exhaust
-  K.box(M.paint, -0.2, 0.55, -0.45, 0.2, 0.95, 0.55, red);
-  const fair = new THREE.BoxGeometry(0.42, 0.55, 0.5);
-  fair.rotateX(0.5);
-  fair.translate(0, 1.0, 0.72);
-  K.add(M.paint, fair, red);
-  K.box(M.matte, -0.17, 0.95, -0.75, 0.17, 1.05, 0.1, dark);
-  K.cyl(M.metal, 0.06, 0.05, -1.05, -0.2, linC(0.8, 0.8, 0.84), { x: 0.24, y: 0.42 });
-  K.box(M.metal, -0.08, 0.35, -0.2, 0.08, 0.6, 0.35, linC(0.55, 0.55, 0.6));
-  // the forks and the bars, the light
-  for (const sx of [-1, 1]) {
-    const f = new THREE.CylinderGeometry(0.03, 0.03, 1.0, 6);
-    f.rotateX(-0.42);
-    f.translate(sx * 0.12, 0.85, 1.05);
-    K.add(M.metal, f, linC(0.8, 0.8, 0.84));
-  }
-  K.cyl(M.metal, 0.025, 0.025, -0.38, 0.38, dark, { axis: 'z', y: 1.38, segs: 6, rot: Math.PI / 2 });
-  const bars = new THREE.CylinderGeometry(0.025, 0.025, 0.76, 6).rotateZ(Math.PI / 2);
-  bars.translate(0, 1.38, 0.82);
-  K.add(M.metal, bars, dark);
-  K.sphere(M.glow, 0.09, 0, 1.15, 1.02, linC(1.0, 0.95, 0.75), 1, 1, 0.6, 10);
-  K.box(M.glow, -0.12, 0.72, -0.82, 0.12, 0.78, -0.78, linC(1.0, 0.2, 0.25));
-  const body = K.build({ warp: warpFor(grade, 5) });
-  // the wheels (they roll)
-  const wheels = [];
-  for (const z of [-0.72, 1.28]) {
-    const W = new Kit();
-    const tyre = new THREE.TorusGeometry(0.34, 0.09, 8, 20).rotateY(Math.PI / 2);
-    W.add(M.matte, tyre, dark);
-    const hub = new THREE.CylinderGeometry(0.1, 0.1, 0.12, 10).rotateZ(Math.PI / 2);
-    W.add(M.metal, hub, linC(0.75, 0.75, 0.8));
-    for (let k = 0; k < 5; k++) {
-      const sp = new THREE.BoxGeometry(0.02, 0.6, 0.03);
-      sp.rotateX((k / 5) * Math.PI);
-      W.add(M.metal, sp, linC(0.75, 0.75, 0.8));
-    }
-    const w = W.build();
-    w.matrixAutoUpdate = true;
-    w.position.set(0, 0.43, z);
-    body.add(w);
-    wheels.push(w);
-  }
-  return { body, wheels, seat: [0, 1.0, -0.3], bar: [0, 1.38, 0.82] };
+  // (its model: game/ridemodels.js; the two wheels roll)
+  const { body, parts } = made('bike', grade, 5);
+  return { body, wheels: [parts.w0, parts.w1], seat: [0, 1.0, -0.3], bar: [0, 1.38, 0.82] };
 }
 
 function copterModel(grade) {
-  const M = itemMats();
-  const K = new Kit();
-  const paper = linC(0.97, 0.95, 0.9);
-  const lines = linC(0.62, 0.72, 0.9);
-  // a cabin folded from a notebook page: a faceted egg, a bubble window, a long tail, skids
-  const cab = new THREE.IcosahedronGeometry(1.0, 1);
-  cab.scale(1.0, 0.9, 1.45);
-  cab.translate(0, 1.6, 0.2);
-  K.add(M.matte, cab, paper);
-  K.sphere(M.glass, 0.72, 0, 1.75, 0.95, linC(0.6, 0.78, 0.95), 1, 0.85, 0.75, 12);
-  const tail = new THREE.CylinderGeometry(0.18, 0.4, 3.4, 6).rotateX(Math.PI / 2);
-  tail.translate(0, 1.75, -2.5);
-  K.add(M.matte, tail, paper);
-  const fin = new THREE.BoxGeometry(0.06, 1.0, 0.6);
-  fin.translate(0, 2.2, -4.0);
-  K.add(M.matte, fin, paper);
-  // the blue rules of the page, round the cabin
-  for (const y of [1.25, 1.55, 1.85]) K.cyl(M.matte, 0.985 * Math.sqrt(1 - ((y - 1.6) / 0.9) ** 2), 0.985 * Math.sqrt(1 - ((y - 1.6) / 0.9) ** 2), y, y + 0.02, lines, { axis: 'y', z: 0.2, segs: 20 });
-  for (const sx of [-1, 1]) {
-    K.cyl(M.metal, 0.04, 0.04, -0.9, 1.1, linC(0.35, 0.35, 0.4), { x: sx * 0.75, y: 0.15, segs: 6 });
-    for (const z of [-0.5, 0.7]) K.cyl(M.metal, 0.03, 0.03, 0.15, 0.75, linC(0.35, 0.35, 0.4), { axis: 'y', x: sx * 0.68, z, segs: 5 });
-  }
-  K.cyl(M.metal, 0.07, 0.07, 2.4, 2.9, linC(0.4, 0.4, 0.45), { axis: 'y', z: 0.2, segs: 8 });
-  const body = K.build({ warp: warpFor(grade, 6) });
-  const rot = (len, wid) => {
-    const R = new Kit();
-    for (const a of [0, Math.PI / 2]) {
-      const b = new THREE.BoxGeometry(len * 2, 0.02, wid);
-      b.rotateY(a);
-      R.add(M.matte, b, paper);
-    }
-    const g = R.build();
-    g.matrixAutoUpdate = true;
-    return g;
-  };
-  const rotor = rot(3.6, 0.32);
-  rotor.position.set(0, 2.92, 0.2);
-  body.add(rotor);
-  const tailRotor = rot(0.6, 0.12);
-  tailRotor.rotation.z = Math.PI / 2;
-  tailRotor.position.set(0.12, 2.25, -4.0);
-  body.add(tailRotor);
-  return { body, rotor, tailRotor };
+  // (its model: game/ridemodels.js; the two rotors turn - the tail one about the helicopter's side-to-side line)
+  const { body, parts } = made('copter', grade, 6);
+  return { body, rotor: parts.rotor, tailRotor: parts.tailRotor };
 }
 
 // The city's own helicopters (the evening news over downtown, the police when it gets hot): a
@@ -542,6 +417,8 @@ class Vehicle {
       if (this.kind === 'boat') {
         this.body.rotation.x = this.pitchV || 0;
         this.body.rotation.z = this.rollV || 0;
+        // (ROADMAP 28.22: its propeller turns with its speed)
+        if (this.screw) this.screw.rotation.z += dt * (3 + Math.abs(this.speed || 0) * 6);
       } else if (this.kind === 'balloon') {
         // (its basket sways under it, leaning a little into where the wind takes it)
         const side = (this.vx || 0) * Math.cos(this.yaw) - (this.vz || 0) * Math.sin(this.yaw);
