@@ -436,6 +436,8 @@ export function buildDesign(p, body) {
     const kits = { gun: new Kit(), base: new Kit(), spin: new Kit() };
     for (const name of Object.keys(GR)) kits[name] = new Kit();
     for (const q of sh.prims) {
+      // (ROADMAP 28.24: a piece that is there for the outline only - what stands for a finer one the outline cannot read)
+      if (q.ghost) continue;
       const g = kits[q.g] ? q.g || 'gun' : 'gun';
       const o = g === 'spin' ? spinO : GR[g] ? GR[g].at : pv;
       addPrim(kits[g], q, o, matOf(q.k), colOf(q.k), matOf, colOf);
