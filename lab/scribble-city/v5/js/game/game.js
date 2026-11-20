@@ -5,6 +5,7 @@ import { Audio } from '../core/audio.js';
 import { CameraRig } from './camera.js';
 import { FigureRenderer } from './figure.js';
 import { Effects } from './fx.js';
+import { ImpactFx } from './impactfx.js';
 import { Player } from './player.js';
 import { Weapons, WEAPON_DEFS, GRADE } from './weapons.js';
 import { Enemies } from './enemies.js';
@@ -181,6 +182,8 @@ export class Game {
     // (a word not shown through a wall: ui/bubbles.js)
     this.bubbles.col = this.world.collision;
     this.fx = new Effects(this);
+    // (ROADMAP 28.27) what a shot does where it lands, by what it is made of
+    this.impactfx = new ImpactFx(this);
     this.cars = new CarRenderer(scene);
     await breath('init');
     this.vehicles = new Vehicles(this);
@@ -1651,6 +1654,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       if (this.graffiti) this.graffiti.draw(fr);
       if (this.fire) this.fire.draw(fr);
       this.weather.draw(fr);
+      this.impactfx.update(dt);
       this.fx.update(dt, fr);
       fr.end();
     }

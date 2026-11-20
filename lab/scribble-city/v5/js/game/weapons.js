@@ -437,6 +437,8 @@ export class Weapons {
       // (a thing drawn freehand to throw flies as its own drawing)
       shape: slot.model && slot.model.shape ? slot.model.shape : null,
       bounce: def.bounce || 0,
+      // (ROADMAP 28.27) hot graphite: through a body, through a thin wall, and on - once
+      hot: def.projectile === 'pencil' || def.projectile === 'slug' ? 1 : 0,
       ...extra,
     };
     // (every few of a belt burn their way: tracers)
@@ -1369,6 +1371,52 @@ export class Weapons {
         this.drawProjectile(fr, pr);
         continue;
       }
+      // (ROADMAP 28.27) hot graphite goes through: a body (and on to whoever is behind him), a wall no thicker than
+      // a hand's length or two (a hole glowing on both its sides) - once, with less of its force
+      if (hit && pr.hot > 0 && !pr.radius && !pr.el) {
+        const ux = dx / len;
+        const uy = dy / len;
+        const uz = dz / len;
+        if (hit.type === 'enemy' || hit.type === 'civ') {
+          const who = hit.enemy || hit.civ;
+          if (!pr.hits) pr.hits = new Set();
+          if (!pr.hits.has(who)) {
+            pr.hits.add(who);
+            this.onHit(pr, hit, ux, uy, uz);
+            pr.damage *= 0.6;
+          }
+          // (on from just past him: what is behind him is met in its turn)
+          pr.x = hit.x + ux * 0.6;
+          pr.y = hit.y + uy * 0.6;
+          pr.z = hit.z + uz * 0.6;
+          if (pr.hits.size >= 2) continue;
+          keep.push(pr);
+          this.drawProjectile(fr, pr);
+          continue;
+        }
+        if (hit.type === 'world' && hit.box && Math.abs(hit.ny || 0) < 0.6) {
+          let out = 0;
+          for (const d of [0.3, 0.55, 0.85]) {
+            if (!col.pointInside(hit.x + ux * d, hit.y + uy * d, hit.z + uz * d, 0.02)) {
+              out = d;
+              break;
+            }
+          }
+          if (out) {
+            this.onHit(pr, hit, ux, uy, uz);
+            game.impactfx.exit(pr, hit.x + ux * out, hit.y + uy * out, hit.z + uz * out, ux, uy, uz);
+            pr.hot--;
+            pr.damage *= 0.6;
+            pr.ignore = hit.box;
+            pr.x = hit.x + ux * (out + 0.05);
+            pr.y = hit.y + uy * (out + 0.05);
+            pr.z = hit.z + uz * (out + 0.05);
+            keep.push(pr);
+            this.drawProjectile(fr, pr);
+            continue;
+          }
+        }
+      }
       if (hit) {
         this.onHit(pr, hit, dx / len, dy / len, dz / len);
         continue;
@@ -1644,6 +1692,7 @@ export class Weapons {
     if (pr.radius > 0) {
       game.explosion(hit.x, hit.y, hit.z, pr.radius, pr.damage, pr.owner);
       this.bigBlast(pr, hit.x, hit.y, hit.z, pr.radius);
+      game.impactfx.blast(pr, hit.x, hit.y, hit.z, pr.radius);
       // (ROADMAP 11.11) a rocket drawn in colour: what its ink does, all round where it went off
       if (pr.el) this.inkRound(pr.el, hit.x, hit.y, hit.z, pr.radius, pr.damage);
       return;
@@ -1658,6 +1707,7 @@ export class Weapons {
       if (kind === 'glue') hit.civ.glueT = pr.stick;
       fx.impact(hit.x, hit.y, hit.z, 0.6);
       this.hitFx(kind, hit, ux, uy, uz, pr.color);
+      game.impactfx.body(pr, hit, ux, uy, uz, hit.civ);
       return;
     }
     if (hit.type === 'enemy') {
@@ -1678,11 +1728,13 @@ export class Weapons {
       }
       fx.impact(hit.x, hit.y, hit.z, kind === 'staple' || kind === 'shaving' ? 0.4 : 0.7);
       this.hitFx(kind, hit, ux, uy, uz, pr.color);
+      game.impactfx.body(pr, hit, ux, uy, uz, e);
       return;
     }
     if (hit.type === 'car') {
       // a car hit: dented, its glass, a tyre... (game/damage.js); yours keep their own count
       const c = hit.car;
+      game.impactfx.car(pr, hit, ux, uy, uz, c);
       // (ROADMAP 23.19: one of the story's cars after him - a car somebody drives, as his own is: what his gun does to it is
       // the fight's own count, game/prologue/paintfight.js shot)
       const F = game.prologue && game.prologue.fight;
@@ -1729,15 +1781,16 @@ export class Weapons {
     const nx = hit.nx || 0;
     const ny = hit.ny === undefined ? 1 : hit.ny;
     const nz = hit.nz || 0;
+    // (ROADMAP 28.27: and what it leaves there - a hot hole, a white fire, paint running down)
+    game.impactfx.world(pr, hit, ux, uy, uz);
+    // (the blot it leaves is game/impactfx.js's now: thrown out over the surface, not a round splat)
     if (kind === 'ink' || kind === 'paintball' || kind === 'marker') {
-      fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, kind === 'ink' ? 0.45 : kind === 'marker' ? 0.55 : 0.5 + Math.random() * 0.3, pr.color);
       fx.spray(hit.x, hit.y, hit.z, nx, ny, nz, 4, 3, pr.color || PEN_BLUE, { cone: 0.8, wide: 3.5, len: 0.08 });
       return;
     }
     if (kind === 'tippex') {
       // a splash of correction fluid: what it covers is gone from the page (ROADMAP 11.43: a big
       // white splash you see from afar, and the hole it rubs bigger)
-      fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, 0.8 + Math.random() * 0.4, WHITE_TINT, 'blot');
       fx.spray(hit.x, hit.y, hit.z, nx, ny, nz, 7, 4, WHITE_OUT, { cone: 0.8, wide: 5, len: 0.11 });
       game.eraseWorld(hit.x, hit.y, hit.z, 0.6, pr.damage * 1.5, hit.box, hit);
       game.audio.play('splat', 0.3);
@@ -1748,12 +1801,10 @@ export class Weapons {
       fx.spray(hit.x, hit.y, hit.z, nx, ny, nz, 4, 3, PINK, { cone: 0.8, bits: true, len: 0.04, life: 0.6 });
     } else if (kind === 'paintmg') {
       // drenched in paint, a thing runs off the page
-      fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, 0.55 + Math.random() * 0.4, pr.color);
       fx.spray(hit.x, hit.y, hit.z, nx, ny, nz, 4, 3.5, pr.color, { cone: 0.8, wide: 4, len: 0.1 });
       game.eraseWorld(hit.x, hit.y, hit.z, 0.2, pr.damage * 1.1, hit.box, hit);
       game.audio.play('splat', 0.25);
     } else if (kind === 'paint' || kind === 'crayon') {
-      fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, (kind === 'crayon' ? 0.35 : 0.7) + Math.random() * 0.4, pr.color);
       fx.spray(hit.x, hit.y, hit.z, nx, ny, nz, kind === 'crayon' ? 3 : 5, 3.5, pr.color, { cone: 0.8, wide: 4, len: 0.1 });
       if (kind === 'crayon') game.eraseWorld(hit.x, hit.y, hit.z, 0.12, pr.damage * 0.3, hit.box, hit);
       game.audio.play('splat', 0.4);
@@ -1768,7 +1819,6 @@ export class Weapons {
       // eraser first: a little blank patch where it lands
       game.eraseWorld(hit.x, hit.y, hit.z, kind === 'shaving' ? 0.16 : 0.28, pr.damage * 0.6, hit.box, hit);
       if (kind === 'pencil' || Math.random() < 0.15) game.stuckPencil(hit.x, hit.y, hit.z, ux, uy, uz);
-      fx.impact(hit.x, hit.y, hit.z, kind === 'shaving' ? 0.3 : 0.5);
       fx.spray(hit.x, hit.y, hit.z, nx, ny, nz, kind === 'shaving' ? 2 : 5, 3, GRAPHITE, { cone: 0.9, bits: true, len: 0.04, life: 0.6 });
     } else if (kind === 'staple') {
       fx.sparks(hit.x, hit.y, hit.z, 2, STEEL);

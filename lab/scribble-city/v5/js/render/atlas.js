@@ -666,6 +666,232 @@ function flash(sk, ctx) {
   }
 }
 
+// ------------------------------------------------------------------ (ROADMAP 28.27) what a shot leaves where it lands
+// Painted, no outlines, in white and greys where the batch's tint gives the colour (a fire's orange, correction
+// fluid's white heat, a paint's own colour) - the same picture for every ink.
+
+// a soft light: a hot spot, an ember's halo, the heart of a burst
+function glowCell(sk, ctx) {
+  const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 122);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.18, 'rgba(255,255,255,0.72)');
+  g.addColorStop(0.45, 'rgba(255,255,255,0.26)');
+  g.addColorStop(0.75, 'rgba(255,255,255,0.07)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 256, 256);
+}
+
+// a ragged shape round the middle: [[x, y], ...] (r: its radius, k: how ragged, n: corners)
+function ragged(sk, r, k, n = 22) {
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const t = (i / n) * PI * 2;
+    const rr = r * (1 + sk.r(-k, k));
+    pts.push([128 + Math.cos(t) * rr, 128 + Math.sin(t) * rr]);
+  }
+  return pts;
+}
+
+// a hole burnt through the page: black at its heart, soot round it, the paper cracked out from it
+function holeCell(sk, ctx) {
+  const soot = ctx.createRadialGradient(128, 128, 30, 128, 128, 104);
+  soot.addColorStop(0, 'rgba(26,22,26,0.82)');
+  soot.addColorStop(0.5, 'rgba(34,29,32,0.34)');
+  soot.addColorStop(1, 'rgba(40,34,36,0)');
+  ctx.fillStyle = soot;
+  ctx.beginPath();
+  ctx.arc(128, 128, 104, 0, PI * 2);
+  ctx.fill();
+  // (the cracks: thin, forked, a few long)
+  ctx.strokeStyle = 'rgba(20,17,22,0.85)';
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 9; i++) {
+    const t = (i / 9) * PI * 2 + sk.r(-0.3, 0.3);
+    let x = 128 + Math.cos(t) * 34;
+    let y = 128 + Math.sin(t) * 34;
+    let a = t;
+    const len = sk.r(30, 84);
+    ctx.lineWidth = sk.r(1.6, 3.4);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    for (let d = 0; d < len; d += 12) {
+      a += sk.r(-0.45, 0.45);
+      x += Math.cos(a) * 12;
+      y += Math.sin(a) * 12;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    if (sk.rnd() < 0.5) {
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(a + 0.9) * 16, y + Math.sin(a + 0.9) * 16);
+      ctx.stroke();
+    }
+  }
+  ctx.fillStyle = '#0d0b10';
+  sk.path(ragged(sk, 36, 0.2));
+  ctx.fill();
+  // (the torn edge of the paper, lifted: a pale rim on one side)
+  ctx.strokeStyle = 'rgba(236,230,214,0.5)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(128, 128, 40, PI * 1.05, PI * 1.75);
+  ctx.stroke();
+}
+
+// the hole's edge while it is hot: a ragged ring and the cracks' beginnings, white - tinted from white heat down to
+// a dull red as it cools
+function rimCell(sk, ctx) {
+  for (const [r, w, a] of [[46, 26, 0.22], [43, 15, 0.5], [41, 7, 1]]) {
+    ctx.strokeStyle = `rgba(255,255,255,${a})`;
+    ctx.lineWidth = w;
+    ctx.lineJoin = 'round';
+    sk.path(ragged(sk, r, 0.1, 26));
+    ctx.closePath();
+    ctx.stroke();
+  }
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 8; i++) {
+    const t = (i / 8) * PI * 2 + sk.r(-0.3, 0.3);
+    const l = sk.r(14, 34);
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = sk.r(2, 4);
+    ctx.beginPath();
+    ctx.moveTo(128 + Math.cos(t) * 44, 128 + Math.sin(t) * 44);
+    ctx.lineTo(128 + Math.cos(t + 0.15) * (44 + l), 128 + Math.sin(t + 0.15) * (44 + l));
+    ctx.stroke();
+  }
+}
+
+// a tongue of fire, its foot at the bottom of the cell: grey to the batch's tint, white at its heart (the tint
+// heats that past the page's white)
+function flameCell(sk, ctx, twin) {
+  // (each tongue solid at its foot, thinning to nothing at its tip)
+  const tongue = (cx, h, w, lean, a, v) => {
+    const g = ctx.createLinearGradient(0, 244, 0, 244 - h);
+    g.addColorStop(0, `rgba(${v},${v},${v},${a})`);
+    g.addColorStop(0.78, `rgba(${v},${v},${v},${a * 0.92})`);
+    g.addColorStop(1, `rgba(${v},${v},${v},${a * 0.3})`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(cx - w, 244);
+    ctx.bezierCurveTo(cx - w * 1.5, 244 - h * 0.35, cx - w * 0.2 + lean * 0.4, 244 - h * 0.6, cx + lean, 244 - h);
+    ctx.bezierCurveTo(cx + w * 0.5 + lean * 0.3, 244 - h * 0.62, cx + w * 1.45, 244 - h * 0.3, cx + w, 244);
+    ctx.quadraticCurveTo(cx, 252, cx - w, 244);
+    ctx.fill();
+  };
+  const lean = sk.r(-26, 26);
+  if (twin) {
+    tongue(92, 160, 36, -22, 0.92, 150);
+    tongue(160, 204, 42, 18, 0.92, 150);
+    tongue(96, 116, 24, -14, 1, 205);
+    tongue(158, 150, 28, 12, 1, 205);
+    tongue(128, 90, 30, 0, 1, 255);
+  } else {
+    tongue(128, 236, 54, lean, 0.92, 150);
+    tongue(126, 178, 38, lean * 0.6, 1, 205);
+    tongue(128, 116, 24, lean * 0.3, 1, 255);
+  }
+  // (a dry brush up through it)
+  for (let i = 0; i < 7; i++) {
+    const x = 128 + sk.r(-34, 34);
+    sk.line(x, 236, x + sk.r(-10, 10) + lean * 0.3, 236 - sk.r(50, 130), { width: sk.r(1.2, 2.4), color: 'rgba(255,255,255,0.4)', overshoot: 0 });
+  }
+}
+
+// paint running down a wall: from the top of the cell to a bead at its foot
+function dripCell(sk, ctx) {
+  const run = (x, len, w) => {
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(x - w, 6);
+    ctx.bezierCurveTo(x - w * 0.7, len * 0.4, x - w * 0.45, len * 0.7, x - w * 0.62, len - w);
+    ctx.arc(x, len - w * 0.2, w * 1.02, PI, 0, true);
+    ctx.bezierCurveTo(x + w * 0.45, len * 0.7, x + w * 0.7, len * 0.4, x + w, 6);
+    ctx.closePath();
+    ctx.fill();
+    // (its wet side)
+    ctx.strokeStyle = 'rgba(150,150,150,0.55)';
+    ctx.lineWidth = w * 0.3;
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.5, 14);
+    ctx.lineTo(x + w * 0.34, len - w * 1.6);
+    ctx.stroke();
+  };
+  run(128, 240, 15);
+  run(84, 132, 9);
+  run(172, 176, 11);
+}
+
+// a shot of paint burst on a wall: a blot, what was thrown out of it - a few long tongues, short ones between them,
+// none evenly placed - a bead at the end of each and drops flung on beyond
+function burstCell(sk, ctx) {
+  ctx.fillStyle = '#ffffff';
+  let t = sk.r(0, PI * 2);
+  for (let i = 0; i < 11; i++) {
+    t += sk.r(0.3, 0.9);
+    const long = sk.rnd() < 0.36;
+    const len = long ? sk.r(82, 108) : sk.r(46, 72);
+    const w = long ? sk.r(4, 7.5) : sk.r(6, 12);
+    const cx = Math.cos(t);
+    const cy = Math.sin(t);
+    const bend = sk.r(-0.22, 0.22) * len;
+    const ex = 128 + cx * len - cy * bend * 0.4;
+    const ey = 128 + cy * len + cx * bend * 0.4;
+    const mx = 128 + cx * len * 0.55 - cy * bend;
+    const my = 128 + cy * len * 0.55 + cx * bend;
+    ctx.beginPath();
+    ctx.moveTo(128 - cy * w * 1.5, 128 + cx * w * 1.5);
+    ctx.quadraticCurveTo(mx - cy * w * 0.3, my + cx * w * 0.3, ex, ey);
+    ctx.quadraticCurveTo(mx + cy * w * 0.3, my - cx * w * 0.3, 128 + cy * w * 1.5, 128 - cx * w * 1.5);
+    ctx.fill();
+    const bead = w * sk.r(0.45, 0.8);
+    ctx.beginPath();
+    ctx.arc(ex, ey, bead, 0, PI * 2);
+    ctx.fill();
+    let d = len + bead + sk.r(4, 10);
+    let r = bead * sk.r(0.5, 0.8);
+    for (let k = 0; k < 3 && d < 120 && sk.rnd() < 0.7; k++) {
+      ctx.beginPath();
+      ctx.arc(128 + cx * d - cy * bend * 0.4, 128 + cy * d + cx * bend * 0.4, r, 0, PI * 2);
+      ctx.fill();
+      d += r * 2 + sk.r(3, 9);
+      r *= 0.65;
+    }
+  }
+  sk.path(ragged(sk, 38, 0.3, 13));
+  ctx.fill();
+  sk.path(ragged(sk, 30, 0.12, 18));
+  ctx.fill();
+  for (let i = 0; i < 9; i++) {
+    const a = sk.r(0, PI * 2);
+    const d = sk.r(50, 108);
+    ctx.beginPath();
+    ctx.arc(128 + Math.cos(a) * d, 128 + Math.sin(a) * d, sk.r(1.6, 4.2), 0, PI * 2);
+    ctx.fill();
+  }
+}
+
+// soot on what burnt: a dark smudge, streaked
+function scorchCell(sk, ctx) {
+  const g = ctx.createRadialGradient(128, 128, 6, 128, 128, 116);
+  g.addColorStop(0, 'rgba(22,19,22,0.9)');
+  g.addColorStop(0.4, 'rgba(28,24,26,0.6)');
+  g.addColorStop(0.8, 'rgba(34,30,30,0.16)');
+  g.addColorStop(1, 'rgba(34,30,30,0)');
+  ctx.fillStyle = g;
+  sk.path(ragged(sk, 112, 0.1, 30));
+  ctx.fill();
+  for (let i = 0; i < 26; i++) {
+    const t = sk.r(0, PI * 2);
+    const r0 = sk.r(20, 70);
+    const r1 = r0 + sk.r(20, 44);
+    sk.line(128 + Math.cos(t) * r0, 128 + Math.sin(t) * r0, 128 + Math.cos(t) * r1, 128 + Math.sin(t) * r1, { width: sk.r(1.5, 3.5), color: 'rgba(18,16,18,0.3)', overshoot: 0 });
+  }
+}
+
 function eyeIcon(sk) {
   sk.paper(ellipsePts(128, 128, 100, 100, 30), '#f7f4ec');
   sk.circle(128, 128, 100, { width: 5, color: INK2D });
@@ -683,7 +909,8 @@ function eyeIcon(sk) {
  */
 export function buildAtlas() {
   const W = 1024;
-  const H = 1024;
+  // (ROADMAP 28.27: six rows of four - two more, for what a shot leaves where it lands)
+  const H = 1536;
   const canvas = makeCanvas(W, H);
   const ctx = canvas.getContext('2d');
   const rects = {};
@@ -734,6 +961,14 @@ export function buildAtlas() {
   cell('muzzle', muzzle);
   cell('eye', eyeIcon);
   cell('flash', flash, 4411);
+  cell('glow', glowCell);
+  cell('hole', holeCell, 5101);
+  cell('rim', rimCell, 5102);
+  cell('flame0', (sk, c) => flameCell(sk, c, false), 5103);
+  cell('flame1', (sk, c) => flameCell(sk, c, true), 5104);
+  cell('drip', dripCell, 5105);
+  cell('burst', burstCell, 5106);
+  cell('scorch', scorchCell, 5107);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.generateMipmaps = true;
