@@ -4,6 +4,7 @@ import { BLACK_INK, RED_INK } from '../render/LineBatch.js';
 import { groundHeight } from '../world/layout.js';
 import { blendMatrix } from './materialize.js';
 import { Fists, FISTS } from './fists.js';
+import { ArmFx, drawSlug, slugWall, slugBody, slugCar } from './armfx.js';
 import { clamp } from '../core/util.js';
 
 import { tr } from '../core/lang.js';
@@ -34,6 +35,9 @@ export const WEAPON_DEFS = {
   tippex: { id: 'tippex', name: tr('מקלע טיפקס', 'White-out machine gun'), kind: 'gun', projectile: 'tippex', damage: 13, rate: 11, speed: 64, gravity: 5, spread: 0.026, ammo: 280, hands: 2, sound: 'tippex' },
   erasermg: { id: 'erasermg', name: tr('מקלע מחקים', 'Eraser machine gun'), kind: 'gun', projectile: 'rubber', damage: 15, rate: 12, speed: 82, gravity: 3, spread: 0.03, ammo: 320, hands: 2, sound: 'rubber' },
   paintmg: { id: 'paintmg', name: tr('מקלע צבע', 'Paint machine gun'), kind: 'gun', projectile: 'paintmg', damage: 11, rate: 14, speed: 58, gravity: 5, spread: 0.034, ammo: 380, hands: 2, sound: 'paint' },
+  // (ROADMAP 28.19) the heavy one: belt-fed, heavy graphite slugs, a tracer every fourth; steady off its bipod on a
+  // knee, wild on the move; it weighs on whoever carries it (game/arms.js its model, game/armfx.js what it does)
+  mag: { id: 'mag', name: tr('מאג', 'MAG'), kind: 'gun', projectile: 'slug', damage: 22, rate: 10.8, speed: 135, gravity: 1.2, spread: 0.026, ammo: 300, hands: 2, kick: 0.09, sound: 'mag', tracer: 4, heavy: 0.84 },
 };
 
 export const GRADE = {
@@ -81,7 +85,7 @@ const GRAPHITE = [0.22, 0.22, 0.26];
 const MARKER_RED = [0.86, 0.12, 0.14];
 // (what the people it hits take it as: correction fluid and little erasers rub out like a
 // pencil's eraser, the paint machine gun's paint is paint)
-const hurtOf = (kind) => (kind === 'tippex' || kind === 'rubber' ? 'pencil' : kind === 'paintmg' ? 'paint' : kind);
+const hurtOf = (kind) => (kind === 'tippex' || kind === 'rubber' || kind === 'slug' ? 'pencil' : kind === 'paintmg' ? 'paint' : kind);
 // (soft inks: no window breaks for them)
 const SOFT_INK = new Set(['water', 'glue', 'ink', 'bounce']);
 const _v = new THREE.Vector3();
@@ -179,6 +183,8 @@ export class Weapons {
     this.cloudT = -9;
     this.gustT = -1;
     this._near = [];
+    // (ROADMAP 28.19: what a real gun does as it fires - its kick, its cases, its heat; game/armfx.js)
+    this.armfx = new ArmFx(game);
   }
 
   // (ROADMAP 5.4, not with ?classic) the bare fists: second in the list, always there
@@ -398,6 +404,8 @@ export class Weapons {
     }
     player.fig.melee = this.swingT;
     player.fig.aim = this.shootOut ? 1 : (def.kind === 'gun' || def.kind === 'beam') && this.isAiming() && canAct ? def.hands : 0;
+    // (a long heavy gun: held nearer, its butt in the shoulder - game/armfx.js)
+    this.armfx.hands(slot, player.fig, player.fig.aim === 2 && onFoot);
     this.updateProjectiles(dt);
   }
 
@@ -425,6 +433,8 @@ export class Weapons {
       bounce: def.bounce || 0,
       ...extra,
     };
+    // (every few of a belt burn their way: tracers)
+    if (def.tracer && (slot.shotN = (slot.shotN || 0) + 1) % def.tracer === 0) pr.tracer = true;
     this.projectiles.push(pr);
     return pr;
   }
@@ -534,6 +544,8 @@ export class Weapons {
     const shots = def.volley || 1;
     // (a bent barrel: its shots bend after whoever is aimed at)
     const target = def.curve ? this.aimTarget() : null;
+    // (steadier off its legs, wilder on the move: game/armfx.js)
+    const fxSpread = this.armfx.spreadK(slot);
     let muzzle = null;
     for (let b = 0; b < shots; b++) {
       const k = def.volley ? b : (slot.shot = (slot.shot || 0) + 1);
@@ -545,7 +557,7 @@ export class Weapons {
       for (let i = 0; i < n; i++) {
         const dir = _v.copy(this.aimPoint).sub(muzzle).normalize();
         // (the shooting skill: ROADMAP 5.6, not with ?classic)
-        const spread = def.spread * g.spread * (game.skills ? game.skills.spreadMul : 1);
+        const spread = def.spread * g.spread * (game.skills ? game.skills.spreadMul : 1) * fxSpread;
         dir.x += (Math.random() - 0.5) * spread * 2;
         dir.y += (Math.random() - 0.5) * spread * 2;
         dir.z += (Math.random() - 0.5) * spread * 2;
@@ -579,8 +591,11 @@ export class Weapons {
         if (player.coverBox && player.coverPop > 0.3) extra.ignore = player.coverBox;
         this.launch(slot, muzzle.x, muzzle.y, muzzle.z, dir.x * spe, dir.y * spe + (sad ? 1 : 0), dir.z * spe, extra);
       }
-      game.fx.muzzle(muzzle.x, muzzle.y, muzzle.z, def.quiet ? 0.35 : def.projectile === 'eraser' ? 1.8 : def.pellets ? 1.5 : 1);
-      this.muzzleFx(def, muzzle, _md.copy(this.aimPoint).sub(muzzle).normalize());
+      // (its own fire and cases, if it has them - game/armfx.js; and it kicks in the hands either way)
+      if (!this.armfx.fired(slot, muzzle, _md.copy(this.aimPoint).sub(muzzle).normalize())) {
+        game.fx.muzzle(muzzle.x, muzzle.y, muzzle.z, def.quiet ? 0.35 : def.projectile === 'eraser' ? 1.8 : def.pellets ? 1.5 : 1);
+        this.muzzleFx(def, muzzle, _md);
+      }
     }
     slot.ammo--;
     if (game.arsenal) game.arsenal.fired(slot);
@@ -589,7 +604,7 @@ export class Weapons {
     // (a silencer on it: a soft click, and nobody further off hears it - no panic, no police)
     if (def.quiet) game.audio.play('staple', 0.4);
     else game.audio.play(def.sound || (def.projectile === 'paint' ? 'paint' : def.projectile === 'pencil' ? 'pencilShot' : 'bazooka'));
-    game.camRig.addShake((def.kick || (def.projectile === 'eraser' ? 0.35 : 0.04)) * (game.skills ? game.skills.kickMul : 1));
+    game.camRig.addShake((def.kick || (def.projectile === 'eraser' ? 0.35 : 0.04)) * (game.skills ? game.skills.kickMul : 1) * this.armfx.kickK(slot));
     const at = player.inVehicle ? player.inVehicle.pos : player.pos;
     if (def.quiet) game.enemies.noise(at, 5);
     else {
@@ -630,6 +645,10 @@ export class Weapons {
       case 'rubber':
         fx.spray(m.x, m.y, m.z, d.x, d.y + 0.2, d.z, 2, 4, PINK, { cone: 0.5, bits: true, len: 0.04, life: 0.5 });
         break;
+      case 'slug':
+        // (on a ride's mount: a tongue of fire out of it)
+        fx.spray(m.x, m.y, m.z, d.x, d.y, d.z, 4, 34, [2.6, 1.7, 0.6], { cone: 0.07, wide: 3.6, len: 0.75, life: 0.055, grav: false });
+        break;
       case 'staple':
         fx.sparks(m.x, m.y, m.z, 1, STEEL);
         break;
@@ -664,6 +683,7 @@ export class Weapons {
       fx.spray(x, y, z, -ux, -uy + 0.4, -uz, 3, 3, WOOD, { cone: 0.8, bits: true, len: 0.05, life: 0.7 });
     } else if (kind === 'rubber') fx.spray(x, y, z, -ux, -uy + 0.4, -uz, 6, 3.5, PINK, { cone: 0.8, bits: true, len: 0.04, life: 0.6 });
     else if (kind === 'glue') fx.spray(x, y, z, -ux, -uy + 0.2, -uz, 4, 2.5, GLUE, { cone: 0.6, wide: 3, len: 0.14 });
+    else if (kind === 'slug') slugBody(this.game, null, hit, ux, uy, uz);
   }
 
   // (ROADMAP 11.43) the heavy ones go off big: a light brighter than the page, a ring of ink racing
@@ -1077,7 +1097,14 @@ export class Weapons {
         m.setPosition(h.x + f.x * (0.22 + bash) - fig.right.x * 0.12, h.y + 0.18, h.z + f.z * (0.22 + bash) - fig.right.z * 0.12);
       }
     } else {
-      const dir = fig.aim ? _v.copy(this.aimPoint).sub(j.handR).normalize() : _v.copy(fig.forward).multiplyScalar(0.6).add(_w.set(0, -0.8, 0)).normalize();
+      const dir = fig.aim ? _v.copy(this.aimPoint).sub(j.handR) : _v.copy(fig.forward).multiplyScalar(0.6).add(_w.set(0, -0.8, 0));
+      if (fig.aim && !this.shootOut) {
+        // (somebody right in front of him, nearer than his own muzzle: the gun stays along his eye's line - it does not
+        // swing round across his chest at them)
+        const dl = dir.length();
+        if (dl < 2.6) dir.normalize().lerp(this.game.camRig.fwd, 1 - clamp((dl - 1.1) / 1.5, 0, 1));
+      }
+      dir.normalize();
       m = p.holdMatrix(dir);
       if (def.spin && slot.model.barrel) {
         // the ring of pencils spins up
@@ -1096,6 +1123,8 @@ export class Weapons {
         m.multiply(_sm.makeScale(...Array(3).fill(Math.max(0.05, 1 + 2.70158 * k * k * k + 1.70158 * k * k))));
       } else slot.popAt = undefined;
     }
+    // (ROADMAP 28.19: it kicks back at a shot; its legs, belt, cover and the heat of its barrel - game/armfx.js)
+    this.armfx.pose(slot, m);
     slot.model.group.matrix.copy(m);
     slot.model.group.matrixWorldNeedsUpdate = true;
     slot.model.group.updateMatrixWorld(true);
@@ -1476,6 +1505,8 @@ export class Weapons {
       fr.lineXYZ(pr.x - ux * 0.08, pr.y - uy * 0.08, pr.z - uz * 0.08, pr.x - ux * L, pr.y - uy * L, pr.z - uz * L, [0.86, 0.72, 0.3], 5, pr.seed + 1, 1, 0.01, 0);
       fr.lineXYZ(pr.x - ux * L, pr.y - uy * L, pr.z - uz * L, pr.x - ux * (L + 0.1), pr.y - uy * (L + 0.1), pr.z - uz * (L + 0.1), BLACK_INK, 3, pr.seed + 2, 1, 0.01, 0);
       fr.lineXYZ(pr.x - ux * 0.7, pr.y - uy * 0.7, pr.z - uz * 0.7, pr.x - ux * 1.6, pr.y - uy * 1.6, pr.z - uz * 1.6, BLACK_INK, 1, pr.seed + 3, 0.35, 0.02, 0);
+    } else if (pr.kind === 'slug') {
+      drawSlug(fr, pr, ux, uy, uz);
     } else if (pr.kind === 'crayon') {
       // a stub of wax crayon, its paper sleeve and a coloured streak behind it
       const c = pr.color;
@@ -1670,6 +1701,7 @@ export class Weapons {
         game.traffic.shotAt(c, pr.owner);
       }
       fx.sparks(hit.x, hit.y, hit.z, 4, STEEL);
+      if (kind === 'slug') slugCar(game, pr, hit);
       fx.impact(hit.x, hit.y, hit.z, 0.45);
       if (Math.hypot(hit.x - game.camera.position.x, hit.z - game.camera.position.z) < 45) game.audio.play('clang', 0.35);
       return;
@@ -1722,6 +1754,10 @@ export class Weapons {
     } else if (kind === 'glue') {
       fx.splatAt(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz, 0.55 + Math.random() * 0.2, GLUE);
       game.audio.play('splat', 0.4);
+    } else if (kind === 'slug') {
+      // a heavy slug: it bites a hole out of what it hits, graphite and paper dust fly back (game/armfx.js)
+      game.eraseWorld(hit.x, hit.y, hit.z, 0.3, pr.damage * 0.9, hit.box, hit);
+      slugWall(game, pr, hit, nx, ny, nz);
     } else if (kind === 'pencil' || kind === 'shaving') {
       // eraser first: a little blank patch where it lands
       game.eraseWorld(hit.x, hit.y, hit.z, kind === 'shaving' ? 0.16 : 0.28, pr.damage * 0.6, hit.box, hit);
