@@ -20,7 +20,7 @@ const AX = {
 // (what each colour of it is made of)
 const MAT_OF = { metal: 'metal', dark: 'metal', iron: 'metal', paint: 'paint', body: 'paint', furn: 'paint', trim: 'paint', accent: 'paint', fabA: 'paint', fabB: 'paint', fA: 'matte', fB: 'matte', wood: 'matte', wicker: 'matte', rim: 'matte', rope: 'matte',
   // (ROADMAP 11.28: the things of game/gearlook.js - a shape may say what any of its colours is made of)
-  chrome: 'metal', steel: 'metal', copper: 'metal', rubber: 'matte', canvas: 'matte', glass: 'glass', glow: 'glow', flame: 'glow', light: 'glow' };
+  chrome: 'metal', steel: 'metal', copper: 'metal', brass: 'metal', slot: 'matte', rubber: 'matte', canvas: 'matte', glass: 'glass', glow: 'glow', flame: 'glow', light: 'glow' };
 const _Y = new THREE.Vector3(0, 1, 0);
 const _Z = new THREE.Vector3(0, 0, 1);
 // (ROADMAP 28.24) the finer primitives as the plainer ones they stand where: what is seen of them on a plane

@@ -810,12 +810,60 @@ function mgDesign(lines, ctx, o) {
     S.box(s0 + 0.04, s0 + 0.07, hr + 0.02, hr + 0.06, 0.014, 'dark', 'gun', { noSil: true });
     S.box(s1 - 0.07, s1 - 0.04, hr + 0.02, hr + 0.06, 0.014, 'dark', 'gun', { noSil: true });
   }
+  // (ROADMAP 28.24) what such a gun has on it besides, none of it changing its outline: the cover's hinge and latch,
+  // bolts in the receiver's sides, the port the cases leave by, the cocking handle; a gas tube under the barrel and
+  // its block, a slotted flash hider, a carrying handle; the belt up out of its box, the box's lid; the frame of the
+  // spade grips and the trigger between them; the cradle's cheeks and the pin it swings on; the mount's collar and
+  // the bolts that hold it down
+  const E = S.prims;
+  const Lt = (z0, z1, b, prof, k, g = 'gun', x = 0, n = 12) => E.push({ t: 'lat', p0: r3(X(z0, b, x)), p1: r3(X(z1, b, x)), prof: prof.map(r2), k, g, n, noSil: true });
+  const Bx = (z0, z1, b0, b1, x0, x1, k, g = 'gun', e = 0.006) => E.push({ t: 'rbox', p0: r3(X(z0, b0, x0)), p1: r3(X(z1, b1, x1)), e, k, g, noSil: true });
+  const Cy = (p, q, r, k, g = 'gun', n = 6, r1 = r) => E.push({ t: 'cyl', p0: r3(p), p1: r3(q), r0: r, r1, k, g, n, noSil: true });
+  Cy(X(aB - 0.03, hr + 0.011, -wr * 0.38), X(aB - 0.03, hr + 0.011, wr * 0.38), 0.009, 'dark');
+  Bx(a0 + 0.04, a0 + 0.075, hr + 0.02, hr + 0.034, -0.014, 0.014, 'metal');
+  for (const sx of [1, -1]) {
+    for (const za of [a0 + 0.06, aB - 0.05]) for (const bb of [hr * 0.25, hr * 0.75]) Cy(X(za, bb, sx * (wr / 2 - 0.002)), X(za, bb, sx * (wr / 2 + 0.008)), 0.009, 'dark');
+    Bx(aP - 0.05, aP + 0.05, -0.035, hr * 0.44, sx * (wr / 2 + 0.002), sx * (wr / 2 + 0.014), 'dark');
+  }
+  Cy(X(aP, hr * 0.3, -wr / 2 - 0.022), X(aP, hr * 0.3, wr / 2 + 0.022), 0.014, 'metal', 'gun', 8);
+  Bx(aP + 0.08, aP + 0.17, hr * 0.42, hr * 0.7, -wr / 2 - 0.004, -wr / 2 + 0.004, 'slot');
+  Cy(X(a0 + 0.1, hr * 0.84, -wr / 2), X(a0 + 0.1, hr * 0.84, -wr / 2 - 0.04), 0.008, 'metal');
+  E.push({ t: 'sph', c: r3(X(a0 + 0.1, hr * 0.84, -wr / 2 - 0.045)), r: 0.015, k: 'furn', g: 'gun', noSil: true });
+  if (!multi) {
+    for (const bx of twin ? [-rb * 1.6, rb * 1.6] : [0]) {
+      const zg = aB + (aM - aB) * 0.6;
+      Cy(X(aB, ya - rb * 1.75, bx), X(zg, ya - rb * 1.75, bx), rb * 0.45, 'dark');
+      Lt(zg - 0.02, zg + 0.035, ya - rb * 0.6, [[0, 0], [0, rb * 1.7], [1, rb * 1.7], [1, 0]], 'dark', 'gun', bx, 8);
+      Lt(aM - 0.09, aM + 0.004, ya, [[0, 0], [0, rb * 1.2], [0.2, rb * 1.62], [0.82, rb * 1.78], [1, rb * 1.6], [1, rb * 0.75], [0.3, rb * 0.75]], 'dark', 'gun', bx);
+      E.push({ t: 'ring', c: r3(X(aM - 0.04, ya, bx)), R: rb * 1.72, ax: 'z', n: 5, a0: 0.3, k: 'slot', g: 'gun', noSil: true, w: rb * 0.55, d: 0.008, h: 0.045 });
+    }
+    E.push({ t: 'pipe', pts: [X(aB + 0.02, hr, 0), X(aB + 0.04, hr + 0.07, 0.03), X(aB + 0.16, hr + 0.07, 0.03), X(aB + 0.18, ya + rb * 2, 0)].map(r3), r: 0.009, k: 'dark', g: 'gun', n: 5, noSil: true });
+  }
+  if (!t.stock) {
+    for (const sx of [1, -1]) for (const bb of [hr * 0.14, hr * 0.9]) Cy(X(0.016, bb, sx * wr * 0.32), X(a0 + 0.01, bb, sx * wr * 0.32), 0.008, 'dark');
+    Bx(0.02, 0.045, hr * 0.42, hr * 0.62, -wr * 0.16, wr * 0.16, 'metal');
+  }
+  if (!t.drum && !t.mag) {
+    const xb = wr / 2 + 0.055;
+    Bx(aMag - 0.095, aMag + 0.095, hr * 0.7 - 0.014, hr * 0.7 + 0.006, xb - 0.055, xb + 0.055, 'dark');
+    Bx(aMag - 0.015, aMag + 0.015, hr * 0.7 - 0.06, hr * 0.7 - 0.01, xb + 0.05, xb + 0.058, 'metal');
+    for (let i = 0; i < 7; i++) {
+      const u = i / 6;
+      const xr = xb * (1 - u) + (wr * 0.2) * u;
+      const br = hr * 0.72 + hr * 0.36 * Math.sin((u * Math.PI) / 2) + (i === 6 ? 0.0 : 0.012);
+      Cy(X(aMag - 0.04, br, xr), X(aMag + 0.04, br, xr), 0.009, 'brass', 'gun', 6, 0.006);
+    }
+  }
+  E.push({ t: 'lat', p0: r3(X(aP, -postH + 0.012, 0)), p1: r3(X(aP, -postH + 0.07, 0)), prof: [[0, 0], [0, 0.058], [0.4, 0.052], [1, 0.034], [1, 0]], k: 'dark', g: 'base', n: 10, noSil: true });
+  E.push({ t: 'ring', c: r3(X(aP, -postH + 0.016, 0)), R: 0.09, ax: 'y', n: 6, a0: 0.5, k: 'metal', g: 'base', noSil: true, r: 0.012, h: 0.014 });
   const hc = hueOf(o.ink);
   const pal = {
     metal: METAL,
     dark: DARK,
     paint: hc ? mix(METAL, hc, 0.62) : [0.26, 0.28, 0.25],
     furn: hc ? mix(hc, [1, 1, 1], 0.12) : TAN,
+    brass: [0.82, 0.62, 0.24],
+    slot: [0.04, 0.04, 0.05],
   };
   // (the drawing over it: as long as it, its barrel's line on the barrel)
   const over = G.N.map((L) => L.map(([a, b]) => [a * len, b * len + (ya - t.mid * len)]));

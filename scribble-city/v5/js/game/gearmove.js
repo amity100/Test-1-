@@ -45,8 +45,23 @@ export const MOVE = {
         if (!s.flameOn) {
           g.audio.play('whoosh', 0.55);
           G.stats.boosts++;
+          // (ROADMAP 28.24: it lights - a flash and a ring at each pipe, sparks out of it)
+          for (const sx of lv >= 3 ? [0] : [-1, 1]) {
+            const e = lv >= 3 ? onCar(v, 0, 1.7, -2.5) : onCar(v, sx * 0.5, 0.36, -2.25);
+            g.fx.flash(e.x, e.y, e.z, lv >= 3 ? 1.5 : 0.8, lv >= 3 ? [2, 1.2, 0.5] : [0.9, 1.4, 2.2]);
+            g.fx.ring(e.x, e.y, e.z, 0.1, lv >= 3 ? 1.3 : 0.7, 0.22, lv >= 3 ? [1, 0.6, 0.2] : [0.6, 0.85, 1], 3);
+            g.fx.sparks(e.x, e.y, e.z, 5, lv >= 3 ? [1.8, 1, 0.3] : [0.7, 1.2, 2]);
+          }
         }
         s.burn = (s.burn || 0) + dt;
+        // (and as it burns: a spit of sparks now and then, smoke off a jet)
+        s.popT = (s.popT || 0) - dt;
+        if (s.popT <= 0) {
+          s.popT = 0.16 + Math.random() * 0.22;
+          const e = lv >= 3 ? onCar(v, 0, 1.7, -2.6) : onCar(v, (Math.random() < 0.5 ? -1 : 1) * 0.5, 0.36, -2.3);
+          g.fx.sparks(e.x, e.y, e.z, 2, lv >= 3 ? [1.8, 1, 0.3] : [0.7, 1.2, 2]);
+          if (lv >= 3) g.fx.smoke(e.x, e.y + 0.1, e.z, 0.9);
+        }
       } else {
         s.n = Math.min(N.cap, s.n + dt * N.fill);
         s.burn = 0;

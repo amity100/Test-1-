@@ -15,6 +15,43 @@ const BRIDGE_L = [10, 18, 30];
 const _a = { x: 0, y: 0, z: 0 };
 const _b = { x: 0, y: 0, z: 0 };
 
+// (ROADMAP 28.24) what heavy running gear does to the ground it is on: dirt thrown out behind it as it bites (o.rate:
+// how often at a walk; o.need: only as it speeds up or slides), and - down out of the air - a ring of dust, dirt
+// from under each corner, a thud. s: the part's own state
+function groundFx(G, v, s, dt, o) {
+  const g = G.game;
+  const sp = Math.abs(v.speed || 0);
+  const acc = (sp - (s.sp0 === undefined ? sp : s.sp0)) / Math.max(dt, 1e-3);
+  s.sp0 = sp;
+  s.dirtT = (s.dirtT || 0) - dt;
+  const slide = Math.abs(v.turn || 0) > 0.5 && sp > 8;
+  if (!v.air && s.dirtT <= 0 && sp > o.from && (!o.need || acc > 4 || slide)) {
+    s.dirtT = Math.max(0.05, o.rate - sp * 0.01);
+    const sg = Math.sign(v.speed || 1);
+    for (const sx of [-1, 1]) {
+      onCar(v, sx * o.x, 0.14, -sg * o.z, _b);
+      g.fx.crumbs(_b.x, _b.y, _b.z, 2, 1.6 + sp * 0.14, true);
+    }
+    if (Math.random() < 0.25) {
+      onCar(v, 0, 0.3, -sg * (o.z + 0.5), _b);
+      g.fx.smoke(_b.x, _b.y, _b.z, 0.7);
+    }
+  }
+  if (s.wasAir && !v.air && (s.airT || 0) > 0.3) {
+    g.fx.ring(v.pos.x, (v.pos.y || 0) + 0.12, v.pos.z, 0.8, o.ring, 0.42, [0.72, 0.68, 0.6], 5);
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        onCar(v, sx * o.x, 0.2, sz * o.z * 0.8, _b);
+        g.fx.crumbs(_b.x, _b.y, _b.z, 5, 4, true);
+      }
+    }
+    g.audio.play('crash', 0.3 + o.thud * 0.25);
+    if (v.driver === g.player) g.camRig.addShake(o.thud);
+  }
+  s.airT = v.air ? (s.airT || 0) + dt : 0;
+  s.wasAir = !!v.air;
+}
+
 // the floor ahead of a car (what it would stand on there - a roof, the bridge's deck, the ground)
 function floorAhead(G, x, z, y) {
   const g = G.game;
@@ -173,6 +210,9 @@ export const MOVE2 = {
       fz.step = Math.max(fz.step || 0, [1.0, 1.25, 1.4][lv - 1]);
       fz.roofs = true;
     },
+    update(G, v, p, dt, s) {
+      groundFx(G, v, s, dt, { x: 1.05, z: 1.5, from: 3, rate: 0.09, need: true, ring: 3.4, thud: 0.28 });
+    },
     animate(G, v, o, dt) {
       const r0 = 0.34;
       const R = (o.p.n && o.p.n.r) || 0.8;
@@ -201,6 +241,17 @@ export const MOVE2 = {
         H.mass = (H.mass || 1) * 1.6;
         v.ram = { k: 2.2, shield: true };
         v.crush = true;
+      }
+    },
+    update(G, v, p, dt, s) {
+      groundFx(G, v, s, dt, { x: 1.0, z: 1.95, from: 1.5, rate: 0.2, need: false, ring: 3.0, thud: 0.34 });
+      // (turned on the spot, its links bite the road: sparks from under them)
+      const g = G.game;
+      s.biteT = (s.biteT || 0) - dt;
+      if (!v.air && s.biteT <= 0 && Math.abs(v.turn || 0) > 0.6 && Math.abs(v.speed || 0) < 7 && v.driver) {
+        s.biteT = 0.1;
+        onCar(v, (Math.random() < 0.5 ? -1 : 1) * 1.0, 0.08, (Math.random() - 0.5) * 3.2, _b);
+        g.fx.sparks(_b.x, _b.y, _b.z, 3, [1.6, 1.1, 0.4]);
       }
     },
     animate(G, v, o, dt) {
