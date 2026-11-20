@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Kit, itemMats, linC } from './items.js';
 import { inflateShape } from './inflate.js';
 import { clamp } from '../core/util.js';
+import { lathe, pipe, cbox, plate } from './armkit.js';
 
 // (ROADMAP 11.27) A thing designed from its drawing (game/itemdesign.js), made: its primitives in the
 // car's frame round its pivot - boxes, cylinders and cones, balls, rings, flat pieces moulded from their
@@ -21,6 +22,10 @@ const MAT_OF = { metal: 'metal', dark: 'metal', iron: 'metal', paint: 'paint', b
   // (ROADMAP 11.28: the things of game/gearlook.js - a shape may say what any of its colours is made of)
   chrome: 'metal', steel: 'metal', copper: 'metal', rubber: 'matte', canvas: 'matte', glass: 'glass', glow: 'glow', flame: 'glow', light: 'glow' };
 const _Y = new THREE.Vector3(0, 1, 0);
+const _Z = new THREE.Vector3(0, 0, 1);
+// (ROADMAP 28.24) the finer primitives as the plainer ones they stand where: what is seen of them on a plane
+// (game/gearlook.js silOf), how deep they are under a line of ink (depthAt)
+export const plainPrim = (q) => (q.t === 'rbox' ? { ...q, t: 'box' } : q.t === 'lat' ? { ...q, t: 'cyl', r0: Math.max(...q.prof.map((p) => p[1])), r1: Math.max(...q.prof.map((p) => p[1])) } : q.t === 'ext' || q.t === 'band' ? { ...q, t: 'slab' } : q);
 
 // a geometry mirrored across x, its faces still facing out
 function flipX(g) {
@@ -113,6 +118,59 @@ function addPrim(Kt, q, o, mat, col, matOf, colOf) {
       Kt.add(mat, B.geo, col);
       break;
     }
+    // (ROADMAP 28.24) the finer ones: what a thing is made of when it is made as such things are - a part turned on a
+    // lathe to a profile, a pipe bent through its points, a block with its edges broken, a plate cut to an outline
+    // with a bevel, a ring of bolts or teeth, a belt round an outline with bars across it (a tank's track)
+    case 'lat': {
+      const a = new THREE.Vector3(q.p0[0] - o[0], q.p0[1] - o[1], q.p0[2] - o[2]);
+      const b = new THREE.Vector3(q.p1[0] - o[0], q.p1[1] - o[1], q.p1[2] - o[2]);
+      const d = b.clone().sub(a);
+      const len = d.length();
+      if (len < 1e-5) break;
+      const g = lathe(q.prof.map(([t, r]) => [t * len, r]), { segs: q.n || 14 });
+      g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(_Z, d.normalize()));
+      g.translate(a.x, a.y, a.z);
+      Kt.add(mat, g, col);
+      break;
+    }
+    case 'pipe':
+      if (q.pts.length >= 2) Kt.add(mat, pipe(q.pts.map((p) => [p[0] - o[0], p[1] - o[1], p[2] - o[2]]), q.r, { segs: q.n || 6, steps: q.steps || q.pts.length * 4, closed: !!q.closed, tension: q.tension }), col);
+      break;
+    case 'rbox':
+      Kt.add(mat, cbox(q.p0[0] - o[0], q.p0[1] - o[1], q.p0[2] - o[2], q.p1[0] - o[0], q.p1[1] - o[1], q.p1[2] - o[2], q.e || 0.012), col);
+      break;
+    case 'ext': {
+      const g = plate(q.ol, -q.W / 2, q.W / 2, { bevel: q.e === undefined ? 0.008 : q.e });
+      if (q.ax === 'y') g.rotateZ(Math.PI / 2);
+      else if (q.ax === 'z') g.rotateY(-Math.PI / 2);
+      const { n } = AX[q.ax];
+      g.translate(n[0] * q.c - o[0], n[1] * q.c - o[1], n[2] * q.c - o[2]);
+      Kt.add(mat, g, col);
+      break;
+    }
+    case 'ring': {
+      for (let i = 0; i < q.n; i++) {
+        const a = (q.a0 || 0) + (i / q.n) * Math.PI * 2;
+        // (made on y, its place out along x; then round, then onto its own axis)
+        const g = q.w ? new THREE.BoxGeometry(q.d, q.h, q.w) : new THREE.CylinderGeometry(q.r, q.r1 === undefined ? q.r : q.r1, q.h, q.sides || 6);
+        g.translate(q.R, 0, 0);
+        g.rotateY(a);
+        if (q.ax === 'x') g.rotateZ(-Math.PI / 2);
+        else if (q.ax === 'z') g.rotateX(Math.PI / 2);
+        g.translate(q.c[0] - o[0], q.c[1] - o[1], q.c[2] - o[2]);
+        Kt.add(mat, g, col);
+      }
+      break;
+    }
+    case 'band': {
+      const g = beltGeo(q, o);
+      if (g) Kt.add(mat, g, col);
+      if (q.links) {
+        const bars = barsOf(q, o);
+        for (const b of bars) Kt.add(matOf(q.kb || q.k), b, colOf(q.kb || q.k));
+      }
+      break;
+    }
     case 'lathe': {
       // (a balloon's envelope: gore by gore round its axis, two colours - in bands across it if so)
       const top = q.prof[q.prof.length - 1][1];
@@ -132,6 +190,109 @@ function addPrim(Kt, q, o, mat, col, matOf, colOf) {
     default:
       break;
   }
+}
+
+// (ROADMAP 28.24) a belt round a closed outline on the plane square to q.ax at q.c: q.W wide across the plane, q.th
+// thick inwards from the outline - its outside, its inside and its two edges
+function beltFrame(q, o) {
+  const A = AX[q.ax];
+  let P = q.ol.map((p) => [p[0], p[1]]);
+  let area = 0;
+  for (let i = 0; i < P.length; i++) {
+    const a = P[i];
+    const b = P[(i + 1) % P.length];
+    area += a[0] * b[1] - b[0] * a[1];
+  }
+  if (area < 0) P = P.reverse();
+  const n = P.length;
+  // (each point's way out: between its two edges' own)
+  const out = P.map((p, i) => {
+    const a = P[(i + n - 1) % n];
+    const b = P[(i + 1) % n];
+    const e0 = [p[0] - a[0], p[1] - a[1]];
+    const e1 = [b[0] - p[0], b[1] - p[1]];
+    const l0 = Math.hypot(e0[0], e0[1]) || 1;
+    const l1 = Math.hypot(e1[0], e1[1]) || 1;
+    const x = e0[1] / l0 + e1[1] / l1;
+    const y = -e0[0] / l0 - e1[0] / l1;
+    const l = Math.hypot(x, y) || 1;
+    return [x / l, y / l];
+  });
+  const X = (u, w, d) => new THREE.Vector3(A.n[0] * (q.c + d) + A.e1[0] * u + A.e2[0] * w - o[0], A.n[1] * (q.c + d) + A.e1[1] * u + A.e2[1] * w - o[1], A.n[2] * (q.c + d) + A.e1[2] * u + A.e2[2] * w - o[2]);
+  const V = (u, w) => new THREE.Vector3(A.e1[0] * u + A.e2[0] * w, A.e1[1] * u + A.e2[1] * w, A.e1[2] * u + A.e2[2] * w);
+  return { A, P, n, out, X, V };
+}
+function beltGeo(q, o) {
+  const { A, P, n, out, X, V } = beltFrame(q, o);
+  if (n < 3) return null;
+  const pos = [];
+  const N = new THREE.Vector3();
+  const ab = new THREE.Vector3();
+  const ac = new THREE.Vector3();
+  // (a four-sided face, facing the way it is told to)
+  const quad = (a, b, c, d, want) => {
+    N.crossVectors(ab.subVectors(b, a), ac.subVectors(c, a));
+    const L = N.dot(want) >= 0 ? [a, b, c, a, c, d] : [a, c, b, a, d, c];
+    for (const v of L) pos.push(v.x, v.y, v.z);
+  };
+  const hw = q.W / 2;
+  const th = q.th || 0.03;
+  const side = new THREE.Vector3(A.n[0], A.n[1], A.n[2]);
+  const back = side.clone().negate();
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const a = P[i];
+    const b = P[j];
+    const ai = [a[0] - out[i][0] * th, a[1] - out[i][1] * th];
+    const bi = [b[0] - out[j][0] * th, b[1] - out[j][1] * th];
+    const el = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    const fo = V((b[1] - a[1]) / el, -(b[0] - a[0]) / el);
+    quad(X(a[0], a[1], -hw), X(b[0], b[1], -hw), X(b[0], b[1], hw), X(a[0], a[1], hw), fo);
+    quad(X(ai[0], ai[1], -hw), X(bi[0], bi[1], -hw), X(bi[0], bi[1], hw), X(ai[0], ai[1], hw), fo.clone().negate());
+    quad(X(a[0], a[1], hw), X(b[0], b[1], hw), X(bi[0], bi[1], hw), X(ai[0], ai[1], hw), side);
+    quad(X(a[0], a[1], -hw), X(b[0], b[1], -hw), X(bi[0], bi[1], -hw), X(ai[0], ai[1], -hw), back);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((pos.length / 3) * 2), 2));
+  return g;
+}
+// (the bars across its outside: q.links of them evenly round it, each q.gw long, q.gh high, as wide as the belt and
+// a little over)
+function barsOf(q, o) {
+  const { A, P, n, X, V } = beltFrame(q, o);
+  const out = [];
+  if (n < 3) return out;
+  const len = [];
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    const a = P[i];
+    const b = P[(i + 1) % n];
+    len.push(Math.hypot(b[0] - a[0], b[1] - a[1]));
+    total += len[i];
+  }
+  const gh = q.gh || 0.03;
+  const side = new THREE.Vector3(A.n[0], A.n[1], A.n[2]);
+  let i = 0;
+  let acc = 0;
+  for (let k = 0; k < q.links; k++) {
+    const s = ((k + 0.5) / q.links) * total;
+    while (i < n - 1 && acc + len[i] < s) acc += len[i++];
+    const a = P[i];
+    const b = P[(i + 1) % n];
+    const t = (s - acc) / (len[i] || 1);
+    const tu = (b[0] - a[0]) / (len[i] || 1);
+    const tw = (b[1] - a[1]) / (len[i] || 1);
+    const up = V(tw, -tu);
+    const along = new THREE.Vector3().crossVectors(side, up);
+    const g = new THREE.BoxGeometry(q.W * (q.over || 1.04), gh, q.gw || 0.05);
+    g.applyMatrix4(new THREE.Matrix4().makeBasis(side, up, along));
+    const c = X(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 0).addScaledVector(up, gh * 0.4);
+    g.translate(c.x, c.y, c.z);
+    out.push(g);
+  }
+  return out;
 }
 
 // (bands across a balloon: [[y0, y1] of its height, 0..1]) its stretches up it and their colour: the
@@ -155,7 +316,8 @@ function depthAt(sh, u, w, sgn) {
   const ni = n.indexOf(1);
   const others = [0, 1, 2].filter((k) => k !== ni);
   let best = 0;
-  for (const q of sh.prims) {
+  for (const q0 of sh.prims) {
+    const q = plainPrim(q0);
     let lo = null;
     let hi = null;
     if (q.t === 'box') {

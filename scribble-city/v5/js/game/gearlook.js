@@ -2,6 +2,7 @@ import { boxOf, thin, tidy, outlineOf, rect, circ, bar, mix, hueOf, lum, lerp, r
 import { carNums } from './itemlook.js';
 import { AX } from './fusedraw.js';
 import { clamp } from '../core/util.js';
+import { plainPrim } from './designbuild.js';
 
 // (ROADMAP 11.28) The things of the pen (game/itemcat.js) designed as such things are made - a helicopter's
 // rotor with its tail rotor, nitro bottles and their exhausts, coilovers at the wheels, a stopwatch on the
@@ -72,8 +73,9 @@ function polyDist(P, [x, y]) {
 // each primitive as it is seen on the plane (ax): polygons in its (u, w)
 export function silOf(prims, ax) {
   const out = [];
-  for (const q of prims) {
-    if (q.noSil) continue;
+  for (const q0 of prims) {
+    if (q0.noSil) continue;
+    const q = plainPrim(q0);
     if (q.t === 'box') {
       const P = [];
       for (const x of [q.p0[0], q.p1[0]]) for (const y of [q.p0[1], q.p1[1]]) for (const z of [q.p0[2], q.p1[2]]) P.push(uvOf([x, y, z], ax));
@@ -245,6 +247,38 @@ const cyl = (p0, p1, r0, r1, k, g = 'gun', o = {}) => ({ t: 'cyl', p0: r3(p0), p
 const box = (p0, p1, k, g = 'gun', o = {}) => ({ t: 'box', p0: r3(p0), p1: r3(p1), k, g, ...(o.noSil ? { noSil: true } : {}), ...(o.hide ? { hide: true } : {}) });
 const sph = (c, r, k, g = 'gun', o = {}) => ({ t: 'sph', c: r3(c), r, k, g, ...(o.noSil ? { noSil: true } : {}), ...(o.hide ? { hide: true } : {}) });
 const tor = (c, R, r, ax, k, g = 'gun', o = {}) => ({ t: 'tor', c: r3(c), R, r, ax, k, g, ...(o.noSil ? { noSil: true } : {}), ...(o.hide ? { hide: true } : {}) });
+// (ROADMAP 28.24) the finer ones (game/designbuild.js addPrim): a part turned to a profile from p0 to p1 (prof: [[t, r],
+// ...], t 0..1 along it - out along its outside, back along a face or a bore); a pipe bent through its points; a block
+// with its edges broken; a plate cut to an outline (on the plane square to ax at c, W thick) with a bevel; n bolts
+// (r, h) or blocks (w round, d out, h along) in a ring R out round ax at c; a belt round an outline, W wide and th
+// thick, with bars across it
+const fl = (o) => ({ ...(o.noSil ? { noSil: true } : {}), ...(o.hide ? { hide: true } : {}) });
+const lat = (p0, p1, prof, k, g = 'gun', o = {}) => ({ t: 'lat', p0: r3(p0), p1: r3(p1), prof: prof.map(r2), k, g, n: o.n || 14, ...fl(o) });
+const tube = (pts, r, k, g = 'gun', o = {}) => ({ t: 'pipe', pts: pts.map(r3), r, k, g, n: o.n || 6, noSil: true, ...(o.closed ? { closed: true } : {}), ...(o.steps ? { steps: o.steps } : {}), ...(o.tension !== undefined ? { tension: o.tension } : {}) });
+const rbox = (p0, p1, k, g = 'gun', o = {}) => ({ t: 'rbox', p0: r3(p0), p1: r3(p1), e: o.e || 0.015, k, g, ...fl(o) });
+const ext = (ax, c, ol, W, k, g = 'gun', o = {}) => ({ t: 'ext', ax, c, ol: ol.map(r2), W, e: o.e === undefined ? 0.008 : o.e, k, g, ...fl(o) });
+const ringOf = (c, R, ax, n, k, g = 'gun', o = {}) => ({ t: 'ring', c: r3(c), R, ax, n, a0: o.a0 || 0, k, g, noSil: true, ...(o.w ? { w: o.w, d: o.d, h: o.h } : { r: o.r || 0.012, h: o.h || 0.02, ...(o.r1 !== undefined ? { r1: o.r1 } : {}), ...(o.sides ? { sides: o.sides } : {}) }) });
+const band = (ax, c, ol, W, th, k, g = 'gun', o = {}) => ({ t: 'band', ax, c, ol: ol.map(r2), W, th, k, g, ...(o.links ? { links: o.links, gw: o.gw || 0.05, gh: o.gh || 0.03, kb: o.kb || k } : {}), ...fl(o) });
+// (a coil spring round the line from a to b: n turns, R out)
+function coil(a, b, R, n, r, k, g = 'gun') {
+  const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const L = Math.hypot(...d) || 1;
+  const z = d.map((x) => x / L);
+  const h = Math.abs(z[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+  const x = [h[1] * z[2] - h[2] * z[1], h[2] * z[0] - h[0] * z[2], h[0] * z[1] - h[1] * z[0]];
+  const xl = Math.hypot(...x) || 1;
+  const X = x.map((v) => v / xl);
+  const Y = [z[1] * X[2] - z[2] * X[1], z[2] * X[0] - z[0] * X[2], z[0] * X[1] - z[1] * X[0]];
+  const pts = [];
+  const N = n * 8;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const an = t * n * Math.PI * 2;
+    pts.push([0, 1, 2].map((j) => a[j] + d[j] * t + (X[j] * Math.cos(an) + Y[j] * Math.sin(an)) * R));
+  }
+  return tube(pts, r, k, g, { steps: N, n: 5, tension: 0.5 });
+}
+
 // a rectangle turned by a (radians) round (cu, cw), from along 0 to along L out, w wide - a blade
 function blade(cu, cw, a, r0, r1, w0, w1) {
   const c = Math.cos(a);
@@ -367,23 +401,39 @@ function turboDesign(lines, ctx, o) {
     const rb = lv === 2 ? 0.115 : 0.1;
     const yb = trunkY + rb + 0.05;
     for (const x of [xb]) {
-      P.push(cyl([x, yb, zb0], [x, yb, zb1], rb, rb, 'nitro', 'gun', { n: 16 }));
-      P.push(sph([x, yb, zb1], rb * 0.98, 'nitro'));
-      P.push(sph([x, yb, zb0], rb * 0.98, 'nitro'));
-      P.push(cyl([x, yb, lerp(zb0, zb1, 0.42)], [x, yb, lerp(zb0, zb1, 0.58)], rb + 0.006, rb + 0.006, 'white', 'gun', { n: 16, noSil: true }));
+      // (ROADMAP 28.24) a nitrous bottle as one is made: a domed foot, its body, a shoulder up to the neck and its
+      // collar; a label round it with a stripe; the valve - its body, a hand wheel on its stem, a gauge; two cradles
+      // it lies in, a steel strap over it at each; a braided line off the valve, round the bottle and down the tail
+      P.push(lat([x, yb, zb0 - rb], [x, yb, zb1 + rb], [[0, 0], [0.02, rb * 0.62], [0.06, rb * 0.92], [0.11, rb], [0.82, rb], [0.89, rb * 0.82], [0.94, rb * 0.45], [0.96, rb * 0.32], [1, rb * 0.32], [1, 0]], 'nitro', 'gun', { n: 16 }));
+      P.push(cyl([x, yb, lerp(zb0, zb1, 0.36)], [x, yb, lerp(zb0, zb1, 0.62)], rb + 0.005, rb + 0.005, 'white', 'gun', { n: 16, noSil: true }));
+      P.push(cyl([x, yb, lerp(zb0, zb1, 0.44)], [x, yb, lerp(zb0, zb1, 0.48)], rb + 0.008, rb + 0.008, 'accent', 'gun', { n: 16, noSil: true }));
       P.push(cyl([x, yb, zb1 + rb * 0.7], [x, yb, zb1 + rb + 0.07], 0.03, 0.03, 'chrome', 'gun', { n: 8 }));
-      P.push(cyl([x, yb + 0.07, zb1 + rb + 0.05], [x, yb + 0.07, zb1 + rb + 0.09], 0.05, 0.05, 'dark', 'gun', { n: 10 }));
-      for (const z of [lerp(zb0, zb1, 0.18), lerp(zb0, zb1, 0.82)]) P.push(box([x - rb - 0.015, trunkY - 0.01, z - 0.025], [x + rb + 0.015, yb - rb * 0.3, z + 0.025], 'dark'));
+      P.push(rbox([x - 0.032, yb - 0.03, zb1 + rb + 0.03], [x + 0.032, yb + 0.04, zb1 + rb + 0.1], 'chrome', 'gun', { noSil: true, e: 0.008 }));
+      P.push(cyl([x, yb + 0.04, zb1 + rb + 0.065], [x, yb + 0.085, zb1 + rb + 0.065], 0.009, 0.009, 'chrome', 'gun', { n: 6, noSil: true }));
+      P.push(tor([x, yb + 0.088, zb1 + rb + 0.065], 0.036, 0.009, 'y', 'accent', 'gun', { noSil: true }));
+      P.push(lat([x + 0.03, yb + 0.005, zb1 + rb + 0.065], [x + 0.075, yb + 0.03, zb1 + rb + 0.065], [[0, 0.01], [0.4, 0.01], [0.4, 0.034], [1, 0.034], [1, 0.028]], 'dark', 'gun', { n: 10, noSil: true }));
+      P.push(lat([x + 0.03, yb + 0.005, zb1 + rb + 0.065], [x + 0.075, yb + 0.03, zb1 + rb + 0.065], [[0.92, 0.028], [0.92, 0]], 'white', 'gun', { n: 10, noSil: true }));
+      for (const z of [lerp(zb0, zb1, 0.14), lerp(zb0, zb1, 0.84)]) {
+        P.push(ext('z', z, [[-(x - rb - 0.03), trunkY - 0.01], [-(x + rb + 0.03), trunkY - 0.01], [-(x + rb + 0.03), yb - rb * 0.2], [-(x + rb * 0.75), yb - rb * 0.55], [-x, yb - rb * 0.98], [-(x - rb * 0.75), yb - rb * 0.55], [-(x - rb - 0.03), yb - rb * 0.2]], 0.045, 'dark', 'gun', { e: 0.005 }));
+        P.push(tor([x, yb, z], rb + 0.006, 0.007, 'z', 'chrome', 'gun', { noSil: true }));
+        for (const s of [-1, 1]) P.push(cyl([x + s * (rb + 0.018), yb - rb * 0.2, z], [x + s * (rb + 0.018), yb - rb * 0.2 + 0.02, z], 0.011, 0.009, 'chrome', 'gun', { n: 6, noSil: true }));
+      }
     }
     // the exhausts: big chrome tips out of the bumper
     const ye = Math.max(0.3, C.clear + 0.12);
     const xe = clamp(D.hw * 0.55, 0.35, 0.6);
     const ze0 = zt + 0.05;
     const ze1 = zt - 0.24;
-    P.push(cyl([xe, ye, ze0], [xe, ye, ze1], 0.075, 0.085, 'chrome', 'gun', { n: 16 }));
-    P.push(cyl([xe, ye, ze1 - 0.005], [xe, ye, ze1 - 0.01], 0.06, 0.06, 'dark', 'gun', { n: 16, noSil: true }));
-    // (the line from the bottle down to it)
-    P.push(cyl([xb, yb, zb1 + rb + 0.06], [xe * 0.9, ye + 0.12, zt + 0.02], 0.016, 0.016, 'rubber', 'gun', { n: 6, noSil: true }));
+    // (a tip as one is made: slashed wide at its mouth, a rolled lip, its bore dark and deep; a clamp where it joins
+    // the pipe, a hanger up to the car; the heat's blue at its mouth)
+    P.push(lat([xe, ye, ze0], [xe, ye, ze1], [[0, 0.066], [0.1, 0.07], [0.82, 0.086], [0.93, 0.097], [1, 0.092], [1, 0.074], [0.25, 0.062]], 'chrome', 'gun', { n: 16 }));
+    P.push(lat([xe, ye, ze0], [xe, ye, ze1], [[0.27, 0.062], [0.27, 0]], 'dark', 'gun', { n: 12, noSil: true }));
+    P.push(tor([xe, ye, lerp(ze0, ze1, 0.86)], 0.089, 0.006, 'z', 'blued', 'gun', { noSil: true }));
+    P.push(tor([xe, ye, lerp(ze0, ze1, 0.18)], 0.075, 0.009, 'z', 'dark', 'gun', { noSil: true }));
+    P.push(cyl([xe + 0.075, ye + 0.02, lerp(ze0, ze1, 0.18)], [xe + 0.105, ye + 0.02, lerp(ze0, ze1, 0.18)], 0.012, 0.01, 'dark', 'gun', { n: 6, noSil: true }));
+    P.push(rbox([xe - 0.012, ye + 0.07, ze0 - 0.02], [xe + 0.012, ye + 0.15, ze0 + 0.03], 'dark', 'gun', { noSil: true, e: 0.005 }));
+    // (the line from the bottle round and down to it)
+    P.push(tube([[xb + 0.03, yb + 0.02, zb1 + rb + 0.1], [xb + rb + 0.05, yb + 0.01, zb1 + rb * 0.6], [xb + rb + 0.05, yb - 0.03, lerp(zb0, zb1, 0.5)], [lerp(xb + rb, xe, 0.6), trunkY + 0.02, zb0 - rb * 0.5], [xe, trunkY - 0.02, zt + 0.07], [xe, ye + 0.12, zt + 0.02]], 0.013, 'braid', 'gun', { n: 5, steps: 26 }));
     // the flame - out only as it boosts (game/gear.js), and as it takes shape
     const fl = lv === 2 ? 1.25 : 1;
     P.push(cyl([xe, ye, ze1 - 0.02], [xe, ye, ze1 - 1.05 * fl], 0.1, 0.015, 'flameB', 'flame', { n: 12 }));
@@ -398,14 +448,24 @@ function turboDesign(lines, ctx, o) {
     const zf = 0.15;
     const zn = zt - 0.35;
     const R0 = 0.3;
-    P.push(box([-0.06, C.roof - 0.02, zf - 0.45], [0.06, y - R0 * 0.6, zn + 0.55], 'dark'));
-    P.push(tor([0, y, zf], R0, 0.045, 'z', 'chrome'));
-    P.push(cyl([0, y, zf], [0, y, zf - 0.25], R0, R0 * 1.02, 'jet', 'gun', { n: 22 }));
-    P.push(cyl([0, y, zf - 0.25], [0, y, zn + 0.35], R0 * 1.02, R0 * 0.86, 'jet', 'gun', { n: 22 }));
-    P.push(cyl([0, y, zn + 0.35], [0, y, zn], R0 * 0.86, R0 * 0.62, 'dark', 'gun', { n: 22 }));
-    P.push(cyl([0, y, zf - 0.02], [0, y, zf - 0.05], R0 * 0.9, R0 * 0.9, 'chrome', 'gun', { n: 22, noSil: true }));
-    P.push(sph([0, y, zf - 0.08], R0 * 0.32, 'chrome', 'gun', { noSil: true }));
-    for (const s of [1, -1]) P.push(box([s * 0.03 - 0.01, y - 0.02, zf - 0.6], [s * 0.03 + 0.01, y + R0 * 1.04, zf - 0.35], 'accent', 'gun', { noSil: true }));
+    // (ROADMAP 28.24) a jet engine as one is made: a swept pylon; an intake with a rolled lip, the fan in it and the
+    // spinner on the fan; a casing in sections, bolted round where they join; a nozzle that narrows, banded; a fuel
+    // line along it; a fin over it
+    const L = zf + 0.05 - zn;
+    const at = (t) => zf + 0.05 - t * L;
+    P.push(ext('x', 0, [[zf - 0.4, C.roof - 0.02], [zn + 0.5, C.roof - 0.02], [zn + 0.7, y - R0 * 0.6], [zf - 0.6, y - R0 * 0.6]], 0.12, 'dark', 'gun', { e: 0.02 }));
+    P.push(lat([0, y, zf + 0.05], [0, y, zn], [[0.06, R0 * 0.84], [0.0, R0 * 0.95], [0.02, R0 * 1.06], [0.09, R0 * 1.05], [0.3, R0 * 1.03], [0.6, R0 * 0.9], [0.6, R0 * 0.8]], 'jet', 'gun', { n: 22 }));
+    P.push(lat([0, y, zf + 0.05], [0, y, zn], [[0.6, R0 * 0.8], [0.6, R0 * 0.93], [0.66, R0 * 0.93], [0.69, R0 * 0.86], [1, R0 * 0.62], [1, R0 * 0.55], [0.75, R0 * 0.6]], 'nozzle', 'gun', { n: 22 }));
+    P.push(lat([0, y, zf + 0.05], [0, y, zn], [[0.07, 0], [0.07, R0 * 0.84]], 'dark', 'gun', { n: 16, noSil: true }));
+    P.push(lat([0, y, zf + 0.05], [0, y, zn], [[0.76, R0 * 0.6], [0.76, 0]], 'dark', 'gun', { n: 12, noSil: true }));
+    P.push(lat([0, y, zf + 0.09], [0, y, at(0.08)], [[0, 0], [0.5, R0 * 0.2], [1, R0 * 0.3]], 'chrome', 'gun', { n: 12, noSil: true }));
+    P.push(ringOf([0, y, at(0.06)], R0 * 0.56, 'z', 11, 'fan', 'gun', { w: R0 * 0.16, d: R0 * 0.52, h: 0.012 }));
+    P.push(tor([0, y, at(0.02)], R0 * 1.05, 0.016, 'z', 'chrome', 'gun', { noSil: true }));
+    P.push(ringOf([0, y, at(0.63)], R0 * 0.95, 'z', 14, 'bolt', 'gun', { r: 0.012, h: 0.03 }));
+    for (const t of [0.3, 0.45]) P.push(tor([0, y, at(t)], R0 * (1.035 - (t - 0.3) * 0.43), 0.008, 'z', 'chrome', 'gun', { noSil: true }));
+    for (const t of [0.8, 0.92]) P.push(tor([0, y, at(t)], R0 * (0.86 - (t - 0.69) * 0.77) + 0.004, 0.007, 'z', 'bolt', 'gun', { noSil: true }));
+    P.push(tube([[R0 * 0.8, y - R0 * 0.72, at(0.14)], [R0 * 0.82, y - R0 * 0.72, at(0.32)], [R0 * 0.74, y - R0 * 0.66, at(0.56)], [R0 * 0.66, y - R0 * 0.72, at(0.62)]], 0.012, 'chrome', 'gun', { n: 5 }));
+    P.push(ext('x', 0, [[at(0.2), y + R0 * 0.98], [at(0.5), y + R0 * 0.94], [at(0.56), y + R0 * 1.3], [at(0.42), y + R0 * 1.3]], 0.03, 'accent', 'gun', { noSil: true, e: 0.006 }));
     P.push(cyl([0, y, zn - 0.02], [0, y, zn - 1.6], R0 * 0.55, 0.03, 'flameB', 'flame', { n: 14 }));
     P.push(cyl([0, y, zn - 0.02], [0, y, zn - 0.9], R0 * 0.3, 0.02, 'flameW', 'flame', { n: 12, noSil: true }));
     pivot = [0, y, zn];
@@ -421,6 +481,11 @@ function turboDesign(lines, ctx, o) {
     rubber: RUBBER,
     jet: hc ? mix(hc, STEEL, 0.4) : STEEL,
     accent: HAZARD,
+    braid: [0.62, 0.64, 0.68],
+    blued: [0.3, 0.42, 0.78],
+    nozzle: [0.25, 0.25, 0.28],
+    fan: [0.5, 0.52, 0.56],
+    bolt: [0.32, 0.33, 0.36],
     flameB: lv === 3 ? HOTFLAME : BLUEFLAME,
     flameW: [1, 1, 0.96],
   };
@@ -430,7 +495,7 @@ function turboDesign(lines, ctx, o) {
     prims: P,
     pivot,
     pal,
-    mats: { flameB: 'glow', flameW: 'glow', nitro: 'paint' },
+    mats: { flameB: 'glow', flameW: 'glow', nitro: 'paint', braid: 'metal', blued: 'metal', nozzle: 'metal', fan: 'metal', bolt: 'metal', jet: 'metal' },
     groups,
     mirror: lv < 3,
     box: box0,
@@ -745,4 +810,4 @@ function domeDesign(lines, ctx, o) {
 export const DESIGNS1 = { rotor: rotorDesign, turbo: turboDesign, jump: jumpDesign, rewind: rewindDesign, tesla: teslaDesign, saws: sawsDesign, smoke: smokeDesign, dome: domeDesign };
 
 // (for the other sheets of designs - game/gearlook2.js, game/gearlook3.js)
-export { STEEL, CHROME, RUBBER, NITRO, BLUEFLAME, HOTFLAME, WHITE, HAZARD, RED, GREEN, BLADE, lum, PAL, featOf, slab, cyl, box, sph, tor, blade, beltY, armsOf, hueOf, mix, lerp, r2, r3, rect, circ, boxOf, carNums, clamp };
+export { hull, lat, tube, rbox, ext, ringOf, band, coil, STEEL, CHROME, RUBBER, NITRO, BLUEFLAME, HOTFLAME, WHITE, HAZARD, RED, GREEN, BLADE, lum, PAL, featOf, slab, cyl, box, sph, tor, blade, beltY, armsOf, hueOf, mix, lerp, r2, r3, rect, circ, boxOf, carNums, clamp };
