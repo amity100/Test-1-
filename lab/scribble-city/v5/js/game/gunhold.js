@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { clamp, damp } from '../core/util.js';
-import { GUN_GRIP } from '../render/heroshapes.js';
+import { GUN_GRIP, HERO_TORSO } from '../render/heroshapes.js';
 
 // (ROADMAP 28.25) A gun in the hero's hands as one is held, and aimed as the big shooters aim.
 //
@@ -8,7 +8,7 @@ import { GUN_GRIP } from '../render/heroshapes.js';
 // is, not stuck on his wrist; his left hand under its fore-end, cupped (fig.handF / handN / handGrip), or wrapped round
 // his right on a pistol. By its kind:
 //   long   a rifle, a shotgun: its butt in his right shoulder, the elbows down, his body turned a little off the line
-//   under  a heavy machine gun: its butt under his arm, fired from there
+//   heavy  a heavy machine gun: at his right hip, clear of him, fired from there; aimed in, in his shoulder as a rifle
 //   tube   a launcher: on his shoulder
 //   hip    a minigun: at his hip in both hands
 //   pistol one-handed things: in both hands out at his eye's line when aimed; hanging in his right hand when not
@@ -20,7 +20,11 @@ import { GUN_GRIP } from '../render/heroshapes.js';
 // crosshair is drawn a little to whoever is nearly on it (assist) - a thumb is not a mouse.
 
 const UP = new THREE.Vector3(0, 1, 0);
-const STYLE = { mag: 'under', bazooka: 'tube', minigun: 'hip' };
+const STYLE = { mag: 'heavy', bazooka: 'tube', minigun: 'hip' };
+// (ROADMAP 28.28, the owner's word: "part of the gun goes through the hero") Nothing held goes through him: the gun's
+// own points (pointsOf) are held against his trunk and his head each frame, and whatever of it is inside moves his
+// hand out - to his side, ahead, up - until it is clear (solve). What a gun needs is kept by the gun and the way it is
+// held (carried, fired from the hip, aimed in), so it is clear from the first frame the next time
 // (the middle of its grip, where the fist's hollow goes: from the model's origin - the web of the hand, at the grip's top)
 const GRIP_C = new THREE.Vector3(0, -0.046, -0.012);
 const _z = new THREE.Vector3();
@@ -34,6 +38,43 @@ const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _pole = new THREE.Vector3();
+const _p = new THREE.Vector3();
+const _up = new THREE.Vector3();
+const _rt = new THREE.Vector3();
+const _fw = new THREE.Vector3();
+const _push = new THREE.Vector3();
+const _inv = new THREE.Matrix4();
+const _mm = new THREE.Matrix4();
+// how far his hand may be moved to clear him, and the room left between a gun and him
+const FIX_MAX = 0.34;
+const CLEAR = 0.012;
+
+// a gun's own points, in its frame: one to every 3 cm cell of its surface (all it takes to know where it is)
+function pointsOf(model) {
+  if (model.__pts) return model.__pts;
+  const g = model.group;
+  const out = [];
+  if (g) {
+    g.updateMatrixWorld(true);
+    _inv.copy(g.matrixWorld).invert();
+    const seen = new Set();
+    g.traverse((o) => {
+      if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
+      const pos = o.geometry.attributes.position;
+      _mm.multiplyMatrices(_inv, o.matrixWorld);
+      const step = Math.max(1, Math.floor(pos.count / 4000));
+      for (let i = 0; i < pos.count; i += step) {
+        _p.fromBufferAttribute(pos, i).applyMatrix4(_mm);
+        const k = `${Math.round(_p.x / 0.03)},${Math.round(_p.y / 0.03)},${Math.round(_p.z / 0.03)}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push(_p.x, _p.y, _p.z);
+      }
+    });
+  }
+  model.__pts = new Float32Array(out);
+  return model.__pts;
+}
 const ease = (t) => t * t * (3 - 2 * t);
 
 export const styleOf = (def) => STYLE[def.id] || (def.hands === 2 ? 'long' : 'pistol');
@@ -48,6 +89,125 @@ export class GunHold {
     this.handF = new THREE.Vector3();
     this.handN = new THREE.Vector3();
     this.gap = 8;
+    // what each gun needs to be clear of him: { c (carried), a (fired from the hip), s (aimed in) }, in his frame
+    // (x to his right, y up, z ahead)
+    this.fixes = new Map();
+    this.pen = 0;
+  }
+
+  fixOf(slot, fig) {
+    const key = `${slot.def.id}:${slot.model && slot.model.length ? slot.model.length.toFixed(2) : ''}:${fig.crouch > 0.5 ? 'c' : 's'}`;
+    let F = this.fixes.get(key);
+    if (!F) {
+      F = { c: new THREE.Vector3(), a: new THREE.Vector3(), s: new THREE.Vector3() };
+      this.fixes.set(key, F);
+    }
+    return F;
+  }
+
+  // the gun where it is this frame (m) against his trunk and his head: what of it is inside him, and which way out.
+  // Kept for the way it is held now (k: raised, sh: aimed in), and his hand goes there from the next frame on
+  solve(slot, fig, m, k, sh) {
+    const P = pointsOf(slot.model);
+    const j = fig.j;
+    if (!P.length || !j.hip || !j.headC) return;
+    const S = fig.scale || 1;
+    _up.set(j.neck.x - j.hip.x, j.neck.y - j.hip.y, j.neck.z - j.hip.z);
+    const L = _up.length() || 1;
+    _up.multiplyScalar(1 / L);
+    _rt.set(j.shoulderR.x - j.shoulderL.x, j.shoulderR.y - j.shoulderL.y, j.shoulderR.z - j.shoulderL.z);
+    _rt.addScaledVector(_up, -_rt.dot(_up)).normalize();
+    _fw.crossVectors(_up, _rt).normalize();
+    const R = HERO_TORSO;
+    const hr = (0.108 + CLEAR) * S;
+    let deep = 0;
+    _push.set(0, 0, 0);
+    const e = m.elements;
+    for (let i = 0; i < P.length; i += 3) {
+      const x0 = P[i];
+      const y0 = P[i + 1];
+      const z0 = P[i + 2];
+      const wx = e[0] * x0 + e[4] * y0 + e[8] * z0 + e[12];
+      const wy = e[1] * x0 + e[5] * y0 + e[9] * z0 + e[13];
+      const wz = e[2] * x0 + e[6] * y0 + e[10] * z0 + e[14];
+      // his head: a ball
+      const hx = wx - j.headC.x;
+      const hy = wy - j.headC.y;
+      const hz = wz - j.headC.z;
+      const hd = Math.hypot(hx, hy, hz);
+      if (hd < hr && hr - hd > deep) {
+        deep = hr - hd;
+        // (out of it to the side and up, never down into his shoulder)
+        _push.set(hx, Math.max(0, hy), hz).addScaledVector(_rt, 0.04).normalize().multiplyScalar(deep);
+      }
+      // his trunk: its rows (height, half width, depth ahead, depth behind, -, how square)
+      const dx = wx - j.hip.x;
+      const dy = wy - j.hip.y;
+      const dz = wz - j.hip.z;
+      const y = ((dx * _up.x + dy * _up.y + dz * _up.z) / L) * 0.5;
+      if (y <= R[0][0] || y >= R[R.length - 1][0]) continue;
+      const x = (dx * _rt.x + dy * _rt.y + dz * _rt.z) / S;
+      const z = (dx * _fw.x + dy * _fw.y + dz * _fw.z) / S;
+      let r = 1;
+      while (r < R.length - 1 && R[r][0] < y) r++;
+      const A = R[r - 1];
+      const B = R[r];
+      const t = (y - A[0]) / Math.max(1e-6, B[0] - A[0]);
+      const w = A[1] + (B[1] - A[1]) * t + CLEAR;
+      const dd = (z > 0 ? A[2] + (B[2] - A[2]) * t : A[3] + (B[3] - A[3]) * t) + CLEAR;
+      const pw = A[5] + (B[5] - A[5]) * t;
+      const ax = Math.abs(x) / w;
+      const az = Math.abs(z) / dd;
+      const q = Math.pow(Math.pow(ax, pw) + Math.pow(az, pw), 1 / pw);
+      if (q >= 1) continue;
+      const d = (1 - q) * Math.min(w, dd) * S;
+      if (d > deep) {
+        deep = d;
+        // (the way out: square to his side there - to his right rather than through him to his left)
+        const nx = (x < -0.04 ? -1 : 1) * (Math.pow(ax, pw - 1) / w + 0.4);
+        const nz = (z < 0 ? -1 : 1) * (Math.pow(az, pw - 1) / dd);
+        _push.set(0, 0, 0).addScaledVector(_rt, nx).addScaledVector(_fw, nz).normalize().multiplyScalar(d);
+      }
+    }
+    // (his right arm above the elbow: a butt carried through it - his hand goes ahead, and the butt with it)
+    {
+      const a = j.shoulderR;
+      const b = j.elbowR;
+      const abx = b.x - a.x;
+      const aby = b.y - a.y;
+      const abz = b.z - a.z;
+      const l2 = abx * abx + aby * aby + abz * abz || 1;
+      const ar = 0.036 * S;
+      let ad = 0;
+      for (let i = 0; i < P.length; i += 3) {
+        const wx = e[0] * P[i] + e[4] * P[i + 1] + e[8] * P[i + 2] + e[12];
+        const wy = e[1] * P[i] + e[5] * P[i + 1] + e[9] * P[i + 2] + e[13];
+        const wz = e[2] * P[i] + e[6] * P[i + 1] + e[10] * P[i + 2] + e[14];
+        let t = ((wx - a.x) * abx + (wy - a.y) * aby + (wz - a.z) * abz) / l2;
+        if (t < 0.1 || t > 0.92) continue;
+        const d = Math.hypot(wx - (a.x + abx * t), wy - (a.y + aby * t), wz - (a.z + abz * t));
+        if (d < ar && ar - d > ad) ad = ar - d;
+      }
+      if (ad > deep) {
+        deep = ad;
+        _push.set(fig.forward.x * 0.9 + fig.right.x * 0.4, 0, fig.forward.z * 0.9 + fig.right.z * 0.4).normalize().multiplyScalar(ad);
+      }
+    }
+    this.pen = deep;
+    if (deep < 0.002) return;
+    // (in his frame; to the way it is held now, if it is held one way and not between two)
+    const F = this.fixOf(slot, fig);
+    const wc = 1 - k;
+    const wa = k * (1 - sh);
+    const ws = k * sh;
+    const V = wc > 0.9 ? F.c : wa > 0.9 ? F.a : ws > 0.9 ? F.s : null;
+    if (!V) return;
+    const r0 = fig.right;
+    const f0 = fig.forward;
+    V.x += (_push.x * r0.x + _push.z * r0.z) * 0.7;
+    V.y += _push.y * 0.7;
+    V.z += (_push.x * f0.x + _push.z * f0.z) * 0.7;
+    if (V.length() > FIX_MAX) V.setLength(FIX_MAX);
   }
 
   // before the figure is posed: what his arms are to do (game/doodle.js gunArm), which way he aims
@@ -76,10 +236,24 @@ export class GunHold {
     const bl = m.length && m.muzzle ? m.length - m.muzzle.z : 0.32;
     // (in his shoulder: the butt's end just in front of the joint, never through him; under his arm: beside him, its
     // end out behind)
-    G.butt = st === 'under' ? clamp(bl - 0.16, 0.2, 0.34) : clamp(bl - 0.02, 0.2, 0.5);
-    G.out = st === 'under' ? 0.1 : st === 'tube' ? 0.0 : -0.02;
-    G.up = st === 'under' ? -0.21 : st === 'tube' ? 0.1 : -0.005;
-    G.blade = st === 'pistol' || st === 'hip' ? -0.08 : -0.34;
+    G.butt = clamp(bl - 0.02, 0.2, 0.5);
+    G.out = st === 'tube' ? 0.02 : -0.02;
+    G.up = st === 'tube' ? 0.1 : -0.005;
+    // (a heavy one: in his shoulder only when he aims in)
+    G.sh = st === 'heavy' ? ease(clamp(this.adsK, 0, 1)) : 1;
+    G.blade = st === 'pistol' || st === 'hip' ? -0.08 : st === 'heavy' ? -0.08 - 0.26 * G.sh : -0.34;
+    // (what it needs to be clear of him, for the way it is held now)
+    {
+      const F = this.fixOf(slot, fig);
+      const kk = ease(clamp(G.k, 0, 1));
+      const sh = st === 'heavy' ? G.sh : clamp(this.adsK, 0, 1);
+      const wc = 1 - kk;
+      const wa = kk * (1 - sh);
+      const ws = kk * sh;
+      G.fx = F.c.x * wc + F.a.x * wa + F.s.x * ws;
+      G.fy = F.c.y * wc + F.a.y * wa + F.s.y * ws;
+      G.fz = F.c.z * wc + F.a.z * wa + F.s.z * ws;
+    }
     // which way: from his neck to what the crosshair is on (somebody right in front of him: along his eye's line)
     const n = fig.j.neck;
     const a = game.weapons.aimPoint;
@@ -92,7 +266,7 @@ export class GunHold {
     fig.aimYaw = clamp(dy, -1.2, 1.2);
     fig.aimPitch = clamp(Math.asin(clamp(_a.y, -1, 1)), -1.15, 1.15);
     // (his head down to the sights a little, over to the stock)
-    const sight = st === 'long' ? 1 : st === 'pistol' ? 0.35 : 0;
+    const sight = st === 'long' || st === 'heavy' ? 1 : st === 'pistol' ? 0.35 : 0;
     fig.headTilt = damp(fig.headTilt || 0, -0.2 * sight * G.k * this.adsK, 10, dt);
     G.headOn = true;
   }
@@ -133,8 +307,9 @@ export class GunHold {
     const f = fig.forward;
     const r = fig.right;
     // carried: by its kind
-    if (G.style === 'pistol') _b.set(f.x * 0.5, -0.86, f.z * 0.5);
+    if (G.style === 'pistol') _b.set(f.x * 0.5 + r.x * 0.12, -0.86, f.z * 0.5 + r.z * 0.12);
     else if (G.style === 'hip') _b.set(f.x - r.x * 0.12, -0.14, f.z - r.z * 0.12);
+    else if (G.style === 'heavy') _b.set(f.x - r.x * 0.06, -0.2, f.z - r.z * 0.06);
     else _b.set(f.x * 0.85 - r.x * 0.4, -0.34, f.z * 0.85 - r.z * 0.4);
     _b.normalize();
     // aimed: at what the crosshair is on, from where his hand is
@@ -147,7 +322,7 @@ export class GunHold {
     _z.copy(_b).lerp(_a, k).normalize();
     // (up the grip: square to the barrel, as near straight up as that is; carried low, rolled in towards him)
     _g.copy(UP);
-    if (G.style !== 'pistol' && G.style !== 'hip') _g.addScaledVector(r, -0.5 * (1 - k));
+    if (G.style !== 'pistol' && G.style !== 'hip' && G.style !== 'heavy') _g.addScaledVector(r, -0.5 * (1 - k));
     _g.addScaledVector(_z, -_g.dot(_z));
     if (_g.lengthSq() < 1e-6) _g.copy(f);
     _g.normalize();
@@ -165,6 +340,7 @@ export class GunHold {
     _e.copy(j.handR).addScaledVector(_h, 0.07 * hk).addScaledVector(_n, (0.012 + GUN_GRIP) * hk);
     out.makeBasis(_x, _g, _z);
     out.setPosition(_e.x - (_x.x * GRIP_C.x + _g.x * GRIP_C.y + _z.x * GRIP_C.z), _e.y - (_x.y * GRIP_C.x + _g.y * GRIP_C.y + _z.y * GRIP_C.z), _e.z - (_x.z * GRIP_C.x + _g.z * GRIP_C.y + _z.z * GRIP_C.z));
+    this.solve(slot, fig, out, k, G.style === 'heavy' ? G.sh : clamp(this.adsK, 0, 1));
     return out;
   }
 

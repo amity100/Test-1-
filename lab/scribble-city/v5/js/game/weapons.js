@@ -412,6 +412,9 @@ export class Weapons {
     this.armfx.hands(slot, player.fig, player.fig.aim === 2 && onFoot);
     // (ROADMAP 28.25: on foot, held and aimed as a gun is - game/gunhold.js)
     this.hold.plan(slot, player.fig, player.fig.aim > 0 && !this.shootOut, onFoot && player.mode === 'foot', dt);
+    // (ROADMAP 28.28: something in his right hand - a blade, a bottle, a shield - and that hand stays out of his pocket:
+    // in it, the thing was in his belly. The pencil is his own: as it was)
+    player.fig.rightFull = slot.model && def.id !== 'pencil' && def.kind !== 'fists' && onFoot && player.mode === 'foot' ? (def.block && !def.knack ? 'shield' : true) : false;
     this.updateProjectiles(dt);
   }
 

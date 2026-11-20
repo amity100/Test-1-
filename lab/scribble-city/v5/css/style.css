@@ -165,16 +165,23 @@ body.air-drawing #ink { display: none !important; }
 
 /* (ROADMAP 28.25) the crosshair: four ticks round a dot, as far apart as the shots go (--gap, ui/hud.js); closer and
    finer aimed in; red on somebody */
-#crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --gap: 8px; --len: 9px; --w: 3px; }
-#crosshair span { position: absolute; background: var(--ink); border-radius: 2px; }
+#crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --gap: 8px; --len: 13px; --w: 3.5px; z-index: 6; }
+/* (ROADMAP 28.28, the owner's word: "there is no sight on the screen") seen on anything: white, a dark edge all round it
+   and a soft shadow under that - on a pale sky, on a dark wall, on a phone in the sun */
+#crosshair span { position: absolute; background: #ffffff; border-radius: 2px; box-shadow: 0 0 0 2px rgba(12, 12, 18, 0.92), 0 0 7px 2px rgba(0, 0, 0, 0.45); }
 #crosshair span:nth-child(1) { left: calc(var(--w) / -2); top: calc(-1 * (var(--gap) + var(--len))); width: var(--w); height: var(--len); }
 #crosshair span:nth-child(2) { left: calc(var(--w) / -2); top: var(--gap); width: var(--w); height: var(--len); }
 #crosshair span:nth-child(3) { top: calc(var(--w) / -2); left: calc(-1 * (var(--gap) + var(--len))); height: var(--w); width: var(--len); }
 #crosshair span:nth-child(4) { top: calc(var(--w) / -2); left: var(--gap); height: var(--w); width: var(--len); }
-#crosshair i { position: absolute; left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%; background: #fff8ec; box-shadow: 0 0 0 1.5px var(--ink); }
+#crosshair i { position: absolute; left: -2.5px; top: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: #ffffff; box-shadow: 0 0 0 2px rgba(12, 12, 18, 0.92), 0 0 6px 1px rgba(0, 0, 0, 0.45); }
+/* (aimed in: a ring round it, the ticks shorter - the sight itself) */
+#crosshair::before { content: ''; position: absolute; left: -27px; top: -27px; width: 54px; height: 54px; box-sizing: border-box; border-radius: 50%; border: 2.5px solid #ffffff; box-shadow: 0 0 0 1.5px rgba(12, 12, 18, 0.85), inset 0 0 0 1.5px rgba(12, 12, 18, 0.85); opacity: 0; transform: scale(1.5); transition: opacity 0.12s, transform 0.14s; }
+#crosshair.ads::before { opacity: 0.95; transform: scale(1); }
+#crosshair.melee::before, #crosshair.plain::before { display: none; }
 #crosshair.melee i, #crosshair.plain i { display: none; }
-#crosshair.ads { --len: 7px; --w: 2.5px; }
+#crosshair.ads { --len: 9px; --w: 3px; }
 #crosshair.enemy span, #crosshair.enemy i { background: #ff3b30; }
+#crosshair.enemy::before { border-color: #ff3b30; }
 #crosshair.melee span { background: var(--red); }
 #hitmarker { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(0.6); font-size: 34px; color: var(--red); opacity: 0; font-weight: 900; transition: opacity 0.1s, transform 0.1s; }
 #hitmarker.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
@@ -764,7 +771,6 @@ html, body { background: #1b1430; }
 #weapon-grade.perfect { color: #e07a12; }
 #weapon-grade.good { color: var(--green); }
 
-#crosshair span { background: #fff8ec; box-shadow: 0 0 0 1.5px var(--ink); }
 #crosshair.melee span { background: #ff4fa3; }
 
 #hidden-tag { background: var(--teal); color: var(--ink); border: 3px solid var(--ink); box-shadow: 4px 5px 0 var(--ink); filter: none; }
@@ -1232,7 +1238,8 @@ body:has(#armor:not(.hidden)):has(#stamina:not(.hidden)) #goals, body:has(#armor
   body.touch #radio { bottom: max(58px, calc(env(safe-area-inset-bottom) + 52px)); max-width: 40vw; padding: 2px 10px; border-width: 2px; font-size: 13px; }
   body.touch #subs { bottom: max(92px, calc(env(safe-area-inset-bottom) + 86px)); max-width: 40vw; }
   body.touch #subs > div { padding: 1px 8px; font-size: 13px; }
-  body.touch #crosshair { transform: translate(-50%, -50%) scale(0.8); }
+  /* (a phone: bigger, not smaller - a thumb's aim, a screen in the hand) */
+  body.touch #crosshair { transform: scale(1.3); }
   body.touch #dialog { width: min(520px, 64vw); padding: 6px 12px 8px; }
   body.touch #dialog .who { font-size: 17px; }
   body.touch #dialog .text { min-height: 0; margin-bottom: 6px; font-size: 14px; }
