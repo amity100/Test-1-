@@ -219,10 +219,20 @@ function waterDesign(lines, ctx, o) {
     const yp = Math.max(0.28, C.clear + 0.04);
     const L = clamp(D.hl * 2 * 0.92, 2.4, 6);
     const rp = 0.24;
-    P.push(cyl([xp, yp, -L / 2], [xp, yp, L / 2 - 0.5], rp, rp, 'float', 'gun', { n: 16 }));
-    P.push(cyl([xp, yp, L / 2 - 0.5], [xp, yp + 0.06, L / 2], rp, 0.05, 'float', 'gun', { n: 16 }));
-    P.push(sph([xp, yp, -L / 2], rp * 0.98, 'float'));
-    for (const z of [-L * 0.28, L * 0.18]) P.push(box([D.hw - 0.12, yp + 0.05, z - 0.05], [xp, yp + 0.12, z + 0.05], 'strut'));
+    // (ROADMAP 28.24) a float as one is made: one hull turned to a line - a round stern, a long body, a bow drawn
+    // out to a point - with the seams of its sections round it, a cleat fore and aft on its deck, a keel strip under
+    // it; each strut a blade with a foot bolted to the float
+    P.push(lat([xp, yp, -L / 2 - rp], [xp, yp, L / 2], [[0, 0], [0.02, rp * 0.6], [0.06, rp * 0.94], [0.1, rp], [0.8, rp], [0.9, rp * 0.72], [0.97, rp * 0.3], [1, 0.03], [1, 0]], 'float', 'gun', { n: 16 }));
+    for (const t of [0.2, 0.42, 0.64]) P.push(tor([xp, yp, lerp(-L / 2, L / 2, t)], rp + 0.003, 0.008, 'z', 'seam', 'gun', { noSil: true }));
+    for (const z of [-L * 0.36, L * 0.26]) {
+      P.push(rbox([xp - 0.02, yp + rp - 0.01, z - 0.07], [xp + 0.02, yp + rp + 0.03, z + 0.07], 'strut', 'gun', { noSil: true, e: 0.008 }));
+      P.push(cyl([xp, yp + rp + 0.02, z - 0.1], [xp, yp + rp + 0.02, z + 0.1], 0.009, 0.009, 'strut', 'gun', { n: 5, noSil: true }));
+    }
+    P.push(rbox([xp - 0.015, yp - rp - 0.03, -L / 2 + 0.2], [xp + 0.015, yp - rp + 0.02, L / 2 - 0.7], 'strut', 'gun', { noSil: true, e: 0.006 }));
+    for (const z of [-L * 0.28, L * 0.18]) {
+      P.push(rbox([D.hw - 0.12, yp + 0.05, z - 0.05], [xp, yp + 0.12, z + 0.05], 'strut', 'gun', { e: 0.012 }));
+      P.push(rbox([xp - 0.07, yp + rp * 0.8, z - 0.09], [xp + 0.05, yp + rp * 0.8 + 0.03, z + 0.09], 'strut', 'gun', { noSil: true, e: 0.008 }));
+    }
     P.push(box([xp - 0.01, yp + rp * 0.7, -L / 2 + 0.2], [xp + 0.01, yp + rp, L / 2 - 0.3], 'stripe', 'gun', { noSil: true }));
     // the outboard motor (this side's half: its cowl on the middle line)
     const ym = C.tailY + 0.1;
@@ -280,7 +290,7 @@ function waterDesign(lines, ctx, o) {
     c = xt + 0.2;
     pivot = [xt, yt, 0];
   }
-  const pal = { float: hc || [1, 0.52, 0.12], stripe: WHITE, strut: [0.2, 0.2, 0.22], motor: [0.12, 0.13, 0.16], dark: [0.1, 0.1, 0.12], prop: CHROME, skirt: [0.12, 0.12, 0.13], duct: hc || [0.86, 0.86, 0.88], hull: hc || [0.95, 0.78, 0.08], band: [0.2, 0.2, 0.22], peri: [0.3, 0.32, 0.36], glass: [0.5, 0.75, 0.95] };
+  const pal = { seam: [0.5, 0.24, 0.05], float: hc || [1, 0.52, 0.12], stripe: WHITE, strut: [0.2, 0.2, 0.22], motor: [0.12, 0.13, 0.16], dark: [0.1, 0.1, 0.12], prop: CHROME, skirt: [0.12, 0.12, 0.13], duct: hc || [0.86, 0.86, 0.88], hull: hc || [0.95, 0.78, 0.08], band: [0.2, 0.2, 0.22], peri: [0.3, 0.32, 0.36], glass: [0.5, 0.75, 0.95] };
   return sheet('water', lines, ctx, o, {
     ax,
     c,

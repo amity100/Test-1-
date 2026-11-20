@@ -252,7 +252,7 @@ const tor = (c, R, r, ax, k, g = 'gun', o = {}) => ({ t: 'tor', c: r3(c), R, r, 
 // with its edges broken; a plate cut to an outline (on the plane square to ax at c, W thick) with a bevel; n bolts
 // (r, h) or blocks (w round, d out, h along) in a ring R out round ax at c; a belt round an outline, W wide and th
 // thick, with bars across it
-const fl = (o) => ({ ...(o.noSil ? { noSil: true } : {}), ...(o.hide ? { hide: true } : {}) });
+const fl = (o) => ({ ...(o.noSil ? { noSil: true } : {}), ...(o.hide ? { hide: true } : {}), ...(o.ghost ? { ghost: true } : {}) });
 const lat = (p0, p1, prof, k, g = 'gun', o = {}) => ({ t: 'lat', p0: r3(p0), p1: r3(p1), prof: prof.map(r2), k, g, n: o.n || 14, ...fl(o) });
 const tube = (pts, r, k, g = 'gun', o = {}) => ({ t: 'pipe', pts: pts.map(r3), r, k, g, n: o.n || 6, noSil: true, ...(o.closed ? { closed: true } : {}), ...(o.steps ? { steps: o.steps } : {}), ...(o.tension !== undefined ? { tension: o.tension } : {}) });
 const rbox = (p0, p1, k, g = 'gun', o = {}) => ({ t: 'rbox', p0: r3(p0), p1: r3(p1), e: o.e || 0.015, k, g, ...fl(o) });
@@ -563,16 +563,21 @@ function jumpDesign(lines, ctx, o) {
     const g = `coil${i}`;
     groups[g] = { at: [x, y0, z], ax: 'y', kind: 'spring' };
     // the damper (its body, its rod), its mounts; the spring round it
-    P.push(cyl([x, y0, z], [x, lerp(y0, y1, 0.55), z], 0.05, 0.05, 'damper', g, { n: 12 }));
+    // (ROADMAP 28.24) a coil-over as one is made: the damper's body with a collar the spring sits on, its rod, the
+    // eye at its foot and the cup at its top; one spring wound round it (not rings); a reservoir beside it on a hose
+    P.push(lat([x, y0, z], [x, lerp(y0, y1, 0.55), z], [[0, 0], [0, 0.05], [0.18, 0.05], [0.18, 0.1], [0.24, 0.1], [0.24, 0.05], [1, 0.05], [1, 0]], 'damper', g, { n: 12 }));
     P.push(cyl([x, lerp(y0, y1, 0.5), z], [x, y1, z], 0.022, 0.022, 'chrome', g, { n: 8 }));
     P.push(cyl([x, y0 - 0.04, z], [x, y0 + 0.02, z], 0.07, 0.07, 'dark', g, { n: 12 }));
-    P.push(cyl([x, y1 - 0.03, z], [x, y1 + 0.02, z], 0.085, 0.085, 'dark', g, { n: 12 }));
+    P.push(lat([x, y1 - 0.05, z], [x, y1 + 0.03, z], [[0, 0.1], [0.5, 0.1], [0.7, 0.085], [1, 0.05], [1, 0]], 'dark', g, { n: 12 }));
     const coils = 6;
     const rc = 0.085;
     for (let k = 0; k < coils; k++) {
       const yy = lerp(y0 + 0.08, y1 - 0.08, (k + 0.5) / coils);
-      P.push(tor([x, yy, z], rc, 0.018, 'y', 'spring', g));
+      P.push({ ...tor([x, yy, z], rc, 0.018, 'y', 'spring', g), ghost: true });
     }
+    P.push(coil([x, lerp(y0, y1, 0.13), z], [x, y1 - 0.05, z], rc, coils, 0.017, 'spring', g));
+    P.push(lat([x + 0.02, lerp(y0, y1, 0.2), z - 0.13], [x + 0.02, lerp(y0, y1, 0.62), z - 0.13], [[0, 0], [0, 0.034], [0.9, 0.034], [0.95, 0.02], [1, 0.02], [1, 0]], 'tank', g, { n: 10, noSil: true }));
+    P.push(tube([[x + 0.02, lerp(y0, y1, 0.2), z - 0.13], [x + 0.03, lerp(y0, y1, 0.1), z - 0.08], [x + 0.03, lerp(y0, y1, 0.08), z - 0.02]], 0.01, 'dark', g, { n: 5 }));
   }
   if (lv >= 2) {
     // (the jump jets: a nozzle under each sill between the wheels, its tank above)
@@ -581,8 +586,9 @@ function jumpDesign(lines, ctx, o) {
       const z = zs[i];
       const xj = D.hw - 0.12;
       const yj = Math.max(0.16, C.clear - 0.02);
-      P.push(cyl([xj, yj + 0.16, z], [xj, yj, z], 0.06, 0.085, 'dark', 'gun', { n: 14 }));
-      P.push(cyl([xj, yj + 0.16, z - 0.1], [xj, yj + 0.16, z + 0.1], 0.06, 0.06, 'tank', 'gun', { n: 12, noSil: true }));
+      P.push(lat([xj, yj + 0.16, z], [xj, yj, z], [[0, 0], [0, 0.05], [0.25, 0.058], [0.3, 0.045], [0.5, 0.05], [1, 0.09], [1, 0.075], [0.45, 0.04]], 'dark', 'gun', { n: 14 }));
+      P.push(lat([xj, yj + 0.16, z - 0.12], [xj, yj + 0.16, z + 0.12], [[0, 0], [0.06, 0.04], [0.15, 0.06], [0.85, 0.06], [0.94, 0.04], [1, 0]], 'tank', 'gun', { n: 12, noSil: true }));
+      for (const zz of [z - 0.06, z + 0.06]) P.push(tor([xj, yj + 0.16, zz], 0.062, 0.006, 'z', 'chrome', 'gun', { noSil: true }));
       const g = `jet${i}`;
       groups[g] = { at: [xj, yj, z], ax: 'y', kind: 'flame' };
       P.push(cyl([xj, yj - 0.01, z], [xj, yj - (lv === 3 ? 0.9 : 0.65), z], 0.09, 0.012, 'flameB', g, { n: 12, noSil: true }));
@@ -590,7 +596,7 @@ function jumpDesign(lines, ctx, o) {
     }
   }
   const pal = {
-    spring: hc || [0.9, 0.16, 0.12],
+    spring: hc || [0.6, 0.08, 0.09],
     damper: [0.92, 0.72, 0.1],
     chrome: CHROME,
     dark: [0.12, 0.12, 0.14],
