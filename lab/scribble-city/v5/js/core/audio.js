@@ -338,18 +338,38 @@ export class Audio {
     if (!this.ctx || !this.enabled) return;
     const v = vol;
     switch (name) {
-      case 'paint':
-        this.tone('sine', 520, 160, 0.09, 0.22 * v);
-        this.hiss(0.06, 0.12 * v, 1800, 1);
+      // (ROADMAP 28.21: no two shots of a gun quite the same - each a little higher or lower than the last)
+      case 'paint': {
+        // a spray gun's spit: the air, the wet of it
+        const p = 0.92 + Math.random() * 0.16;
+        this.tone('sine', 520 * p, 160, 0.09, 0.2 * v);
+        this.hiss(0.07, 0.16 * v, 1900 * p, 1, 'bandpass', 0, 900);
+        this.hiss(0.03, 0.06 * v, 5200, 2, 'highpass', 0.01);
         break;
-      case 'pencilShot':
-        this.hiss(0.08, 0.3 * v, 4000, 2, 'bandpass', 0, 1500);
-        this.tone('triangle', 900, 300, 0.07, 0.12 * v);
+      }
+      case 'pencilShot': {
+        // a rifle: the crack of it, the thump behind the crack, the wood of the pencil in it
+        const p = 0.94 + Math.random() * 0.12;
+        this.hiss(0.09, 0.34 * v, 4000 * p, 2, 'bandpass', 0, 1400);
+        this.tone('sine', 190 * p, 60, 0.1, 0.34 * v);
+        this.tone('triangle', 900 * p, 300, 0.07, 0.12 * v);
+        this.hiss(0.25, 0.1 * v, 900, 0.7, 'lowpass', 0.04, 220);
         break;
-      case 'bazooka':
-        this.hiss(0.35, 0.5 * v, 900, 0.7, 'lowpass', 0, 200);
-        this.tone('sine', 140, 50, 0.3, 0.4 * v);
+      }
+      case 'bolt':
+        // a bolt worked: up and back, forward and down
+        this.tone('square', 820, 420, 0.022, 0.07 * v);
+        this.hiss(0.04, 0.1 * v, 3000, 2, 'bandpass', 0.01);
+        this.tone('square', 560, 900, 0.022, 0.07 * v, 0.13);
+        this.hiss(0.035, 0.12 * v, 3600, 2, 'bandpass', 0.13);
         break;
+      case 'bazooka': {
+        const p = 0.93 + Math.random() * 0.14;
+        this.hiss(0.4, 0.55 * v, 900 * p, 0.7, 'lowpass', 0, 180);
+        this.tone('sine', 140 * p, 46, 0.32, 0.45 * v);
+        this.hiss(0.5, 0.16 * v, 2600, 1, 'bandpass', 0.03, 700);
+        break;
+      }
       case 'cannon':
         this.hiss(0.5, 0.7 * v, 700, 0.6, 'lowpass', 0, 120);
         this.tone('sine', 110, 35, 0.45, 0.6 * v);
@@ -616,16 +636,21 @@ export class Audio {
         // a guitar chord, string by string
         [196, 247, 294, 392, 494].forEach((f, i) => this.tone('triangle', f, f * 0.995, 0.9, 0.05 * v, i * 0.025));
         break;
-      case 'shotgun':
-        this.hiss(0.32, 0.6 * v, 1200, 0.7, 'lowpass', 0, 260);
-        this.tone('sine', 160, 55, 0.25, 0.45 * v);
+      case 'shotgun': {
+        const p = 0.93 + Math.random() * 0.14;
+        this.hiss(0.32, 0.6 * v, 1200 * p, 0.7, 'lowpass', 0, 250);
+        this.tone('sine', 160 * p, 52, 0.25, 0.48 * v);
         this.hiss(0.05, 0.25 * v, 3500, 1, 'highpass', 0.18);
         this.tone('square', 260, 240, 0.04, 0.06 * v, 0.3);
         break;
-      case 'staple':
-        this.tone('square', 1500, 700, 0.03, 0.08 * v);
-        this.hiss(0.03, 0.18 * v, 5200, 2, 'highpass');
+      }
+      case 'staple': {
+        const p = 0.9 + Math.random() * 0.2;
+        this.tone('square', 1500 * p, 700, 0.03, 0.08 * v);
+        this.hiss(0.03, 0.18 * v, 5200 * p, 2, 'highpass');
+        this.tone('sine', 210 * p, 120, 0.03, 0.08 * v);
         break;
+      }
       case 'slash':
         this.hiss(0.16, 0.32 * v, 2800, 1.6, 'bandpass', 0, 900);
         this.tone('triangle', 1400, 2400, 0.08, 0.05 * v);

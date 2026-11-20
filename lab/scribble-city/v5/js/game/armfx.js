@@ -227,6 +227,37 @@ const g_visible = (g) => !!g && g.visible !== false;
 
 const FX = { mag: MAG };
 
+// ---------------------------------------------------------------------------------------------- every other gun
+// (ROADMAP 28.21) What comes out of each of the others with the shot, beside what game/weapons.js muzzleFx already
+// throws: fire painted (not a comic star) out of the ones that burn something; a wet mist the colour of what they
+// spray out of the ones that spray; what their action throws out - a spent stub, a staple's link, a crumb of rubber,
+// a curl of wood; a wisp off a barrel that has fired long. By the weapon's id.
+//   flash: the fire's size (m) · tongue: [lines, speed, length, cone] of fire ahead · mist: the colour of a wet puff
+//   ('paint': one of the paints) · smoke: a grey puff's size · out: what its action throws { col, len, n, sp, up, late
+//   (s after the shot: a bolt worked by hand), snd } · warm: how much a shot warms it (wisps after) · back: fire out
+//   of its back as well (a launcher)
+const PAINTS = [[0.85, 0.35, 0.3], [0.3, 0.5, 0.85], [0.35, 0.7, 0.4], [0.9, 0.72, 0.25], [0.6, 0.4, 0.75]];
+const WHITE = [1.0, 1.0, 0.98];
+const PINK = [0.93, 0.5, 0.56];
+const WOOD = [0.9, 0.62, 0.3];
+const INKBLUE = [0.2, 0.36, 0.78];
+const GLUEW = [0.97, 0.97, 0.94];
+const GFX = {
+  rifle: { flash: 0.34, tongue: [3, 34, 0.7, 0.05], smoke: 0.2, out: { col: LACQUER, len: 0.032, late: 0.26, snd: 'bolt' }, warm: 0.22 },
+  shotgun: { flash: 0.62, tongue: [7, 28, 0.6, 0.2], smoke: 0.42, warm: 0.5 },
+  bazooka: { flash: 0.85, tongue: [5, 22, 0.8, 0.18], smoke: 0.5, back: true },
+  planes: { smoke: 0.3 },
+  stapler: { flash: 0.15, out: { col: STEEL, len: 0.012 }, warm: 0.06 },
+  erasermg: { flash: 0.2, tongue: [2, 26, 0.4, 0.06], out: { col: PINK, len: 0.018 }, warm: 0.09 },
+  minigun: { flash: 0.2, tongue: [2, 30, 0.5, 0.05], out: { col: WOOD, len: 0.03, up: 0.9 }, warm: 0.07 },
+  tippex: { mist: WHITE, out: { col: WHITE, len: 0.014, sp: 1.6, up: -0.6 }, warm: 0 },
+  paintmg: { mist: 'paint', out: { col: 'paint', len: 0.014, sp: 1.6, up: -0.6 } },
+  paint: { mist: 'paint' },
+  m4: { mist: 'paint', out: { col: 'paint', len: 0.016 }, warm: 0.05 },
+  pen: { mist: INKBLUE },
+  glue: { mist: GLUEW },
+};
+
 export class ArmFx {
   constructor(game) {
     this.game = game;
@@ -264,7 +295,8 @@ export class ArmFx {
     if (F && F.shot) F.shot(this, slot, this.st(slot, F), pr);
   }
 
-  // it has fired: m its muzzle, d the way it fired (true: its flash and sound are its own here)
+  // it has fired: m its muzzle, d the way it fired. true: all that comes out of it is its own, here; 1: its fire or its
+  // mist is from here (not the comic star), and game/weapons.js muzzleFx still throws its bits; false: neither
   fired(slot, m, d) {
     const F = this.of(slot);
     const st = this.st(slot, F);
@@ -275,7 +307,56 @@ export class ArmFx {
       F.fired(this, slot, st, m, d);
       return true;
     }
-    return false;
+    const G = GFX[slot.def.id];
+    if (!G || slot.def.quiet) return false;
+    const game = this.game;
+    const fx = game.fx;
+    st.n = (st.n || 0) + 1;
+    if (G.flash) fx.sprite('flash', m.x + d.x * 0.05, m.y + d.y * 0.05, m.z + d.z * 0.05, { size: G.flash * (0.85 + Math.random() * 0.4), grow: 0.35, life: 0.055, tint: [2.2, 1.9, 1.45] });
+    if (G.tongue) fx.spray(m.x, m.y, m.z, d.x, d.y, d.z, G.tongue[0], G.tongue[1], FIRE, { cone: G.tongue[3], wide: 3.4, len: G.tongue[2], life: 0.055, grav: false });
+    if (G.mist) {
+      // (a wet puff of what it sprays, rolling on ahead of it)
+      const c = G.mist === 'paint' ? PAINTS[Math.floor(Math.random() * PAINTS.length)] : G.mist;
+      fx.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', m.x + d.x * 0.12, m.y + d.y * 0.12, m.z + d.z * 0.12, { size: 0.16 + Math.random() * 0.08, grow: 2.2, life: 0.26, vx: d.x * 4.5, vy: d.y * 4.5 + 0.2, vz: d.z * 4.5, alpha: 0.5, tint: [c[0] * 1.15, c[1] * 1.15, c[2] * 1.15] });
+    }
+    if (G.smoke && (G.smoke > 0.3 || st.n % 2 === 0)) fx.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', m.x + d.x * 0.25, m.y + d.y * 0.25 + 0.04, m.z + d.z * 0.25, { size: G.smoke, grow: 1.8, life: 0.7, vx: d.x * 2.2, vy: 0.6, vz: d.z * 2.2, alpha: 0.3 });
+    if (G.back) this.backblast(slot, m, d);
+    if (G.out) {
+      if (G.out.late) st.outT = G.out.late;
+      else this.throwOut(slot, G.out, d);
+    }
+    if (G.warm) st.warm = Math.min(1.2, (st.warm || 0) + G.warm);
+    return 1;
+  }
+
+  // what its action throws out of its side: a spent stub, a link, a crumb (o: of GFX)
+  throwOut(slot, o, d) {
+    const model = slot.model;
+    if (!model || !model.eject || !model.group) return;
+    const g = model.group;
+    _x.setFromMatrixColumn(g.matrixWorld, 0).normalize();
+    _y.setFromMatrixColumn(g.matrixWorld, 1).normalize();
+    _a.copy(model.eject).applyMatrix4(g.matrixWorld);
+    const up = o.up === undefined ? 0.55 : o.up;
+    const c = o.col === 'paint' ? PAINTS[Math.floor(Math.random() * PAINTS.length)] : o.col;
+    // (out to his right: -x of the gun)
+    this.game.fx.spray(_a.x, _a.y, _a.z, -_x.x * 0.9 + _y.x * up - d.x * 0.2, -_x.y * 0.9 + _y.y * up, -_x.z * 0.9 + _y.z * up - d.z * 0.2, o.n || 1, o.sp || 3.2, c, { cone: 0.25, bits: true, len: o.len || 0.02, life: 1.4 });
+    if (o.snd) this.game.audio.play(o.snd, 0.7);
+  }
+
+  // a launcher: fire and a rolling cloud out of its back, a ring of dust blown off the ground behind him
+  backblast(slot, m, d) {
+    const game = this.game;
+    const fx = game.fx;
+    const L = slot.model && slot.model.length ? slot.model.length : 1.3;
+    const bx = m.x - d.x * L;
+    const by = m.y - d.y * L;
+    const bz = m.z - d.z * L;
+    fx.sprite('flash', bx, by, bz, { size: 0.7, grow: 0.5, life: 0.07, tint: [2.2, 1.8, 1.3] });
+    fx.spray(bx, by, bz, -d.x, -d.y, -d.z, 7, 20, FIRE2, { cone: 0.3, wide: 3.6, len: 0.9, life: 0.08, grav: false });
+    for (let i = 0; i < 3; i++) fx.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', bx - d.x * (0.4 + i * 0.5), by + 0.1, bz - d.z * (0.4 + i * 0.5), { size: 0.5 + i * 0.25, grow: 1.6, life: 0.9 + i * 0.2, vx: -d.x * (3 - i * 0.7), vy: 0.5, vz: -d.z * (3 - i * 0.7), alpha: 0.4 });
+    const p = game.player.pos;
+    fx.ring(p.x - d.x * 1.4, p.y + 0.16, p.z - d.z * 1.4, 0.3, 2.2, 0.55, DUST, 6);
   }
 
   // the gun in the hands this frame: m its matrix (pushed back by its kick here), then what moves on it
@@ -320,6 +401,25 @@ export class ArmFx {
       }
     }
     if (F && F.held) F.held(this, slot, st, dt, m);
+    // (a bolt worked by hand: the spent one thrown out a moment after the shot)
+    if (st.outT > 0) {
+      st.outT -= dt;
+      const G = GFX[def.id];
+      if (st.outT <= 0 && G && G.out) this.throwOut(slot, G.out, _z.setFromMatrixColumn(m, 2).normalize());
+    }
+    // (a barrel that has fired long: thin wisps off its mouth once the firing stops)
+    if (st.warm > 0) {
+      const quiet = game.time - (slot.fxShot || -9) > 0.22;
+      st.warm = Math.max(0, st.warm - dt * 0.4);
+      if (quiet && st.warm > 0.3 && slot.model && slot.model.muzzle) {
+        st.wispT = (st.wispT || 0) - dt;
+        if (st.wispT <= 0) {
+          st.wispT = 0.14;
+          _a.copy(slot.model.muzzle).applyMatrix4(m);
+          game.fx.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', _a.x, _a.y, _a.z, { size: 0.045 + st.warm * 0.04, grow: 2.2, life: 0.8, vy: 0.5, vx: (Math.random() - 0.5) * 0.2, vz: (Math.random() - 0.5) * 0.2, alpha: 0.1 + st.warm * 0.1, aspect: 0.7 });
+        }
+      }
+    }
     // the hands on it, where it is this frame (game/doodle.js placeHand)
     if (slot.model && slot.model.hold && fig.placeHand && game.player.mode === 'foot') {
       const hold = slot.model.hold;
