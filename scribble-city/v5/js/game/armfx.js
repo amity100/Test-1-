@@ -421,9 +421,10 @@ export class ArmFx {
       }
     }
     // the hands on it, where it is this frame (game/doodle.js placeHand)
-    if (slot.model && slot.model.hold && fig.placeHand && game.player.mode === 'foot') {
+    if (slot.model && (slot.model.hold || fig.gun) && fig.placeHand && game.player.mode === 'foot') {
       const hold = slot.model.hold;
       if (F && st.rk > 0.5 && F.reloadLeft) {
+        if (fig.gun) game.weapons.hold.freeLeft(fig);
         const u = reloading ? 1 - ar.reloadT / (ar.reloadFull || 3.6) : 1;
         const K = F.reloadLeft;
         let i = 0;
@@ -436,6 +437,9 @@ export class ArmFx {
         fig.placeHand(-1, _a, _pole.set(-fig.right.x * 0.9, -0.6, -fig.right.z * 0.9));
         F.reloadRight(st, u, _b).applyMatrix4(m);
         fig.placeHand(1, _b);
+      } else if (fig.gun) {
+        // (ROADMAP 28.25: his left hand on it as it is held - game/gunhold.js)
+        game.weapons.hold.hands(slot, fig, m);
       } else if (fig.aim === 2) {
         // (aimed: the left hand under it, as far along its hold as the arm reaches - never off the gun)
         const sh = fig.j.shoulderL;

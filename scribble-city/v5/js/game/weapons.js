@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GunHold } from './gunhold.js';
 import { buildPencilModel, buildWeaponModel, PEN_BLUE } from './items.js';
 import { BLACK_INK, RED_INK } from '../render/LineBatch.js';
 import { groundHeight } from '../world/layout.js';
@@ -94,6 +95,7 @@ const _u = new THREE.Vector3();
 const _sm = new THREE.Matrix4();
 const _om = new THREE.Matrix4();
 const _UP = new THREE.Vector3(0, 1, 0);
+const _gm = new THREE.Matrix4();
 const _hp = new THREE.Vector3();
 const _hd = new THREE.Vector3();
 const _md = new THREE.Vector3();
@@ -166,6 +168,8 @@ export class Weapons {
     this.lastFire = -10;
     this.projectiles = [];
     this.aimPoint = new THREE.Vector3();
+    // (ROADMAP 28.25: how a gun is held and aimed - game/gunhold.js)
+    this.hold = new GunHold(game);
     this.aimHitEnemy = null;
     this.beam = null; // the highlighter's ray this frame: { a, b, hit }
     // the slots that are always there (not with ?classic: the pencil and the bare fists)
@@ -211,7 +215,7 @@ export class Weapons {
     const c = this.current;
     if (c.def.kind !== 'gun' && c.def.kind !== 'beam') return false;
     const input = this.game.input;
-    return input.fire || input.aim || this.game.time - this.lastFire < 1.0;
+    return input.fire || input.aim || input.aimLatch || this.game.time - this.lastFire < 1.0;
   }
 
   swinging() {
@@ -406,6 +410,8 @@ export class Weapons {
     player.fig.aim = this.shootOut ? 1 : (def.kind === 'gun' || def.kind === 'beam') && this.isAiming() && canAct ? def.hands : 0;
     // (a long heavy gun: held nearer, its butt in the shoulder - game/armfx.js)
     this.armfx.hands(slot, player.fig, player.fig.aim === 2 && onFoot);
+    // (ROADMAP 28.25: on foot, held and aimed as a gun is - game/gunhold.js)
+    this.hold.plan(slot, player.fig, player.fig.aim > 0 && !this.shootOut, onFoot && player.mode === 'foot', dt);
     this.updateProjectiles(dt);
   }
 
@@ -557,7 +563,7 @@ export class Weapons {
       for (let i = 0; i < n; i++) {
         const dir = _v.copy(this.aimPoint).sub(muzzle).normalize();
         // (the shooting skill: ROADMAP 5.6, not with ?classic)
-        const spread = def.spread * g.spread * (game.skills ? game.skills.spreadMul : 1) * fxSpread;
+        const spread = def.spread * g.spread * (game.skills ? game.skills.spreadMul : 1) * fxSpread * (this.shootOut ? 1 : this.hold.spreadK());
         dir.x += (Math.random() - 0.5) * spread * 2;
         dir.y += (Math.random() - 0.5) * spread * 2;
         dir.z += (Math.random() - 0.5) * spread * 2;
@@ -1105,7 +1111,7 @@ export class Weapons {
         if (dl < 2.6) dir.normalize().lerp(this.game.camRig.fwd, 1 - clamp((dl - 1.1) / 1.5, 0, 1));
       }
       dir.normalize();
-      m = p.holdMatrix(dir);
+      m = fig.gun && !this.shootOut ? this.hold.gunMatrix(slot, fig, _gm) : p.holdMatrix(dir);
       if (def.spin && slot.model.barrel) {
         // the ring of pencils spins up
         slot.model.barrel.rotation.z = (slot.barrelA = (slot.barrelA || 0) + slot.spin * 0.9);

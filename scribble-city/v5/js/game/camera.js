@@ -47,9 +47,14 @@ export class CameraRig {
     // looks at instead of you - game/facelab.js: somebody's face, close)
     if (this.focus) target = this.focus;
     const ov = this.over;
-    const dist = ov ? ov.dist : (opts.dist || this.dist) * (opts.aim ? 0.62 : 1);
+    // (ROADMAP 28.25) aimed in: the boom shortened and the shoulder drawn in, eased - never a jump (opts.aimDist,
+    // aimShoulder: how near, how far out - else 0.62 of the boom, the same shoulder)
+    const aimK = (this.aimK = damp(this.aimK || 0, opts.aim ? 1 : 0, 12, dt));
+    const d0 = opts.dist || this.dist;
+    const dist = ov ? ov.dist : d0 + ((opts.aimDist || d0 * 0.62) - d0) * aimK;
     const height = ov ? ov.height : opts.height || this.height;
-    const shoulder = opts.shoulder !== undefined ? opts.shoulder : this.shoulder;
+    const sh0 = opts.shoulder !== undefined ? opts.shoulder : this.shoulder;
+    const shoulder = sh0 + ((opts.aimShoulder !== undefined ? opts.aimShoulder : sh0) - sh0) * aimK;
     const cp = Math.cos(this.pitch);
     this.fwd.set(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp);
     this.right.set(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
@@ -148,7 +153,7 @@ export class CameraRig {
       cam.position.z += (Math.random() - 0.5) * s;
     }
     cam.rotation.set(this.pitch, this.yaw + Math.PI, 0, 'YXZ');
-    const fov = this.baseFov * (opts.aim ? 0.8 : 1) * (opts.fovMul || 1);
+    const fov = this.baseFov * (1 - (opts.aimFov !== undefined ? opts.aimFov : 0.2) * aimK) * (opts.fovMul || 1);
     if (Math.abs(cam.fov - fov) > 0.05) {
       cam.fov = damp(cam.fov, fov, 10, dt);
       cam.updateProjectionMatrix();

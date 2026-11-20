@@ -226,6 +226,29 @@ export class HUD {
     const dmgA = Math.max(0, 1 - (game.time - p.lastHurt) / 0.6);
     this.damageEl.style.opacity = `${Math.max(dmgA * 0.9, p.hp < 30 ? 0.35 + Math.sin(game.time * 6) * 0.15 : 0)}`;
     this.crosshair.classList.toggle('melee', game.weapons.current.def.kind === 'melee' || game.weapons.current.def.kind === 'fists');
+    // (ROADMAP 28.25: as far apart as the shots go, closer aimed in; red on somebody - game/gunhold.js)
+    {
+      const W = game.weapons;
+      const H = W.hold;
+      const cur = W.current;
+      const isGun = cur.def.kind === 'gun' || cur.def.kind === 'beam';
+      const kick = isGun ? Math.max(0, 1 - (game.time - W.lastFire) / 0.18) : 0;
+      const gap = Math.round(H.crossGap(cur, kick) * 2) / 2;
+      if (gap !== this.crossGap) {
+        this.crossGap = gap;
+        this.crosshair.style.setProperty('--gap', `${gap}px`);
+      }
+      const ads = isGun && H.ads;
+      if (ads !== this.crossAds) {
+        this.crossAds = ads;
+        this.crosshair.classList.toggle('ads', ads);
+      }
+      const on = isGun && !!W.aimHitEnemy;
+      if (on !== this.crossOn) {
+        this.crossOn = on;
+        this.crosshair.classList.toggle('enemy', on);
+      }
+    }
     // (in a car: while a gun is out of the window, ROADMAP 4.7)
     // (on a boat, in the plane: nothing to aim, ROADMAP 4.8)
     this.crosshair.style.display = (p.mode === 'foot' && !game.inBar) || (v && v.kind !== 'car' && v.kind !== 'boat' && v.kind !== 'plane') || game.weapons.shootOut ? '' : 'none';

@@ -163,12 +163,18 @@ body.air-drawing #ink { display: none !important; }
 #weapon-grade.wonky { color: #e07a12; }
 #weapon-grade.fail { color: var(--red); }
 
-#crosshair { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; transform: translate(-50%, -50%); }
+/* (ROADMAP 28.25) the crosshair: four ticks round a dot, as far apart as the shots go (--gap, ui/hud.js); closer and
+   finer aimed in; red on somebody */
+#crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --gap: 8px; --len: 9px; --w: 3px; }
 #crosshair span { position: absolute; background: var(--ink); border-radius: 2px; }
-#crosshair span:nth-child(1) { left: 13px; top: 0; width: 3px; height: 9px; transform: rotate(4deg); }
-#crosshair span:nth-child(2) { left: 13px; bottom: 0; width: 3px; height: 9px; transform: rotate(-5deg); }
-#crosshair span:nth-child(3) { top: 13px; left: 0; height: 3px; width: 9px; transform: rotate(-4deg); }
-#crosshair span:nth-child(4) { top: 13px; right: 0; height: 3px; width: 9px; transform: rotate(6deg); }
+#crosshair span:nth-child(1) { left: calc(var(--w) / -2); top: calc(-1 * (var(--gap) + var(--len))); width: var(--w); height: var(--len); }
+#crosshair span:nth-child(2) { left: calc(var(--w) / -2); top: var(--gap); width: var(--w); height: var(--len); }
+#crosshair span:nth-child(3) { top: calc(var(--w) / -2); left: calc(-1 * (var(--gap) + var(--len))); height: var(--w); width: var(--len); }
+#crosshair span:nth-child(4) { top: calc(var(--w) / -2); left: var(--gap); height: var(--w); width: var(--len); }
+#crosshair i { position: absolute; left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%; background: #fff8ec; box-shadow: 0 0 0 1.5px var(--ink); }
+#crosshair.melee i, #crosshair.plain i { display: none; }
+#crosshair.ads { --len: 7px; --w: 2.5px; }
+#crosshair.enemy span, #crosshair.enemy i { background: #ff3b30; }
 #crosshair.melee span { background: var(--red); }
 #hitmarker { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(0.6); font-size: 34px; color: var(--red); opacity: 0; font-weight: 900; transition: opacity 0.1s, transform 0.1s; }
 #hitmarker.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
@@ -531,6 +537,9 @@ body:not(.touch) .touch-only { display: none; }
 body.nc #btn-up { bottom: max(204px, calc(env(safe-area-inset-bottom) + 194px)); }
 body.nc #btn-down { bottom: max(150px, calc(env(safe-area-inset-bottom) + 140px)); }
 #btn-guard { right: max(116px, calc(env(safe-area-inset-right) + 96px)); bottom: max(196px, calc(env(safe-area-inset-bottom) + 186px)); background: #ffe1cc; }
+/* (ROADMAP 28.25) the aim button: where the guard's is (never out together) - aimed in while it is lit */
+#btn-aim { right: max(116px, calc(env(safe-area-inset-right) + 96px)); bottom: max(126px, calc(env(safe-area-inset-bottom) + 116px)); }
+#btn-aim.on { background: #ffd23f; box-shadow: 0 0 0 3px #fff8ec, 3px 4px 0 var(--ink); }
 /* (not with ?classic) the weapon wheel: hold Tab, or hold the swap button (ROADMAP 6.6) */
 #wheel { position: fixed; left: 50%; top: 50%; width: 0; height: 0; z-index: 30; pointer-events: none; }
 #wheel::before { content: ''; position: absolute; left: -205px; top: -205px; width: 410px; height: 410px; border-radius: 50%; background: radial-gradient(circle, rgba(255, 253, 246, 0.82) 0 38%, rgba(255, 253, 246, 0.55) 39% 70%, rgba(255, 253, 246, 0) 71%); }
@@ -1045,7 +1054,7 @@ body.touch #btn-pause { left: calc(50% - 26px); }
 #vf-shoot, #vf-back { pointer-events: auto; display: none; }
 body.touch #vf-shoot { display: block; right: max(30px, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); background: #fff8ec; }
 body.touch #vf-back { display: block; left: max(20px, env(safe-area-inset-left)); top: max(14px, env(safe-area-inset-top)); }
-body.phone-cam #hud, body.phone-cam #btn-fire, body.phone-cam #btn-jump, body.phone-cam #btn-draw, body.phone-cam #btn-swap, body.phone-cam #btn-photo, body.phone-cam #btn-enter, body.phone-cam #btn-phone, body.phone-cam #btn-radio, body.phone-cam #btn-view, body.phone-cam #btn-guard, body.phone-cam #btn-hands, body.phone-cam #btn-handbrake, body.phone-cam #btn-boost { display: none !important; }
+body.phone-cam #hud, body.phone-cam #btn-fire, body.phone-cam #btn-jump, body.phone-cam #btn-draw, body.phone-cam #btn-swap, body.phone-cam #btn-photo, body.phone-cam #btn-enter, body.phone-cam #btn-phone, body.phone-cam #btn-radio, body.phone-cam #btn-view, body.phone-cam #btn-guard, body.phone-cam #btn-aim, body.phone-cam #btn-hands, body.phone-cam #btn-handbrake, body.phone-cam #btn-boost { display: none !important; }
 #phone-flash { position: fixed; inset: 0; z-index: 13; background: #fff; opacity: 0; pointer-events: none; }
 #phone-flash.on { animation: phoneFlash 0.35s ease-out; }
 @keyframes phoneFlash { from { opacity: 0.85; } to { opacity: 0; } }
@@ -1249,6 +1258,7 @@ body:has(#armor:not(.hidden)):has(#stamina:not(.hidden)) #goals, body:has(#armor
   body.touch.nc #btn-up { bottom: max(152px, calc(env(safe-area-inset-bottom) + 144px)); }
   body.touch.nc #btn-down { bottom: max(112px, calc(env(safe-area-inset-bottom) + 104px)); }
   body.touch #btn-guard { right: max(86px, calc(env(safe-area-inset-right) + 72px)); bottom: max(146px, calc(env(safe-area-inset-bottom) + 138px)); }
+  body.touch #btn-aim { right: max(92px, calc(env(safe-area-inset-right) + 74px)); bottom: max(84px, calc(env(safe-area-inset-bottom) + 76px)); }
   body.touch #btn-hands { right: max(196px, calc(env(safe-area-inset-right) + 180px)); bottom: max(96px, calc(env(safe-area-inset-bottom) + 88px)); }
   /* the menus: smaller print, more of them on the screen */
   body.touch .sheet h2 { margin-bottom: 6px; font-size: 24px; }
@@ -1714,7 +1724,7 @@ body.touch .fd-it i { font-size: 8.5px; }
 body.touch .fd-cats { top: auto; bottom: max(8px, env(safe-area-inset-bottom)); left: 56%; padding: 4px 6px; gap: 4px; }
 body.touch .fd-cats-t { display: none; }
 body.touch .fd-cat { font-size: 13px; padding: 4px 8px; }
-body.touch.fd-open #btn-fire, body.touch.fd-open #btn-jump, body.touch.fd-open #btn-draw, body.touch.fd-open #btn-photo, body.touch.fd-open #btn-swap, body.touch.fd-open #btn-guard, body.touch.fd-open #btn-hands, body.touch.fd-open #btn-up, body.touch.fd-open #btn-down, body.touch.fd-open #btn-enter, body.touch.fd-open #draw-hint, body.touch.fd-open #look-zone, body.touch.fd-open #btn-gas, body.touch.fd-open #btn-brake, body.touch.fd-open #btn-handbrake, body.touch.fd-open #btn-boost { display: none !important; }
+body.touch.fd-open #btn-fire, body.touch.fd-open #btn-jump, body.touch.fd-open #btn-draw, body.touch.fd-open #btn-photo, body.touch.fd-open #btn-swap, body.touch.fd-open #btn-guard, body.touch.fd-open #btn-aim, body.touch.fd-open #btn-hands, body.touch.fd-open #btn-up, body.touch.fd-open #btn-down, body.touch.fd-open #btn-enter, body.touch.fd-open #draw-hint, body.touch.fd-open #look-zone, body.touch.fd-open #btn-gas, body.touch.fd-open #btn-brake, body.touch.fd-open #btn-handbrake, body.touch.fd-open #btn-boost { display: none !important; }
 body.touch.fd-open #toasts { left: 24%; }
 body.touch .fd-signs { top: calc(max(6px, env(safe-area-inset-top)) + 96px); left: max(10px, env(safe-area-inset-left)); padding: 4px 7px 5px; gap: 2px; }
 body.touch .fd-signs b { font-size: 15px; }

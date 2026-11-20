@@ -136,6 +136,41 @@ function makeShape() {
   return { type: 0, c: new THREE.Vector3(), x: new THREE.Vector3(), y: new THREE.Vector3(), z: new THREE.Vector3(), part: 'torso', bone: '', col: [1, 1, 1, 1], fill: 0, clip: null, clipArr: [0, 0, 0, 0], bias: 0, solid: true };
 }
 
+
+// (ROADMAP 28.25) where a hand goes for the gun he holds (G: game/gunhold.js - its kind, how far aimed 0..1, how long its
+// butt): the right one's wrist; the left one's here only roughly - it is put on the gun itself once the gun is placed
+// (gunhold hands). Carried: a long one low across him in both hands; a pistol in the hand that hangs. Aimed: a long one's
+// butt in his shoulder (under his arm, on his shoulder), a pistol out at his eye's line, a minigun at his hip.
+const _ga = new THREE.Vector3();
+function gunArm(fig, G, side, hipY, tgt) {
+  const S = fig.scale;
+  const j = fig.j;
+  const k = G.k * G.k * (3 - 2 * G.k);
+  const d = fig.aimDir;
+  if (G.style === 'hip') {
+    if (side === 1) fig.toWorld(0.27, hipY + 0.15, 0.06, tgt);
+    else fig.toWorld(0.02, hipY + 0.2, 0.42, tgt);
+    return true;
+  }
+  if (G.style === 'pistol') {
+    if (k < 0.03 || (side === -1 && G.k < 0.45)) return false;
+    fig.toWorld(side * 0.24, hipY - 0.05, 0.05, tgt);
+    _ga.copy(j.neck).addScaledVector(d, 0.47 * S).addScaledVector(fig.right, (side === 1 ? 0.035 : -0.04) * S);
+    _ga.y += 0.085 * S;
+    tgt.lerp(_ga, k);
+    return true;
+  }
+  // (carried: his hand out by his right hip, the butt outside his elbow - not into his ribs)
+  if (side === 1) fig.toWorld(0.25, hipY + 0.15, 0.2, tgt);
+  else fig.toWorld(0.05, hipY + 0.06, 0.5, tgt);
+  if (k > 0.001) {
+    _ga.copy(j.shoulderR).addScaledVector(d, (side === 1 ? G.butt : G.butt + 0.3) * S).addScaledVector(fig.right, (side === 1 ? G.out : G.out - 0.05) * S);
+    _ga.y += G.up * S;
+    tgt.lerp(_ga, k);
+  }
+  return true;
+}
+
 export class Doodle {
   // (ROADMAP 18.9) the film's people on twos: on while it plays, n its twelve-a-second clock
   static twos = { on: false, n: 0 };
@@ -156,6 +191,8 @@ export class Doodle {
     this.walkAmp = 0;
     this.air = false;
     this.aim = 0;
+    // (ROADMAP 28.25: a gun in his hands, held as one is - game/gunhold.js sets it, gunArm poses by it)
+    this.gun = null;
     this.aimPitch = 0;
     this.aimYaw = 0; // aim offset from where the body faces (headless guys wave the gun around)
     this.melee = -1;
@@ -580,6 +617,8 @@ export class Doodle {
       } else if (this.flail > 0) {
         const a = ph * 2.2 + off;
         this.toWorld(side * (0.3 + Math.sin(a) * 0.15), ny + 0.1 + Math.cos(a * 1.3) * 0.35, nz + 0.2 + Math.sin(a * 0.7) * 0.2, tgt);
+        useIK = true;
+      } else if (this.gun && gunArm(this, this.gun, side, hipY, tgt)) {
         useIK = true;
       } else if (this.aim && (side === 1 || this.aim === 2)) {
         // (aimReach, aimSide: a long heavy gun is held nearer, its butt in the shoulder - game/armfx.js)
