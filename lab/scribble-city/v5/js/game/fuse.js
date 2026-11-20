@@ -41,6 +41,8 @@ import { tr } from '../core/lang.js';
 // On what is yours (your car, you, your gun) it stays; on others (a police car, a gangster, a man in
 // the street) it does its thing for a few seconds and goes.
 
+// (ROADMAP 28.24) where an effect of a part goes, in the world
+const _fxp = new THREE.Vector3();
 // (ROADMAP 15.3) a jet's and a propeller's own axis - its flame out of -z - and the way drawn
 const _jetAxis = new THREE.Vector3(0, 0, -1);
 const _jetDir = new THREE.Vector3();
@@ -2872,6 +2874,23 @@ export class Fuse {
           ud.flame.scale.z = damp(ud.flame.scale.z, k * (o.p.v === 'under' ? 1 : 1.4), 18, this.fdt);
           // (ROADMAP 28.24: out only as it burns - squashed flat it was a white lid on the nozzle)
           ud.flame.visible = ud.flame.scale.z > 0.03;
+          // (it lights with a flash and a ring; burning, sparks and smoke off it)
+          if (on) {
+            const fx = this.game.fx;
+            ud.flame.getWorldPosition(_fxp);
+            if (!ud.lit) {
+              fx.flash(_fxp.x, _fxp.y, _fxp.z, 1.3, [2, 1.2, 0.5]);
+              fx.ring(_fxp.x, _fxp.y, _fxp.z, 0.1, 1.2, 0.24, [1, 0.6, 0.2], 3);
+              fx.sparks(_fxp.x, _fxp.y, _fxp.z, 6, [1.8, 1, 0.3]);
+            }
+            ud.puffT = (ud.puffT || 0) - this.fdt;
+            if (ud.puffT <= 0) {
+              ud.puffT = 0.14 + Math.random() * 0.12;
+              fx.sparks(_fxp.x, _fxp.y, _fxp.z, 2, [1.8, 1, 0.3]);
+              fx.smoke(_fxp.x, _fxp.y + 0.15, _fxp.z, 0.8);
+            }
+          }
+          ud.lit = !!on;
         } else if (o.role === 'spring' && ud.coil) {
           const k = v.fzSpringT && t - v.fzSpringT < 0.35 ? 1 - (t - v.fzSpringT) / 0.35 : 0;
           ud.coil.scale.y = 0.22 + k * 1.3;

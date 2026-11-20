@@ -315,8 +315,24 @@ function rotorDesign(lines, ctx, o) {
   const hc = hueOf(o.ink);
   const P = [];
   // the mast on its plate, the swashplate, its links
-  P.push(cyl([0, C.roof - 0.03, z0], [0, C.roof + 0.05, z0], 0.3, 0.27, 'dark', 'gun', { n: 20 }));
+  // (ROADMAP 28.24) as a helicopter's is made: the mast out of a fairing bolted to the roof, a second plate over the
+  // swashplate that turns with the blades; the rotor's head in steps, two bolts through each blade's grip; the
+  // turbine in its cowl behind the mast, its intake and its exhaust; a shaft along the boom's top to the tail
+  // rotor's gearbox; a skid under the tail; lamps at the stabiliser's tips
+  P.push(lat([0, C.roof - 0.03, z0], [0, C.roof + 0.12, z0], [[0, 0], [0, 0.3], [0.45, 0.27], [1, 0.12], [1, 0]], 'dark', 'gun', { n: 20 }));
+  P.push(ringOf([0, C.roof + 0.03, z0], 0.245, 'y', 10, 'chrome', 'gun', { r: 0.014, h: 0.022 }));
   P.push(cyl([0, C.roof + 0.05, z0], [0, hub - 0.05, z0], 0.075, 0.065, 'steel'));
+  P.push(cyl([0, hub - 0.185, z0], [0, hub - 0.155, z0], 0.15, 0.15, 'steel', 'main', { n: 18, noSil: true }));
+  P.push(lat([0, hub - 0.06, z0], [0, hub + 0.15, z0], [[0, 0], [0, 0.135], [0.45, 0.135], [0.55, 0.1], [0.85, 0.1], [1, 0.055], [1, 0]], 'dark', 'main', { n: 16, noSil: true }));
+  {
+    const ye = C.roof + 0.17;
+    const ze0 = z0 - 0.24;
+    const ze1 = Math.min(ze0 - 0.5, -D.hl * 0.42 + 0.12);
+    P.push(lat([0, ye, ze0], [0, ye, ze1], [[0, 0.07], [0, 0.15], [0.12, 0.175], [0.7, 0.165], [0.92, 0.11], [1, 0.1], [1, 0.07], [0.8, 0.075]], 'boom', 'gun', { n: 14, noSil: true }));
+    P.push(lat([0, ye, ze0], [0, ye, ze1], [[0.012, 0], [0.012, 0.072]], 'dark', 'gun', { n: 12, noSil: true }));
+    P.push(lat([0.12, ye + 0.06, ze1 + 0.16], [0.26, ye + 0.16, ze1 - 0.02], [[0, 0.045], [1, 0.055], [1, 0.042], [0.2, 0.038]], 'chrome', 'gun', { n: 10, noSil: true }));
+    P.push(tor([0, ye, lerp(ze0, ze1, 0.4)], 0.172, 0.008, 'z', 'dark', 'gun', { noSil: true }));
+  }
   P.push(cyl([0, hub - 0.25, z0], [0, hub - 0.2, z0], 0.17, 0.17, 'chrome', 'gun', { n: 18 }));
   for (const s of [1, -1]) P.push(cyl([s * 0.12, hub - 0.2, z0], [s * 0.1, hub - 0.03, z0], 0.012, 0.012, 'dark', 'gun', { n: 6 }));
   // (what turns: the hub, its grips, the blades - flat, a little thinner out to their painted tips)
@@ -328,6 +344,7 @@ function rotorDesign(lines, ctx, o) {
     P.push(slab('y', hub, blade(z0, 0, a, 0.08, 0.36, 0.2, 0.17), 0.07, 'dark', 'main', { edge: 2.4 }));
     P.push(slab('y', hub, blade(z0, 0, a, 0.34, R * 0.84, 0.3, 0.26), 0.045, 'blade', 'main', { edge: 2.2 }));
     P.push(slab('y', hub, blade(z0, 0, a, R * 0.84, R, 0.26, 0.24), 0.05, 'tip', 'main', { edge: 2.2 }));
+    for (const rr of [0.16, 0.29]) P.push(cyl([-Math.sin(a) * rr, hub + 0.03, z0 + Math.cos(a) * rr], [-Math.sin(a) * rr, hub + 0.055, z0 + Math.cos(a) * rr], 0.018, 0.015, 'chrome', 'main', { n: 6, noSil: true }));
   }
   // the tail boom: from the back of the roof out behind the car, a little up; its strut to the boot
   const zr = -D.hl * 0.42;
@@ -337,6 +354,9 @@ function rotorDesign(lines, ctx, o) {
   P.push(cyl([0, yr, zr], [0, yt, zt], 0.1, 0.055, 'boom', 'gun', { n: 14 }));
   P.push(cyl([0, yr + 0.12, zr + 0.1], [0, hub - 0.22, z0 - 0.05], 0.05, 0.04, 'boom', 'gun', { n: 8 }));
   P.push(cyl([0, C.tailY + 0.25, -D.hl + 0.15], [0, lerp(yr, yt, 0.55), lerp(zr, zt, 0.55)], 0.03, 0.03, 'steel', 'gun', { n: 6 }));
+  P.push(cyl([0, yr + 0.1, zr], [0, yt + 0.058, zt + 0.12], 0.022, 0.02, 'dark', 'gun', { n: 6, noSil: true }));
+  P.push(tube([[0, lerp(yr, yt, 0.82) - 0.06, lerp(zr, zt, 0.82)], [0, yt - 0.34, zt + 0.22], [0, yt - 0.37, zt - 0.02]], 0.013, 'steel', 'gun', { n: 5 }));
+  for (const s of [1, -1]) P.push(sph([s * 0.45, yt - 0.02, zt + 0.3], 0.026, s > 0 ? 'light' : 'green', 'gun', { noSil: true }));
   // its fin (upright, swept) and the stabiliser across it
   P.push(slab('x', 0, [[zt + 0.42, yt - 0.02], [zt + 0.05, yt + 0.62], [zt - 0.16, yt + 0.62], [zt - 0.02, yt - 0.06], [zt + 0.06, yt - 0.3], [zt + 0.24, yt - 0.26]], 0.05, 'boom', 'gun', { edge: 2.4 }));
   P.push(slab('y', yt - 0.02, [[zt + 0.42, -0.42], [zt + 0.18, -0.46], [zt + 0.18, 0.46], [zt + 0.42, 0.42]], 0.04, 'boom', 'gun', { edge: 2 }));
@@ -345,6 +365,8 @@ function rotorDesign(lines, ctx, o) {
   const tz = zt - 0.02;
   const tx = 0.1;
   P.push(cyl([tx - 0.06, ty, tz], [tx + 0.04, ty, tz], 0.045, 0.045, 'dark', 'tail', { n: 10 }));
+  P.push(lat([tx - 0.09, ty, tz], [tx - 0.055, ty, tz], [[0, 0], [0, 0.07], [1, 0.07], [1, 0]], 'boom', 'gun', { n: 10, noSil: true }));
+  P.push(sph([tx + 0.05, ty, tz], 0.03, 'chrome', 'tail', { noSil: true }));
   for (let i = 0; i < 2; i++) {
     const a = (i / 2) * Math.PI * 2 + 0.6;
     // (on the x plane: u is the car's z, w its y)
@@ -361,6 +383,7 @@ function rotorDesign(lines, ctx, o) {
     tip: hc ? mix(hc, [1, 1, 1], 0.1) : HAZARD,
     boom: hc ? mix(hc, [0.15, 0.15, 0.17], 0.25) : [0.88, 0.88, 0.86],
     light: RED,
+    green: GREEN,
   };
   return sheet('rotor', lines, ctx, o, {
     ax: 'y',
@@ -648,10 +671,30 @@ function teslaDesign(lines, ctx, o) {
   const y0 = C.roof - 0.02;
   const zc = -0.25;
   const H = 0.62 + 0.08 * (lv - 1);
-  P.push(box([-0.24, y0, zc - 0.22], [0.24, y0 + 0.13, zc + 0.22], 'dark'));
-  P.push(box([-0.2, y0 + 0.13, zc - 0.18], [0.2, y0 + 0.15, zc + 0.18], 'steel', 'gun', { noSil: true }));
-  P.push(tor([0, y0 + 0.17, zc], 0.17, 0.012, 'y', 'copper', 'gun', { noSil: true }));
-  P.push(tor([0, y0 + 0.2, zc], 0.13, 0.012, 'y', 'copper', 'gun', { noSil: true }));
+  // (ROADMAP 28.24) as a coil is built: a cabinet bolted down, a plate on it; the primary - copper pipe wound flat
+  // in a spiral - on four ribbed insulators; three capacitors standing behind; a spark gap of two balls; a heavy
+  // cable out of its side
+  P.push(rbox([-0.24, y0, zc - 0.22], [0.24, y0 + 0.13, zc + 0.22], 'dark', 'gun', { e: 0.02 }));
+  P.push(rbox([-0.2, y0 + 0.13, zc - 0.18], [0.2, y0 + 0.15, zc + 0.18], 'steel', 'gun', { noSil: true, e: 0.006 }));
+  {
+    const sp = [];
+    for (let i = 0; i <= 44; i++) {
+      const a = (i / 44) * Math.PI * 2 * 2.75;
+      const r = 0.2 - 0.085 * (i / 44);
+      sp.push([Math.cos(a) * r, y0 + 0.185 + 0.03 * (i / 44), zc + Math.sin(a) * r]);
+    }
+    P.push(tube(sp, 0.011, 'copper', 'gun', { n: 5, steps: 88, tension: 0.5 }));
+  }
+  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+    P.push(lat([sx * 0.14, y0 + 0.15, zc + sz * 0.14], [sx * 0.14, y0 + 0.19, zc + sz * 0.14], [[0, 0], [0, 0.022], [0.3, 0.014], [0.5, 0.022], [0.8, 0.014], [1, 0.018], [1, 0]], 'white', 'gun', { n: 8, noSil: true }));
+    P.push(cyl([sx * 0.21, y0 + 0.128, zc + sz * 0.19], [sx * 0.21, y0 + 0.142, zc + sz * 0.19], 0.013, 0.011, 'steel', 'gun', { n: 6, noSil: true }));
+  }
+  for (const x of [-0.1, 0, 0.1]) P.push(lat([x, y0 + 0.15, zc - 0.15], [x, y0 + 0.3, zc - 0.15], [[0, 0], [0, 0.036], [0.85, 0.036], [0.9, 0.02], [1, 0.012], [1, 0]], 'cap', 'gun', { n: 10, noSil: true }));
+  for (const s of [1, -1]) {
+    P.push(cyl([0.17, y0 + 0.15, zc + 0.12 + s * 0.045], [0.17, y0 + 0.24, zc + 0.12 + s * 0.045], 0.007, 0.007, 'steel', 'gun', { n: 5, noSil: true }));
+    P.push(sph([0.17, y0 + 0.25, zc + 0.12 + s * 0.03], 0.02, 'chrome', 'gun', { noSil: true }));
+  }
+  P.push(tube([[-0.24, y0 + 0.06, zc + 0.05], [-0.32, y0 + 0.05, zc + 0.08], [-0.4, y0 + 0.0, zc + 0.2], [-0.46, y0 - 0.06, zc + 0.32]], 0.018, 'cable', 'gun', { n: 6 }));
   P.push(cyl([0, y0 + 0.13, zc], [0, y0 + 0.24, zc], 0.07, 0.06, 'white', 'gun', { n: 12 }));
   P.push(cyl([0, y0 + 0.24, zc], [0, y0 + 0.24 + H, zc], 0.08, 0.075, 'copper', 'gun', { n: 16 }));
   const nw = 11;
@@ -662,7 +705,7 @@ function teslaDesign(lines, ctx, o) {
   // (its charge: a glow round the ring, out as it charges and fires)
   P.push(tor([0, yt, zc], 0.17 + 0.02 * lv, 0.1, 'y', 'glow', 'charge', { noSil: true }));
   P.push(sph([0, yt, zc], 0.12, 'glow', 'charge', { noSil: true }));
-  const pal = { dark: [0.12, 0.12, 0.14], steel: STEEL, copper: hc ? mix(hc, [0.78, 0.45, 0.2], 0.4) : [0.78, 0.45, 0.2], wind: [0.55, 0.3, 0.12], white: WHITE, chrome: CHROME, glow: [0.62, 0.86, 1] };
+  const pal = { dark: [0.12, 0.12, 0.14], steel: STEEL, copper: hc ? mix(hc, [0.78, 0.45, 0.2], 0.4) : [0.78, 0.45, 0.2], wind: [0.55, 0.3, 0.12], white: WHITE, chrome: CHROME, glow: [0.62, 0.86, 1], cap: [0.14, 0.3, 0.62], cable: RUBBER };
   return sheet('tesla', lines, ctx, o, {
     ax: 'z',
     c: zc + 0.25,
@@ -746,17 +789,23 @@ function smokeDesign(lines, ctx, o) {
   const P = [];
   const yb = (K ? beltY(K, 0.08) : C.tailY + 0.3) + 0.02;
   const zb = -D.hl + 0.32;
-  P.push(box([0, yb - 0.02, zb - 0.1], [Math.min(D.hw - 0.1, 0.62), yb + 0.06, zb + 0.12], 'rack'));
+  // (ROADMAP 28.24) as a smoke discharger is made: a bank of tubes on a bracket bolted to the car, each with a band
+  // at its foot and a lip at its mouth, a red cap on a lanyard in the mouth; the firing lead from tube to tube
+  P.push(rbox([0, yb - 0.02, zb - 0.1], [Math.min(D.hw - 0.1, 0.62), yb + 0.06, zb + 0.12], 'rack', 'gun', { e: 0.014 }));
   const nt = lv >= 3 ? 4 : 3;
+  const lead = [];
   for (let i = 0; i < nt; i++) {
     const x = 0.16 + i * 0.13;
     const p0 = [x, yb + 0.04, zb];
     const p1 = [x + 0.03, yb + 0.22, zb - 0.16];
-    P.push(cyl(p0, p1, 0.052, 0.052, 'tube', 'gun', { n: 12 }));
-    P.push(cyl(p1, [p1[0] + 0.004, p1[1] + 0.025, p1[2] - 0.022], 0.056, 0.056, 'cap', 'gun', { n: 12 }));
+    P.push(lat(p0, p1, [[0, 0], [0, 0.056], [0.14, 0.056], [0.14, 0.05], [0.86, 0.052], [0.86, 0.06], [1, 0.06], [1, 0.046], [0.5, 0.044]], 'tube', 'gun', { n: 12 }));
+    P.push(lat(p1, [p1[0] + 0.004, p1[1] + 0.025, p1[2] - 0.022], [[-0.6, 0.046], [0.4, 0.05], [1, 0.03], [1, 0]], 'cap', 'gun', { n: 12 }));
+    P.push(cyl([x, yb + 0.058, zb + 0.09], [x, yb + 0.072, zb + 0.09], 0.012, 0.01, 'bolt', 'gun', { n: 6, noSil: true }));
+    lead.push([x + 0.004, yb + 0.075, zb + 0.045]);
   }
-  P.push(box([0.1, yb + 0.06, zb + 0.02], [0.1 + nt * 0.13, yb + 0.1, zb + 0.08], 'rack', 'gun', { noSil: true }));
-  const pal = { rack: [0.2, 0.22, 0.2], tube: hc ? mix(hc, [0.3, 0.34, 0.26], 0.5) : [0.34, 0.38, 0.28], cap: [0.86, 0.16, 0.14] };
+  P.push(rbox([0.1, yb + 0.06, zb + 0.02], [0.1 + nt * 0.13, yb + 0.1, zb + 0.08], 'rack', 'gun', { noSil: true, e: 0.008 }));
+  P.push(tube([[0.06, yb + 0.03, zb + 0.14]].concat(lead.map(([x, y, z]) => [x, y + 0.04, z + 0.02]), [[0.1 + nt * 0.13 + 0.03, yb + 0.05, zb + 0.14]]), 0.007, 'bolt', 'gun', { n: 4, steps: 24 }));
+  const pal = { rack: [0.2, 0.22, 0.2], tube: hc ? mix(hc, [0.3, 0.34, 0.26], 0.5) : [0.34, 0.38, 0.28], cap: [0.6, 0.08, 0.09], bolt: [0.1, 0.1, 0.11] };
   return sheet('smoke', lines, ctx, o, {
     ax: 'z',
     c: zb - 0.2,

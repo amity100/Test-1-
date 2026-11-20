@@ -23,8 +23,13 @@ function missilesDesign(lines, ctx, o) {
   const per = lv === 1 ? 1 : 2;
   const L = 1.25;
   const rm = 0.075;
-  P.push(cyl([0, y0, zc], [0, y0 + 0.08, zc], 0.3, 0.28, 'dark', 'gun', { n: 20 }));
-  P.push(box([0, y0 + 0.08, zc - 0.32], [0.26, y0 + 0.22, zc + 0.3], 'frame'));
+  // (ROADMAP 28.24) as a launcher is made: its turntable bolted round, a ram that tips the frame; each missile a
+  // body with a pointed nose turned to a curve, a dark band where its eye is, four swept fins square to one another,
+  // its nozzle behind; a shoe on its rail fore and aft
+  P.push(lat([0, y0, zc], [0, y0 + 0.08, zc], [[0, 0], [0, 0.3], [0.6, 0.3], [1, 0.26], [1, 0]], 'dark', 'gun', { n: 20 }));
+  P.push(ringOf([0, y0 + 0.05, zc], 0.27, 'y', 12, 'bolt', 'gun', { r: 0.012, h: 0.014 }));
+  P.push(rbox([0, y0 + 0.08, zc - 0.32], [0.26, y0 + 0.22, zc + 0.3], 'frame', 'gun', { e: 0.02 }));
+  P.push(cyl([0.2, y0 + 0.09, zc - 0.26], [0.2, y0 + 0.2, zc + 0.16], 0.022, 0.022, 'bolt', 'gun', { n: 6, noSil: true }));
   const groups = { ammo: { at: [0.1, y0 + 0.4, zc], ax: 'x', kind: 'ammo' } };
   for (let i = 0; i < per; i++) {
     const x = 0.11 + i * 0.17;
@@ -32,21 +37,26 @@ function missilesDesign(lines, ctx, o) {
     // its rail; on it the missile - body, nose, fins
     P.push(box([x - 0.03, y - rm - 0.03, zc - L / 2], [x + 0.03, y - rm, zc + L / 2], 'frame', 'gun', { noSil: i > 0 }));
     P.push(cyl([x, y, zc - L / 2], [x, y, zc + L / 2 - 0.26], rm, rm, 'body', 'ammo', { n: 14 }));
-    P.push(cyl([x, y, zc + L / 2 - 0.26], [x, y, zc + L / 2], rm, 0.01, 'nose', 'ammo', { n: 14 }));
+    P.push(lat([x, y, zc + L / 2 - 0.26], [x, y, zc + L / 2], [[0, rm], [0.35, rm * 0.9], [0.7, rm * 0.58], [0.92, rm * 0.22], [1, 0.004]], 'nose', 'ammo', { n: 14 }));
+    P.push(cyl([x, y, zc + L / 2 - 0.3], [x, y, zc + L / 2 - 0.26], rm + 0.003, rm + 0.003, 'fin', 'ammo', { n: 14, noSil: true }));
     P.push(cyl([x, y, zc + 0.1], [x, y, zc + 0.16], rm + 0.004, rm + 0.004, 'band', 'ammo', { n: 14, noSil: true }));
-    for (let k = 0; k < 4; k++) {
-      const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
-      const cx = x + Math.cos(a) * (rm + 0.06);
-      const cy = y + Math.sin(a) * (rm + 0.06);
-      P.push(box([Math.min(x, cx) - 0.006, Math.min(y, cy) - 0.006, zc - L / 2], [Math.max(x, cx) + 0.006, Math.max(y, cy) + 0.006, zc - L / 2 + 0.22], 'fin', 'ammo', { noSil: k !== 1 }));
+    P.push(lat([x, y, zc - L / 2 - 0.05], [x, y, zc - L / 2 + 0.01], [[0, rm * 0.5], [0, rm * 0.72], [1, rm * 0.5], [1, 0]], 'fin', 'ammo', { n: 10, noSil: true }));
+    {
+      const zb = zc - L / 2;
+      const fin = (r0, r1) => [[zb + 0.24, r0], [zb + 0.09, r1], [zb + 0.005, r1], [zb + 0.005, r0]];
+      for (const sg of [1, -1]) {
+        P.push(ext('x', x, fin(rm * 0.85, rm + 0.075).map(([z, r]) => [z, y + sg * r]), 0.01, 'fin', 'ammo', { e: 0.003, noSil: sg < 0 }));
+        P.push(ext('y', y, fin(rm * 0.85, rm + 0.075).map(([z, r]) => [z, -(x + sg * r)]), 0.01, 'fin', 'ammo', { e: 0.003, noSil: true }));
+      }
     }
+    for (const zs of [zc - L * 0.3, zc + L * 0.2]) P.push(rbox([x - 0.022, y - rm - 0.012, zs - 0.03], [x + 0.022, y - rm + 0.01, zs + 0.03], 'bolt', 'ammo', { noSil: true, e: 0.005 }));
     if (lv === 3) P.push(box([x - 0.002, y + rm, zc - 0.1], [x + 0.002, y + rm + 0.05, zc + 0.3], 'fin', 'ammo', { noSil: true }));
   }
   if (lv >= 2) {
     // (the pod's casing round them)
     P.push(box([0.02, y0 + 0.2, zc - L / 2 + 0.3], [0.04, y0 + 0.2 + (lv === 3 ? 0.42 : 0.26), zc + L / 2 - 0.3], 'pod', 'gun', { noSil: true }));
   }
-  const pal = { dark: DARK, frame: GUNMETAL, body: hc ? mix(hc, WHITE, 0.4) : [0.9, 0.91, 0.88], nose: RED, band: HAZARD, fin: [0.2, 0.22, 0.26], pod: OLIVE };
+  const pal = { dark: DARK, frame: GUNMETAL, body: hc ? mix(hc, WHITE, 0.4) : [0.9, 0.91, 0.88], nose: [0.6, 0.08, 0.09], band: HAZARD, fin: [0.2, 0.22, 0.26], pod: OLIVE, bolt: [0.4, 0.41, 0.45] };
   return sheet('missiles', lines, ctx, o, {
     ax: 'x',
     c: 0.11 + 0.1,
@@ -166,18 +176,35 @@ function harpoonDesign(lines, ctx, o) {
   const mirror = lv >= 3;
   for (const x of xs) {
     P.push(cyl([x, C.hoodY - 0.02, zb], [x, yb - 0.07, zb], 0.05, 0.05, 'dark', 'gun', { n: 10 }));
-    P.push(box([x - 0.07, yb - 0.08, zb - 0.32], [x + 0.07, yb + 0.07, zb + 0.15], 'body'));
+    // (ROADMAP 28.24) as a harpoon gun is made: its body on a swivel, the air bottle that fires it on top with its
+    // gauge, a collar at the barrel's mouth, the grips behind; the harpoon's head two broad blades crossed, barbs
+    // behind them; the reel between two flanges, its line wound on it and out to the harpoon's tail, a crank
+    P.push(lat([x, C.hoodY + 0.02, zb], [x, yb - 0.07, zb], [[0, 0], [0, 0.085], [0.25, 0.085], [0.4, 0.05], [1, 0.05], [1, 0]], 'dark', 'gun', { n: 10, noSil: true }));
+    P.push(rbox([x - 0.07, yb - 0.08, zb - 0.32], [x + 0.07, yb + 0.07, zb + 0.15], 'body', 'gun', { e: 0.018 }));
     P.push(cyl([x, yb, zb + 0.15], [x, yb, zb + L * 0.62], 0.045, 0.045, 'barrel', 'gun', { n: 12 }));
+    P.push(lat([x, yb, zb + L * 0.62 - 0.07], [x, yb, zb + L * 0.62 + 0.004], [[0, 0.046], [0.2, 0.06], [1, 0.064], [1, 0.03], [0.4, 0.03]], 'dark', 'gun', { n: 12, noSil: true }));
     P.push(cyl([x, yb, zb - 0.44], [x, yb, zb - 0.3], 0.05, 0.06, 'dark', 'gun', { n: 10 }));
+    P.push(lat([x, yb + 0.115, zb - 0.28], [x, yb + 0.115, zb + 0.2], [[0, 0], [0.04, 0.035], [0.12, 0.045], [0.84, 0.045], [0.93, 0.03], [1, 0.016], [1, 0]], 'tank', 'gun', { n: 12, noSil: true }));
+    P.push(lat([x, yb + 0.115, zb + 0.2], [x, yb + 0.04, zb + 0.24], [[0, 0.012], [1, 0.012], [1, 0]], 'steel', 'gun', { n: 6, noSil: true }));
+    P.push(lat([x - 0.03, yb + 0.13, zb - 0.2], [x - 0.085, yb + 0.15, zb - 0.2], [[0, 0.008], [0.5, 0.008], [0.5, 0.03], [1, 0.03], [1, 0]], 'gauge', 'gun', { n: 10, noSil: true }));
+    for (const s of [1, -1]) P.push(cyl([x + s * 0.045, yb - 0.02, zb - 0.32], [x + s * 0.06, yb - 0.1, zb - 0.42], 0.016, 0.018, 'dark', 'gun', { n: 6, noSil: true }));
     // the harpoon: its shaft, its head and barbs - it flies (game/gearweap2.js)
     P.push(cyl([x, yb, zb + L * 0.62], [x, yb, zb + L * 0.85], 0.02, 0.02, 'steel', 'spear', { n: 8 }));
-    P.push(cyl([x, yb, zb + L * 0.85], [x, yb, zb + L], 0.05, 0.004, 'head', 'spear', { n: 10 }));
+    {
+      const zh = zb + L;
+      const hd = (c) => [[zh, c], [zh - 0.13, c + 0.052], [zh - 0.105, c + 0.014], [zh - 0.19, c + 0.014], [zh - 0.19, c - 0.014], [zh - 0.105, c - 0.014], [zh - 0.13, c - 0.052]];
+      P.push(ext('x', x, hd(yb), 0.012, 'head', 'spear', { e: 0.004 }));
+      P.push(ext('y', yb, hd(-x), 0.012, 'head', 'spear', { e: 0.004, noSil: true }));
+    }
     for (const s of [1, -1]) P.push(cyl([x, yb, zb + L * 0.88], [x, yb + s * 0.09, zb + L * 0.8], 0.012, 0.006, 'head', 'spear', { n: 6 }));
     // the reel
-    P.push(cyl([x + 0.08, yb - 0.02, zb - 0.12], [x + 0.18, yb - 0.02, zb - 0.12], 0.1, 0.1, 'reel', 'gun', { n: 16, noSil: true }));
-    P.push(tor([x + 0.13, yb - 0.02, zb - 0.12], 0.09, 0.012, 'x', 'cable', 'gun', { noSil: true }));
+    P.push(lat([x + 0.075, yb - 0.02, zb - 0.12], [x + 0.185, yb - 0.02, zb - 0.12], [[0, 0], [0, 0.11], [0.12, 0.11], [0.12, 0.06], [0.88, 0.06], [0.88, 0.11], [1, 0.11], [1, 0]], 'reel', 'gun', { n: 16, noSil: true }));
+    P.push(cyl([x + 0.09, yb - 0.02, zb - 0.12], [x + 0.17, yb - 0.02, zb - 0.12], 0.088, 0.088, 'cable', 'gun', { n: 14, noSil: true }));
+    P.push(cyl([x + 0.185, yb - 0.02, zb - 0.12], [x + 0.21, yb + 0.04, zb - 0.12], 0.009, 0.009, 'steel', 'gun', { n: 5, noSil: true }));
+    P.push(sph([x + 0.215, yb + 0.05, zb - 0.12], 0.018, 'dark', 'gun', { noSil: true }));
+    P.push(tube([[x + 0.13, yb + 0.068, zb - 0.12], [x + 0.1, yb + 0.1, zb + 0.2], [x + 0.03, yb + 0.03, zb + L * 0.66]], 0.006, 'cable', 'gun', { n: 4 }));
   }
-  const pal = { dark: DARK, body: hc || [0.32, 0.36, 0.42], barrel: GUNMETAL, steel: CHROME, head: [0.85, 0.86, 0.9], reel: HAZARD, cable: [0.5, 0.5, 0.52] };
+  const pal = { dark: DARK, body: hc || [0.32, 0.36, 0.42], barrel: GUNMETAL, steel: CHROME, head: [0.85, 0.86, 0.9], reel: HAZARD, cable: [0.5, 0.5, 0.52], tank: [0.56, 0.1, 0.1], gauge: WHITE };
   return sheet('harpoon', lines, ctx, o, {
     ax: 'x',
     c: xs[0],
@@ -204,7 +231,17 @@ function netDesign(lines, ctx, o) {
   const y0 = C.roof - 0.02;
   const zc = -0.15;
   const w = 0.42 + 0.04 * (lv - 1);
-  P.push(box([-w, y0, zc - w], [w, y0 + 0.16, zc + w], 'box'));
+  // (ROADMAP 28.24) as a net launcher is made: a steel tray with a rim round it and a bracket at each corner; four
+  // mortars leaning out of its corners, a lip at each mouth, the net's weights in them; the bottle that fires them
+  // on its side, a pipe from it round to each
+  P.push(rbox([-w, y0, zc - w], [w, y0 + 0.16, zc + w], 'box', 'gun', { e: 0.02 }));
+  for (const s of [1, -1]) {
+    P.push(rbox([s * (w - 0.03) - 0.03, y0 + 0.145, zc - w], [s * (w - 0.03) + 0.03, y0 + 0.18, zc + w], 'rim', 'gun', { noSil: true, e: 0.008 }));
+    P.push(rbox([-w, y0 + 0.145, zc + s * (w - 0.03) - 0.03], [w, y0 + 0.18, zc + s * (w - 0.03) + 0.03], 'rim', 'gun', { noSil: true, e: 0.008 }));
+  }
+  P.push(lat([w + 0.07, y0 + 0.08, zc - 0.2], [w + 0.07, y0 + 0.08, zc + 0.16], [[0, 0], [0.05, 0.04], [0.14, 0.055], [0.82, 0.055], [0.93, 0.03], [1, 0.018], [1, 0]], 'tank', 'gun', { n: 12, noSil: true }));
+  P.push(tube([[w + 0.07, y0 + 0.08, zc + 0.16], [w + 0.07, y0 + 0.1, zc + 0.3], [w + 0.02, y0 + 0.13, zc + w - 0.02]], 0.011, 'rim', 'gun', { n: 5 }));
+  for (const z of [zc - 0.1, zc + 0.08]) P.push(tor([w + 0.07, y0 + 0.08, z], 0.057, 0.006, 'z', 'rim', 'gun', { noSil: true }));
   // the net folded on it: its cords, criss-cross
   for (let i = 0; i <= 6; i++) {
     const t = lerp(-w + 0.06, w - 0.06, i / 6);
@@ -214,10 +251,11 @@ function netDesign(lines, ctx, o) {
   for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
     const b0 = [sx * (w - 0.06), y0 + 0.12, zc + sz * (w - 0.06)];
     const b1 = [sx * (w + 0.06), y0 + 0.36, zc + sz * (w + 0.06)];
-    P.push(cyl(b0, b1, 0.055, 0.06, 'barrel', 'gun', { n: 12 }));
+    P.push(lat(b0, b1, [[0, 0], [0, 0.055], [0.84, 0.058], [0.84, 0.07], [1, 0.07], [1, 0.05], [0.3, 0.046]], 'barrel', 'gun', { n: 12 }));
     P.push(sph(b1, 0.045, 'weight', 'gun', { noSil: true }));
+    P.push(rbox([sx * (w - 0.02) - 0.05, y0 + 0.0, zc + sz * (w - 0.02) - 0.05], [sx * (w - 0.02) + 0.05, y0 + 0.05, zc + sz * (w - 0.02) + 0.05], 'rim', 'gun', { noSil: true, e: 0.01 }));
   }
-  const pal = { box: hc ? mix(hc, GUNMETAL, 0.4) : GUNMETAL, cord: [0.85, 0.82, 0.7], barrel: DARK, weight: HAZARD };
+  const pal = { box: hc ? mix(hc, GUNMETAL, 0.4) : GUNMETAL, cord: [0.85, 0.82, 0.7], barrel: DARK, weight: HAZARD, rim: [0.42, 0.43, 0.47], tank: [0.56, 0.1, 0.1] };
   return sheet('net', lines, ctx, o, {
     ax: 'y',
     c: y0 + 0.2,
@@ -684,19 +722,28 @@ function repaintDesign(lines, ctx, o) {
   const P = [];
   const y0 = C.roof - 0.02;
   const zc = -0.25;
-  P.push(box([-0.55, y0, zc - 0.05], [0.55, y0 + 0.08, zc + 0.05], 'rail'));
+  // (ROADMAP 28.24) as a sprayer is made: a rail across the roof on two feet; at each end a spray gun on its post -
+  // its body, the air cap round its nozzle, a trigger, the knob behind; three cans of paint, each with a rolled rim
+  // top and bottom, a lid with its wire handle, and a hose to the guns
+  P.push(rbox([-0.55, y0, zc - 0.05], [0.55, y0 + 0.08, zc + 0.05], 'rail', 'gun', { e: 0.014 }));
   for (const x of [-0.45, 0.45]) {
     P.push(cyl([x, y0 + 0.08, zc], [x, y0 + 0.28, zc], 0.025, 0.025, 'rail', 'gun', { n: 8 }));
-    P.push(box([x - 0.05, y0 + 0.22, zc - 0.08], [x + 0.05, y0 + 0.32, zc + 0.12], 'gun'));
+    P.push(rbox([x - 0.05, y0 + 0.22, zc - 0.08], [x + 0.05, y0 + 0.32, zc + 0.12], 'gun', 'gun', { e: 0.014 }));
     P.push(cyl([x, y0 + 0.28, zc + 0.12], [x * 1.25, y0 + 0.24, zc + 0.24], 0.02, 0.03, 'chrome', 'gun', { n: 8 }));
+    P.push(lat([x * 1.2, y0 + 0.248, zc + 0.215], [x * 1.27, y0 + 0.236, zc + 0.255], [[0, 0.03], [0, 0.044], [1, 0.044], [1, 0.012], [0.4, 0.012]], 'rail', 'gun', { n: 10, noSil: true }));
+    P.push(lat([x, y0 + 0.27, zc - 0.08], [x, y0 + 0.27, zc - 0.125], [[0, 0.012], [0.4, 0.012], [0.4, 0.024], [1, 0.024], [1, 0]], 'chrome', 'gun', { n: 8, noSil: true }));
+    P.push(rbox([x - 0.008, y0 + 0.13, zc + 0.02], [x + 0.008, y0 + 0.22, zc + 0.045], 'chrome', 'gun', { noSil: true, e: 0.004 }));
+    P.push(tube([[x, y0 + 0.22, zc - 0.06], [x * 0.9, y0 + 0.16, zc - 0.16], [x * 0.55, y0 + 0.1, zc - 0.26], [x * 0.45, y0 + 0.2, zc - 0.32]], 0.011, 'hose', 'gun', { n: 5 }));
   }
   const cols = [hc || [0.9, 0.2, 0.25], [0.2, 0.5, 0.95], [0.25, 0.8, 0.35]];
   for (let k = 0; k < 3; k++) {
     const x = (k - 1) * 0.2;
-    P.push(cyl([x, y0 + 0.08, zc - 0.32], [x, y0 + 0.36, zc - 0.32], 0.075, 0.075, `can${k}`, 'gun', { n: 14 }));
-    P.push(cyl([x, y0 + 0.36, zc - 0.32], [x, y0 + 0.4, zc - 0.32], 0.05, 0.03, 'chrome', 'gun', { n: 10 }));
+    P.push(lat([x, y0 + 0.08, zc - 0.32], [x, y0 + 0.36, zc - 0.32], [[0, 0], [0, 0.079], [0.05, 0.079], [0.05, 0.074], [0.94, 0.074], [0.94, 0.08], [1, 0.08], [1, 0]], `can${k}`, 'gun', { n: 14 }));
+    P.push(lat([x, y0 + 0.36, zc - 0.32], [x, y0 + 0.385, zc - 0.32], [[0, 0.07], [0.5, 0.07], [0.5, 0.04], [1, 0.04], [1, 0]], 'chrome', 'gun', { n: 12 }));
+    P.push(tube([[x - 0.074, y0 + 0.3, zc - 0.32], [x - 0.06, y0 + 0.42, zc - 0.34], [x + 0.06, y0 + 0.42, zc - 0.34], [x + 0.074, y0 + 0.3, zc - 0.32]], 0.005, 'chrome', 'gun', { n: 4 }));
+    P.push(cyl([x, y0 + 0.16, zc - 0.32], [x, y0 + 0.27, zc - 0.32], 0.0755, 0.0755, 'label', 'gun', { n: 14, noSil: true }));
   }
-  const pal = { rail: DARK, gun: [0.3, 0.32, 0.36], chrome: CHROME, can0: cols[0], can1: cols[1], can2: cols[2] };
+  const pal = { rail: DARK, gun: [0.3, 0.32, 0.36], chrome: CHROME, can0: cols[0], can1: cols[1], can2: cols[2], hose: RUBBER, label: WHITE };
   return sheet('repaint', lines, ctx, o, {
     ax: 'z',
     c: zc + 0.3,
@@ -719,16 +766,37 @@ function jammerDesign(lines, ctx, o) {
   const P = [];
   const y0 = C.roof - 0.02;
   const zc = -0.3;
-  P.push(box([-0.22, y0, zc - 0.16], [0.22, y0 + 0.14, zc + 0.16], 'box'));
+  // (ROADMAP 28.24) as a jammer is built: a ribbed case with fins that cool it down its sides, a panel of lamps and
+  // two knobs on its face, handles at its ends; three whip aerials, each on a sprung base with a coil wound in it;
+  // a dish on a yoke with its feed horn out in front of it on three struts; a cable off its back
+  P.push(rbox([-0.22, y0, zc - 0.16], [0.22, y0 + 0.14, zc + 0.16], 'box', 'gun', { e: 0.016 }));
+  for (let k = 0; k < 6; k++) for (const s of [1, -1]) P.push(rbox([s * 0.222 - 0.006, y0 + 0.02, zc - 0.13 + k * 0.048], [s * 0.222 + 0.012, y0 + 0.12, zc - 0.118 + k * 0.048], 'fin', 'gun', { noSil: true, e: 0.003 }));
+  P.push(rbox([-0.18, y0 + 0.07, zc + 0.158], [0.18, y0 + 0.125, zc + 0.166], 'panel', 'gun', { noSil: true, e: 0.003 }));
   for (let k = 0; k < 5; k++) P.push(sph([-0.14 + k * 0.07, y0 + 0.1, zc + 0.165], 0.012, 'led', 'leds', { noSil: true }));
+  for (const x of [-0.12, 0.12]) P.push(lat([x, y0 + 0.04, zc + 0.16], [x, y0 + 0.04, zc + 0.19], [[0, 0], [0, 0.022], [0.6, 0.022], [1, 0.016], [1, 0]], 'aerial', 'gun', { n: 10, noSil: true }));
+  for (const s of [1, -1]) P.push(tube([[s * 0.2, y0 + 0.14, zc - 0.08], [s * 0.2, y0 + 0.19, zc - 0.06], [s * 0.2, y0 + 0.19, zc + 0.06], [s * 0.2, y0 + 0.14, zc + 0.08]], 0.009, 'aerial', 'gun', { n: 5 }));
   for (const [x, h] of [[-0.16, 0.9], [0, 1.15], [0.16, 0.8]]) {
-    P.push(cyl([x, y0 + 0.14, zc], [x, y0 + 0.14 + h * (0.85 + 0.1 * lv), zc], 0.012, 0.006, 'aerial', 'gun', { n: 6 }));
-    P.push(sph([x, y0 + 0.14 + h * (0.85 + 0.1 * lv), zc], 0.018, 'tip', 'gun'));
+    const top = y0 + 0.14 + h * (0.85 + 0.1 * lv);
+    P.push(lat([x, y0 + 0.14, zc], [x, y0 + 0.23, zc], [[0, 0], [0, 0.03], [0.3, 0.03], [0.4, 0.018], [1, 0.014], [1, 0]], 'aerial', 'gun', { n: 8, noSil: true }));
+    P.push(coil([x, y0 + 0.17, zc], [x, y0 + 0.23, zc], 0.018, 4, 0.004, 'coil'));
+    P.push(cyl([x, y0 + 0.14, zc], [x, top, zc], 0.012, 0.006, 'aerial', 'gun', { n: 6 }));
+    P.push(sph([x, top, zc], 0.018, 'tip', 'gun'));
   }
   // the dish, on its stalk, facing up and back
   P.push(cyl([0.1, y0 + 0.14, zc - 0.1], [0.1, y0 + 0.28, zc - 0.12], 0.02, 0.02, 'aerial', 'gun', { n: 6 }));
-  P.push(cyl([0.1, y0 + 0.3, zc - 0.14], [0.1, y0 + 0.35, zc - 0.2], 0.14, 0.02, 'dish', 'gun', { n: 18 }));
-  const pal = { box: hc || [0.2, 0.22, 0.26], led: RED, aerial: DARK, tip: [0.86, 0.14, 0.14], dish: WHITE };
+  P.push(lat([0.1, y0 + 0.3, zc - 0.14], [0.1, y0 + 0.35, zc - 0.2], [[0.5, 0], [0.15, 0.06], [0, 0.13], [0.06, 0.142], [0.2, 0.07], [0.62, 0.022], [1, 0.02], [1, 0]], 'dish', 'gun', { n: 18 }));
+  {
+    const c = [0.1, y0 + 0.3, zc - 0.14];
+    const ax = [0, 0.05 / 0.078, -0.06 / 0.078];
+    const horn = [c[0] - ax[0] * 0.11, c[1] - ax[1] * 0.11, c[2] - ax[2] * 0.11];
+    P.push(sph(horn, 0.018, 'tip', 'gun', { noSil: true }));
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * Math.PI * 2;
+      P.push(cyl([c[0] + Math.cos(a) * 0.12, c[1] + Math.sin(a) * 0.12 * 0.77, c[2] + Math.sin(a) * 0.12 * 0.64], horn, 0.004, 0.004, 'aerial', 'gun', { n: 4, noSil: true }));
+    }
+  }
+  P.push(tube([[0.1, y0 + 0.06, zc - 0.16], [0.14, y0 + 0.05, zc - 0.24], [0.26, y0 + 0.0, zc - 0.3]], 0.012, 'aerial', 'gun', { n: 5 }));
+  const pal = { box: hc || [0.2, 0.22, 0.26], led: RED, aerial: DARK, tip: [0.6, 0.08, 0.09], dish: WHITE, fin: [0.13, 0.14, 0.17], panel: [0.06, 0.06, 0.07], coil: [0.78, 0.45, 0.2] };
   return sheet('jammer', lines, ctx, o, {
     ax: 'z',
     c: zc + 0.25,
