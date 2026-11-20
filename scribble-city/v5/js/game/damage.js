@@ -207,6 +207,8 @@ export class Damage {
     D.burning = true;
     D.burnT = -delay;
     D.fuse = 6 + Math.random() * 4;
+    // (ROADMAP 28.27: set alight by paint, by correction fluid - it burns in their colours)
+    if (game.impactfx) game.impactfx.carAlight(c);
     this.stats.fires++;
     if (game.traffic.list.includes(c)) {
       c.stopped = true;
@@ -227,6 +229,8 @@ export class Damage {
     D.glass = 2;
     D.hp = 0;
     this.stats.booms++;
+    // (ROADMAP 28.27: it goes up in what brought it down)
+    if (game.impactfx) game.impactfx.carDeath(c);
     if (c.kind === 'car' && c.hurt) {
       // your car: as it does when it is done for
       c.hurt(1e6);

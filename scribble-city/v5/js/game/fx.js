@@ -26,6 +26,11 @@ export class Effects {
     this.marks = []; // persistent markers (eyes over hiding spots, "!" over enemies)
     // (ROADMAP 11.43) rings drawn round a blast, growing out from it
     this.rings = [];
+    // (ROADMAP 28.27) what is in each decal's place now; the decals that still change (a hole's edge cooling, paint
+    // running down); the little fires left burning where a shot landed
+    this.decalAtSlot = [];
+    this.live = [];
+    this.burns = [];
   }
 
   sprite(rect, x, y, z, o = {}) {
@@ -63,6 +68,8 @@ export class Effects {
     for (let i = 0; i < 6; i++) {
       this.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', x + (Math.random() - 0.5) * radius, y + Math.random() * radius * 0.6, z + (Math.random() - 0.5) * radius, {
         size: radius * (0.5 + Math.random() * 0.5), grow: 1.2, life: 1.4 + Math.random(), vy: 1.2, alpha: 0.85,
+        // (ROADMAP 28.27: a blast's smoke is smoke - dark, some of it darker - not paper)
+        tint: i % 2 ? BOOM_SMOKE : BOOM_SMOKE2,
       });
     }
     this.crumbs(x, y + 0.5, z, 40, radius * 1.4, true);
@@ -89,9 +96,52 @@ export class Effects {
     ax.applyAxisAngle(nrm, rot);
     uv.applyAxisAngle(nrm, rot);
     const o = { x, y, z, w: size, h: size, rect: this.atlas.rects[rect], tint: [tint[0], tint[1], tint[2], alpha], axis: [ax.x, ax.y, ax.z], up: [uv.x, uv.y, uv.z], pivot: [0.5, 0.5] };
+    return this.putDecal(i, o);
+  }
+
+  putDecal(i, o) {
+    o.i = i;
+    this.decalAtSlot[i] = o;
     if (i >= this.decals.count) this.decals.add(o);
     else this.decals.set(i, o);
     this.decalsDirty = true;
+    return o;
+  }
+
+  // (ROADMAP 28.27) a decal put just as told - w by h, its right and its up given, hung from its pivot (no turn of
+  // its own): a run of paint down a wall
+  decalAt(rect, x, y, z, w, h, tint, alpha, axis, up, pivot = [0.5, 0.5]) {
+    const i = this.decalCursor % this.decals.capacity;
+    this.decalCursor++;
+    return this.putDecal(i, { x, y, z, w, h, rect: this.atlas.rects[rect], tint: [tint[0], tint[1], tint[2], alpha], axis, up, pivot });
+  }
+
+  // a decal on whichever surface, as splatAt - and given back, to be changed (live)
+  markAt(rect, x, y, z, nx, ny, nz, size, tint, alpha = 0.92, lift = 0.03) {
+    const n = _n.set(nx || 0, ny === undefined ? 1 : ny, nz || 0);
+    if (n.lengthSq() < 0.5) n.set(0, 1, 0);
+    n.normalize();
+    const axis = Math.abs(n.y) > 0.7 ? _ax.set(1, 0, 0) : _ax.set(-n.z, 0, n.x).normalize();
+    const up = _up.crossVectors(n, axis).normalize();
+    return this.decal(rect, x + n.x * lift, y + n.y * lift, z + n.z * lift, size, tint, alpha, [axis.x, axis.y, axis.z], [up.x, up.y, up.z]);
+  }
+
+  // a decal that changes for a while: after hold s, over life s, to tint1 (its colour and how solid: [r, g, b, a]), to
+  // w1 by h1; then next (the same, from there). Gone from the list when done, or when its place is given to a newer one
+  animate(o, A) {
+    if (this.live.length > 40) this.live.shift();
+    this.live.push({ o, t: 0, hold: A.hold || 0, life: A.life || 1, t0: o.tint.slice(), t1: A.tint1 || o.tint.slice(), w0: o.w, h0: o.h, w1: A.w1 === undefined ? o.w : A.w1, h1: A.h1 === undefined ? o.h : A.h1, ease: A.ease || 1, next: A.next || null });
+    return o;
+  }
+
+  // (ROADMAP 28.27) a little fire left burning: tongues of it rising off the spot for life s, a light at its foot,
+  // embers going up. o: { life, size, tints: [[r, g, b], ...], core (the colour of its heart), smoke (a wisp off it),
+  // follow: { pos, yaw } and the spot in its frame (ox, oy, oz) - on a car, on somebody, done: () => true ends it }
+  burn(x, y, z, o = {}) {
+    if (this.burns.length >= 14) this.burns.shift();
+    const b = { x, y, z, t: 0, life: o.life || 1.2, size: o.size || 0.3, tints: o.tints || FIRE_TINTS, core: o.core || FIRE_CORE, smoke: o.smoke !== false, follow: o.follow || null, ox: o.ox || 0, oy: o.oy || 0, oz: o.oz || 0, done: o.done || null, acc: 0, eacc: 0, sacc: 0 };
+    this.burns.push(b);
+    return b;
   }
 
   // splat on whichever surface a projectile hit (normal from the ray cast)
@@ -214,6 +264,80 @@ export class Effects {
     }
   }
 
+  updateLive(dt) {
+    const L = this.live;
+    for (let i = L.length - 1; i >= 0; i--) {
+      const a = L[i];
+      const o = a.o;
+      if (this.decalAtSlot[o.i] !== o) {
+        L.splice(i, 1);
+        continue;
+      }
+      a.t += dt;
+      let k = Math.max(0, Math.min(1, (a.t - a.hold) / a.life));
+      if (a.ease !== 1) k = 1 - Math.pow(1 - k, a.ease);
+      for (let c = 0; c < 4; c++) o.tint[c] = a.t0[c] + (a.t1[c] - a.t0[c]) * k;
+      o.w = a.w0 + (a.w1 - a.w0) * k;
+      o.h = a.h0 + (a.h1 - a.h0) * k;
+      this.decals.set(o.i, o);
+      this.decalsDirty = true;
+      if (a.t >= a.hold + a.life) {
+        L.splice(i, 1);
+        if (a.next) this.animate(o, a.next);
+      }
+    }
+  }
+
+  updateBurns(dt) {
+    const B = this.burns;
+    for (let i = B.length - 1; i >= 0; i--) {
+      const b = B[i];
+      b.t += dt;
+      if (b.t >= b.life || (b.done && b.done())) {
+        B.splice(i, 1);
+        continue;
+      }
+      const F = b.follow;
+      if (F) {
+        const c = Math.cos(F.yaw || 0);
+        const s = Math.sin(F.yaw || 0);
+        b.x = F.pos.x + b.ox * c + b.oz * s;
+        b.y = (F.pos.y || 0) + b.oy;
+        b.z = F.pos.z - b.ox * s + b.oz * c;
+      }
+      // (it catches, burns, dies down)
+      const k = Math.min(1, b.t / 0.12) * Math.min(1, (b.life - b.t) / 0.45);
+      const sz = b.size * (0.35 + 0.65 * k);
+      const T = b.tints;
+      b.acc += dt;
+      while (b.acc > 0.055) {
+        b.acc -= 0.055;
+        const tint = T[Math.floor(Math.random() * T.length)];
+        this.sprite(Math.random() < 0.6 ? 'flame0' : 'flame1', b.x + (Math.random() - 0.5) * sz * 0.5, b.y - sz * 0.08, b.z + (Math.random() - 0.5) * sz * 0.5, {
+          size: sz * (0.75 + Math.random() * 0.6), grow: 0.55, life: 0.2 + Math.random() * 0.16, vy: sz * (2.2 + Math.random() * 1.6), tint, alpha: 1, pivot: FOOT, aspect: 0.55 + Math.random() * 0.2,
+        });
+        // (its heart, paler, low in it)
+        if (Math.random() < 0.5) this.sprite('flame0', b.x + (Math.random() - 0.5) * sz * 0.25, b.y - sz * 0.06, b.z + (Math.random() - 0.5) * sz * 0.25, { size: sz * (0.4 + Math.random() * 0.25), grow: 0.4, life: 0.16 + Math.random() * 0.1, vy: sz * 1.6, tint: b.core, alpha: 0.95, pivot: FOOT, aspect: 0.75 });
+      }
+      b.eacc += dt;
+      if (b.eacc > 0.11) {
+        b.eacc = 0;
+        this.sprite('glow', b.x, b.y + sz * 0.15, b.z, { size: sz * 2.6, grow: 0.3, life: 0.16, tint: T[0], alpha: 0.5 * k });
+        if (this.particles.length < 400) {
+          const hot = T[1] || T[0];
+          this.particles.push({ x: b.x + (Math.random() - 0.5) * sz * 0.4, y: b.y + sz * 0.3, z: b.z + (Math.random() - 0.5) * sz * 0.4, vx: (Math.random() - 0.5) * 0.9, vy: 1.4 + Math.random() * 1.6, vz: (Math.random() - 0.5) * 0.9, life: 0.5 + Math.random() * 0.5, t: 0, len: 0.035, color: hot, seed: Math.random() * 50, spin: 0, streak: true, wide: 2.2, noGrav: true, drag: 1.1 });
+        }
+      }
+      if (b.smoke) {
+        b.sacc += dt;
+        if (b.sacc > 0.3) {
+          b.sacc = 0;
+          this.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', b.x, b.y + sz * 0.9, b.z, { size: sz * 0.9, grow: 1.6, life: 0.9, vy: 0.9, tint: SOOT, alpha: 0.4 * k });
+        }
+      }
+    }
+  }
+
   update(dt, figures) {
     // sprites
     const sb = this.sprites;
@@ -318,6 +442,8 @@ export class Effects {
     }
     this._ps = parts;
     this.particles = ps;
+    this.updateLive(dt);
+    this.updateBurns(dt);
     // (ROADMAP 11.43) the rings round a blast: drawn in pieces round, growing out fast and then
     // slower, thinner and paler as they go
     const rings = this.rings;
@@ -340,8 +466,19 @@ export class Effects {
   }
 }
 
+// a fire's own colours (no brighter than the page: past its white a colour only pales - the look's paper)
+const FIRE_TINTS = [[1.0, 0.5, 0.13], [1.0, 0.74, 0.22], [0.95, 0.3, 0.06]];
+const _n = new THREE.Vector3();
+const _ax = new THREE.Vector3();
+const _up = new THREE.Vector3();
+
 // the one sprite description the sprites and marks are filled into in turn
 const _spr = { x: 0, y: 0, z: 0, w: 0, h: 0, rect: null, tint: [1, 1, 1, 1], pivot: null };
 const PIVOT_MID = [0.5, 0.5];
+const FOOT = [0.5, 0.04];
+const FIRE_CORE = [1.0, 0.9, 0.42];
+const BOOM_SMOKE = [0.46, 0.44, 0.47];
+const BOOM_SMOKE2 = [0.3, 0.28, 0.31];
+const SOOT = [0.3, 0.29, 0.32];
 
 export { RED_INK };
