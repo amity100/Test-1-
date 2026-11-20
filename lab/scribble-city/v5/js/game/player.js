@@ -374,7 +374,7 @@ export class Player {
     // (ROADMAP 11.20: wheels drawn under your feet - game/fuse.js)
     const fuse = this.game.fuse;
     const skate = fuse && !this.crouched ? fuse.heroSpeedK(sprint) : 1;
-    const speed = gliding ? chute.fly.speed * (chute.powered ? 1.2 : 1) * Math.min(1, wl) : (this.crouched ? 2.3 : weapons.guarding ? 2.6 : sprint ? (8.2 + (skills ? skills.sprintBonus : 0)) * (this.energyT > 0 ? 1.15 : 1) * (this.runShoes ? 1.1 : 1) : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1) * (fists && fists.busy ? 0.5 : 1) * skate * (!gliding && weapons.current.def.heavy ? weapons.current.def.heavy : 1);
+    const speed = gliding ? chute.fly.speed * (chute.powered ? 1.2 : 1) * Math.min(1, wl) : (this.crouched ? 2.3 : weapons.guarding ? 2.6 : sprint ? (8.2 + (skills ? skills.sprintBonus : 0)) * (this.energyT > 0 ? 1.15 : 1) * (this.runShoes ? 1.1 : 1) : weapons.hold.ads ? 2.9 : aiming ? 4.2 : 5.0) * Math.min(1, wl) * (this.coffeeT > 0 ? 1.3 : 1) * (fists && fists.busy ? 0.5 : 1) * skate * (!gliding && weapons.current.def.heavy ? weapons.current.def.heavy : 1);
     const accel = gliding ? 7 : this.onGround ? 40 : 9;
     const tx = wx * speed;
     const tz = wz * speed;
@@ -520,7 +520,8 @@ export class Player {
     } else if (wl > 0.05) {
       this.yaw = dampAngle(this.yaw, Math.atan2(wx, wz), 10, dt);
     }
-    fig.yaw = this.yaw;
+    // (ROADMAP 28.25: a gun aimed - his body turned a little off its line, the shoulder its butt is in back)
+    fig.yaw = this.yaw + (fig.gun ? fig.gun.blade * fig.gun.k : 0);
     fig.speed = Math.hypot(this.vel.x + lx, this.vel.z + lz);
     fig.air = !this.onGround;
     fig.sit = damp(fig.sit, 0, 8, dt);

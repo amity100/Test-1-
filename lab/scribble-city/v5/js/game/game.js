@@ -1336,6 +1336,8 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     else if (playing && !this.airdraw.open && !(this.freedraw && this.freedraw.open) && !(pro && (pro.holdCam || pro.drawing))) {
       this.camRig.applyLook(look.x, look.y);
       if (look.x || look.y) this.lastLookInput = this.time;
+      // (ROADMAP 28.25: on a phone, the crosshair drawn a little to whoever is nearly on it - game/gunhold.js)
+      if (dt > 0 && this.weapons && this.weapons.hold) this.weapons.hold.assist(dt, Math.abs(look.x) + Math.abs(look.y) > 1.5);
     }
     if (dt > 0) {
       player.update(dt, input, this.camRig, this.weapons);
@@ -1521,9 +1523,10 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       else {
         // (ROADMAP 11.11, parts 2: a sight drawn on it - aimed, it zooms, and the look slows to match)
         const wd = this.weapons.current.def;
-        const aim = wd.kind === 'gun' && input.aim;
+        // (ROADMAP 28.25: aimed in - game/gunhold.js: the camera in over his shoulder, the look slower)
+        const aim = this.weapons.hold.ads;
         const zoom = aim && wd.zoom ? wd.zoom : 1;
-        this.camRig.lookK = 1 / zoom;
+        this.camRig.lookK = (aim ? 0.72 : 1) / zoom;
         // (on the big wheel or the carousel: further back, the ride and the view round it)
         const ro = (this.fair && this.fair.camOpts()) || (this.arenaGame && this.arenaGame.camOpts());
         // (a game played in the world: the camera held behind you, its screen in front - ui/minigame.js)
@@ -1534,7 +1537,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
           // (v5, ROADMAP 18: and under a car park's deck, under the deck)
           const gcy = this.prolSet && this.prolSet.built ? this.prolSet.ceilingAt(player.pos.x, player.pos.z, player.pos.y) : Infinity;
           const maxY = IR && IR.height ? IR.floor + IR.height - 0.3 : gcy < Infinity ? gcy - 0.2 : undefined;
-          this.camRig.update(dt, player.pos, ro || { aim, fovMul: 1 / zoom, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: IR ? 2.6 : 3.3, maxY });
+          this.camRig.update(dt, player.pos, ro || { aim, aimDist: 1.75, aimShoulder: 0.72, aimFov: 0.24, fovMul: 1 / zoom, height: 1.62 - player.fig.sit * 0.7 - (player.crouched ? 0.45 * (1 - player.coverPop) : 0), dist: IR ? 2.6 : 3.3, maxY });
         }
       }
     }
@@ -2767,12 +2770,20 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       const dive = btns && !!v.dive;
       // (the fists' guard: on foot with the fists out, ROADMAP 5.4)
       const fists = p.mode === 'foot' && !!this.weapons.current.def.bare;
-      const key = `${p.mode === 'foot'}|${p.mode === 'swim'}|${!!fl}|${fists}|${lift}|${dive}`;
+      // (ROADMAP 28.25: a gun out on foot - the aim button, on and off)
+      const gunOut = p.mode === 'foot' && (this.weapons.current.def.kind === 'gun' || this.weapons.current.def.kind === 'beam');
+      const key = `${p.mode === 'foot'}|${p.mode === 'swim'}|${!!fl}|${fists}|${lift}|${dive}|${gunOut}`;
       if (key !== this.upDownKey) {
         this.upDownKey = key;
         $('btn-down').classList.toggle('hidden', !(p.mode === 'foot' || p.mode === 'swim' || fl || dive));
         $('btn-up').classList.toggle('hidden', !(p.mode === 'swim' || fl || lift || dive));
         $('btn-guard').classList.toggle('hidden', !fists);
+        $('btn-aim').classList.toggle('hidden', !gunOut);
+        // (the first time a gun is out on a phone: what the button is)
+        if (gunOut && this.touch && !this.aimTold) {
+          this.aimTold = true;
+          this.hud.toast(tr('הכפתור עם המסגרת — כניסה לכוונות ויציאה. גם בלי זה, יורים לאן שהכוונת מצביעה', 'The framed button aims in and out. Without it, shots still go where the crosshair points'), 'info', 4.5);
+        }
         if (!fists) this.input.aim = false;
       }
       // the pedals (and the stick away, css/style.css): the handbrake where there are wheels to lock,

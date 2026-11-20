@@ -12,6 +12,8 @@ export class Input {
     this.fire = false;
     this.firePressed = false;
     this.aim = false;
+    // (ROADMAP 28.25: a phone's aim button - aimed in till it is touched again; game/gunhold.js)
+    this.aimLatch = false;
     this.wheel = 0;
     this.move = { x: 0, y: 0 }; // x right, y forward
     this.sensitivity = 1;
@@ -364,6 +366,14 @@ export class Input {
     // (not with ?classic: hands up, ROADMAP 6.3)
     btn('btn-hands', 'KeyH');
     // (not with ?classic: the fists' guard while it is held - the right click's aim; ROADMAP 5.4)
+    const aimBtn = document.getElementById('btn-aim');
+    if (aimBtn) {
+      aimBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        this.aimLatch = !this.aimLatch;
+        aimBtn.classList.toggle('on', this.aimLatch);
+      }, { passive: false });
+    }
     const guard = document.getElementById('btn-guard');
     if (guard) {
       guard.addEventListener('touchstart', (e) => {
