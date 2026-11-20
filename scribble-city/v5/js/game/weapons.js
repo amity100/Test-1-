@@ -592,10 +592,10 @@ export class Weapons {
         this.launch(slot, muzzle.x, muzzle.y, muzzle.z, dir.x * spe, dir.y * spe + (sad ? 1 : 0), dir.z * spe, extra);
       }
       // (its own fire and cases, if it has them - game/armfx.js; and it kicks in the hands either way)
-      if (!this.armfx.fired(slot, muzzle, _md.copy(this.aimPoint).sub(muzzle).normalize())) {
-        game.fx.muzzle(muzzle.x, muzzle.y, muzzle.z, def.quiet ? 0.35 : def.projectile === 'eraser' ? 1.8 : def.pellets ? 1.5 : 1);
-        this.muzzleFx(def, muzzle, _md);
-      }
+      const own = this.armfx.fired(slot, muzzle, _md.copy(this.aimPoint).sub(muzzle).normalize());
+      // (ROADMAP 28.21: the comic star only out of a gun with no fire or mist of its own; its bits fly either way)
+      if (!own) game.fx.muzzle(muzzle.x, muzzle.y, muzzle.z, def.quiet ? 0.35 : def.projectile === 'eraser' ? 1.8 : def.pellets ? 1.5 : 1);
+      if (own !== true) this.muzzleFx(def, muzzle, _md);
     }
     slot.ammo--;
     if (game.arsenal) game.arsenal.fired(slot);
@@ -604,7 +604,7 @@ export class Weapons {
     // (a silencer on it: a soft click, and nobody further off hears it - no panic, no police)
     if (def.quiet) game.audio.play('staple', 0.4);
     else game.audio.play(def.sound || (def.projectile === 'paint' ? 'paint' : def.projectile === 'pencil' ? 'pencilShot' : 'bazooka'));
-    game.camRig.addShake((def.kick || (def.projectile === 'eraser' ? 0.35 : 0.04)) * (game.skills ? game.skills.kickMul : 1) * this.armfx.kickK(slot));
+    game.camRig.addShake((def.kick || (def.projectile === 'eraser' ? 0.35 : def.projectile === 'pencil' ? 0.12 : 0.04)) * (game.skills ? game.skills.kickMul : 1) * this.armfx.kickK(slot));
     const at = player.inVehicle ? player.inVehicle.pos : player.pos;
     if (def.quiet) game.enemies.noise(at, 5);
     else {
