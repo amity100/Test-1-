@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { makeSurface, srgb, lin3, LAYERS, mergedSurface, penRow, sortDefines } from './materials.js';
 import { motion, motionRows, bindMotion, rowsOf } from './motion.js';
 import { GFX } from '../core/util.js';
+import { lathe, rod, pipe } from '../game/armkit.js';
 
 // (ROADMAP 19.1, the phone's own way of drawing - GFX.carLod, phones only) A car far off, in fewer
 // points. Every car was drawn with all of its 4,700 triangles out to 260 m, where it is ten pixels
@@ -444,6 +445,113 @@ function build(kind) {
     for (const sd of [-1, 1]) trimParts.push(box(0.16, 0.1, 0.2, sd * (hw(tm) + 0.08), belt(tm) + 0.12, tm * L - off - 0.05));
   }
   const plates = [box(0.52, 0.12, 0.02, 0, tailY - 0.2, -off - 0.01), box(0.52, 0.12, 0.02, 0, hb * 0.38, off + 0.01)];
+  // (ROADMAP 28.23) what a real car has on it, on the full make only: bright work - the bars of its grille, the
+  // lamps' bezels, a strip along each bumper and along the waist, the door handles, the pipes at the back - and dark:
+  // the seams of its doors, the lips of its wheel arches, the sill's line, the filler's flap, an aerial; by its kind,
+  // a wing on its tail, a scoop on its hood, rails on its roof. All of it on the shell: it dents with the body.
+  const chromeParts = [];
+  const trimX = [];
+  const big = K.len > 6.5;
+  const SP = (z, y, sd) => sidePoint(kind, z, y, sd);
+  // (a line along its side, lying on the skin: from (z0, y0) to (z1, y1) in n pieces, r thick)
+  const sideLine = (list, z0, y0, z1, y1, r, n = 5, sides = [1, -1]) => {
+    for (const sd of sides) {
+      let prev = null;
+      for (let i = 0; i <= n; i++) {
+        const p = SP(z0 + ((z1 - z0) * i) / n, typeof y0 === 'function' ? y0(i / n) : y0 + ((y1 - y0) * i) / n, sd);
+        if (p && prev) list.push(rod(prev, p, r, r, 4));
+        prev = p;
+      }
+    }
+  };
+  const G0 = K.glass;
+  const zOf = (t) => t * L - off;
+  if (!big) {
+    // the grille's bars and its surround; a badge over it; the lamps' bezels; the fog lamps
+    const gw = hw(1) * 1.1;
+    const gh2 = Math.min(0.16, hb * 0.25);
+    for (let i = 0; i < 3; i++) chromeParts.push(box(gw * 0.96, 0.012, 0.03, 0, hb * 0.55 - gh2 * 0.3 + i * gh2 * 0.3, off + 0.02));
+    chromeParts.push(box(gw + 0.03, 0.014, 0.03, 0, hb * 0.55 + gh2 / 2 + 0.006, off + 0.012));
+    chromeParts.push(box(gw + 0.03, 0.014, 0.03, 0, hb * 0.55 - gh2 / 2 - 0.006, off + 0.012));
+    chromeParts.push(lathe([[off + 0.004, 0.0], [off + 0.004, 0.04], [off + 0.02, 0.036], [off + 0.024, 0.0]], { y: hb * 0.55 + gh2 / 2 + 0.07, segs: 10 }));
+    for (const sd of [-1, 1]) {
+      chromeParts.push(box(K.head.w + 0.036, K.head.h + 0.036, 0.06, sd * (hw(0.98) - K.head.w / 2 - 0.1), hb + K.head.y, off - 0.046, 0.3));
+      heads.push(box(0.13, 0.05, 0.04, sd * hw(0.98) * 0.62, K.clear + 0.15, off - 0.03));
+      chromeParts.push(box(0.16, 0.076, 0.03, sd * hw(0.98) * 0.62, K.clear + 0.15, off - 0.046));
+    }
+    // a bright strip along each bumper; the pipes; a frame round each plate
+    chromeParts.push(box(hw(1) * 1.56, 0.026, 0.03, 0, K.clear + 0.115, off + 0.004));
+    chromeParts.push(box(hw(0) * 1.56, 0.026, 0.03, 0, K.clear + 0.115, -off - 0.004));
+    for (const sd of [-1, 1]) {
+      chromeParts.push(lathe([[-off - 0.07, 0.03], [-off - 0.07, 0.042], [-off + 0.12, 0.042]], { x: sd * hw(0.04) * 0.52, y: K.clear + 0.03, segs: 8 }));
+      trimX.push(lathe([[-off - 0.066, 0.03], [-off - 0.066, 0.0]], { x: sd * hw(0.04) * 0.52, y: K.clear + 0.03, segs: 8 }));
+    }
+    trimX.push(box(0.57, 0.17, 0.016, 0, tailY - 0.2, -off - 0.002));
+    trimX.push(box(0.57, 0.17, 0.016, 0, hb * 0.38, off + 0.002));
+    chromeParts.push(box(hw(0.02) * 2 * K.tail.w + 0.04, 0.012, 0.03, 0, tailY - 0.044, -off + 0.012));
+  }
+  // the doors: the seam behind and ahead of each, the handles; the waist's bright line; the sill's line
+  const cabT0 = G0.tA + 0.035;
+  const cabT1 = G0.tD - 0.02;
+  if (!big && cabT1 - cabT0 > 0.2) {
+    const seams = [cabT1];
+    const pl = (G0.pillars || []).filter((p) => p > cabT0 + 0.08 && p < cabT1 - 0.08);
+    if (pl.length) seams.push(pl[0]);
+    if (pl.length && pl[0] - cabT0 > 0.15) seams.push(cabT0);
+    for (const t of seams) sideLine(trimX, zOf(t), K.clear + 0.1, zOf(t) - 0.02, belt(t) - 0.03, 0.007, 6);
+    for (const t of pl.length ? [pl[0] + 0.035, ...(pl[0] - cabT0 > 0.15 ? [cabT0 + 0.035] : [])] : [cabT0 + 0.06]) {
+      for (const sd of [1, -1]) {
+        const a = SP(zOf(t), belt(t) - 0.15, sd);
+        const b = SP(zOf(t) + 0.16, belt(t + 0.03) - 0.15, sd);
+        if (a && b) chromeParts.push(rod([a[0] + sd * 0.008, a[1], a[2]], [b[0] + sd * 0.008, b[1], b[2]], 0.012, 0.012, 5));
+      }
+    }
+    sideLine(chromeParts, zOf(G0.tA), (u) => belt(G0.tA + (G0.tD - G0.tA) * u) - 0.034, zOf(G0.tD), 0, 0.008, 10);
+    sideLine(trimX, zOf(K.wheels[0]) + K.r * 1.5, K.clear + 0.085, zOf(K.wheels[K.wheels.length - 1]) - K.r * 1.5, K.clear + 0.085, 0.008, 6);
+    // (the filler's flap, on its left)
+    const fc = SP(zOf(Math.max(0.06, G0.tA - 0.03)), belt(G0.tA) - 0.24, 1);
+    if (fc) trimX.push(lathe([[0.0, 0.05], [0.0, 0.06], [0.006, 0.06], [0.006, 0.05]], { axis: 'x', y: fc[1], z: fc[2], segs: 10 }).translate(fc[0] - 0.004, 0, 0));
+  }
+  // the lips of the wheel arches
+  if (!big) {
+    for (const t of K.wheels) {
+      const zc = zOf(t);
+      for (const sd of [1, -1]) {
+        let prev = null;
+        for (let i = 0; i <= 8; i++) {
+          const a = 0.2 + (i / 8) * (Math.PI - 0.4);
+          const p = SP(zc + Math.cos(a) * K.r * 1.22, K.r * 1.12 * Math.sin(a) + K.r * 0.15 + 0.045, sd);
+          if (p && prev) trimX.push(rod(prev, p, 0.011, 0.011, 4));
+          prev = p;
+        }
+      }
+    }
+  }
+  // by its kind: a wing on the tail, a scoop on the hood, rails along the roof; an aerial
+  if (kind === 'sports' || kind === 'hyper' || kind === 'coupe') {
+    const wy = belt(0.05) + (kind === 'hyper' ? 0.2 : 0.15);
+    trimX.push(box(hw(0.06) * 1.76, 0.026, 0.24, 0, wy, -off + 0.24, -0.12));
+    for (const sd of [-1, 1]) {
+      trimX.push(box(0.03, wy - belt(0.07) + 0.03, 0.14, sd * hw(0.06) * 0.6, (wy + belt(0.07)) / 2 - 0.01, -off + 0.26));
+      trimX.push(box(0.016, 0.1, 0.3, sd * hw(0.06) * 0.88, wy + 0.02, -off + 0.24));
+    }
+  }
+  if (kind === 'muscle') {
+    const hz = (zOf(G0.tD) + off) / 2;
+    trimX.push(box(0.5, 0.09, 0.62, 0, belt((G0.tD + 1) / 2) + 0.04, hz));
+    trimX.push(box(0.44, 0.05, 0.02, 0, belt((G0.tD + 1) / 2) + 0.05, hz + 0.31));
+    for (const sd of [-1, 1]) chromeParts.push(rod([sd * (hw(0.5) + 0.03), K.clear + 0.05, zOf(0.3)], [sd * (hw(0.5) + 0.03), K.clear + 0.05, zOf(0.62)], 0.04, 0.04, 8));
+  }
+  if (kind === 'suv' || kind === 'trail' || kind === 'van') {
+    for (const sd of [-1, 1]) {
+      const x = sd * hw((G0.tB + G0.tC) / 2) * G0.w1 * 0.86;
+      trimX.push(rod([x, G0.R + 0.05, zOf(G0.tB) + 0.1], [x, G0.R + 0.05, zOf(G0.tC) - 0.1], 0.016, 0.016, 5));
+      for (const t of [G0.tB + 0.04, (G0.tB + G0.tC) / 2, G0.tC - 0.04]) trimX.push(box(0.03, 0.06, 0.05, x, G0.R + 0.02, zOf(t)));
+    }
+  }
+  if (!big) trimX.push(rod([hw(G0.tB) * 0.5, G0.R - 0.02, zOf(G0.tB) + 0.06], [hw(G0.tB) * 0.5, G0.R + 0.42, zOf(G0.tB) - 0.16], 0.006, 0.004, 4));
+  const EMPTY = box(0.0001, 0.0001, 0.0001, 0, K.clear + 0.3, 0);
+  const chrome = chromeParts.length ? merge(chromeParts) : EMPTY;
   const wheels = K.wheels.flatMap((t) => [-1, 1].map((sd) => ({ z: t * L - off, x: sd * (hw(t) - 0.16 + (K.wx || 0)), r: K.r, sd, tw: K.tw || 1 })));
   K.roofY = K.glass.R;
   // where the turn signals blink: the front and back corners (ROADMAP 4.3)
@@ -473,10 +581,11 @@ function build(kind) {
   // of its shell that change, and its glass
   const lod = [null];
   if (GFX.carLod) {
-    lod.push({ body: merge([lowerBody(K, 'mid').toNonIndexed(), gh.roof]), glass: gh.glass });
-    lod.push({ body: merge([lowerBody(K, true).toNonIndexed(), ghLo.roof]), trim: merge([ghLo.frames, ...trimParts.slice(1)]) });
+    // (further off: none of the bright work, none of the seams)
+    lod.push({ body: merge([lowerBody(K, 'mid').toNonIndexed(), gh.roof]), glass: gh.glass, trim: merge(trimParts), chrome: EMPTY });
+    lod.push({ body: merge([lowerBody(K, true).toNonIndexed(), ghLo.roof]), trim: merge([ghLo.frames, ...trimParts.slice(1)]), chrome: EMPTY });
   }
-  return { body, glass: gh.glass, tail, head: merge(heads), trim: merge(trimParts), plate: merge(plates), wheels, K, inside, sunBody, lod };
+  return { body, glass: gh.glass, tail, head: merge(heads), trim: merge([...trimParts, ...trimX]), chrome, plate: merge(plates), wheels, K, inside, sunBody, lod };
 }
 
 // (ROADMAP 4.6) a point on a car's side, from a picture of it from the side: z along it (forward),
@@ -699,15 +808,16 @@ function byCorners(g) {
   return out;
 }
 
-function merge(list) {
+function merge(list0) {
+  // (each in its own points first: a turned part or a rod comes with its points shared - ROADMAP 28.23)
+  const list = list0.map((g0) => (g0.index ? g0.toNonIndexed() : g0));
   let n = 0;
   for (const g of list) n += g.attributes.position.count;
   const pos = new Float32Array(n * 3);
   const nor = new Float32Array(n * 3);
   const uv = new Float32Array(n * 2);
   let k = 0;
-  for (const g0 of list) {
-    const g = g0.index ? g0.toNonIndexed() : g0;
+  for (const g of list) {
     if (!g.attributes.normal) g.computeVertexNormals();
     const c = g.attributes.position.count;
     pos.set(g.attributes.position.array, k * 3);
@@ -961,6 +1071,8 @@ export class CarRenderer {
       trim: S({ kind: 'box', gloss: 0.3 }),
       dark: S({ kind: 'box', color: srgb(0.06, 0.06, 0.08), gloss: 0.4, line: 0.7 }),
       plate: S({ kind: 'box', color: srgb(0.95, 0.94, 0.86), line: 0.6 }),
+      // (ROADMAP 28.23) its bright work: the grille's bars, the bezels, the handles, the pipes
+      chrome: S({ kind: 'box', color: srgb(0.8, 0.81, 0.86), gloss: 0.7, line: 0.55 }),
       // (ROADMAP 4.5) the inside of the car you drive, seen through its open side windows: the
       // body's skin from within, dark (its own number for the ink: it takes none from the rest)
       cabin: S({ kind: 'box', color: srgb(0.27, 0.25, 0.29), gloss: 0.1, line: 0.55, side: THREE.BackSide, obj: 0.7731, noShadow: true }),
@@ -980,7 +1092,7 @@ export class CarRenderer {
     mats.glass.defines.USE_CABIN = '';
     shellPen.defines.USE_CABIN = '';
     for (const m of [shellPen, mats.glass, mats.cabin]) sortDefines(m);
-    const shellParts = [['body', mats.paint, 0, 1], ['tail', mats.tail, 0.5, 0], ['head', mats.head, 0.6, 0], ['trim', mats.dark, 0.55, 0], ['plate', mats.plate, 0.65, 0]];
+    const shellParts = [['body', mats.paint, 0, 1], ['tail', mats.tail, 0.5, 0], ['head', mats.head, 0.6, 0], ['trim', mats.dark, 0.55, 0], ['plate', mats.plate, 0.65, 0], ['chrome', mats.chrome, 0.7, 0]];
     for (const kind of Object.keys(KINDS)) {
       const b = build(kind);
       const n = kind === 'bus' ? 12 : DRAWN_ONLY.has(kind) ? 8 : cap;
@@ -1044,6 +1156,24 @@ export class CarRenderer {
       P.inside.mesh.userData.noReflect = true;
     }
     const tyre = new THREE.CylinderGeometry(1, 1, 0.3, 20).rotateZ(Math.PI / 2);
+    // (ROADMAP 28.23) the wheel of a car near enough to see it: a tyre with shoulders and two grooves round its
+    // tread, a dark disc inside it (the brake, behind the spokes); a rim with its lip, five spokes in pairs, the
+    // nuts and the cap. Further off, the plain ones below.
+    const tyreFine = merge([
+      lathe([[-0.15, 0.62], [-0.15, 0.9], [-0.105, 1.0], [-0.05, 1.0], [-0.044, 0.972], [-0.03, 0.972], [-0.024, 1.0], [0.024, 1.0], [0.03, 0.972], [0.044, 0.972], [0.05, 1.0], [0.105, 1.0], [0.15, 0.9], [0.15, 0.62]], { axis: 'x', segs: 20 }),
+      lathe([[-0.154, 0.74], [-0.154, 0.8], [-0.148, 0.8]], { axis: 'x', segs: 20 }),
+      lathe([[0.148, 0.8], [0.154, 0.8], [0.154, 0.74]], { axis: 'x', segs: 20 }),
+      lathe([[0.0, 0.0], [0.0, 0.62], [0.012, 0.62], [0.012, 0.0]], { axis: 'x', segs: 14 }),
+    ]);
+    const rimFine = [
+      lathe([[-0.07, 0.6], [-0.07, 0.66], [0.07, 0.66], [0.07, 0.6], [0.04, 0.57], [-0.04, 0.57]], { axis: 'x', segs: 18 }),
+      lathe([[-0.06, 0.0], [-0.06, 0.13], [-0.03, 0.16], [0.03, 0.16], [0.06, 0.13], [0.06, 0.0]], { axis: 'x', segs: 10 }),
+    ];
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2;
+      for (const da of [-0.16, 0.16]) rimFine.push(rod([0, Math.cos(a) * 0.12, Math.sin(a) * 0.12], [0, Math.cos(a + da) * 0.6, Math.sin(a + da) * 0.6], 0.045, 0.034, 5));
+      rimFine.push(rod([-0.066, Math.cos(a + 0.63) * 0.095, Math.sin(a + 0.63) * 0.095], [0.066, Math.cos(a + 0.63) * 0.095, Math.sin(a + 0.63) * 0.095], 0.02, 0.02, 5));
+    }
     // the rim: a dished disc and five spokes
     const rimParts = [new THREE.CylinderGeometry(0.7, 0.7, 0.02, 16).rotateZ(Math.PI / 2).toNonIndexed(), new THREE.CylinderGeometry(0.16, 0.16, 0.06, 10).rotateZ(Math.PI / 2).translate(0.02, 0, 0).toNonIndexed()];
     for (let k = 0; k < 5; k++) {
@@ -1055,6 +1185,10 @@ export class CarRenderer {
     const rim = merge(rimParts);
     this.tyres = new Pool(scene, tyre, mats.tyre, cap * 4);
     this.rims = new Pool(scene, rim, mats.rim, cap * 4);
+    this.tyresFine = new Pool(scene, tyreFine, mats.tyre, 72);
+    this.rimsFine = new Pool(scene, merge(rimFine), mats.rim, 72);
+    this.rimsFine.mesh.userData.noShadow = true;
+    this.rimsFine.mesh.userData.noReflect = true;
     // (ROADMAP 19.1) the wheels of the cars further off: a tyre of twelve sides and of eight, the rim
     // a plain disc (its five spokes are under a pixel there)
     this.tyreMakes = [this.tyres];
@@ -1068,6 +1202,9 @@ export class CarRenderer {
       r.mesh.userData.noShadow = true;
       r.mesh.userData.noReflect = true;
     }
+    // (the near cars' own wheels: last in the lists, so each frame they are counted and closed with the rest)
+    this.tyreMakes.push(this.tyresFine);
+    this.rimMakes.push(this.rimsFine);
     // (where this frame's cars are seen from, and the pixels a metre is one metre from there: view)
     this.eye = new THREE.Vector3();
     this.ppmK = Infinity;
@@ -1200,8 +1337,10 @@ export class CarRenderer {
     make.shell.push(_m, this.col(color), part, rv, D, o.open ? -1 : 0);
     make.glass.push(_m, D && D.glass ? (D.glass > 1 ? GLASS_BROKEN : GLASS_CRACKED) : WHITE, part + 0.3, rv, D, o.open ? -1 : 0);
     // (the wheels in fewer points only far off: some way off, a car's own are all but as they were, and a draw less)
-    const tyres = lv === 2 && this.tyreMakes.length > 1 ? this.tyreMakes[1] : this.tyres;
-    const rims = lv === 2 && this.rimMakes.length > 1 ? this.rimMakes[1] : this.rims;
+    // (ROADMAP 28.23: a car near - within some 30 m - on the wheels as a wheel is made, while there is room for them)
+    const near = lv === 0 && this.tyresFine.n + 6 <= 72 && Math.hypot(x - this.eye.x, z - this.eye.z) < 30;
+    const tyres = near ? this.tyresFine : lv === 2 && this.tyreMakes.length > 1 ? this.tyreMakes[1] : this.tyres;
+    const rims = near ? this.rimsFine : lv === 2 && this.rimMakes.length > 1 ? this.rimMakes[1] : this.rims;
     // (ROADMAP 4.5) the car you drive: its side windows down, the inside seen through them
     if (o.open) {
       P.inside.push(_m, WHITE, part + 0.5, null, D);
@@ -1219,7 +1358,8 @@ export class CarRenderer {
       _w.compose(_p.set(w.x, wr, w.z), _q, _s.set(w.tw, wr, w.r));
       _w.premultiply(_m);
       tyres.push(_w, WHITE, part + 0.7, rv);
-      _w.compose(_p.set(w.x + w.sd * (0.15 * w.tw + 0.015), wr, w.z), _q, _s.set(1, w.r, w.r));
+      // (the plain rim is a disc on the tyre's outer face; the made one sits in the tyre, its lip just proud of the wall)
+      _w.compose(_p.set(w.x + w.sd * (near ? 0.15 * w.tw - 0.058 : 0.15 * w.tw + 0.015), wr, w.z), _q, _s.set(1, w.r, w.r));
       _w.premultiply(_m);
       rims.push(_w, o.rim || WHITE, part + 0.8, rv);
     }
