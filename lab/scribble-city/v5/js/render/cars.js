@@ -949,6 +949,7 @@ const GLASS_CRACKED = [3.1, 3.0, 2.5];
 const GLASS_BROKEN = [0.3, 0.3, 0.32];
 const RED_OFF = [0.5, 0.06, 0.08];
 const RED_ON = [3.2, 0.25, 0.3];
+const BEACON_IDLE = [0.1, 0.2, 0.95];
 const BLUE_OFF = [0.08, 0.12, 0.5];
 const BLUE_ON = [0.3, 0.5, 3.2];
 const POLICE_STRIPE = [0.04, 0.05, 0.1];
@@ -1452,6 +1453,12 @@ export class CarRenderer {
       for (let k = -1; k <= 1; k++) this.box(this.trimBox, _m, k * 0.45, K.clear + 0.1, -L / 2 + 0.06, 0.04, 0.18, 0.3, GARBAGE_DARK, rv);
       for (const x of [-0.62, -0.46, 0.46, 0.62]) this.box(this.trimBox, _m, x, K.clear + 0.22, -L / 2 - 0.02, 0.11, 0.11, 0.08, CHROME, rv);
       this.box(this.lightBox, _m, 0, 0.07, 0, K.W * 0.78, 0.03, L * 0.66, NEON_UNDER, rv);
+    } else if (extra === 'beacon') {
+      // (ROADMAP 28.26) an unmarked pursuit car: the one lamp put on its roof, over the driver - what tells it from the
+      // family saloon it is built on, on the street and in its drawing. Flashing while it is driven
+      const blink = o.siren !== undefined ? o.siren : -1;
+      this.box(this.trimBox, _m, 0.34, K.roofY + 0.03, 0.12, 0.26, 0.06, 0.26, GARBAGE_DARK, rv);
+      this.box(this.lightBox, _m, 0.34, K.roofY + 0.12, 0.12, 0.17, 0.13, 0.17, blink > 0 ? BLUE_ON : BEACON_IDLE, rv);
     } else if (extra === 'muscle') {
       // a scoop on the hood, its mouth chrome; a ducktail on the deck; pipes along the sills;
       // chrome bumpers; a white stripe down each side
