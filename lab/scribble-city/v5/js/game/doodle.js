@@ -299,6 +299,23 @@ export class Doodle {
     this.visible = v;
   }
 
+  // (ROADMAP 28.19) one hand put on a point NOW, after the pose is made: a gun held in two hands is where it is only
+  // once the right hand is - the left goes onto it in the same frame (game/armfx.js). As far as the arm reaches.
+  placeHand(side, target, pole = null) {
+    const j = this.j;
+    const k = (this.look.build.arms || 1) * this.scale;
+    const shoulder = side === 1 ? j.shoulderR : j.shoulderL;
+    const elbow = side === 1 ? j.elbowR : j.elbowL;
+    const hand = side === 1 ? j.handR : j.handL;
+    const l1 = 0.31 * k;
+    const l2 = 0.29 * k;
+    hand.copy(target);
+    const L = (l1 + l2) * 0.999;
+    if (hand.distanceTo(shoulder) > L) hand.sub(shoulder).setLength(L).add(shoulder);
+    ik(shoulder, hand, l1, l2, pole || _d.set(this.right.x * side * 0.6, -1, this.right.z * side * 0.6), elbow);
+    return hand;
+  }
+
   toWorld(x, y, z, out) {
     const s = this.scale;
     out.set(this.pos.x + (this.right.x * x + this.forward.x * z) * s, this.pos.y + y * s, this.pos.z + (this.right.z * x + this.forward.z * z) * s);
@@ -565,8 +582,9 @@ export class Doodle {
         this.toWorld(side * (0.3 + Math.sin(a) * 0.15), ny + 0.1 + Math.cos(a * 1.3) * 0.35, nz + 0.2 + Math.sin(a * 0.7) * 0.2, tgt);
         useIK = true;
       } else if (this.aim && (side === 1 || this.aim === 2)) {
-        const reach = side === 1 ? 0.55 : 0.42;
-        tgt.copy(j.neck).addScaledVector(this.aimDir, reach * this.scale).addScaledVector(this.right, (side === 1 ? 0.08 : 0.03) * this.scale);
+        // (aimReach, aimSide: a long heavy gun is held nearer, its butt in the shoulder - game/armfx.js)
+        const reach = side === 1 ? this.aimReach || 0.55 : 0.42;
+        tgt.copy(j.neck).addScaledVector(this.aimDir, reach * this.scale).addScaledVector(this.right, (side === 1 ? this.aimSide || 0.08 : 0.03) * this.scale);
         tgt.y -= 0.12 * this.scale;
         useIK = true;
       } else if (this.punch >= 0 && side === this.punchSide) {

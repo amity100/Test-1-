@@ -704,6 +704,46 @@ export class Audio {
         this.hiss(0.5, 0.22 * v, 1800, 3, 'bandpass', 0, 3600);
         this.hiss(0.03, 0.18 * v, 5000, 3, 'highpass', 0.05);
         break;
+      case 'mag': {
+        // (ROADMAP 28.19) a heavy machine gun: the thump of it in the chest, the crack over it, its action clattering
+        // back - and no two shots quite the same
+        const p = 0.93 + Math.random() * 0.14;
+        this.tone('sine', 175 * p, 46, 0.12, 0.5 * v);
+        this.hiss(0.12, 0.55 * v, 1150 * p, 0.7, 'lowpass', 0, 230);
+        this.hiss(0.035, 0.3 * v, 4300 * p, 1, 'highpass');
+        this.tone('square', 250 * p, 115, 0.03, 0.07 * v);
+        this.tone('square', 1350 * p, 820, 0.012, 0.035 * v, 0.045);
+        break;
+      }
+      case 'magTail':
+        // the street answering it once it stops
+        this.hiss(0.65, 0.2 * v, 720, 0.6, 'lowpass', 0.02, 170);
+        this.hiss(0.35, 0.07 * v, 2400, 1, 'bandpass', 0.07, 900);
+        break;
+      case 'magOpen':
+        // its feed cover unlatched and thrown up
+        this.tone('square', 950, 520, 0.02, 0.09 * v);
+        this.hiss(0.05, 0.16 * v, 2800, 2, 'bandpass', 0.02);
+        this.tone('square', 420, 260, 0.03, 0.08 * v, 0.16);
+        break;
+      case 'magBelt':
+        // a belt laid on the tray: link after link
+        for (let i = 0; i < 6; i++) this.tone('triangle', 2500 + Math.random() * 900, 1700, 0.016, 0.05 * v, i * 0.055 + Math.random() * 0.02);
+        this.hiss(0.2, 0.06 * v, 3600, 2, 'bandpass', 0.05);
+        break;
+      case 'magShut':
+        // the cover slapped down
+        this.hiss(0.06, 0.34 * v, 1500, 1, 'lowpass');
+        this.tone('square', 310, 115, 0.045, 0.13 * v);
+        this.tone('square', 1100, 700, 0.012, 0.05 * v, 0.02);
+        break;
+      case 'magRack':
+        // the cocking handle hauled back and let go
+        this.tone('square', 700, 340, 0.035, 0.1 * v);
+        this.hiss(0.08, 0.2 * v, 2400, 2, 'bandpass', 0, 1500);
+        this.tone('square', 480, 920, 0.025, 0.11 * v, 0.2);
+        this.hiss(0.045, 0.26 * v, 3200, 2, 'bandpass', 0.2);
+        break;
       case 'mini':
         this.tone('square', 520 + Math.random() * 80, 300, 0.035, 0.05 * v);
         this.hiss(0.03, 0.14 * v, 2600, 1.4, 'bandpass');

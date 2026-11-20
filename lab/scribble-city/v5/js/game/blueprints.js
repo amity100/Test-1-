@@ -1211,6 +1211,33 @@ Object.assign(BLUEPRINTS, {
 });
 
 Object.assign(BLUEPRINTS, {
+  // (ROADMAP 28.19) the heavy machine gun: drawn from its side - the butt, the body, the grip, the long barrel, the
+  // legs under it, the tin its belt comes out of
+  mag: {
+    id: 'mag',
+    name: tr('מאג', 'MAG'),
+    nameEn: 'MAG',
+    kind: 'weapon',
+    difficulty: 3,
+    desc: tr('מקלע כבד מוזן שרשרת. קליעי גרפיט כבדים, נותב כל רביעי. יציב על הדו-רגל כשכורעים, פרוע בתנועה — והקנה מתחמם.', 'A heavy belt-fed machine gun. Heavy graphite slugs, a tracer every fourth. Steady off its bipod when you kneel, wild on the move — and the barrel heats up.'),
+    strokes: [
+      { label: tr('קת', 'stock'), en: 'stock', pts: close([[3, 36], [24, 38], [24, 50], [12, 56], [3, 56]]) },
+      { label: tr('גוף', 'body'), en: 'body', pts: close([[24, 36], [58, 36], [58, 50], [24, 50]]) },
+      { label: tr('ידית', 'grip'), en: 'grip', pts: close([[30, 50], [38, 50], [35, 66], [26, 66]]) },
+      { label: tr('קנה', 'Barrel'), en: 'barrel', pts: close([[58, 40], [97, 40], [97, 45], [58, 45]]) },
+      { label: tr('דו-רגל', 'bipod'), en: 'bipod', pts: [[76, 46], [70, 68]] },
+      { label: tr('ארגז שרשרת', 'belt box'), en: 'belt box', pts: close([[42, 50], [57, 50], [57, 64], [42, 64]]) },
+    ],
+    fills: [
+      { poly: [[3, 36], [24, 38], [24, 50], [12, 56], [3, 56]], color: '#8f6a3d' },
+      { poly: [[24, 36], [58, 36], [58, 50], [24, 50]], color: '#4a4d58' },
+      { poly: [[30, 50], [38, 50], [35, 66], [26, 66]], color: '#8f6a3d' },
+      { poly: [[58, 40], [97, 40], [97, 45], [58, 45]], color: '#3b3d47' },
+      { poly: [[42, 50], [57, 50], [57, 64], [42, 64]], color: '#1f4666' },
+    ],
+    anchors: { muzzle: [97, 42.5], grip: [32, 58] },
+    scale: 1.5,
+  },
   paramotor: {
     id: 'paramotor',
     name: tr('דריפטפאן P2', 'Driftfan P2'),
@@ -1250,7 +1277,7 @@ export const BLUEPRINT_ORDER = ['paint', 'rifle', 'car', 'bazooka', 'tank', 'shi
 // (ROADMAP 4.8: in the album, not with ?classic - and no boards of their own in the city)
 export const BLUEPRINT_MORE = ['scooter', 'bicycle', 'jetski', 'boat', 'plane'];
 // (ROADMAP 28: new things of the start - in the album and on the pen's shelf; no boards of their own in the city)
-export const BLUEPRINT_NEW = ['paramotor'];
+export const BLUEPRINT_NEW = ['paramotor', 'mag'];
 // (ROADMAP 11.41: the catalog's cars - in the album, not with ?classic; no boards of their own)
 export const BLUEPRINT_CARS = ['streetline', 'muscle', 'nightshift', 'hyper', 'trailforge', 'driftvan', 'cargobrute', 'interceptor', 'limo', 'monster', 'armored', 'firetruck'];
 // (ROADMAP 9.2: in the album, not with ?classic; to be had in the shops, no boards of their own)

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { makeSurface, srgb, lin3 } from '../render/materials.js';
+import { ARMS } from './arms.js';
 
 // The things you draw and then hold: every weapon as a real thing, made the way the city is made
 // (glossy paint full of the sunset, chrome, a glowing bit of neon here and there), its outlines
@@ -497,15 +498,36 @@ const BUILD = {
 export function buildWeaponModel(id, grade = 'good', o = {}) {
   const M = mats();
   const K = new Kit();
-  const fn = BUILD[id] || BUILD.paint;
+  // (ROADMAP 28.19: the ones modelled as real weapons are made, game/arms.js)
+  const fn = ARMS[id] || BUILD[id] || BUILD.paint;
   const opt = { ...o };
   const info = fn(K, M, opt);
   const seed = (id.length * 7.31 + (o.seed || 0)) % 10;
   const group = K.build({ warp: warpFor(grade, seed), seed: seed * 0.1 });
   const out = { group, ...info, id, grade };
+  // (what moves on it - a belt, a bipod's legs, a feed cover on its hinge: each a group of its own in the gun's,
+  // at its own hinge; game/armfx.js moves them)
+  if (info && info.parts) {
+    out.parts = {};
+    let n = 2;
+    for (const [name, q] of Object.entries(info.parts)) {
+      const home = !q.at[0] && !q.at[1] && !q.at[2];
+      const pg = q.kit.build({ warp: home ? warpFor(grade, seed) : null, seed: (seed * 0.1 * n++) % 1 });
+      pg.matrixAutoUpdate = true;
+      pg.position.set(q.at[0], q.at[1], q.at[2]);
+      if (q.fold) pg.rotation.x = q.fold;
+      if (q.hide) pg.visible = false;
+      group.add(pg);
+      out.parts[name] = { group: pg, at: q.at, fold: q.fold || 0 };
+    }
+    // (barrels on a rotor: what game/weapons.js spins up)
+    if (out.parts.rotor) out.barrel = out.parts.rotor.group;
+  }
   if (opt.barrel) {
     const b = opt.barrel.build({ warp: warpFor(grade, seed + 1), seed: seed * 0.2 });
     b.matrixAutoUpdate = true;
+    // (the axis it turns on, where that is not the gun's own: game/arms.js)
+    if (opt.barrelAt) b.position.set(opt.barrelAt[0], opt.barrelAt[1], opt.barrelAt[2]);
     group.add(b);
     out.barrel = b;
   }

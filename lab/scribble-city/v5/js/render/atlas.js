@@ -625,6 +625,47 @@ function muzzle(sk) {
   }
 }
 
+// (ROADMAP 28.19) the fire out of a real gun's muzzle, painted: a white heart, yellow round it, orange tongues
+// going out to nothing - no outline; the batch's tint heats it past the page's white so it glows
+function flash(sk, ctx) {
+  const g = ctx.createRadialGradient(128, 128, 2, 128, 128, 112);
+  g.addColorStop(0, 'rgba(255,255,244,1)');
+  g.addColorStop(0.16, 'rgba(255,244,190,0.96)');
+  g.addColorStop(0.36, 'rgba(255,196,84,0.62)');
+  g.addColorStop(0.62, 'rgba(255,128,36,0.22)');
+  g.addColorStop(1, 'rgba(255,90,20,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(128, 128, 112, 0, PI * 2);
+  ctx.fill();
+  // (the tongues: tapering, uneven, a few long)
+  for (let i = 0; i < 9; i++) {
+    const t = (i / 9) * PI * 2 + sk.r(-0.25, 0.25);
+    const len = sk.r(54, 118);
+    const w = sk.r(7, 15);
+    const cx = Math.cos(t);
+    const cy = Math.sin(t);
+    const gr = ctx.createLinearGradient(128 + cx * 14, 128 + cy * 14, 128 + cx * len, 128 + cy * len);
+    gr.addColorStop(0, 'rgba(255,250,214,0.95)');
+    gr.addColorStop(0.45, 'rgba(255,186,70,0.7)');
+    gr.addColorStop(1, 'rgba(255,110,30,0)');
+    ctx.fillStyle = gr;
+    ctx.beginPath();
+    ctx.moveTo(128 + cx * 10 - cy * w, 128 + cy * 10 + cx * w);
+    ctx.quadraticCurveTo(128 + cx * len * 0.6 - cy * w * 0.5, 128 + cy * len * 0.6 + cx * w * 0.5, 128 + cx * len, 128 + cy * len);
+    ctx.quadraticCurveTo(128 + cx * len * 0.6 + cy * w * 0.5, 128 + cy * len * 0.6 - cx * w * 0.5, 128 + cx * 10 + cy * w, 128 + cy * 10 - cx * w);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // (a brush's dry strokes across it, so it is of the same hand as the rest)
+  for (let i = 0; i < 14; i++) {
+    const t = sk.r(0, PI * 2);
+    const r0 = sk.r(10, 44);
+    const r1 = r0 + sk.r(18, 46);
+    sk.line(128 + Math.cos(t) * r0, 128 + Math.sin(t) * r0, 128 + Math.cos(t) * r1, 128 + Math.sin(t) * r1, { width: sk.r(1.2, 2.6), color: 'rgba(255,236,170,0.5)', overshoot: 0 });
+  }
+}
+
 function eyeIcon(sk) {
   sk.paper(ellipsePts(128, 128, 100, 100, 30), '#f7f4ec');
   sk.circle(128, 128, 100, { width: 5, color: INK2D });
@@ -692,6 +733,7 @@ export function buildAtlas() {
   cell('smoke1', smoke, 902);
   cell('muzzle', muzzle);
   cell('eye', eyeIcon);
+  cell('flash', flash, 4411);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.generateMipmaps = true;
