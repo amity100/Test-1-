@@ -3,7 +3,8 @@
 // as it is drawn and at the end; and drawings of other things altogether (a house, a sun, a scribble) read by each shelf.
 // What it tells: how often each thing is read as itself; what it is taken for when it is not; and the things that light up
 // for drawings that are not them - the owner's word: "things that keep popping up as if we tried to draw them".
-// usage: node tools/test-catalog.mjs [samples per level] (MEMORY=1: and with the pen's memory of a few picks - drawmemory.js)
+// usage: node tools/test-catalog.mjs [samples per level] (MEMORY=1: and with the pen's memory of a few picks - drawmemory.js;
+// VARIANT=1: lines broken in two and the drawing turned a little)
 import { BLUEPRINTS } from '../v5/js/game/blueprints.js';
 import { matchCatalog, shelfIds, SHELVES, tooEarly, drawnWhole, MATCH_MIN, PICK_SLACK } from '../v5/js/game/catmatch.js';
 import { DrawMemory } from '../v5/js/game/drawmemory.js';
@@ -75,6 +76,21 @@ function humanCopy(bp, lv, rnd) {
         return [ox + X * s * ax, oy + (cy + ry + sh[1] + ny) * s * ay];
       }),
     );
+  }
+  // (VARIANT=1: as a hand does it its own way - a long line broken in two where the pen was lifted, and the whole
+  // drawing turned a little: how many lines it is drawn in is the hand's affair)
+  if (process.env.VARIANT) {
+    const out = [];
+    for (const p of strokes) {
+      if (p.length > 24 && rnd() < 0.5) {
+        const k = Math.floor(p.length * (0.3 + 0.4 * rnd()));
+        out.push(p.slice(0, k + 1), p.slice(k));
+      } else out.push(p);
+    }
+    const a = (rnd() - 0.5) * 0.24;
+    const c = Math.cos(a);
+    const sn = Math.sin(a);
+    return out.map((p) => p.map(([x, y]) => [x * c - y * sn, x * sn + y * c]));
   }
   return strokes;
 }

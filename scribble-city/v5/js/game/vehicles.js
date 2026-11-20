@@ -64,7 +64,7 @@ export const CAR_BP = {
   trailforge: { kind: 'trail', color: [0.74, 0.5, 0.2], hp: 1.7, armor: 0.15, handling: { mass: 1.9, power: 15.5, top: 30, grip: 8.4, slide: 0.95, steer: 1.25, roll: 1.1, pitch: 0.85 }, voice: { f: 0.74, lp: 0.75, vol: 1.15 } },
   driftvan: { kind: 'van', color: [0.94, 0.8, 0.26], hp: 1.4, handling: { mass: 1.65, power: 14.5, top: 29, grip: 5.6, slide: 1.55, steer: 1.4, roll: 1.2, pitch: 0.7 }, voice: { f: 0.86, lp: 0.85, vol: 1 } },
   cargobrute: { kind: 'truck', color: [0.3, 0.42, 0.36], hp: 2.6, armor: 0.2, ram: { k: 1.7 }, handling: { mass: 3.0, power: 10.5, top: 24, grip: 5.8, slide: 0.83, steer: 0.88, roll: 1.2, pitch: 0.55 }, voice: { f: 0.55, lp: 0.6, vol: 1.3 } },
-  interceptor: { kind: 'sedan', color: [0.07, 0.07, 0.09], hp: 1.25, jets: 1, handling: { mass: 1.3, power: 19, top: 41, grip: 9.2, slide: 1.05, steer: 1.5, roll: 0.6, pitch: 0.45 }, voice: { f: 1.05, lp: 1.1, vol: 1.05 } },
+  interceptor: { kind: 'sedan', color: [0.07, 0.07, 0.09], extra: 'beacon', hp: 1.25, jets: 1, handling: { mass: 1.3, power: 19, top: 41, grip: 9.2, slide: 1.05, steer: 1.5, roll: 0.6, pitch: 0.45 }, voice: { f: 1.05, lp: 1.1, vol: 1.05 } },
 };
 
 const QUALITY = {
@@ -471,7 +471,7 @@ class Vehicle {
   draw(cars) {
     if (this.kind !== 'car' || this.dead) return;
     const BP = this.bodyPose();
-    const siren = (this.extra === 'police' || this.extra === 'armored' || this.extra === 'fire') && this.driver ? Math.floor(this.game.time * 5) % 2 : -1;
+    const siren = (this.extra === 'police' || this.extra === 'armored' || this.extra === 'fire' || this.extra === 'beacon') && this.driver ? Math.floor(this.game.time * 5) % 2 : -1;
     // (just drawn: still turning from the drawing into the car)
     const rv = this.mat ? this.mat.carRV : null;
     const U = this.up;
