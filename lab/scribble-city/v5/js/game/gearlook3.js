@@ -1,4 +1,4 @@
-import { sheet, slab, cyl, box, sph, tor, blade, beltY, hueOf, mix, lerp, r3, carNums, clamp, STEEL, CHROME, RUBBER, WHITE, HAZARD, RED, GREEN } from './gearlook.js';
+import { sheet, slab, cyl, box, sph, tor, blade, beltY, lat, tube, rbox, ext, ringOf, coil, hueOf, mix, lerp, r3, carNums, clamp, STEEL, CHROME, RUBBER, WHITE, HAZARD, RED, GREEN } from './gearlook.js';
 
 // (ROADMAP 11.28) More of the pen's things designed (game/gearlook.js has how): the weapons - missiles on
 // their rails, the flamethrower, the mine layer, the harpoon gun, the net launcher, the wrecking crane, the
@@ -337,34 +337,69 @@ function armorDesign(lines, ctx, o) {
   const yl = C.clear + 0.08;
   const yh = clamp(C.mid + 0.18, yl + 0.3, C.roof - 0.25);
   const panels = [[-D.hl * 0.78, -D.hl * 0.12], [-D.hl * 0.1, D.hl * 0.42], [D.hl * 0.44, D.hl * 0.86]];
-  for (const [z0, z1] of panels) {
-    P.push(slab('x', x, [[z0, yl], [z1, yl], [z1, yh], [z0, yh]], 0.035, 'plate', 'gun', { edge: 4.5 }));
-    for (const z of [z0 + 0.06, z1 - 0.06]) for (const y of [yl + 0.06, yh - 0.06, (yl + yh) / 2]) P.push(sph([x + 0.022, y, z], 0.022, 'rivet', 'gun', { noSil: true }));
-  }
+  // (ROADMAP 28.24) plate as it is hung on a car: each a sheet of steel cut with its corners off, a bevel round it; a
+  // second, smaller one welded on its middle; bolts all round its edge; the door's has a firing port with its
+  // shutter and hangs on two hinges; the back one is braced corner to corner
+  const bolt = (y, z) => P.push(cyl([x + 0.014, y, z], [x + 0.034, y, z], 0.017, 0.013, 'rivet', 'gun', { n: 6, noSil: true }));
+  panels.forEach(([z0, z1], pi) => {
+    const c = 0.07;
+    P.push(ext('x', x, [[z0 + c, yl], [z1 - c, yl], [z1, yl + c], [z1, yh - c], [z1 - c, yh], [z0 + c, yh], [z0, yh - c], [z0, yl + c]], 0.035, 'plate', 'gun', { e: 0.01 }));
+    const i0 = 0.11;
+    P.push(ext('x', x + 0.024, [[z0 + i0 + 0.04, yl + i0], [z1 - i0 - 0.04, yl + i0], [z1 - i0, yl + i0 + 0.04], [z1 - i0, yh - i0 - 0.04], [z1 - i0 - 0.04, yh - i0], [z0 + i0 + 0.04, yh - i0], [z0 + i0, yh - i0 - 0.04], [z0 + i0, yl + i0 + 0.04]], 0.016, 'plate2', 'gun', { noSil: true, e: 0.005 }));
+    const n = Math.max(2, Math.round((z1 - z0 - 0.2) / 0.17));
+    for (let k = 0; k <= n; k++) {
+      const z = lerp(z0 + 0.1, z1 - 0.1, k / n);
+      bolt(yl + 0.05, z);
+      bolt(yh - 0.05, z);
+    }
+    for (const z of [z0 + 0.05, z1 - 0.05]) bolt((yl + yh) / 2, z);
+    const ym = (yl + yh) / 2;
+    const zm = (z0 + z1) / 2;
+    if (pi === 1) {
+      P.push(rbox([x + 0.03, ym + 0.02, zm - 0.11], [x + 0.046, ym + 0.1, zm + 0.11], 'slot', 'gun', { noSil: true, e: 0.006 }));
+      P.push(rbox([x + 0.044, ym + 0.035, zm - 0.02], [x + 0.058, ym + 0.085, zm + 0.13], 'plate', 'gun', { noSil: true, e: 0.005 }));
+      for (const y of [yl + 0.12, yh - 0.2]) P.push(cyl([x + 0.03, y, z0 + 0.02], [x + 0.03, y + 0.1, z0 + 0.02], 0.016, 0.016, 'rivet', 'gun', { n: 8, noSil: true }));
+    } else if (pi === 0) {
+      const t = 0.022;
+      const a = [z0 + i0 + 0.03, yl + i0 + 0.02];
+      const b = [z1 - i0 - 0.03, yh - i0 - 0.02];
+      P.push(ext('x', x + 0.036, [[a[0], a[1] + t], [a[0] + t, a[1]], [b[0], b[1] - t], [b[0] - t, b[1]]], 0.012, 'plate', 'gun', { noSil: true, e: 0.004 }));
+      P.push(ext('x', x + 0.036, [[a[0], b[1] - t], [b[0] - t, a[1]], [b[0], a[1] + t], [a[0] + t, b[1]]], 0.012, 'plate', 'gun', { noSil: true, e: 0.004 }));
+    } else {
+      // (over the front wheel: a handle to lift it off by)
+      P.push(tube([[x + 0.03, ym + 0.02, zm - 0.09], [x + 0.07, ym + 0.03, zm - 0.07], [x + 0.07, ym + 0.03, zm + 0.07], [x + 0.03, ym + 0.02, zm + 0.09]], 0.009, 'rivet', 'gun', { n: 5 }));
+    }
+  });
   if (lv >= 2) {
-    // (grilles over the side windows: bars up and across)
+    // (grilles over the side windows: a frame, bars up it, one across)
     const yw0 = yh + 0.06;
     const yw1 = C.roof - 0.08;
     const xw = x - 0.08;
     for (let k = 0; k <= 7; k++) {
       const z = lerp(-D.hl * 0.42, D.hl * 0.18, k / 7);
-      P.push(box([xw - 0.015, yw0, z - 0.015], [xw + 0.015, yw1, z + 0.015], 'bar', 'gun', { noSil: true }));
+      P.push(cyl([xw, yw0, z], [xw, yw1, z], 0.012, 0.012, 'bar', 'gun', { n: 6, noSil: true }));
     }
-    P.push(box([xw - 0.015, (yw0 + yw1) / 2 - 0.015, -D.hl * 0.42], [xw + 0.015, (yw0 + yw1) / 2 + 0.015, D.hl * 0.18], 'bar', 'gun', { noSil: true }));
+    for (const y of [yw0, (yw0 + yw1) / 2, yw1]) P.push(rbox([xw - 0.016, y - 0.016, -D.hl * 0.42 - 0.02], [xw + 0.016, y + 0.016, D.hl * 0.18 + 0.02], 'bar', 'gun', { noSil: true, e: 0.005 }));
   }
   if (lv >= 3) {
-    P.push(box([D.hw * 0.2, C.clear - 0.02, D.hl - 0.05], [D.hw + 0.02, C.clear + 0.3, D.hl + 0.08], 'plate'));
-    P.push(box([D.hw * 0.2, C.clear - 0.02, -D.hl - 0.08], [D.hw + 0.02, C.clear + 0.3, -D.hl + 0.05], 'plate'));
-    P.push(box([x - 0.02, C.clear - 0.06, -D.hl * 0.8], [x + 0.03, yl, D.hl * 0.8], 'plate', 'gun', { noSil: true }));
+    for (const s of [1, -1]) {
+      const za = s > 0 ? D.hl - 0.05 : -D.hl - 0.08;
+      P.push(rbox([D.hw * 0.2, C.clear - 0.02, za], [D.hw + 0.02, C.clear + 0.3, za + 0.13], 'plate', 'gun', { e: 0.02 }));
+      const zf = s > 0 ? za + 0.13 : za;
+      for (const xb of [D.hw * 0.32, D.hw * 0.62, D.hw * 0.92]) for (const y of [C.clear + 0.04, C.clear + 0.24]) P.push(cyl([xb, y, zf - s * 0.004], [xb, y, zf + s * 0.016], 0.017, 0.013, 'rivet', 'gun', { n: 6, noSil: true }));
+      P.push(tor([D.hw * 0.46, C.clear + 0.14, zf + s * 0.03], 0.04, 0.012, 'x', 'rivet', 'gun', { noSil: true }));
+    }
+    P.push(rbox([x - 0.02, C.clear - 0.06, -D.hl * 0.8], [x + 0.03, yl, D.hl * 0.8], 'plate', 'gun', { noSil: true, e: 0.012 }));
   }
-  const pal = { plate: hc ? mix(hc, [0.45, 0.47, 0.5], 0.5) : [0.45, 0.47, 0.5], rivet: [0.3, 0.31, 0.33], bar: [0.18, 0.18, 0.2] };
+  const plate = hc ? mix(hc, [0.45, 0.47, 0.5], 0.5) : [0.45, 0.47, 0.5];
+  const pal = { plate, plate2: mix(plate, [0.2, 0.2, 0.22], 0.28), rivet: [0.3, 0.31, 0.33], bar: [0.18, 0.18, 0.2], slot: [0.05, 0.05, 0.06] };
   return sheet('armor', lines, ctx, o, {
     ax: 'x',
     c: x + 0.02,
     prims: P,
     pivot: [x, (yl + yh) / 2, 0],
     pal,
-    mats: { plate: 'metal', bar: 'metal' },
+    mats: { plate: 'metal', plate2: 'metal', bar: 'metal', rivet: 'metal', slot: 'matte' },
     mirror: true,
     box: [panels[1][0], panels[1][1], yl, yh],
     focus: { at: [D.hw, C.mid, 0], k: 0.05 },
@@ -387,38 +422,82 @@ function bullbarDesign(lines, ctx, o) {
   const yl = Math.max(0.16, C.clear - 0.06);
   const yh = C.noseY + 0.32;
   if (lv === 1) {
-    for (const x of [-w * 0.45, w * 0.45]) P.push(box([x - 0.05, yl, z - 0.05], [x + 0.05, yh, z + 0.05], 'bar'));
-    for (const y of [yl + 0.12, (yl + yh) / 2, yh - 0.05]) P.push(cyl([-w, y, z + 0.04], [w, y, z + 0.04], 0.035, 0.035, 'bar', 'gun', { n: 10 }));
-    P.push(box([-w * 0.5, yh - 0.1, z + 0.05], [w * 0.5, yh - 0.02, z + 0.1], 'light', 'gun', { noSil: true }));
-  } else if (lv === 2) {
-    // the blade: a curve across, in strips; its arms back to the car
-    const N = 6;
-    for (let k = 0; k < N; k++) {
-      const t0 = k / N;
-      const t1 = (k + 1) / N;
-      const y0 = lerp(yl - 0.06, yh + 0.12, t0);
-      const y1 = lerp(yl - 0.06, yh + 0.12, t1);
-      const z0 = z + 0.22 * Math.sin(t0 * Math.PI) * 0.6 + 0.1 * t0;
-      const z1 = z + 0.22 * Math.sin(t1 * Math.PI) * 0.6 + 0.1 * t1;
-      P.push(box([-w - 0.1, y0, Math.min(z0, z1)], [w + 0.1, y1, Math.max(z0, z1) + 0.05], 'blade', 'gun'));
+    // (ROADMAP 28.24) a push bar as one is made: two uprights cut from plate, a rubber strip down the face of each, an
+    // arm from each back to the chassis; three tubes across, bent back round the car's corners; a mesh of rods
+    // between the uprights; two round lamps on the top tube
+    for (const x of [-w * 0.45, w * 0.45]) {
+      P.push(ext('x', x, [[z - 0.07, yl], [z + 0.05, yl + 0.04], [z + 0.07, yh - 0.06], [z + 0.02, yh], [z - 0.07, yh - 0.04]], 0.05, 'bar', 'gun', { e: 0.008 }));
+      P.push(rbox([x - 0.018, yl + 0.1, z + 0.06], [x + 0.018, yh - 0.1, z + 0.086], 'pad', 'gun', { noSil: true, e: 0.008 }));
+      P.push(rbox([x - 0.03, yl + 0.08, z - 0.42], [x + 0.03, yl + 0.16, z - 0.05], 'bar', 'gun', { noSil: true, e: 0.01 }));
     }
-    for (const x of [-w * 0.5, w * 0.5]) P.push(box([x - 0.05, yl + 0.1, z - 0.3], [x + 0.05, yl + 0.2, z + 0.1], 'bar'));
-    P.push(box([-w - 0.1, yl - 0.08, z + 0.04], [w + 0.1, yl - 0.03, z + 0.12], 'edge', 'gun', { noSil: true }));
+    for (const y of [yl + 0.12, (yl + yh) / 2, yh - 0.05]) {
+      P.push(cyl([-w + 0.1, y, z + 0.045], [w - 0.1, y, z + 0.045], 0.034, 0.034, 'tube', 'gun', { n: 10 }));
+      for (const s of [1, -1]) P.push(tube([[s * (w - 0.12), y, z + 0.045], [s * (w - 0.02), y, z + 0.025], [s * (w + 0.03), y, z - 0.07], [s * (w + 0.03), y, z - 0.24]], 0.034, 'tube', 'gun', { n: 8, steps: 12 }));
+    }
+    for (let k = 1; k < 9; k++) P.push(cyl([lerp(-w * 0.4, w * 0.4, k / 9), yl + 0.12, z + 0.04], [lerp(-w * 0.4, w * 0.4, k / 9), yh - 0.05, z + 0.04], 0.008, 0.008, 'mesh', 'gun', { n: 5, noSil: true }));
+    for (const x of [-w * 0.22, w * 0.22]) {
+      P.push(lat([x, yh + 0.045, z - 0.03], [x, yh + 0.045, z + 0.08], [[0, 0], [0, 0.035], [0.25, 0.062], [1, 0.068], [1, 0.058], [0.9, 0.058]], 'bar', 'gun', { n: 12, noSil: true }));
+      P.push(lat([x, yh + 0.045, z - 0.03], [x, yh + 0.045, z + 0.08], [[0.9, 0.058], [0.9, 0]], 'light', 'gun', { n: 12, noSil: true }));
+      P.push(box([x - 0.012, yh - 0.03, z + 0.02], [x + 0.012, yh + 0.0, z + 0.05], 'bar', 'gun', { noSil: true }));
+    }
+  } else if (lv === 2) {
+    // a plough as one is made: its blade one curved sheet - its foot forward, hollow up its face, its top curling
+    // over; a steel edge bolted along its foot; ribs behind it; an A-frame back to the car and a ram that lifts it;
+    // a marker rod up at each end
+    const yb = yl - 0.06;
+    const yt = yh + 0.12;
+    const zf = (t) => z + 0.27 - 0.19 * Math.sin(t * Math.PI) + 0.07 * t;
+    const N = 9;
+    const front = [];
+    const backP = [];
+    for (let k = 0; k <= N; k++) {
+      front.push([zf(k / N), lerp(yb, yt, k / N)]);
+      backP.push([zf(k / N) - 0.035, lerp(yb, yt, k / N)]);
+    }
+    P.push(ext('x', 0, front.concat(backP.reverse()), w * 2 + 0.2, 'blade', 'gun', { e: 0.006 }));
+    backP.reverse();
+    P.push(ext('x', 0, [[zf(0) - 0.012, yb - 0.035], [zf(0) + 0.03, yb - 0.035], [zf(0) + 0.022, yb + 0.07], [zf(0.1) + 0.006, yb + 0.07]], w * 2 + 0.22, 'edge', 'gun', { noSil: true, e: 0.004 }));
+    for (let k = 0; k < 8; k++) P.push(cyl([lerp(-w, w, k / 7), yb + 0.03, zf(0) + 0.02], [lerp(-w, w, k / 7), yb + 0.03, zf(0) + 0.04], 0.014, 0.011, 'bolt', 'gun', { n: 6, noSil: true }));
+    for (const x of [-w * 0.85, -w * 0.3, w * 0.3, w * 0.85]) P.push(ext('x', x, backP.filter((q, k) => k % 2 === 0 || k === N).map(([a, b]) => [a + 0.004, b]).concat([[z - 0.02, yt - 0.14], [z - 0.02, yb + 0.1]]), 0.025, 'rib', 'gun', { noSil: true, e: 0.004 }));
+    for (const s of [1, -1]) {
+      P.push(cyl([s * w * 0.5, yl + 0.14, z - 0.34], [s * w * 0.16, yl + 0.1, z + 0.06], 0.032, 0.032, 'bar', 'gun', { n: 8 }));
+      P.push(cyl([s * (w + 0.06), yt - 0.02, zf(1) - 0.03], [s * (w + 0.06), yt + 0.42, zf(1) - 0.03], 0.008, 0.008, 'bar', 'gun', { n: 5, noSil: true }));
+      P.push(sph([s * (w + 0.06), yt + 0.44, zf(1) - 0.03], 0.026, 'tip', 'gun', { noSil: true }));
+    }
+    P.push(cyl([-w * 0.5, yl + 0.14, z - 0.05], [w * 0.5, yl + 0.14, z - 0.05], 0.03, 0.03, 'bar', 'gun', { n: 8, noSil: true }));
+    P.push(cyl([0, yh - 0.02, z - 0.26], [0, lerp(yh, yl, 0.5), z - 0.08], 0.036, 0.036, 'bar', 'gun', { n: 10, noSil: true }));
+    P.push(cyl([0, lerp(yh, yl, 0.5), z - 0.08], [0, yl + 0.2, z + 0.06], 0.017, 0.017, 'chrome', 'gun', { n: 8, noSil: true }));
   } else {
-    // the wedge: a plate from over the bumper down and out to just over the road
+    // a ramp wedge as one is made: a plate from over the bumper down and out to just over the road, bars across it
+    // for grip, a dark stripe down each side; a cheek plate under each edge; a steel lip at its foot; two struts
+    // under it back to the chassis
     const zt = z + 0.9;
-    P.push(slab('x', 0, [[z - 0.05, yh], [zt, 0.08], [zt, 0.04], [z - 0.05, yl]], w * 2 + 0.2, 'blade', 'gun', { edge: 4 }));
-    P.push(box([-w - 0.1, 0.02, zt - 0.04], [w + 0.1, 0.09, zt + 0.02], 'edge'));
-    for (const x of [-w * 0.6, w * 0.6]) P.push(box([x - 0.04, yl, z - 0.25], [x + 0.04, yh - 0.1, z], 'bar'));
+    const a = [z - 0.05, yh];
+    const b = [zt, 0.075];
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const d = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
+    const up = [-d[1], d[0]];
+    const at = (t, h) => [a[0] + d[0] * L * t + up[0] * h, a[1] + d[1] * L * t + up[1] * h];
+    P.push(ext('x', 0, [at(0, 0), at(1, 0), [zt + 0.02, 0.04], [zt - 0.06, 0.04], at(0, -0.045)], w * 2 + 0.2, 'blade', 'gun', { e: 0.006 }));
+    for (let k = 1; k <= 7; k++) P.push(ext('x', 0, [at(k / 8 - 0.012, 0.001), at(k / 8 + 0.012, 0.001), at(k / 8 + 0.008, 0.016), at(k / 8 - 0.008, 0.016)], w * 2 - 0.18, 'rib', 'gun', { noSil: true, e: 0.003 }));
+    for (const s of [1, -1]) {
+      P.push(ext('x', s * (w + 0.04), [at(0.03, 0.002), at(0.97, 0.002), at(0.97, 0.007), at(0.03, 0.007)], 0.1, 'stripe', 'gun', { noSil: true, e: 0.001 }));
+      P.push(ext('x', s * (w + 0.085), [at(0, -0.02), at(0.96, -0.02), [z - 0.05, yl]], 0.03, 'cheek', 'gun', { e: 0.006 }));
+      P.push(cyl([s * w * 0.6, yl + 0.06, z - 0.22], [s * w * 0.6, 0.16, zt - 0.3], 0.03, 0.03, 'bar', 'gun', { n: 8, noSil: true }));
+      P.push(rbox([s * w * 0.6 - 0.04, yl, z - 0.25], [s * w * 0.6 + 0.04, yh - 0.1, z], 'bar', 'gun', { e: 0.01 }));
+    }
+    P.push(rbox([-w - 0.1, 0.02, zt - 0.05], [w + 0.1, 0.08, zt + 0.03], 'edge', 'gun', { e: 0.012 }));
+    for (let k = 0; k < 8; k++) P.push(cyl([lerp(-w, w, k / 7), 0.078, zt - 0.01], [lerp(-w, w, k / 7), 0.092, zt - 0.01], 0.014, 0.011, 'bolt', 'gun', { n: 6, noSil: true }));
   }
-  const pal = { bar: hc || [0.12, 0.12, 0.14], blade: hc ? mix(hc, HAZARD, 0.5) : HAZARD, edge: [0.2, 0.2, 0.22], light: [1, 0.95, 0.8] };
+  const blade = hc ? mix(hc, HAZARD, 0.5) : HAZARD;
+  const pal = { bar: hc || [0.12, 0.12, 0.14], tube: hc ? mix(hc, [0.1, 0.1, 0.12], 0.5) : [0.16, 0.16, 0.18], pad: RUBBER, mesh: [0.2, 0.2, 0.22], blade, rib: mix(blade, [0.1, 0.1, 0.1], 0.35), cheek: mix(blade, [0.1, 0.1, 0.1], 0.2), stripe: [0.1, 0.1, 0.11], edge: [0.3, 0.3, 0.33], bolt: [0.5, 0.5, 0.54], chrome: CHROME, tip: [0.9, 0.36, 0.08], light: [1, 0.95, 0.8] };
   return sheet('bullbar', lines, ctx, o, {
     ax: 'x',
     c: lv === 3 ? w + 0.12 : w,
     prims: P,
     pivot: [0, (yl + yh) / 2, z],
     pal,
-    mats: { bar: 'metal', edge: 'metal', light: 'glow' },
+    mats: { bar: 'metal', tube: 'metal', edge: 'metal', bolt: 'metal', chrome: 'metal', light: 'glow', pad: 'matte', stripe: 'matte', tip: 'paint' },
     focus: { at: [0, (yl + yh) / 2, z + 0.4], k: 0.2 },
     n: { lv, len: [0.6, 0.9, 1.2][lv - 1] },
     traits: { style: ['bar', 'plough', 'wedge'][lv - 1] },
@@ -547,28 +626,48 @@ function repairDesign(lines, ctx, o) {
   const P = [];
   const y0 = C.roof + 0.02;
   const zc = -0.35;
-  for (const x of [-0.42, 0.42]) P.push(box([x - 0.025, C.roof - 0.02, zc - 0.5], [x + 0.025, y0 + 0.04, zc + 0.5], 'rack'));
-  for (const z of [zc - 0.4, zc + 0.4]) P.push(box([-0.45, y0 + 0.04, z - 0.025], [0.45, y0 + 0.08, z + 0.025], 'rack'));
-  P.push(box([-0.3, y0 + 0.08, zc - 0.2], [0.24, y0 + 0.36, zc + 0.12], 'box'));
-  P.push(box([-0.3, y0 + 0.36, zc - 0.2], [0.24, y0 + 0.4, zc + 0.12], 'lid'));
-  P.push(box([-0.08, y0 + 0.4, zc - 0.06], [0.02, y0 + 0.46, zc - 0.02], 'dark'));
-  // the wrench lying by it
-  P.push(box([0.27, y0 + 0.08, zc - 0.3], [0.31, y0 + 0.11, zc + 0.15], 'steel'));
-  P.push(tor([0.29, y0 + 0.1, zc + 0.2], 0.05, 0.018, 'y', 'steel'));
-  P.push(tor([0.29, y0 + 0.1, zc - 0.35], 0.045, 0.018, 'y', 'steel', 'gun', { noSil: true }));
-  if (lv >= 3) {
-    P.push(cyl([-0.1, y0 + 0.4, zc + 0.05], [-0.1, y0 + 0.62, zc + 0.05], 0.035, 0.035, 'arm', 'arm', { n: 8 }));
-    P.push(cyl([-0.1, y0 + 0.62, zc + 0.05], [0.25, y0 + 0.66, zc + 0.3], 0.03, 0.03, 'arm', 'arm', { n: 8 }));
-    P.push(sph([0.25, y0 + 0.66, zc + 0.3], 0.04, 'dark', 'arm'));
+  // (ROADMAP 28.24) a mechanic's kit as one is carried: a rack of tube with its feet; a steel tool chest - its body,
+  // its lid with a handle bowed over it, two clasps and the hinges, ribs pressed in its side; a gas bottle strapped
+  // beside it with its valve and its hose; a wrench and a jack
+  for (const x of [-0.42, 0.42]) {
+    P.push(cyl([x, y0 + 0.02, zc - 0.5], [x, y0 + 0.02, zc + 0.5], 0.022, 0.022, 'rack', 'gun', { n: 8 }));
+    for (const z of [zc - 0.4, zc + 0.4]) P.push(rbox([x - 0.04, C.roof - 0.02, z - 0.05], [x + 0.04, y0 + 0.012, z + 0.05], 'rack', 'gun', { noSil: true, e: 0.01 }));
   }
-  const pal = { rack: DARK, box: hc || RED, lid: hc ? mix(hc, [0, 0, 0], 0.2) : [0.7, 0.1, 0.1], dark: DARK, steel: CHROME, arm: HAZARD };
+  for (const z of [zc - 0.4, zc + 0.4]) P.push(cyl([-0.45, y0 + 0.06, z], [0.45, y0 + 0.06, z], 0.02, 0.02, 'rack', 'gun', { n: 8 }));
+  P.push(rbox([-0.3, y0 + 0.08, zc - 0.2], [0.24, y0 + 0.36, zc + 0.12], 'box', 'gun', { e: 0.022 }));
+  P.push(rbox([-0.31, y0 + 0.345, zc - 0.21], [0.25, y0 + 0.41, zc + 0.13], 'lid', 'gun', { e: 0.02 }));
+  for (const y of [y0 + 0.15, y0 + 0.22, y0 + 0.29]) P.push(rbox([0.238, y - 0.012, zc - 0.17], [0.248, y + 0.012, zc + 0.09], 'lid', 'gun', { noSil: true, e: 0.004 }));
+  for (const z of [zc - 0.13, zc + 0.05]) {
+    P.push(rbox([0.24, y0 + 0.31, z - 0.025], [0.262, y0 + 0.39, z + 0.025], 'steel', 'gun', { noSil: true, e: 0.006 }));
+    P.push(cyl([-0.312, y0 + 0.35, z - 0.03], [-0.312, y0 + 0.35, z + 0.03], 0.012, 0.012, 'steel', 'gun', { n: 6, noSil: true }));
+  }
+  P.push(tube([[-0.03, y0 + 0.41, zc - 0.14], [-0.03, y0 + 0.47, zc - 0.11], [-0.03, y0 + 0.47, zc + 0.03], [-0.03, y0 + 0.41, zc + 0.06]], 0.012, 'dark', 'gun', { n: 6 }));
+  // (the bottle: its shoulders, its collar and valve, a gauge; the hose off it coiled once and away under the lid)
+  P.push(lat([-0.39, y0 + 0.16, zc - 0.26], [-0.39, y0 + 0.16, zc + 0.2], [[0, 0], [0, 0.06], [0.04, 0.075], [0.8, 0.075], [0.9, 0.05], [0.93, 0.028], [1, 0.028], [1, 0]], 'tank', 'gun', { n: 14 }));
+  P.push(lat([-0.39, y0 + 0.16, zc + 0.2], [-0.39, y0 + 0.16, zc + 0.27], [[0, 0.018], [0.5, 0.018], [0.5, 0.03], [1, 0.03], [1, 0]], 'steel', 'gun', { n: 8, noSil: true }));
+  P.push(lat([-0.39, y0 + 0.2, zc + 0.235], [-0.39, y0 + 0.24, zc + 0.235], [[0, 0.01], [0.4, 0.01], [0.4, 0.03], [1, 0.03], [1, 0]], 'gauge', 'gun', { n: 10, noSil: true }));
+  for (const z of [zc - 0.14, zc + 0.08]) P.push(tor([-0.39, y0 + 0.16, z], 0.077, 0.007, 'z', 'dark', 'gun', { noSil: true }));
+  P.push(tube([[-0.36, y0 + 0.16, zc + 0.27], [-0.3, y0 + 0.13, zc + 0.33], [-0.18, y0 + 0.1, zc + 0.3], [-0.1, y0 + 0.1, zc + 0.2], [-0.16, y0 + 0.1, zc + 0.15]], 0.011, 'hose', 'gun', { n: 5, steps: 20 }));
+  // the wrench lying by it: its shaft, an open jaw at one end, a ring at the other
+  P.push(rbox([0.275, y0 + 0.085, zc - 0.3], [0.305, y0 + 0.105, zc + 0.15], 'steel', 'gun', { e: 0.006 }));
+  P.push(ext('y', y0 + 0.095, [[zc + 0.14, -0.26], [zc + 0.2, -0.23], [zc + 0.25, -0.245], [zc + 0.25, -0.27], [zc + 0.2, -0.275], [zc + 0.2, -0.305], [zc + 0.25, -0.31], [zc + 0.25, -0.335], [zc + 0.2, -0.35], [zc + 0.14, -0.32]], 0.022, 'steel', 'gun', { e: 0.004 }));
+  P.push(tor([0.29, y0 + 0.095, zc - 0.34], 0.04, 0.014, 'y', 'steel', 'gun', { noSil: true }));
+  if (lv >= 3) {
+    // (its arm: a post, an elbow, a forearm with its ram, a welding head at its end)
+    P.push(lat([-0.1, y0 + 0.4, zc + 0.05], [-0.1, y0 + 0.62, zc + 0.05], [[0, 0], [0, 0.06], [0.12, 0.06], [0.16, 0.036], [0.9, 0.034], [0.9, 0.05], [1, 0.05], [1, 0]], 'arm', 'arm', { n: 10 }));
+    P.push(cyl([-0.1, y0 + 0.62, zc + 0.05], [0.25, y0 + 0.66, zc + 0.3], 0.03, 0.026, 'arm', 'arm', { n: 8 }));
+    P.push(cyl([-0.06, y0 + 0.5, zc + 0.08], [0.1, y0 + 0.63, zc + 0.2], 0.012, 0.012, 'steel', 'arm', { n: 6, noSil: true }));
+    P.push(sph([-0.1, y0 + 0.62, zc + 0.05], 0.045, 'dark', 'arm', { noSil: true }));
+    P.push(lat([0.25, y0 + 0.66, zc + 0.3], [0.3, y0 + 0.6, zc + 0.36], [[0, 0], [0, 0.036], [0.6, 0.036], [1, 0.012], [1, 0]], 'dark', 'arm', { n: 8 }));
+  }
+  const pal = { rack: DARK, box: hc || [0.6, 0.08, 0.09], lid: hc ? mix(hc, [0, 0, 0], 0.2) : [0.46, 0.06, 0.07], dark: DARK, steel: CHROME, arm: HAZARD, tank: [0.12, 0.3, 0.5], gauge: WHITE, hose: [0.6, 0.12, 0.1] };
   return sheet('repair', lines, ctx, o, {
     ax: 'x',
     c: 0.3,
     prims: P,
     pivot: [0, y0 + 0.2, zc],
     pal,
-    mats: { steel: 'metal' },
+    mats: { steel: 'metal', tank: 'metal', rack: 'metal', hose: 'matte' },
     groups: lv >= 3 ? { arm: { at: [-0.1, y0 + 0.4, zc + 0.05], ax: 'x', kind: 'arm' } } : {},
     focus: { at: [0, y0 + 0.2, zc], k: 0.35 },
     n: { lv },

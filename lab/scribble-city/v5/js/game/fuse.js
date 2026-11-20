@@ -2870,6 +2870,8 @@ export class Fuse {
           v.fzThrust = 0;
           const k = on ? 1.2 + Math.sin(t * 40) * 0.25 : 0.001;
           ud.flame.scale.z = damp(ud.flame.scale.z, k * (o.p.v === 'under' ? 1 : 1.4), 18, this.fdt);
+          // (ROADMAP 28.24: out only as it burns - squashed flat it was a white lid on the nozzle)
+          ud.flame.visible = ud.flame.scale.z > 0.03;
         } else if (o.role === 'spring' && ud.coil) {
           const k = v.fzSpringT && t - v.fzSpringT < 0.35 ? 1 - (t - v.fzSpringT) / 0.35 : 0;
           ud.coil.scale.y = 0.22 + k * 1.3;
@@ -3016,7 +3018,10 @@ export class Fuse {
             fr.lineXYZ(_v.x, _v.y, _v.z, _w.x, _w.y, _w.z, [0.2, 0.2, 0.24], 2, 7300, 1, 0.01, 0);
           }
         }
-        if (o.part.type === 'jet' && m && m.userData.flame) m.userData.flame.scale.z = 1.4 + Math.sin(t * 40) * 0.3;
+        if (o.part.type === 'jet' && m && m.userData.flame) {
+          m.userData.flame.visible = true;
+          m.userData.flame.scale.z = 1.4 + Math.sin(t * 40) * 0.3;
+        }
         if (o.part.type === 'barrel' && m && m.userData.pivot && o.st.aim !== undefined) m.userData.pivot.rotation.y = o.st.aim - c.yaw;
         if (o.part.type === 'spring' && m && m.userData.coil) m.userData.coil.scale.y = clamp(0.3 + o.st.vy * 0.08, 0.3, 1.4);
       } else if (o.kind === 'person' && o.model) {
