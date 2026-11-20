@@ -147,18 +147,41 @@ function gunArm(fig, G, side, hipY, tgt) {
   const j = fig.j;
   const k = G.k * G.k * (3 - 2 * G.k);
   const d = fig.aimDir;
+  // (ROADMAP 28.28: and out of him by what the gun needs to be clear - game/gunhold.js solve: fx to his right, fy up, fz
+  // ahead)
+  const clear = () => {
+    if (!G.fx && !G.fy && !G.fz) return true;
+    tgt.addScaledVector(fig.right, G.fx).addScaledVector(fig.forward, G.fz);
+    tgt.y += G.fy;
+    return true;
+  };
   if (G.style === 'hip') {
     if (side === 1) fig.toWorld(0.27, hipY + 0.15, 0.06, tgt);
     else fig.toWorld(0.02, hipY + 0.2, 0.42, tgt);
-    return true;
+    return clear();
   }
   if (G.style === 'pistol') {
-    if (k < 0.03 || (side === -1 && G.k < 0.45)) return false;
-    fig.toWorld(side * 0.24, hipY - 0.05, 0.05, tgt);
+    if (side === -1 && G.k < 0.45) return false;
+    // (ROADMAP 28.28: carried, it hangs in his right hand at his side, a little out from his leg - his own hand, not
+    // whatever his arms do when they are empty: on his hips, the gun was in his belly. It swings a little as he walks)
+    fig.toWorld(side * 0.27, hipY - 0.13, 0.03 + Math.sin(fig.phase || 0) * 0.07 * Math.min(1, fig.walkAmp || 0), tgt);
     _ga.copy(j.neck).addScaledVector(d, 0.47 * S).addScaledVector(fig.right, (side === 1 ? 0.035 : -0.04) * S);
     _ga.y += 0.085 * S;
     tgt.lerp(_ga, k);
-    return true;
+    return clear();
+  }
+  if (G.style === 'heavy') {
+    // carried, and fired from the hip: beside his right hip, all of it clear of him, his left hand under it ahead;
+    // aimed in: in his shoulder
+    if (side === 1) fig.toWorld(0.31, hipY + 0.13, 0.1, tgt);
+    else fig.toWorld(0.08, hipY + 0.12, 0.52, tgt);
+    const s = k * G.sh;
+    if (s > 0.001) {
+      _ga.copy(j.shoulderR).addScaledVector(d, (side === 1 ? G.butt : G.butt + 0.3) * S).addScaledVector(fig.right, (side === 1 ? G.out : G.out - 0.05) * S);
+      _ga.y += G.up * S;
+      tgt.lerp(_ga, s);
+    }
+    return clear();
   }
   // (carried: his hand out by his right hip, the butt outside his elbow - not into his ribs)
   if (side === 1) fig.toWorld(0.25, hipY + 0.15, 0.2, tgt);
@@ -168,7 +191,7 @@ function gunArm(fig, G, side, hipY, tgt) {
     _ga.y += G.up * S;
     tgt.lerp(_ga, k);
   }
-  return true;
+  return clear();
 }
 
 export class Doodle {
@@ -648,6 +671,13 @@ export class Doodle {
         useIK = true;
       } else if (held && carryPose(this, held, side, hipY, ny, nz, tgt)) {
         useIK = true;
+      } else if (side === 1 && this.rightFull && sit <= 0.5 && crawl <= 0.5) {
+        // (ROADMAP 28.28) something in his right hand - a blade, a bottle, the scissors: carried at his side, a hand's
+        // width out from his leg, swinging a little as he goes - not swung free through his thigh; a shield: his
+        // forearm across his front, the shield before his chest (game/weapons.js), running too
+        if (this.rightFull === 'shield') this.toWorld(0.16, hipY + 0.34, 0.3, tgt);
+        else this.toWorld(0.31, hipY - 0.1, 0.05 - Math.sin(ph + off) * 0.11 * Math.min(1, this.walkAmp || 0), tgt);
+        useIK = true;
       } else if (sit > 0.5) {
         this.toWorld(side * 0.16, hipY + 0.32, 0.36, tgt);
         useIK = true;
@@ -679,7 +709,7 @@ export class Doodle {
         this.toWorld(nx + hx * chc - hz * chs, ey - Math.cos(b) * armF, nz + hx * chs + hz * chc, hand);
         // (his hand in his pocket: the wrist at its mouth, at the front of his hip, the elbow out and back; the hand itself is
         // inside it - render/people.js, by pocketR / pocketL)
-        if (this.pk > 0 && !held) {
+        if (this.pk > 0 && !held && !(side === 1 && this.rightFull)) {
           this.toWorld(side * 0.128 + hipX, hipY - 0.012, 0.032, tgt);
           const pole = _d.set(this.right.x * side * 0.8 - f.x * 0.9, -0.2, this.right.z * side * 0.8 - f.z * 0.9);
           ik(shoulder, tgt, armU * this.scale, armF * this.scale, pole, _q);
