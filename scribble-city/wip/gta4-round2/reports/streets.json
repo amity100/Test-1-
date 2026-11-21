@@ -1,0 +1,57 @@
+{
+ "aspect": "Road and sidewalk detail (streets)",
+ "worktree": "/home/user/Test-1-/.claude/worktrees/wf_a71e1740-598-4",
+ "branch": "gta4/streets",
+ "commits": [
+  "8cdea0c v5 GTA IV pass (gta4/streets): work in progress, cut off by a usage limit (from the earlier attempt)",
+  "ae895dd v5 GTA IV pass (gta4/streets): the mainland's streets as they are when you stand in them",
+  "321d61b v5 GTA IV streets: lighter on the frame and on phones",
+  "697c816 v5 GTA IV streets: the blocks' own sidewalk things stay where they were"
+ ],
+ "files_changed": [
+  "scribble-city/v5/js/world/mainland/tiles.js",
+  "scribble-city/v5/js/world/mainland/sidewalks.js",
+  "scribble-city/v5/js/world/mainland/roadkit.js (new)",
+  "scribble-city/v5/js/world/mainland/roadside.js (new)",
+  "scribble-city/v5/js/world/mainland/roadmarks.js (new)"
+ ],
+ "summary": "I resumed on the existing gta4/streets branch. The earlier attempt had left two helper modules, roadkit.js and roadside.js, that were never wired in. I finished them, added a new layout module, roadmarks.js, and integrated everything into tiles.js and sidewalks.js. All of it is mainland only and keeps the pen style.\n\nWhat changed:\n\nON THE ASPHALT (roadmarks.js; each stretch of road between two crossings is laid out from its own dice, so the tiles that share a stretch agree and every mark is painted exactly once):\n- White stop bars on every approach to a crossing.\n- Lane arrows, taken from the crossing's real exits in roads.js exitsFrom (straight and straight-or-right where the road goes on; left and right at T-junctions).\n- Storm drains at the curb: a grate on the asphalt and a mouth cut into the curb face, short of each crossing and sometimes mid-block.\n- Manholes and pairs of small valve covers.\n- Trench patches and pothole patches of newer asphalt.\n- Black sealed cracks, kept inside the lane.\n- Dark oil drips where cars wait at the light.\n- Bike routes (River Ave, Fairfax, NE 11th, Calle Ocho): bicycle-and-chevron markings on green in the curb lane.\n- The bayfront boulevard: a real bike lane with its line, bicycle symbols, and green paint where it meets the crossings.\n- SLOW SCHOOL XING around the school block.\n- STOP painted before stop signs.\n- Each crossing box gets its own manholes and cracks.\n\nAT THE CORNERS (roadside.js):\n- Every corner sidewalk is lowered to the street where the zebras land, with a sloped ramp and a yellow tactile pad.\n- Walk / don't-walk boxes on every signal pole, two per pole, with a push button. They are lit by the existing game/signals.js clock and follow the real light: the walking man shows green, the hand red, and amber while it flashes. One of the two heads rides on the pole's existing light entry, so it adds no extra per-frame lookup.\n- Green street-name blades with the plan's real names (M_AVES and M_STREETS sign fields, plus the causeways), on two opposite poles of each crossing.\n- A signal cabinet at one corner of each signal crossing.\n- Iron bollards at the corners of the busy town blocks.\n- At the grid's corner crossings with no light: new zebras, STOP signs with an ALL WAY plate, and name blades.\n\nALONG THE CURBS (tiles.js):\n- Curbs painted red near the corners of streets, and yellow loading zones in town, with LOADING ZONE painted along the curb and a plate on the lamp.\n- Plates on lamp posts, drawn in one new sign picture: SPEED LIMIT 35, BIKE ROUTE, TOW-AWAY, NO TURN ON RED, street cleaning, 2 HOUR PARKING.\n- Iron tree grates under the avenue trees in town.\n- Sidewalk wear: gum spots, cracks, worn patches, and water/phone utility lids.\n- In residential blocks:\n  - grass strips along every curb, and a street tree on each street side;\n  - on the south side of each block, three wooden utility poles carrying cobra-head lamps (with crossarms, a transformer, and a number tag);\n  - wires from pole to pole and across the avenue when the next block is also residential, otherwise a guy wire at the end.\n\nON THE BLOCKS' SIDEWALKS (sidewalks.js):\n- Bus stops get a red curb, a BUS STOP box painted on the road, and a plate on a post.\n- The old plain coloured curb signs now use the new plate pictures (TOW-AWAY, NO PARKING and others).\n- Grey power boxes and green phone pedestals.\n- Litter: papers around bins, news boxes, benches and corners, papers in the gutters, crushed cups, and leaves in residential streets.\n- The block's own dice and menus are unchanged, so every existing hydrant, bin and bench stands where it stood.\n\nMEASURED (base 30f175c against this branch):\n- Average tile vertices over all 88 street tiles, measured with a node build harness that reproduces the browser counts exactly: 29.2k → 42.5k (+45%).\n- On phones (low mode, which trims plates, bollards, extra trees and walk-head hoods): 37.3k (+28%).\n- Sidewalk dressing per block: 6.25k → 7.0k vertices (+12%).\n- Browser, same spot, 13 live tiles: tile vertices 467k → 600k; block vertices +0.8%; draw calls per frame 728 → 765 (+5%); triangles 1.184M → 1.236M (+4.3%).\n- The signs are one new pen with no shadow pass, culled at the small-prop distance. The paint, wires and grass share existing merged draws.\n- Signal lighting (Signals.draw, 60-frame average): 0.095 → 0.112 ms per frame (176 → 278 entries).\n- Tile build time in node: about 93 → 160 ms per tile. In game this is spread over frames by the streamer's yields.\n- No page errors in any run.\n- Every changed file passes node --check.\n\nWHAT I COULD NOT DO, OR DID DIFFERENTLY:\n- Avenues have no true bike lane, because the cars use the curb lane (roads.js lanes); they have sharrows on green instead. Only the bayfront, which has room, got a real bike lane.\n- The lit walk/hand lens is a coloured disc over the drawn icon, not a lit icon shape. signals.js, which is not my file, draws one instanced disc for every lens.\n- Feet near the curb edge of a ramp float up to about 9 cm, because the walk height in plan.js stays at curb height until the road.\n- Night shots came out too dark to use for comparison.\n- The 'street' camera setup shows little difference.\n\nBefore/after images: send/streets_1.jpg (crossing from above), streets_2.jpg (eye-level corner), streets_3.jpg (loading zone at the curb), streets_4.jpg (residential crossing with poles and wires).",
+ "images": [
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/streets_1.jpg",
+   "caption_he": "צומת ממבט על: לפני – אספלט חלק וריק; אחרי – קווי עצירה, חצי נתיבים, סימוני אופניים על ירוק, תעלות ניקוז, מכסי ביוב, טלאים וסדקים מתוקנים"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/streets_2.jpg",
+   "caption_he": "פינת רחוב בגובה העיניים: שלטי שמות רחוב ירוקים עם השמות האמיתיים, רמזורי הולכי רגל מוארים, רמפות עם משטח אזהרה צהוב ועמודוני ברזל"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/streets_3.jpg",
+   "caption_he": "שפת המדרכה מקרוב: אזור פריקה וטעינה צבוע בצהוב עם כיתוב על הכביש, שלט על עמוד הפנס, תעלת ניקוז, טלאי אספלט ולכלוך על המדרכה"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/streets_4.jpg",
+   "caption_he": "צומת בשכונת מגורים: עמודי חשמל מעץ עם חוטים ופנסים, רצועות דשא לאורך שפת המדרכה, חצים, קווי עצירה ורמפות"
+  }
+ ],
+ "tests": [
+  "node --check on all 5 changed or new files: pass",
+  "Node build harness (stubbed DOM; tile 'verts' matches the browser exactly, e.g. t5_2 39896 = 39896): builds all 88 street tiles without errors in desktop and low mode",
+  "Node harness: dressSidewalks over all 165 non-landmark blocks without errors; bus stops (184) and hot-dog carts (89) identical to base, so the original layout is preserved",
+  "Browser runs through run_browser.sh, base and after with the same camera setups (corner, corner_high, pole_close, ramp_low, avenue, street, valley, valley_street, valley_corner, valley_walk, downtown, loading, corner_night, ramp_night): no [pageerror] in any log",
+  "Browser stats probe at the same spot, base vs after: draw calls, triangles, tile and block vertices, Signals.draw ms per frame (60-frame average)",
+  "Visual check of every shot: no floating or broken pieces seen, no z-fighting seen; sign quads sit 4 mm off their boards and road paint at 2 cm",
+  "Shots: /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/shots/streets/before_*.png and after_*.png"
+ ],
+ "perf": "- Tile vertices (node, all 88 tiles): average 29.2k → 42.5k (+45%) on desktop; 37.3k (+28%) in low mode.\n- Browser, 13 live tiles at the same spot: 467k → 600k vertices.\n- Block vertices: +0.8%. Sidewalk dressing per block: 6.25k → 7.0k.\n- Draw calls per frame: 728 → 765 (+5%).\n- Triangles: 1.184M → 1.236M (+4.3%).\n- Signals.draw: 0.095 → 0.112 ms per frame (60-frame average; entries 176 → 278).\n- Tile build time (node): about 93 → 160 ms, spread over frames by the streamer's yields.\n- No per-frame allocations or new per-frame loops; everything new is static geometry built at tile or block build time.\n- The sign pen has no shadow pass and is culled at the 150 m small-prop distance. Paint, wires and grass use existing merged pens (court, rail, wallSolid).",
+ "known_issues": [
+  "The walk/hand lit lens is a coloured disc over the icon, not an icon shape: game/signals.js (not my file) draws one instanced disc per lens.",
+  "Curb ramps are visual only. The walk height in plan.js stays at curb height until the road, so feet over the lowest edge of a ramp can float up to about 9 cm.",
+  "Avenues have no true bike lane, because traffic uses the curb lane (roads.js lanes); they have sharrows on green instead. Only the bayfront has a painted bike lane.",
+  "Utility-pole wires are not erased with their pole: the wires carry no prop id, so if a pole is rubbed out or knocked over, its wires stay hanging.",
+  "On streamed builds a block built before the first tile may draw its sign plates uncull'd (the sign pen is added to world.smallPens when the first tile builds).",
+  "Night shots (after_corner_night, after_ramp_night) are dark, so they show the lit walk signals and blades only weakly.",
+  "The shared lock was often held by other agents, so runs were serialized."
+ ],
+ "outside_edits": []
+}

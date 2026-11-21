@@ -1,0 +1,18 @@
+[log] city built 15583 ms {"ms":12812,"meshes":417,"pens":11,"rooms":89,"verts":4105454,"roomVerts":328117,"boxes":7015,"shops":152,"lights":526,"signs":169,"signsMissed":0,"parked":231,"billboards":29,"signals":74}
+[eval] 1
+[eval] 1
+[eval] 1
+[eval] 1
+[eval] 1
+[eval] ["car","sedan",170]
+[eval] ["harpoon","tow",3.1,14]
+[shot] main_b_harpoon.png
+[eval] ["net","net",1]
+[shot] main_b_net.png
+[eval] ["tesla","emp"]
+[shot] main_b_tesla.png
+[eval] ["oil",2,"spin"]
+[shot] main_b_oil.png
+[eval] ["decoy",true,true,16.99,2]
+[shot] main_b_decoy.png
+[eval] "{\"errors\":0,\"errs\":[]}"

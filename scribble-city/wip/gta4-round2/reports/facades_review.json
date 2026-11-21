@@ -1,0 +1,77 @@
+{
+ "aspect": "facades",
+ "issues": [
+  {
+   "issue": "(Previous reviewer, 02ffd46, kept) The kick plate under the shop glass ran across the doorway, so shoppers walked through a knee-high wall. Behind the door to the flats there were slits showing the shop's room. On the island's gang blocks the boarded-up windows had disappeared.",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "Blinds on the office glass (kits.js modern) and in the walk-up windows (facades.js deepWindow) showed as rows of black dots from across the street, like perforated tin. You can see it in the builder's own after_down_modern and after_down_deco. Cause: each slat was a box about 1 cm high. The outline pass draws the fold at its top and bottom edge, and those folds fall between pixels. Making the slats 3 cm thick did not cure it. The fix: each slat is now only its front face (SLAT_FACE), so there is no fold to outline, and it is 0.62 of the blind's colour so it still shows up close. This also removes 313k vertices across the 166 blocks.",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "Air-conditioner drip streaks were up to 1.9 m long (deepWindow) and 1.5 m (hotels). That is longer than the wall between two floors, so a streak could run past the head of the window below and hang in the air across its recessed opening. On hotels it could lie just in front of the glass. Streaks now stop on the wall: at most 1.0 m, and 0.85 m on hotels.",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "Hotel through-wall ACs under first-floor windows sat in the same plane as the shop's neon sign (0.3 m out from the wall), so the box could cut through the letters. ACs now start on the second floor.",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "On about 65% of houses (those with a porch) the new doormat sat inside the porch floor, where nobody could see it. It now lies on the porch floor.",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "Branch-wide added cost: 12.1% more static vertices across all 166 mainland blocks (24.64M to 27.63M). The worst block is downtown offices #107 at about +42%. On the phone/low path the total is +10.2% (worst block +26%). Live vertices in a district rise about 17%, and main-pass triangles rise 10-14% at fixed cameras. There is no per-frame code, and draw calls are flat. Accepted.",
+   "severity": "low",
+   "fixed": false
+  },
+  {
+   "issue": "Cosmetic, not fixed: a glass sticker can overlap a mullion. The posts of the Havana houses' window bars touch the shutters. The weather() helper in facades.js is never used. Bars on fire escapes and balconettes are 2.4 cm and may show some dotted aliasing at long range. The 'signsMissed' counter goes up for blade signs when the neon atlas is full, but no extra signs go missing, because blade signs use the same atlas key as the main sign.",
+   "severity": "low",
+   "fixed": false
+  }
+ ],
+ "commits": [
+  "4a09095 v5 GTA IV facades review (in progress): blinds drawn whole, the mat on the porch",
+  "417de43 v5 GTA IV facades review (in progress): the drips stop over the window under them, no box through the shop's neon",
+  "18e6235 v5 GTA IV facades review (in progress): the blinds' slats as faces, no fold for the inker",
+  "c80105e v5 GTA IV facades review (in progress): the slats a good shade darker"
+ ],
+ "tests": [
+  "node --check passes on facades.js, deco.js, kits.js and hotels.js after every change.",
+  "Node harness r2/dice.mjs built all 166 mainland blocks, base_main against HEAD, desktop and ?low. No exceptions and no NaN. The block rng's next value after the full build is identical in all 166 blocks, so the city's dice are unchanged. Seats, benches, bus stops and stock are identical. Shop kinds and names are identical; 177 shop doors moved by up to 0.65 m, as expected, because the door to the flats shifts the shop glass.",
+  "Node harness r2/steps.mjs timed every build step of every block. Base: 57.1 s total, longest step 138 ms. HEAD: 51.1 s total, longest step 108 ms. Re-timing best-of-4 on the 5 blocks that looked worse gave equal results, so there is no new build stutter.",
+  "Browser look_head and look_head3 (1280x720, 13:00, Little Havana and downtown): exit 0, no page errors. Pixel-diff against the builder's after shots confirms the cameras match for havana_deco, down_deco, down_strip and down_deco_close.",
+  "Browser perf, two base/HEAD pairs at 320x180, the second pair in reverse order, 300-frame windows calibrated against a fixed CPU loop: exit 0, no page errors.",
+  "Lab smoke on the final commit c80105e (640x360, lab=1): exit 0, no page errors. The [eval] lines are identical to smoke/main.log.",
+  "The island was checked by the previous reviewer's island run (no errors). The island also builds at the start of every run above with no errors (169 signs, 0 missed)."
+ ],
+ "lab_smoke": "The final commit c80105e (and the earlier 417de43) gives exactly the same [eval] lines as /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/smoke/main.log: [\"car\",\"sedan\",170], [\"harpoon\",\"tow\",3.1,14], [\"net\",\"net\",1], [\"tesla\",\"emp\"], [\"oil\",2,\"spin\"], [\"decoy\",true,true,16.99,2], \"{\\\"errors\\\":0,\\\"errs\\\":[]}\". There are no [pageerror] lines and the exit code is 0. Log: /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/review_facades/r2/runs/lab_head3.log",
+ "perf": "All measurements compare against base_main (6277529).\n- Vertices (node, all 166 blocks): 24.64M to 27.63M (+12.1%). My slat change removed 313k. The worst block is #107 downtown offices at about +42%. The phone/low path is +10.2%, worst block +26.3%.\n- Block build CPU (node, every step timed): 57.1 s to 51.1 s total, longest single step 138 ms to 108 ms. Best-of-4 re-timing shows equal per-step peaks, so there is no new stutter while blocks stream in.\n- Browser, two base/HEAD pairs at 320x180, the second pair in reverse order:\n  - Little Havana, settled, update CPU per frame (300-frame windows): base 7.93, 7.60, 8.04, 7.32, 6.99 ms; HEAD 8.84, 8.56, 8.55, 8.59, 6.16 ms.\n  - Divided by a fixed CPU loop timed in the same window: base 15.9, HEAD 15.6. That loop's own time swung from 41 to 82 ms because other agents share the machine.\n  - The facades have no per-frame code, and the civilians' update (code the branch does not touch) moves by as much as the total. My conclusion is that there is no measurable per-frame CPU change.\n- Rendering at fixed cameras:\n  - Little Havana: main-pass triangles 1.81-1.88M to 2.06-2.07M (+10-14%); draw calls 821-835 to 789-793.\n  - Downtown: triangles 2.02-2.16M to 2.30-2.35M (+9-14%); draw calls 809-842 to 830-831.\n  - Live vertices +17% in both districts.\n- Island start-up build: 4.105M to 4.314M vertices (+5%). The build-time difference is at noise level.\n- These are headless software-GL numbers. Real phone GPU frame times were not measured.",
+ "verdict": "ready",
+ "notes": "I continued the interrupted review. Its one commit (02ffd46) is correct and I kept it. Its snapshots fix1 to fix1i are identical to 02ffd46, so no work was lost.\n\nOn top of it I made four commits, only in the aspect's own files (kits.js, facades.js, hotels.js); nothing outside them was touched:\n- **Blinds without the dot pattern (the main visible fix).** The offices' blinds and the walk-up window blinds showed as rows of black dots from across the street, like perforated tin. Each slat is now a single face, a shade darker than the blind, so it reads as a slat up close and as an even tone far off. This also removes 313k vertices.\n- **Drip streaks stop on the wall.** Streaks under air conditioners no longer run past the window below and hang in the air across its opening.\n- **No hotel AC through the shop sign.** Hotel wall ACs start on the second floor, so they no longer cut through the shop's neon letters.\n- **House doormat visible.** On houses with a porch the doormat now lies on the porch instead of inside it.\n\nThe review found no runtime errors:\n- The blade signs use the same neon-atlas key as the main sign, so they take no extra atlas slots.\n- No builder returns before its parts are written out.\n- The phone/low-detail flag matches the one in main.js.\n- There is no debug output, the names are invented and the in-world text is in English.\n- Both before/after checks of the city's dice show they are unchanged.\n\nWhat I could not do:\n- I could not find the builder's camera settings for the Spanish-style hotel and modern-building shots. Because of that I did not recompose facades_3, and my fixes do not affect what it shows anyway. facades_4 (shop row) is also unchanged.\n- The two refreshed after shots use cameras confirmed against the builder's own by pixel difference.\n- The builder's original after shots and images are kept in /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/review_facades/r2/builder_backup/.\n\nFiles:\n- Notes: /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/notes/review_facades.txt\n- Harnesses and runs: /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/review_facades/r2/\n- Refreshed images: /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/facades_1.jpg and /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/facades_2.jpg\n- Refreshed after shots: /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/shots/facades/after_havana_deco.png, after_down_deco.png, after_down_strip.png and after_down_deco_close.png in the same folder.",
+ "images": [
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/facades_1.jpg",
+   "caption_he": "בית דירות בהוואנה הקטנה: חלונות שקועים בקיר עם אדני חלון, תריסים פתוחים, מרפסונים עם עציצים, כרכוב על זיזים ושלט על לוח צבוע"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/facades_2.jpg",
+   "caption_he": "בניין ישן במרכז העיר: מדרגות חירום, מזגנים בחלונות, אבני ראש מעל החלונות וכרכוב. התריסים במשרדים שמאחור כבר לא נראים כמו פח מחורר"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/facades_3.jpg",
+   "caption_he": "הבניין הספרדי: תריסים, וילונות מאחורי הזכוכית וקורות מתחת לגג הרעפים"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/facades_4.jpg",
+   "caption_he": "שורת חנויות: מסגרת לכל שלט, זיזים מתחת לגג, ארגז תריס, מוטות מעל הזכוכית ושטיח בכניסה"
+  }
+ ]
+}

@@ -1,0 +1,58 @@
+REVIEW pedestrians (reviewer 2, continuing after a cut-off reviewer 1 with no notes)
+Worktree: /home/user/Test-1-/.claude/worktrees/wf_a71e1740-598-2  branch gta4/pedestrians
+Start: HEAD 5abd9da (5 "review (in progress)" commits by reviewer 1 on top of builder 4bda00c, 74425c6)
+
+Step 1: reading reviewer 1 commits 9eb758c c052112 cebb646 40268cd 5abd9da
+Reviewer 1 commits (kept, look right): 9eb758c (enemy shout crashed via spoke -> only civs' own people),
+ c052112 (free hands for film/coin/couples/calls, pigeons back, sweep in place, debug counters gone),
+ cebb646 (curb slot 0.36 m clearance, walkT give-up; greet by free hands), 40268cd (no closure per frame
+ in meetings), 5abd9da (gesture yields reach written by streetlife into its vector).
+Step 2: read full diff 6277529..HEAD (civilians, streetsocial new, crowds, routines, voices, ambient).
+ All referenced names verified: audio strum/cheer/coins, streetlife.notes, bodies.blob, lineXYZ, carry kinds,
+ civilianLook kinds, CURB, fountains (r 4.2, top CURB+0.7), planter (top CURB+0.585), weapons.current.def.kind.
+ Ownership: only owned files changed (6 files), no outside edits. Content: no alcohol/smoking, invented names only.
+Step 3: perf pair base/branch started (review_pedestrians/perf.json, 320x180, calle + towers, 600-frame samples)
+Step 4: fixes committed 3e0b2e1: curb corner key by far corner (overlap at curb), remove() sets gone,
+ tourist pose spot along walk + room check, stale grumble + patience reset, routines skip enclosed mall hall
+ benches/fountain (released sitters walked into hall walls; mallLife owns them).
+Perf pair 1 (calle x3, towers x2; per-frame ms; 320x180): base civ 2.00/1.77/1.66, 1.59/1.56; branch civ 2.05/2.35/4.19, 2.50/3.14
+ BUT branch run overlapped another agent's node process at 120% CPU (unchanged systems far/shops also +30..200%) -> inconclusive, rerun later.
+Functional run func1 at 1280x720 -> browser OOM-killed (cgroup 14 GB shared by all agents; headless 9 GB) at first screenshot.
+ Rerunning at 640x360 (func2) with a memory watcher (memwatch.sh) and JS heap probes.
+func2 (640x360): poseSpot 21 walkers, 0 null, max 1.56 m off the walk line; curb: 40 samples, 5 waiters, max 2 at a corner,
+ 0 overlaps (<0.45 m), min pair 0.76 m. Renderer then OOM-killed during the galleria fill (cgroup shared; other agents'
+ node world builds running at the same time).
+Memory compare 320x180 (mem.json, 8x600 frames) and 1280x720 (memhd.json): base and branch renderer RSS alike
+ (peak 4.3-4.6 GB during the build, settle 1.4-2.9 GB, GC timing); no growth trend -> no leak; OOMs were shared pressure.
+Step 5: 889c79d routines: places know their prop (bench/planter/fountain via world/objects); rubbed out -> sitters get up,
+ no new sitters; tend() no concat per frame. Queued func3 (640x360: pose/obj stats, curb, erase test, night, rain, touch,
+ island, galleria last) and interleaved perf p2 (branch,base,branch,base with a fixed-loop load reference).
+Step 6: committed: gesture never over armsUp/surrender/dance (aimed-at civilians raised a fist instead of hands up:
+ voices aimAt says AIMED in tone 'alarm' -> gestureFor 'fist' -> reachR beats armsUp in doodle); LAUGH_RE/GREET_RE whole words.
+func3 (640x360, HEAD 299c4c5 or 889c79d): no pageerror, errs 0 in all steps.
+ places: bench+obj 199, ledge+obj 22 (every bench/planter/fountain place found its prop), bus/cafe no obj.
+ erase test: ledge sitter -> obj fading -> after 60 frames seat free, sit 0, released, baseY 0.
+ night 21h: huddles office:2 friends:3 office:3 night:3, calls, busker; rain 0.7: all huddles/busker/calls ended (partings 4);
+ touch: 1 huddle (2), busker crowd 3; island: 3 huddles (friends, neighbours, tourists); galleria: 8 benches + 1 fountain
+ in the hall, 0 routine places in hall. Renderer peak 5.8 GB.
+p2 run 1: branch civ 2.19/1.77/1.94 (calle), 1.66/1.75 (towers) vs base (pair1) 2.00/1.77/1.66, 1.59/1.56. ~equal within noise.
+Lab smoke queued.
+LAB SMOKE (branch HEAD 299c4c5): identical to smoke/main.log: car sedan 170; harpoon tow 3.1 14; net 1; tesla emp; oil 2 spin;
+ decoy true true 16.99 2; {"errors":0}; no pageerror.
+p2 pair (run1): calle civ base 1.81/1.71/1.70 (mean 1.74) vs branch 2.19/1.77/1.94 (1.97, +13%); towers base 1.60/1.52 vs
+ branch 1.66/1.75 (+9%); crowds +0.05-0.1 ms (StreetSocial); civDraw ~same; total update ('all') +0..6%.
+ -> profiling the civ update by path (prof.json: social(), owned-by-social, still, walkers, steer) on branch and base.
+p2 pair (run2): calle branch 2.47/2.27/1.84 (2.19) vs base 2.47/2.00/1.91 (2.13); towers branch 2.13/2.16 vs base 1.06/1.25
+ (base towers varies 1.06..1.60 between runs: noise). Averages over both pairs: calle civ +7%, towers +~40% (noisy).
+Profile prof.json (calle, per frame, branch vs base): civ 2.07 vs 1.75 (+0.3 ms). social() 0.02-0.05 ms (4-5 calls);
+ social-owned people 0.13-0.26 ms (7-10 updates); walkers 0.34-0.38 (14-16) vs 0.44-0.49 (25-30); still ~same;
+ others (shops, buddies, kids) 0.93-1.07 vs 0.80-0.92; manager overhead same (0.36). Fewer updates/frame in branch
+ (73-81 vs 75-88) but each a bit dearer (held items' IK, heads turned, gestures, more buddies at full rate) + load noise.
+ Verdict: modest (+0.1-0.3 ms/frame desktop at ~90 people), no allocations per frame beyond the codebase's ctrl pattern.
+Final verification queued (final.json: staged friends group talking at 1280x720, gestureFor words, aimed civilian hands up).
+final.json (1280x720, HEAD): staged friends group of 3 talks: speaker gest 'open' both hands, the 2 listeners look at
+ the speaker; gestureFor: 'Have a nice day!'->beat, 'Half off!'->explain, 'Hands up!'->explain, 'Ha ha ha!'->laugh,
+ 'Hey guys!'->wave, 'History repeats.'->open. (Shot: the player hides the group - no new image.)
+aim.json before/after (git archive 889c79d vs HEAD): aimed civilian armsUp 1 + gesture 'fist': before reachR=true
+ (fist over the raised hands), after reachR=false (hands stay up). errs 0 both.
+DONE: all fixes committed (3e0b2e1, 889c79d, 299c4c5); look of the composed images unchanged -> builder's images kept.

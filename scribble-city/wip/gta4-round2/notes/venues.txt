@@ -1,0 +1,45 @@
+venues (gta4/venues) - builder #3 notes
+worktree /home/user/Test-1-/.claude/worktrees/wf_a71e1740-598-6, base 6277529
+start: HEAD 00a5dbb (snapshot of builder #2, never browser-tested). Builder #1 last commit c9f3e85.
+earlier test scripts: scratchpad/gta4/work_venues/shots.json, r2/t1.json, r2/check.json, r2/perf2.json
+step 1: reading diff 6277529..HEAD
+step 1 done: read the diff. Already there (builders 1+2): world/venues2.js (gourmet/bar/club/cinema/theatre stock plans),
+  game/venuelife.js (Dining host/waiters/cook/chef, BarLife, LobbyLife, eatPlate), streetlife hooks, mall hall dressing
+  (kiosks, pods, bins, screens, banners, signs, window dressing, tray stations), game/mall.js (HallNav A*, kiosk sellers,
+  guard, cleaner, food court parties, escalator riders), nightlife bouncer card check.
+step 2: browser run of r3/check.json on HEAD 00a5dbb -> exit 0, no pageerror, errs 0. shots r3/h0_*.png look good.
+  weak spots seen: mall hall from the entry still close to before (kiosks only 2 placed, none near the entry);
+  theatre arch sign = blank lit squares; glasses/decanters read as white cones; paintings look blank.
+step 3: probe r3/p1: galleria hall x -842..-828, z -91..17, zm -37, food court z -50..-24 (west), escalator x -834.6..-831.6 z -34.8..-25.8.
+  only 2 kiosks were placed (strict side alternation + keep zones). Club rope card check works (checking idT, bouncer reachR).
+step 4 commit 118f0bd: kiosks greedy both sides (up to 6, + coffee and balloons kinds; buyers get a cup / a balloon),
+  mall: 4 people on benches at open (phones), gallery rail leaners, no per-frame people.slice(); floor bays;
+  venues2: paintings (4 motifs + picture lamp), mirrors with streaks, decanter wine visible, glass tint,
+  neon lettering via wallNeon(): AUDITORIUM arch, BOX OFFICE, TICKETS, club name + VIP, bar name over back bar.
+  running r3/check2.json -> r3/a1_*
+step 5 commits 6304b4c, + festoons/toast/applause commit: a1 run ok (errs 0). m1 mall run: 6 kiosks (coffee,phones,balloons,sweets,watches,sunglasses),
+  31 shoppers + 6 staff, rail leaners seen; perf in mall all 10.81 ms/frame (base 10.42), civ 2.456 (base 2.558), mall 0.057 (base 0.023).
+  base perf run r3/pbase (perf3.json, 320x180) queued; then mine.
+step 6: d1 run (dine.json): Le Crayon full evening cycle works (eating/done/check/coffee/gone, host lead, waiters clear/pickup/check,
+  toasts '!'), theatre applause 16 clapping then reset, errs 0.
+  perf3 (320x180, per update ms): base vs mine - gourmet civ 1.40->3.09 (88->111 civs), shops .09->.20;
+  club civ 2.06->2.36, shops .135->.216; bar 1.09->.94; theatre 1.59->1.27; mall civ 1.73->2.19 mall .009->.026 (16->37 people).
+  mainland verts near galleria +35.9k (+1.6%). venue code itself: gourmet .14-.24ms, club .05, theatre .12.
+commit 78a494c: film titles on posters (FILMS parody list via wallNeon), waiter idle spot fix (no path spam).
+  running r3/neon.json -> n1 (mainland neon slot usage probe).
+step 7: FOUND: mainland neon atlas (MainNeon, 128 slots) is saturated around the theatre/mall even in base
+  (base palace: 127 used / 0 missed; mine before fix: 128 used / 26 missed; cumulative misses base 192 vs mine 311 over the tour).
+  Builder-2's and my decorative neon words (promo, banners, FOOD COURT.., AUDITORIUM, film titles) stole slots from shop names.
+  FIX (commit 2c4d08d): NEW world/letters.js - a 5x7 stroke font (glyphs extracted from X11 koi6x10 bitmap font),
+  words drawn as boxes (venues2 words(): soups, one id per word) or quads (mall.js sign()). All decorative lettering moved
+  off the neon atlas; wallNeon() kept only for the place's own name and guarded by neonRoom() (cache hit or >=32 spare).
+  commit 1573dd6: club coat check attendant + guests hand coats for a ticket.
+  running r3/letters.json -> l1 (neon probe + lettering shots)
+step 8: l1 run: neon at palace 128 used / 0 missed (base 127/0); tour misses 141/148/198 vs base 138/142/192 (was 211/214/311).
+  lettering reads correctly: POPCORN menu, INK STORM / THE ERASER / SKETCHY posters, OPEN/SALE/-30% banners.
+  commit bc31d4e: 4 poster motifs, AUDITORIUM on a dark (non-lamp) panel (lamp panel washed the gold letters out).
+  running r3/final.json -> f1_* (after shots, same cameras as before_*) and lab smoke -> r3/smoke.
+  TODO after: touch-mode sanity (g.touch=true), compose before/after, report.
+step 9 (final): f1 after shots (errs 0) -> shots/venues/after_*.png; lab smoke r3/smoke.log identical to smoke/main.log, errors 0.
+  touch sanity (g.touch=true): gourmet 1 waiter no cook, club no coat check, mall 10 people + 2 staff, errs 0.
+  composed send/venues_1..4.jpg (gourmet, theatre lobby, open mall court, club). DONE. Left: nothing blocking.

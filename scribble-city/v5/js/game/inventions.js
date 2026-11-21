@@ -1,0 +1,117 @@
+import { tr } from '../core/lang.js';
+// (ROADMAP 15.5) Your inventions: a car with the parts you drew on it - their sizes, places, ways -
+// kept under a name, every version of it, and made again whole in a moment (ui/freedraw.js: the
+// pen's "inventions" shelf; game/partpen.js: kept from the car's pen). What you know how to draw (the
+// album, ui/album.js) and what you made of it are two libraries: this is the second.
+
+const KEY = 'scribble-city-v5-inventions';
+const MAX = 24;
+
+// the ink a part takes, made again with its invention
+const PART_INK = { wing: 4, rotor: 6, jet: 4, prop: 3, wheel: 3, armor: 4 };
+
+export class Inventions {
+  constructor(game) {
+    this.game = game;
+    // { id, name, base: { bp }, parts: [{ type, v, n, at, dir, ink }], v, t, versions: [...] }
+    this.list = [];
+    this.load();
+  }
+
+  load() {
+    try {
+      const d = JSON.parse(localStorage.getItem(KEY) || '[]');
+      if (Array.isArray(d)) this.list = d.filter((o) => o && typeof o.name === 'string' && Array.isArray(o.parts)).slice(0, MAX);
+    } catch (e) {
+      this.list = [];
+    }
+  }
+
+  save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(this.list));
+    } catch (e) {
+      // (no room: they last as long as the page)
+    }
+  }
+
+  // the car v as an invention: what it is underneath, and every part drawn on it
+  capture(v) {
+    const parts = (v && v.fuse ? v.fuse.parts : []).filter((p) => p.par).map((p) => ({ type: p.type, v: p.v, n: { ...p.n }, at: p.at ? p.at.slice() : null, dir: p.dir ? p.dir.slice() : null, ink: p.ink }));
+    return { base: { bp: v && v.bp ? v.bp.id : 'car' }, parts };
+  }
+
+  // kept under a name - a name it already has: a new version of it, the old ones kept
+  store(name, v) {
+    const c = this.capture(v);
+    if (!c.parts.length) return { why: tr('עוד אין עליה חלקים מצוירים — ציירו טורבו, גלגלי שטח, שריון...', 'There are no drawn parts on it yet — draw a turbo, off-road wheels, armor...') };
+    name = String(name || '').trim().slice(0, 28) || tr('המצאה', 'Invention');
+    let o = this.list.find((x) => x.name === name);
+    if (o) {
+      o.versions = (o.versions || []).slice(-5);
+      o.versions.push({ base: o.base, parts: o.parts, v: o.v, t: o.t });
+      o.base = c.base;
+      o.parts = c.parts;
+      o.v = (o.v || 1) + 1;
+      o.t = Date.now();
+    } else {
+      o = { id: Math.random().toString(36).slice(2, 8), name, base: c.base, parts: c.parts, v: 1, t: Date.now() };
+      this.list.unshift(o);
+      if (this.list.length > MAX) this.list.length = MAX;
+    }
+    this.save();
+    return { ok: true, o };
+  }
+
+  // (ROADMAP 28) a build kept from the parts tray: every part on the ride as it is (the pen's things, the links, the
+  // drawn ones) - made again whole from the pen's "inventions" shelf when there is no ride by you
+  storeFull(name, base, parts) {
+    if (!parts || !parts.length) return null;
+    name = String(name || '').trim().slice(0, 28) || tr('בנייה', 'Build');
+    let o = this.list.find((x) => x.name === name);
+    if (o) {
+      o.base = base;
+      o.parts = parts;
+      o.full = true;
+      o.v = (o.v || 1) + 1;
+      o.t = Date.now();
+    } else {
+      o = { id: Math.random().toString(36).slice(2, 8), name, base, parts, full: true, v: 1, t: Date.now() };
+      this.list.unshift(o);
+      if (this.list.length > MAX) this.list.length = MAX;
+    }
+    this.save();
+    return o;
+  }
+
+  remove(id) {
+    const i = this.list.findIndex((o) => o.id === id);
+    if (i < 0) return false;
+    this.list.splice(i, 1);
+    this.save();
+    return true;
+  }
+
+  // the ink to make it again: its car's, and each part's
+  inkOf(o, baseInk) {
+    return baseInk + o.parts.reduce((s, p) => s + (PART_INK[p.type] || 4), 0);
+  }
+
+  // names to offer for what is on the car now (its parts say what it is)
+  names(v) {
+    const t = new Set((v && v.fuse ? v.fuse.parts : []).filter((p) => p.par).map((p) => p.type));
+    const out = [];
+    if (t.has('wing') && t.has('rotor') && t.has('jet')) out.push(tr('השד המעופף', 'The Flying Devil'));
+    if (t.has('wing') && t.has('jet')) out.push(tr('טיל הכביש', 'The Road Missile'));
+    if (t.has('wing') && t.has('rotor')) out.push(tr('הדאון המרחף', 'The Hovering Glider'));
+    if (t.has('rotor')) out.push(tr('המסוק של השכונה', 'The Neighborhood Chopper'));
+    if (t.has('armor') && t.has('wheel')) out.push(tr('מפלצת הכביש', 'The Road Monster'));
+    if (t.has('armor')) out.push(tr('הטנק הוורוד', 'The Pink Tank'));
+    if (t.has('wheel')) out.push(tr('קופץ השטח', 'The Off-Road Jumper'));
+    if (t.has('jet')) out.push(tr('הטורבו המשוגע', 'The Crazy Turbo'));
+    if (t.has('prop')) out.push(tr('סירת הכביש', 'The Road Boat'));
+    if (t.has('wing')) out.push(tr('הציפור', 'The Bird'));
+    out.push(tr('ההמצאה שלי', 'My Invention'));
+    return [...new Set(out)].filter((n) => !this.list.some((o) => o.name === n)).slice(0, 3);
+  }
+}

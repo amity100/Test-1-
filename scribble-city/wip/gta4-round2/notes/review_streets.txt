@@ -1,0 +1,44 @@
+review_streets (adversarial reviewer/fixer for the streets aspect)
+Worktree: /home/user/Test-1-/.claude/worktrees/wf_a71e1740-598-4  branch gta4/streets, HEAD a855027 at start.
+Step 1: reading report, diff 6277529..HEAD (5 files: roadkit.js, roadmarks.js, roadside.js new; sidewalks.js, tiles.js).
+Step 2 (node harness in /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/rv_streets/h: reg.mjs/loader.mjs stub DOM + 'three'):
+ - tiles.mjs: all 88 tiles build, no errors (desktop + low). base 29.2k verts/48.9 ms per tile; branch 42.5k/85.5 ms.
+ - steps3.mjs: longest step between yields: base p99 13.0 ms, >16ms 32; branch HEAD p99 19.4, >16ms 96 (crossings, blocks).
+ - overlap.mjs: collision boxes of tiles + dressSidewalks: HEAD had 712 bollard boxes and 26 guy-wire anchors on curb ramps,
+   and the signal cabinet overlapping sidewalk things (booth/trash/bench/mailbox/planter/cart/paystation/hydrant/rack) at
+   the south end of blocks next to the wide streets (slot at z1-9.5).
+Fixed in ec1d4e0: more yields (p99 now 10.0, >16ms 25, below base); guy anchor to corner point (x1-0.45); bollards at 0.85;
+ cabinet only on corners south of the crossing; utility line = one 'pole' prop (no topple leaving wires; erased whole);
+ cross-avenue span without the phone cable (it passed through the far corner's signal pole at 5.5 m).
+ After: overlap.mjs shows no new overlaps vs base, nothing on ramps.
+Browser perf run (review_streets/perf.json, base vs branch) queued on the lock since 15:48.
+Step 3: ece643d litter on the LIVE blocks' grass strip lies on top of it (was under it), sidewalk covers set past the strip.
+        26d518a the 5 lightless grid corners are L-bends where cars never stop (roads.js lightAt 'g'): no STOP signs /
+        ALL WAY / painted STOP there any more; zebras, stop bar, arrows stay; names on their own post.
+ - First browser perf script (60 rendered frames per measure) timed out at 25 min on base (software GL ~1.35 s/frame):
+   replaced with review_streets/perf2.json (few renders; renderer.info for one frame; 300 updates timed; Signals.draw x300;
+   15 tiles built in page). Queued base+branch (p2_base, p2_branch), look1 (visual + erase test), lab1 (lab smoke).
+ - Base partial: 14 live tiles 498k tile verts, block verts 3.33M, signals 234 entries, 84 lamps drawn, cap 868.
+ - Max signal lamps within NEAR of any camera (node): branch 192 (base 96) << cap 720+.
+Step 4: 3330497 wires drawn in M.pole (objMask) instead of M.rail (no aObj): otherwise erasing the line left its wires.
+ - look1 run (review_streets/look1_*.png): no pageerror; guy wire now lands at the corner point between the two ramp
+   pads; cross-avenue span = 3 top wires; line prop id found with 4 boxes (3 poles + guy anchor), rub -> fading -> gone.
+   (camera of the erase shots was inside a building: redone in after.json)
+ - LAB SMOKE (review_streets/lab1.log): [eval] lines identical to smoke/main.log, {"errors":0}, no pageerror.
+ - Queued: p2_base / p2_branch (perf2.json), after.json (builder's camera setups + erase test) -> refresh after shots.
+Step 5: browser perf (review_streets/perf2.json, 320x180, one frame's renderer.info incl. all passes):
+  spot A downtown corner, 14 tiles: calls 772 -> 854, tris 1.689M -> 1.858M, tile verts 498k -> 733k, block verts
+   3.327M -> 3.345M, Signals.draw 0.013 -> 0.062 ms (lamps drawn 84 -> 168, entries 234 -> 394), update ms ~equal (7.5/6.4)
+  spot B valley, 18 tiles: calls 985 -> 1098, tris 1.907M -> 2.102M, tile verts 643k -> 996k, update 4.9/4.5
+  tile build in page (15 tiles): 70 -> 99 ms/tile.
+ - after.json run: refreshed shots/streets/after_*.png (+ after_line_before_erase/after_line_erased: the whole line
+   with its wires goes) and send/streets_1..4.jpg (same labels). Lab smoke lab1 identical to main.
+ - 13b91fd: tile paint gets chunk 'paint' -> its own draw, userData.noShadow + noReflect (flat paint; wasted in
+   shadow map and mirror). Queued p2_branch2, look2, lab2 on the final code.
+ Known/not fixed: feet float <=9 cm on ramps (plan.js height, not owned); block-built-before-first-tile plates not
+  culled (needs index.js hook; negligible); a neighbour line's cross-avenue span dangles if its far line is erased
+  (rare); warnPost/tarSnake/CURB_WHITE unused exports.
+Step 6 (final, HEAD 13b91fd): p2_branch2: spot A calls 842 (base 772), tris 1.849M (base 1.689M); spot B calls 1079 (base 985),
+ tris 2.004M (base 1.907M) - the paint change took ~98k tris / 19 draws off spot B. Signals.draw ~0.02-0.06 ms (base ~0.01).
+ look2 (corner, corner_high, valley_corner): paint still drawn, unchanged look. lab2 [eval] lines IDENTICAL to smoke/main.log,
+ errors 0, no pageerror in any run. Island import check ok (NODES 24 = MAIN0). Verdict: ready.

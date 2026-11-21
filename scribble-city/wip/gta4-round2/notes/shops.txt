@@ -1,0 +1,13 @@
+shops aspect notes (agent label: shops)
+worktree: /home/user/Test-1-/.claude/worktrees/wf_3848baa4-b32-7
+branch gta4/shops created from 7a20387
+step 1: reading code
+step 1 done: read shops2.js, stock.js, rooms.js (Room, FURNISH old plans for barber/laundry/flowers/music/gym/lobby/arcade/store/studio, falafel -> FURNISH.bagel without .stock so it is built eagerly), soup.js, interiors.js, streetlife.js spots use:
+  barber: R.chairs[0] npc chair, R.chairs[last] hero chair, barber stands 0.62 to the side of the chair; seats = waiting bench; no pay.
+  lobby: browse spots with lift:true at (lu+0.3, db+1.2) -> lift doors drawn at (lu, db+0.12); seats (SEATED lobby 1).
+  shopping mode (look/reach/hold/queue/pay) only when R.pay is set; what: garment|soda|book|look|phone|else item.
+  laundry (no pay): paySpot = keeper + 1.35 along keeper yaw (ITEM laundry). gym/music/arcade/barber/lobby ITEM null.
+  music keeper strums at home (workInside), paying completes on its own.
+probe p0: island room sizes W 4.7..28.7 x D 8.3..9.3; 60 lobbies on the island; barber/gym/laundry up to 28.5 m wide.
+step 2: before shots script work_shops/shots.json (helpers __goRoom / __goOut, weapons hidden, player hidden); run b1 started.
+step 2 done: before shots b1 -> shots/shops/before_*.png (25 shots: 11 interiors, 12 windows, 2 street rows)

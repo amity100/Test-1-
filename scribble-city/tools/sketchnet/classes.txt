@@ -1,0 +1,30 @@
+airplane
+helicopter
+car
+police car
+pickup truck
+truck
+van
+firetruck
+ambulance
+bus
+school bus
+motorbike
+bicycle
+tractor
+cannon
+rifle
+sword
+knife
+axe
+hammer
+baseball bat
+boomerang
+house
+tree
+face
+flower
+cat
+star
+cloud
+fish

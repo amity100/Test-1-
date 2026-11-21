@@ -1,0 +1,163 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<script type="importmap">{ "imports": { "three": "/js/vendor/three.module.min.js" } }</script>
+<style>body{margin:0;background:#ddd}canvas{display:block}</style>
+</head><body>
+<script type="module">
+import * as THREE from 'three';
+import * as HERO from '/v5/js/render/heroshapes.js';
+import { folkBody } from '/v5/js/render/folkshapes.js';
+import { FOLK } from '/v5/js/render/folkspec.js';
+
+const q = new URLSearchParams(location.search);
+const subj = q.get('subj') || 'hero';
+const capName = q.get('cap') || 'cap.json';
+const W = 500, H = 500;
+try {
+  const cap = await (await fetch('/lab/' + capName)).json();
+  // the parts of one person: the hero's, or a folk owner's
+  let recs;
+  let k = -1;
+  if (subj === 'hero') recs = cap.filter((r) => r.n.startsWith('hero'));
+  else {
+    const own = +subj;
+    recs = cap.filter((r) => r.owner === own && /^folk\d+_/.test(r.n));
+    k = recs.length ? +recs[0].n.match(/^folk(\d+)_/)[1] : -1;
+  }
+  const band = !!q.get('band');
+  const skip = band ? /Hand|Thigh|Shin|Shoe|Sole|Fore|Pelvis|thigh|shin|shoe|fore|pelvis|skirt|[Cc]ollar/ : /Hand|Thigh|Shin|Shoe|Sole|Fore|Pelvis|thigh|shin|shoe|fore|pelvis|skirt/;
+  const seen = new Set();
+  recs = recs.filter((r) => {
+    if (skip.test(r.n)) return false;
+    // (an ear, a lock: one of each kind is enough - the first of each name, twice for the ears/upper arms)
+    const key = r.n + ':' + seen.size;
+    return true;
+  });
+  const body = k >= 0 ? folkBody(k) : null;
+  const geoOf = (n) => {
+    if (body) {
+      const part = n.replace(/^folk\d+_/, '');
+      // (the old collar - gone from the game: render/heroshapes.js neckbandGeo)
+      if (part === 'collar') return null;
+      return body.parts[part] || null;
+    }
+    if (n === 'heroEarR') return HERO.heroEarGeo(1);
+    if (n === 'heroEarL') return HERO.heroEarGeo(-1);
+    if (n === 'heroCollar') return null;
+    const f = HERO[n + 'Geo'];
+    return f ? f() : null;
+  };
+  const COL = (n) => {
+    const p = n.replace(/^folk\d+_|^hero/, '').toLowerCase();
+    if (/collar/.test(p)) return 0xb0502a;
+    if (/neck|head|ear|face/.test(p)) return 0xe8b896;
+    if (/hair|locks|fall|bun/.test(p)) return 0x4a3424;
+    if (/tee/.test(p)) return 0xf0f0ea;
+    if (/zip|welt/.test(p)) return 0x3a3a46;
+    return 0x5a6a8a;
+  };
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xdedad2);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x887766, 1.6));
+  const dl = new THREE.DirectionalLight(0xffffff, 1.6);
+  scene.add(dl);
+  const cache = new Map();
+  let collarM = null;
+  let neckM = null;
+  for (const r of recs) {
+    let g = cache.get(r.n);
+    if (g === undefined) {
+      g = geoOf(r.n);
+      cache.set(r.n, g);
+    }
+    if (!g) continue;
+    const m = new THREE.Matrix4().fromArray(r.m);
+    const e = m.elements;
+    // (as DrawClass.push: a mirrored frame turned round)
+    if (e[0] * (e[5] * e[10] - e[6] * e[9]) - e[4] * (e[1] * e[10] - e[2] * e[9]) + e[8] * (e[1] * e[6] - e[2] * e[5]) < 0) {
+      e[0] = -e[0];
+      e[1] = -e[1];
+      e[2] = -e[2];
+    }
+    const mat = new THREE.MeshStandardMaterial({ color: COL(r.n), roughness: 0.85, metalness: 0, side: THREE.DoubleSide, flatShading: false });
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.matrixAutoUpdate = false;
+    mesh.matrix.copy(m);
+    scene.add(mesh);
+    const ed = new THREE.LineSegments(new THREE.EdgesGeometry(g, 40), new THREE.LineBasicMaterial({ color: 0x1a1410 }));
+    ed.matrixAutoUpdate = false;
+    ed.matrix.copy(m);
+    scene.add(ed);
+    if (/collar$/i.test(r.n) && !collarM) collarM = m.clone();
+    if (/neck$/i.test(r.n) && !neckM) neckM = m.clone();
+    if (band && /neck$/i.test(r.n)) {
+      const bg = body ? HERO.neckbandGeo((y, t, lift, out) => body.lines.neckSurf(null, y, t, lift, out), +(q.get('ya') || -0.096), +(q.get('yb') || -0.024), +(q.get('gap') || 0.006)) : HERO.neckbandGeo(HERO.heroNeckSurf, +(q.get('ya') || -0.096), +(q.get('yb') || -0.024), +(q.get('gap') || 0.006));
+      const bm = new THREE.Mesh(bg, new THREE.MeshStandardMaterial({ color: COL('torso'), roughness: 0.85, side: THREE.DoubleSide }));
+      bm.matrixAutoUpdate = false;
+      bm.matrix.copy(m);
+      scene.add(bm);
+    }
+  }
+  const M = collarM || neckM;
+  const c = new THREE.Vector3().setFromMatrixPosition(M);
+  const up = new THREE.Vector3().setFromMatrixColumn(M, 1).normalize();
+  const fw = new THREE.Vector3().setFromMatrixColumn(M, 2).normalize();
+  const rt = new THREE.Vector3().crossVectors(up, fw).normalize();
+  const look = c.clone().addScaledVector(up, 0.03);
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setSize(W * 3, H * 2);
+  document.body.appendChild(renderer.domElement);
+  renderer.setScissorTest(true);
+  const cam = new THREE.PerspectiveCamera(30, W / H, 0.05, 50);
+  const D = +(q.get('d') || 0.75);
+  // back, back 3/4 from above (the game's camera), side, front 3/4, front, from above behind
+  const VIEWS = [
+    [180, 8], [150, 28], [90, 5], [35, 8], [0, 4], [180, 50],
+  ];
+  VIEWS.forEach(([yaw, pitch], i) => {
+    const a = (yaw * Math.PI) / 180;
+    const b = (pitch * Math.PI) / 180;
+    const dir = new THREE.Vector3().addScaledVector(fw, Math.cos(a) * Math.cos(b)).addScaledVector(rt, Math.sin(a) * Math.cos(b)).addScaledVector(up, Math.sin(b));
+    cam.position.copy(look).addScaledVector(dir, D);
+    cam.up.copy(up);
+    cam.lookAt(look);
+    dl.position.copy(cam.position).addScaledVector(up, 1.5).addScaledVector(rt, 0.8);
+    const x = (i % 3) * W;
+    const y = (1 - Math.floor(i / 3)) * H;
+    renderer.setViewport(x, y, W, H);
+    renderer.setScissor(x, y, W, H);
+    renderer.render(scene, cam);
+  });
+
+  // (measure=1: the neck in the torso's own measure, by height)
+  if (q.get('measure')) {
+    const tor = recs.find((r) => /orso$/.test(r.n));
+    const nk = recs.find((r) => /eck$/.test(r.n));
+    const col = recs.find((r) => /ollar$/.test(r.n));
+    const fix = (a) => { const m = new THREE.Matrix4().fromArray(a); const e = m.elements; if (e[0] * (e[5] * e[10] - e[6] * e[9]) - e[4] * (e[1] * e[10] - e[2] * e[9]) + e[8] * (e[1] * e[6] - e[2] * e[5]) < 0) { e[0] = -e[0]; e[1] = -e[1]; e[2] = -e[2]; } return m; };
+    const Mt = fix(tor.m), Mn = fix(nk.m);
+    const inv = Mt.clone().invert();
+    const g = geoOf(nk.n);
+    const P = g.attributes.position;
+    const v = new THREE.Vector3();
+    const bins = {};
+    for (let i = 0; i < P.count; i++) {
+      v.fromBufferAttribute(P, i).applyMatrix4(Mn).applyMatrix4(inv);
+      const b = Math.round(v.y * 200) / 200;
+      const o = bins[b] || (bins[b] = { x: 0, zf: -9, zb: 9, n: 0 });
+      o.x = Math.max(o.x, Math.abs(v.x)); o.zf = Math.max(o.zf, v.z); o.zb = Math.min(o.zb, v.z); o.n++;
+    }
+    const ks = Object.keys(bins).map(Number).sort((a, b) => a - b).filter((y) => y > 0.4 && y < 0.62);
+    console.log('neck in torso space: y | halfW | zFront | zBack');
+    for (const y of ks) console.log(y.toFixed(3) + ' | ' + bins[y].x.toFixed(4) + ' | ' + bins[y].zf.toFixed(4) + ' | ' + bins[y].zb.toFixed(4));
+    const sc = (m) => [0, 1, 2].map((c) => new THREE.Vector3().setFromMatrixColumn(m, c).length().toFixed(4)).join(',');
+    console.log('torso scale ' + sc(Mt) + ' neck scale ' + sc(Mn) + (col ? ' collar scale ' + sc(fix(col.m)) : ''));
+    if (col) { const c = new THREE.Vector3().setFromMatrixPosition(fix(col.m)).applyMatrix4(inv); console.log('collar origin in torso space ' + c.toArray().map((x) => x.toFixed(4))); }
+  }
+  console.log('parts', recs.length, 'k', k, k >= 0 ? JSON.stringify(FOLK[k].top.kind) + ' ' + JSON.stringify(FOLK[k].inner && FOLK[k].inner.kind) : '');
+} catch (e) {
+  console.log('ERR ' + e.message + '\n' + e.stack);
+}
+window.__done = true;
+</script>
+</body></html>

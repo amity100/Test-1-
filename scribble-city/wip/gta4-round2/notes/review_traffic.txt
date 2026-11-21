@@ -1,0 +1,106 @@
+review_traffic notes (adversarial reviewer for gta4/traffic)
+worktree: /home/user/Test-1-/.claude/worktrees/wf_a71e1740-598-3  branch gta4/traffic  head at start 301bf64
+work dir: /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/review_traffic
+
+[step 1] started review; no prior notes file existed.
+[step 2] code review of 6277529..HEAD (only owned files changed: traffic.js, fleet.js, curbs.js, deliveries.js, patrol.js - no ownership violations; no console logs).
+  Candidate problems found by reading (to confirm/fix):
+  a) Curbs.drop leaves dropped curb/lot cars un-"gone": damage.js keeps them in its set; a burning dropped car can explode later and
+     traffic.unpark(c) then removes a box id the city has since given to another block (a wall vanishes).
+  b) parkIt(): the traffic car is marked gone but stays in Traffic.list up to 0.8 s (pushOut/collideVehicle/signs don't skip gone).
+  c) Curbs leaveOne walker goes round the back at fixed -hl-0.9..1.2 m: through the car behind when the gap is 0.7-1.5 m.
+  d) pullOut does not re-check the lane: a car coming up the lane may be cut off (no crash detection for parallel cars).
+  e) visitor cars (parked by the traffic) are not kept clear when their block is re-added -> curb car can be generated on top.
+  f) spawnPatrol slows the patrol also in ?classic (should be unchanged there).
+  g) lot cars drawn at y=0 while lots are at CURB (0.15): wheels sunk (check in browser).
+  h) cars easing over to the curb slide sideways without turning (crab) - realism.
+  i) Curbs.update: a walker who panics on the way to their car is NOT released (lost -> no release): stays scripted with owner=curbs
+     and ctrl, walks on to the door and stands there forever (never despawned: scripted+owner). Real leak.
+  j) pull-over model: cars slide sideways at once (time damping) as soon as c.pull is set, 12-20 m (parking), 16 m (vans), 14 m (taxis)
+     before the stop - straight through the cars parked in between. Real clipping on every street with a parking lane.
+  k) leaveOne spawns the walker 7-11 m from a car chosen IN VIEW: pops up in plain sight (civilians.js rule: nobody pops up in view).
+[step 3] FIXES WRITTEN (uncommitted yet, syntax ok):
+  curbs.js: drop() marks cars gone + box undefined; unvisit gone; add() keeps clear of visitors and the player's vehicles;
+    leaveOne: picks a car with a real gap (gap()), walks through the gap middle, takes a passer-by on that sidewalk (else spawns
+    out of view, else skips); update(): panic/lost walker released+rejoined; seated 'sat' phase with left signal, waits for the
+    lane (laneClear) up to 12 s before pullOut; wantPark: space must have freeRun behind >= hl+4.2, creeps to finish, parks
+    partly in or gives up; pullOut uses new pull state (pullS/pullV/pullMax 0.75).
+  traffic.js: list filtered of gone cars at the end of update; classic patrol speed unchanged; new pull model in mind():
+    distance-steered (pullS, pullV, slope<=0.4 / 0.6 parking / 0.75 pulling out), capped by roomBeside() (parked cars beside,
+    angled-in allowance); drive(): yaw tilt from lateral speed (nose turned the way it goes, |tilt|<=0.32).
+  NOTE: my first perf run r1_branch started while I was editing -> its code state is mixed: IGNORE its perf numbers.
+    Clean pre-fix snapshot exported (git archive 301bf64) to review_traffic/pre/scribble-city for branch-before numbers.
+[step 4] commits d72ab23 (pull model, curbs fixes), 6db024c (lot cars on their ground; parkIt walker via wider gap).
+  r1_branch probe (mixed code but probes valid): parked 570, curb 273, lots 66 near Havana; lot cars standing on CURB ground: 111
+  of 297 (island ones too) were drawn at y=0 (sunk 0.15) -> fixed (lotHeight). curb cars on road: ok; curb boxes vs non-car
+  boxes: 0 hits; curb overlaps: 0.  Renders are VERY slow on the shared machine (~10 s each): perf scripts now 6 renders.
+  Testing now from exported snapshots (review_traffic/pre = 301bf64, post1 = 6db024c) so editing the worktree is safe.
+  Queued: r2_post1 (functional stress, 1280x720), r1_pre, r1_post1 (perf).
+[step 5] commit 09784fb: taxis stop with the back door at a gap in the parked cars (Curbs.gapAt; unit-tested in
+  review_traffic/unit/gap_test.mjs), fares walk sidewalk -> gap -> door (before: through a parked car).
+  Background bash default limit is 30 min: earlier chains got killed. Re-queued with 2 h limit:
+   chain A: r3_post2 (func_r2.json on post2 = 09784fb), p_base (perf on base_main)
+   chain B: p_pre (perf on pre = 301bf64), p_post2 (perf on post2)
+  (old r1_base/r2_post1 names are dead - ignore them)
+[step 6] c2bfecb tilt smoothing; next commit: patrol/deliveries avoid bus stops (Traffic.nearStop) - builder's known issue.
+  Lab gear (not my files) calls gearfx.cars() per frame while active: spreads list+parked (~500 now) - minor, noted only.
+[step 7] r3_post2 (functional, post2=09784fb): no [pageerror]; no leaked scripted people after far jump/back (owned 0/0/0);
+  curb overlaps 0; island: buses sent 3 served 2, yields/slow/taps work; night+rain+touch ok.
+  FOUND: overlap monitor 6 hits (max 0.31 m) - all parking cars at 7-8 m/s darting into small gaps between parked cars.
+  -> fixed 62474af: roomBeside look-ahead (parked car in front within 2+1.1*v, or before the stop point pullLeft set by
+     callers: wantPark/deliveries/taxi/patrol), parking approach <= 4.5 m/s.
+  FOUND: leaveOne succeeded 0 of 12 (camera on the avenue) -> r4 probe of the reasons, camera on a side street.
+  commit 5dc3469: patrol/deliveries avoid bus stops (Traffic.nearStop).
+  Queued r4_post3 (func_r4.json on post3 = 62474af).
+[step 8] PERF (Havana, 320x180, 300-update samples x2; touch caps 1 sample):
+   base_main : traffic.update 0.37/0.38 ms (24 cars), draw 0.09-0.22; touch upd 0.43 (13 cars) draw 0.10
+   pre (301bf64): update 0.65/0.68 (27-30 cars), draw 0.40-0.41 (68 parked shown); touch upd 0.46 (15) draw 0.23-0.38
+   (frame times update+render single frames 24-38 ms everywhere: noise dominates)
+  r4_post3: leaveOne ok with camera on a side street (inView 9, ok 8, 3/6 started, all passers-by); burn test ok (dropped
+   burning car gone, damage set 0, its old box freed and not touched); no leaks after far jump/back; overlaps 0.
+  FOUND: overlap monitor 265 hits up to 1.06 m: all pull-OUTs (front corner into the car parked in front, tight gaps).
+   Simulated geometry (python) -> full-lock pull-out (steep 1.0, ramp 1.5/m) + tilt = atan(pullV) (clamp 0.8) clears 0.7 m gaps.
+   -> d79ac91. 206046d: walker spawn rule = civilians' (not within 50 m in view).
+  Queued r5_post4 (func_r5.json: per-kind max penetration) on post4 = d79ac91.
+[step 9] p_post2 perf = pre (update 0.64-0.67, draw 0.36-0.44; touch 0.41/0.39): my fixes cost nothing measurable.
+  Branch vs base: traffic.update +0.27-0.3 ms, traffic.draw (called per update) +0.3 ms; touch draw 0.10 -> 0.39 ms.
+  r5_post4: monitor 265 -> 9 hits, max 1.06 -> 0.27 m, all pull-outs from spaces tighter than 0.5 m (car in front).
+  -> b97bdb4: back up into the room behind first (0.7 m/s, up to 1.4 m front room), wheels turned out before going,
+     no car taken that has no room either end; curb HALF_LEN = drawn lengths (sedan was 15 cm short).
+  Queued chain E: r6_post5 (func_r5) + smoke_post5 (lab smoke); chain F: shots_post5 (after shots) + p_post5 (perf).
+[step 10] r6_post5 (b97bdb4): overlap monitor 0 hits over 6195 pull-frames (6 cars left the curb, 6 parked, 2 van stops,
+  2 patrol stops); no [pageerror]; burn test ok; no leaks after far jump/back; curb overlaps 0. Side-street shot looks right.
+[step 11] shots_post5 (1280x720, builder's final.json cameras + mine): 8 builder shots ok (bus boarded 3 alighted 1; van
+  delivered 2 boxes; police stop phases complete); lot_close shows lot cars standing on the lot (y 0.15). park_in step had a
+  script index bug (my test) -> fixed in shots2. The staged police scene (builder's helper) stops the car by a bus shelter -
+  exactly what natural stops now avoid -> re-staged away from bus stops (shots2_branch on post5, shots2_base on base_main).
+[step 12] LAB SMOKE on post5 (= HEAD b97bdb4): identical to smoke/main.log: car sedan 170; harpoon tow 3.1 14; net 1;
+  tesla emp; oil 2 spin; decoy true true 16.99 2; {"errors":0}; no [pageerror].
+[step 13] PERF post5 (final code): traffic.update 0.43/0.60 ms (26/33 cars), draw 0.26/0.35; touch 0.44 / 0.23 - same as pre.
+  After shots refreshed in shots/traffic/after_{bus_stop,bus_board,side_street,crossing_over,lot,delivery,delivery_b,lot_close}
+  from post5; send/traffic_1..3.jpg recomposed (same labels). Police re-staged (first try stood by a hot dog cart: prompt
+  in the shot) -> camera avoids carts too; s2_base (base_main) + s3_post5 queued for traffic_4; park_in row choice fixed.
+[step 14] traffic_4 recomposed: police stop re-staged away from bus stops and carts (before: s2_base_police from base_main,
+  after: s3_post5_police) -> shots/traffic/before_police.png / after_police.png. park_in/parked_in shots (after_park_in,
+  after_parked_in): the car turns its nose into a 39 m space (slope 0.6, ~27 deg), ends parked straight (-0.02 rad), driver out.
+  Commit d3fe802: taxi gap search capped short of the next crossing. Export post6 = d3fe802.
+  Queued chain I: r7_post6 (func_r5 + night/rain/touch + island) and smoke_post6 (lab smoke).
+[step 15] r7_post6 (d3fe802): no [pageerror]; island: buses sent 3 served 2, yields 9, slow 7, taps 3, hails 5, pickups 2;
+  burn test ok; no leaks; BUT monitor 18 small hits (max 0.19 m): 'park' (two parkers set off for the same space; the second
+  came up beside the first, parked a little out) and 'taxi' (easing over < 0.9 m did not check the cars parked beside).
+  -> 9d3fbc1: space reservation (seekPark.tx/tz), roomBeside for every pull. Export post7 = 9d3fbc1.
+  Queued chain J: r8_post7 (func_r7) + smoke_post7 (lab smoke on final code). (smoke_post6 runs too, ignore.)
+[step 16] r8_post7 (9d3fbc1): monitor 70 small hits (max 0.21) all 'park': cars parked a few degrees askew (tilt kept at
+  parkIt) whose corner stuck out, measured by their middle only. -> 9668add: creep until straight (|pullV|<=0.06), parkIt
+  squares to the lane (<0.12 rad), roomBeside/curbRoom use sideOf (corners of askew parked cars), park only if pullS>=2.05
+  (else passing traffic would clip it: inK 0.7 of a 2.4 room left it 0.28 m into the lane). Monitor extended: traffic vs
+  visitors ('lane'). Export post8 = 9668add; chain K: r9_post8 + smoke_post8.
+[step 17] FINAL (HEAD 9668add = post8): r9_post8: overlap monitor 0 hits over 5384 pull-frames + traffic-vs-visitors check
+  (7 cars left the curb, 6 parked, 2 van stops 2 boxes, 3 patrol stops), night+rain+touch 0 hits, island ok (buses sent 4),
+  burn/drop test ok, no leaked scripted people, curb overlaps 0, no [pageerror].
+  LAB SMOKE on 9668add identical to baseline, {"errors":0}, no [pageerror].
+  Composed images send/traffic_1..4.jpg refreshed (after shots from b97bdb4; later commits only change maneuver
+  clearances, not these scenes). Verdict: ready.
+  Left (not my files / inherent): +0.3 ms traffic.update and +0.3 ms traffic.draw per frame vs base (touch draw 0.10->0.39);
+  lab gear gearfx.cars() spreads ~600 cars per frame while active; parked cars' headlights glow by day (render/cars.js);
+  off-view cars not drawn (shadow at screen edge at very low sun).

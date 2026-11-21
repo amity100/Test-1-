@@ -1,0 +1,56 @@
+{
+ "aspect": "Living traffic (traffic)",
+ "worktree": "/home/user/Test-1-/.claude/worktrees/wf_a71e1740-598-3",
+ "branch": "gta4/traffic",
+ "commits": [
+  "7b35437 v5 GTA IV pass (gta4/traffic): work in progress, cut off by a usage limit (earlier attempt, kept)",
+  "bc61edd v5 GTA IV pass (gta4/traffic): the patrol's stop to its end, the garbage man through the gaps, cars where you look",
+  "a6605ea v5 GTA IV pass (gta4/traffic): cheaper where the traffic is thick"
+ ],
+ "files_changed": [
+  "scribble-city/v5/js/game/traffic.js",
+  "scribble-city/v5/js/game/fleet.js",
+  "scribble-city/v5/js/game/curbs.js (new)",
+  "scribble-city/v5/js/game/deliveries.js (new)",
+  "scribble-city/v5/js/game/patrol.js (new)"
+ ],
+ "summary": "I picked up from the earlier WIP commit (7b35437), fixed what was broken, finished the work and tested it in the browser. The mainland traffic now does all of the following.\n\n1. Parked cars on the curbs (game/curbs.js). As mainland blocks stream in, cars are parked along both curbs of every narrow street, in the painted parking lane. The cars are seeded per block, so a street has the same cars every time you come back. Town districts are fuller than the hills. Alley mouths and driveways are kept clear. About 380 curb cars are live around Little Havana. The cars the building kits had already placed in lots and driveways are now drawn too: before, these were invisible collision boxes you walked into (about 75 near Little Havana). All of these cars are ordinary parked cars, so you can enter, shoot or erase them, and their boxes come and go with their block. People walk up to a parked car, get in at the driver's door, signal and pull out. Traffic cars also slow down, find a gap, park, and the driver walks off.\n\n2. Buses serve the mainland stops. Each block's stops are registered with traffic through the existing mainland.listen hook, so no outside file was edited. Now and then a bus is sent to a nearby stop where people wait, and it keeps straight on to reach it. It signals in, puts its hazards on, waits up to 14 s for people still walking to its door, then signals out. Routines then boards and drops people: in the final run 0 boarded and 2 alighted; an earlier run had 3 and 4.\n\n3. Taxis: 75% cruise the curb lane looking for a fare, and hails happen more often. To pick up or drop off, a taxi signals, eases over into a gap in the parking lane and puts its hazards on.\n\n4. Deliveries (game/deliveries.js), in working hours. Five invented firms run vans and box trucks.\n   - The van double-parks at a shop door with its hazards on.\n   - The driver gets out on the road side, takes 1–3 boxes from the back, goes through a gap between parked cars and into the shop, then comes back.\n   - Drivers stuck behind it honk and shout (\"Double-parked again?!\"). On avenues they overtake.\n   - If the driver is scared, the van is left standing.\n\n5. Police stops (game/patrol.js). The patrol car now cruises slower than traffic. Now and then it pulls over a car in the curb lane:\n   - roof lights come on, no siren;\n   - the car signals, pulls to the curb and puts its hazards on;\n   - an officer walks to the driver's window; there is dialogue and the ticket book comes out;\n   - the car pulls away first, then the patrol leaves.\n   I fixed a bug where the stop was called off as soon as the car was released.\n\n6. The morning garbage truck now works the mainland bins, which are re-listed as blocks change. It has hazards on at each bin, and the worker goes through a gap between the parked cars (checked: 1 bin emptied).\n\n7. Crossings and jams:\n   - A car turning at a crossing waits at its stop line while someone is on the crosswalk it turns across.\n   - Some drivers are slow to start on green, and the car behind taps the horn (\"It's green!\").\n   - Horn complaints depend on what is blocking the car.\n\n8. Density on the mainland: up to 44 cars on desktop (was 32) and 20 on phones (was 16), spawned nearer the player. Cars far behind you and out of sight are removed so new ones can appear ahead of you.\n\n9. Cost control: cars outside the width of the view (plus a margin) are not drawn; the search for what is ahead of each car skips anything too far away; on phones parked cars are drawn out to 110 m only.\n\nMEASURED (headless, Little Havana, 300-frame samples, base 30f175c vs branch):\n- Moving cars: 24 → 30–33. Cars within 100 m of the player: 7 → 17.\n- traffic.update per frame: 0.77–0.80 ms → 1.10–1.19 ms.\n- traffic.draw per frame: 0.20 ms → 0.62–0.65 ms (about 54 parked and 31 moving cars drawn).\n- With phone caps: update 0.32 → 0.70 ms, draw 0.10 → 0.50 ms.\n- fleet.update: 0.11–0.15 → 0.12–0.18 ms.\n- No new draw calls or static vertices: cars go through the existing instanced pools.\n- No [pageerror] in any final run.\n\nNOT DONE: brake lights and opening van doors would need changes in render/cars.js, which is not my file. Avenues get no curb parking because they have no parking lane. Lot cars never drive in or out. On phones, parked cars cost about 0.4 ms more per frame.",
+ "images": [
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/traffic_1.jpg",
+   "caption_he": "רחוב צדדי ביבשה: לפני – שוליים ריקים; אחרי – שורות מכוניות חונות משני צדי הרחוב, עם רווחים ליד סמטאות וכניסות לחניה"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/traffic_2.jpg",
+   "caption_he": "תחנת אוטובוס בליטל הוואנה: אחרי – אוטובוס נשלח לתחנה שבה מחכים, מאותת, נעצר עם אורות חירום, ואנשים עולים ויורדים"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/traffic_3.jpg",
+   "caption_he": "משלוח לחנות: טנדר בחנייה כפולה עם אורות חירום, והשליח נושא ארגז מהדלת האחורית אל החנות"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/traffic_4.jpg",
+   "caption_he": "ניידת סיור עוצרת רכב: אורות על הגג, הרכב עומד ליד המדרכה, השוטר ליד החלון והנהג מתרץ"
+  }
+ ],
+ "tests": [
+  "node --check on traffic.js, fleet.js, curbs.js, deliveries.js, patrol.js: all pass",
+  "Before/after shot script (work_traffic/final.json) at 1280x720 on the base export of 30f175c (r2/b5) and on the branch (r2/a6): 0 [pageerror]. Shots are in shots/traffic/before_*.png and after_*.png (bus_stop, bus_board, side_street, crossing_over, lot, delivery, delivery_b, police)",
+  "Delivery check (diag2): van stops by the shop with hazards, worker goes toRear, in, enter, inside, back, toCab, then the van leaves (boxes: 1, abandoned: 0)",
+  "Police stop check (diag2, final): follow, notice, pull, stopped, out, walk, talk; the car is released and pulls out; stats show 'called: 0' after the fix",
+  "Garbage truck check (diag3, run d4): stops at a bin at 07:36, worker goes through a 1-point gap, grab, back, toss, drive (bins emptied: 1)",
+  "Perf runs perf7, perf8 and perf9 (base vs branch, per method, with and without phone caps) at 320x180: numbers are in the summary"
+ ],
+ "perf": "Little Havana, headless software WebGL, 300-frame samples.\n- traffic.update: 0.77–0.80 ms (24 cars, base) → 1.10–1.19 ms (31–33 cars). Inside it, the search for what is ahead of each car dropped from 0.53–0.62 to 0.27–0.30 ms after a cheap distance pre-check.\n- traffic.draw: 0.20 ms → 0.62–0.65 ms (about 54 parked and 31 moving cars drawn, after limiting drawing to the width of the view).\n- Phone caps (game.touch): update 0.32 → 0.70 ms with 13–15 cars; draw 0.10 → 0.50 ms with 37 parked cars inside the 110 m radius.\n- fleet.update: about +0.03 ms.\n- Downtown: update 0.51–0.74 → 0.88–0.92 ms; draw 0.13–0.20 → 0.38–0.50 ms.\n- No new draw calls or static vertices: parked and moving cars use the existing instanced car pools.\n- The periodic jobs run every 0.8 s or less often (curb tick, sending buses, spawning, recycling) and cost ≤0.01 ms per frame averaged.",
+ "known_issues": [
+  "Traffic CPU is higher: about +0.35 ms update and +0.4 ms draw per frame on desktop, and about +0.4 ms update and +0.4 ms draw with phone caps. This comes from more cars and roughly 380 curb plus 75 lot cars, more of them drawn.",
+  "Cars and their wipers outside the horizontal view (camera field of view + 0.3 rad + car length + 6 m) are not drawn. At very low sun, a long shadow from a car just off-screen could be missing at the screen edge.",
+  "No brake lights and no opening van rear doors: both need render/cars.js, which is not my file.",
+  "Avenues get no curb parking because they have no parking lane. Lot and driveway cars never drive in or out.",
+  "A car pulled over by the police can stop beside a bus stop (seen in the shot). A following bus waits behind it and does not pull in.",
+  "A lot car you took comes back if its block is streamed out and in again (new car records per attach). Curb cars the traffic parked stay until you are more than 330 m away.",
+  "The camera of the garbage-truck check shot missed the truck. That behaviour was verified from the state log only.",
+  "The delivery and police scenes in the shots were started with test helpers (deliveries.sendTo, patrol.start). Naturally, a van comes every 18–40 s near the player during working hours, and a patrol tries a stop with 30% chance each second when there is a suitable car ahead, then waits 70–150 s before the next."
+ ],
+ "outside_edits": []
+}
