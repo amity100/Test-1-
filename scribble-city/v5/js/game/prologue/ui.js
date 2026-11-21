@@ -112,7 +112,7 @@ body.touch.fd-car #pl-hint.card.how.dock { left: auto; right: max(8px, env(safe-
 body.touch #pl-call { top: max(8px, env(safe-area-inset-top)); bottom: auto; right: max(10px, env(safe-area-inset-right)); width: 200px; padding: 8px 12px; }
 body.touch #pl-call .n { font-size: 18px; margin: 2px 0 6px; }
 #pl-hint kbd { display: inline-block; min-width: 1.6em; padding: 1px 7px; margin: 0 2px; border-radius: 6px; background: #fff4e0; color: #1a1426; font: 800 0.95em "Rubik", sans-serif; box-shadow: 0 3px 0 #b8a98e; direction: ltr; }
-body.prologue #goals, body.prologue .goals, body.prologue #toasts.hide-pl, body.prologue #crosshair, body.prologue #weapon, body.prologue-film #prompt, body.prologue #subs, body.prologue #btn-swap, body.prologue-film #btn-draw, body.prologue #btn-photo, body.prologue #radio { display: none !important; }
+body.prologue #goals, body.prologue .goals, body.prologue #toasts.hide-pl, body.prologue #crosshair:not(.gun), body.prologue-film #crosshair, body.prologue #weapon, body.prologue-film #prompt, body.prologue #subs, body.prologue #btn-swap, body.prologue-film #btn-draw, body.prologue #btn-photo, body.prologue #radio { display: none !important; }
 body.prologue-film #hud { opacity: 0 !important; transition: opacity 0.6s; }
 body.prologue-film #gear-bar, body.prologue-film #gear-rw, body.prologue-film #gear-sea, body.prologue-film #pp-slots, body.prologue-film #pp-tip { display: none !important; }
 /* (and a phone's buttons: nothing to press while the film is shown) */

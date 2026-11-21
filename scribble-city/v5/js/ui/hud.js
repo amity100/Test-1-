@@ -232,6 +232,11 @@ export class HUD {
       const H = W.hold;
       const cur = W.current;
       const isGun = cur.def.kind === 'gun' || cur.def.kind === 'beam';
+      // (ROADMAP 28.29: a gun out - the crosshair is shown in the opening story too, game/prologue/ui.js)
+      if (isGun !== this.crossGun) {
+        this.crossGun = isGun;
+        this.crosshair.classList.toggle('gun', isGun);
+      }
       const kick = isGun ? Math.max(0, 1 - (game.time - W.lastFire) / 0.18) : 0;
       const gap = Math.round(H.crossGap(cur, kick) * 2) / 2;
       if (gap !== this.crossGap) {
