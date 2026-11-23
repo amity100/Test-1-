@@ -871,6 +871,11 @@ export class Audio {
       f = 70 + level * 150 + Math.sin(t * 40) * 6;
       vol = 0.05 + level * 0.04;
       this.engFilter.frequency.setTargetAtTime(700 + level * 1100, t, 0.05);
+    } else if (kind === 'hover') {
+      // (ROADMAP 29.5) the hover bike: a low hum of its ducted fans that rises with its speed, a slow beat in it
+      f = 48 + level * 105 + Math.sin(t * 7) * (3 + level * 4);
+      vol = 0.04 + level * 0.035;
+      this.engFilter.frequency.setTargetAtTime(260 + level * 820, t, 0.07);
     } else if (kind === 'pedal') {
       f = 60;
       vol = 0;

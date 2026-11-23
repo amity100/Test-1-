@@ -584,6 +584,39 @@ Object.assign(BLUEPRINTS, {
   },
 });
 
+// (ROADMAP 29.5, plan item 6) the hover bike: a motorbike with no wheels, on two hover pods - the long body with its
+// seat, the pod under its tail and the one under its nose, the handlebar (game/rides.js updateHover). Its drawing is
+// found in the city, in the surfers' mechanic's van (game/places.js spot 'hoverbike'): no roof board of its own
+// (noBoard - world/roofs.js)
+const HB_BODY = [[0, 20], [10, 13], [30, 12], [36, 5], [54, 5], [60, 12], [80, 13], [100, 21], [92, 29], [8, 29]];
+Object.assign(BLUEPRINTS, {
+  hoverbike: {
+    id: 'hoverbike',
+    name: tr('אופנוע ריחוף', 'Hover Bike'),
+    the: tr('אופנוע הריחוף', 'The hover bike'),
+    g: 'm',
+    nameEn: 'HOVER BIKE',
+    kind: 'vehicle',
+    difficulty: 3,
+    desc: tr('אופנוע בלי גלגלים שמרחף חצי מטר מעל הכביש, החול והמים. קל ומהיר, נוטה בפניות וקופץ קפיצה קטנה (רווח).', 'A motorbike with no wheels that hovers half a metre over the road, the sand and the water. Light and fast, it leans into the turns and hops a little (Space).'),
+    strokes: [
+      { label: tr('גוף ומושב', 'Body'), en: 'body', pts: close(HB_BODY) },
+      { label: tr('כרית ריחוף', 'Hover pod'), en: 'pod', pts: stadium(2, 32, 36, 44) },
+      { label: tr('כרית ריחוף', 'Hover pod'), en: 'pod', pts: stadium(62, 32, 96, 44) },
+      { label: tr('כידון', 'handlebar'), en: 'handlebar', pts: [[80, 13], [74, 2], [84, 0]] },
+    ],
+    fills: [
+      { poly: HB_BODY, color: '#2bb3b1' },
+      { poly: stadium(2, 32, 36, 44), color: '#34343c' },
+      { poly: stadium(62, 32, 96, 44), color: '#34343c' },
+      { poly: stadium(6, 42, 32, 46), color: '#7fe8ff' },
+      { poly: stadium(66, 42, 92, 46), color: '#7fe8ff' },
+    ],
+    noBoard: true,
+    scale: 2.6,
+  },
+});
+
 // (ROADMAP 9.2, not with ?classic) drawings that solve problems: a ladder up to a roof, a ramp to
 // jump off, a bridge over a gap, an umbrella for the rain, a key for what is locked (game/gadgets.js)
 const UMB_TOP = ellipse(50, 46, 44, 38, 16, PI, PI * 2);
@@ -1171,7 +1204,9 @@ if (!ALL_GEAR) {
 
 export const BLUEPRINT_ORDER = ['paint', 'rifle', 'car', 'bazooka', 'tank', 'shield', 'stapler', 'bandage', 'shotgun', 'katana', 'glue', 'inkbomb', 'boomerang', 'planes', 'bike', 'laser', 'copter', 'minigun', 'tippex', 'erasermg', 'paintmg', 'parachute'];
 // (ROADMAP 4.8: in the album, not with ?classic - and no boards of their own in the city)
-export const BLUEPRINT_MORE = ['scooter', 'bicycle', 'jetski', 'boat', 'plane'];
+export const BLUEPRINT_MORE = ['scooter', 'bicycle', 'jetski', 'boat', 'plane', 'hoverbike'];
+// (the ones of them on boards up on the city's roofs - world/roofs.js, world/city.js: not one found somewhere of its own)
+export const BLUEPRINT_ROOFS = BLUEPRINT_MORE.filter((id) => !BLUEPRINTS[id].noBoard);
 // (ROADMAP 28: new things of the start - in the album and on the pen's shelf; no boards of their own in the city)
 export const BLUEPRINT_NEW = ['paramotor', 'mag', 'mp5'];
 // (ROADMAP 11.41: the catalog's cars - in the album, not with ?classic; no boards of their own)

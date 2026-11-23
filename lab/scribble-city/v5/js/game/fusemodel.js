@@ -736,6 +736,32 @@ export function floatModel(len, hw, paint) {
   return wrap(K.build({ seed: 0.97 }), { L, r });
 }
 
+// ------------------------------------------------------------------ hover pads (ROADMAP 29.5)
+// one of the hover bike's pods for a car's wheel arch (game/fuse.js 'hover'): a short duct in the part's colour, its
+// chromed intake ring and a grille over it, the fan's hub inside, a cream band round it; under it a glowing disc and the
+// glowing rim of its lip; a strut up into the arch. r: its radius; its underside at the origin
+const PAD_GLOW = linC(0.45, 0.96, 1.0);
+export function hoverPadModel(r, paint) {
+  const M = itemMats();
+  const K = new Kit();
+  const h = r * 0.78;
+  K.add(M.paint, lathe([[0, r - 0.045], [0.022, r], [h * 0.7, r + 0.004], [h - 0.025, r - 0.01], [h - 0.005, r - 0.035], [h - 0.025, r - 0.058], [0.025, r - 0.06], [0, r - 0.045]], { axis: 'y', segs: 22 }), paint);
+  K.add(M.paint, lathe([[h * 0.36, r + 0.006], [h * 0.52, r + 0.006]], { axis: 'y', segs: 22 }), WHITE);
+  K.add(M.metal, new THREE.TorusGeometry(r - 0.03, 0.016, 8, 24).rotateX(Math.PI / 2).translate(0, h - 0.004, 0), CHROME);
+  for (let k = 0; k < 4; k++) K.add(M.metal, cbox(-(r - 0.055), h - 0.03, -0.006, r - 0.055, h - 0.018, 0.006, 0.002).rotateY((k / 4) * Math.PI), STEEL);
+  K.add(M.metal, lathe([[0.04, 0.0], [0.04, 0.045], [0.07, 0.065], [h - 0.06, 0.065], [h - 0.03, 0.0]], { axis: 'y', segs: 12 }), STEEL);
+  for (let k = 0; k < 5; k++) {
+    const b = cbox(0.07, 0.07, -0.025, r - 0.07, 0.078, 0.025, 0.002);
+    b.rotateX(0.45);
+    b.rotateY((k / 5) * Math.PI * 2);
+    K.add(M.metal, b, DARK);
+  }
+  K.add(M.glow, lathe([[0.014, 0.0], [0.014, r - 0.07]], { axis: 'y', segs: 18 }), PAD_GLOW);
+  K.add(M.glow, lathe([[-0.002, r - 0.042], [0.022, r - 0.002]], { axis: 'y', segs: 22 }), PAD_GLOW);
+  K.add(M.metal, cbox(-0.035, h - 0.01, -0.05, 0.035, h + 0.24, 0.05, 0.01), STEEL);
+  return wrap(K.build({ seed: 0.71 }), { r });
+}
+
 // ------------------------------------------------------------------ links (ROADMAP 28)
 // what joins things, each at its own place on the ride (game/buildtray.js linkAt), its foot at the origin: the coupler -
 // a tow bar out of the tail with a clamp ring on it, its pin through; the mode shift - a switch box with its lever and

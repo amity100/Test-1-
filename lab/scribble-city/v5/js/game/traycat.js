@@ -21,7 +21,7 @@ export const TAB_ICON = {
 };
 
 export const TRAY = {
-  func: ['turbo', 'jet', 'prop', 'wing', 'rotor', 'balloon', 'jump', 'chute', 'water', 'tracks', 'monster', 'rewind'],
+  func: ['turbo', 'jet', 'prop', 'wing', 'rotor', 'balloon', 'jump', 'chute', 'water', 'hover', 'tracks', 'monster', 'rewind'],
   weapon: ['mg', 'handgun', 'missiles', 'harpoon', 'net', 'tesla'],
   armor: ['armor', 'bullbar', 'smoke', 'repair', 'jammer', 'repaint'],
   link: ['coupler', 'modeshift', 'duallink', 'cargo'],
@@ -37,6 +37,12 @@ export const EXTRA = {
   prop: {
     cat: 'func', par: 'prop', name: tr('מדחף', 'Propeller'), does: tr('דוחף בעדינות כל הזמן — ביבשה, במים ובאוויר', 'A gentle push all the time — on land, on water, in the air'), use: 'always',
     icon: '<circle cx="12" cy="12" r="2"/><path d="M12 10 C9 6 9 3 12 2 C15 3 15 6 12 10 Z M12 14 C15 18 15 21 12 22 C9 21 9 18 12 14 Z M14 12 C18 9 21 9 22 12 C21 15 18 15 14 12 Z M10 12 C6 15 3 15 2 12 C3 9 6 9 10 12 Z"/>',
+  },
+  // (ROADMAP 29.5, plan item 6) the hover bike's pods in place of a ride's wheels: it floats as the hover bike does - over
+  // the road, the sand and the sea (game/fuse.js 'hover')
+  hover: {
+    cat: 'func', hover: true, name: tr('כריות ריחוף', 'Hover Pads'), does: tr('מרחפת חצי מטר מעל הכביש, החול והמים — נוסעים ישר לתוך הים', 'Hovers half a metre over the road, the sand and the water — drive straight into the sea'), use: 'always',
+    icon: '<path d="M2 9 H22"/><ellipse cx="7" cy="13" rx="4" ry="2"/><ellipse cx="17" cy="13" rx="4" ry="2"/><path d="M4 18 H10 M14 18 H20"/>',
   },
   // (ROADMAP 28.15) the gun in your hand, on the roof: it fires there what it fires in the hand
   handgun: {
@@ -71,7 +77,7 @@ export function info(id) {
 // that take off); the size handle goes from 0.6 to 1.7 of it
 export const SIZE = {
   turbo: [1.2, 0.8], jet: [1.2, 0.6], prop: [1.3, 1.3], wing: [1.5, 0.95], rotor: [2.3, 2.3], balloon: [2.7, 2.5], jump: [1.2, 1.0], chute: [3.2, 2.2],
-  water: [3.2, 1.2], tracks: [3.4, 0.9], monster: [0.9, 0.9], rewind: [0.9, 0.9], mg: [1.9, 0.7], missiles: [1.5, 0.9], harpoon: [1.4, 0.9], net: [1.2, 1.0],
+  water: [3.2, 1.2], hover: [1.0, 0.7], tracks: [3.4, 0.9], monster: [0.9, 0.9], rewind: [0.9, 0.9], mg: [1.9, 0.7], missiles: [1.5, 0.9], harpoon: [1.4, 0.9], net: [1.2, 1.0],
   tesla: [1.0, 1.4], armor: [2.6, 1.4], bullbar: [1.9, 0.9], smoke: [1.1, 0.8], repair: [1.0, 1.0], jammer: [0.9, 1.5], repaint: [0.9, 1.1],
 };
 // the ones whose size changes what they do: these have the size handle
@@ -199,7 +205,7 @@ export function metersOf(v) {
     wings = fz.wingFly ? 1 : clamp((H.top * 0.92 * (v.jets ? 1 + 0.4 * (fz.jetK || 1) : 1)) / fz.takeoff, 0, 0.95);
     lift = Math.max(lift, wings);
   }
-  const float = fz.float ? clamp(fz.float.k || 1, 0, 1.5) : 0;
+  const float = fz.float ? clamp(fz.float.k || 1, 0, 1.5) : fz.hover ? 1 : 0;
   return { weight: m / m0, power, lift, float, wings, rotor: fz.rotor || 0, balloon: fz.balloon || 0 };
 }
 

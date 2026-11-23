@@ -109,6 +109,7 @@ import { Fire } from './fire.js';
 import { Gadgets } from './gadgets.js';
 import { FreeDraw } from '../ui/freedraw.js';
 import { Finds } from './finds.js';
+import { Places } from './places.js';
 import { Signs } from './signs.js';
 import { Fuse } from './fuse.js';
 import { Gear } from './gear.js';
@@ -388,6 +389,9 @@ export class Game {
     this.freedraw = this.classic ? null : new FreeDraw(this);
     // (ROADMAP 29.5) drawings found in the city: the start kit, what is locked till found, the drawings on the walls
     this.finds = this.classic ? null : new Finds(this);
+    // (ROADMAP 29.5) the places built for the finds: the racing garage, the car park's roof, the helipad, the surf
+    // club, the mechanic's van (game/places.js) - built once the opening story is over, one a frame
+    this.places = this.classic ? null : new Places(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: tr('כישורים', 'Skills'), glyph: 'skills', fill: '#bfe7a6' });
     if (this.money) this.phone.addApp({ id: 'bank', name: tr('בנק', 'Bank'), glyph: 'bank', fill: '#fff3c4' });
     if (this.props) this.phone.addApp({ id: 'props', name: tr('נכסים', 'Property'), glyph: 'deed', fill: '#c8f0b0' });
@@ -407,6 +411,7 @@ export class Game {
     if (this.prolSet && !this.lab && (telling || this.params.has('prolset') || (this.prologue && this.prologue.done) || !PROLOGUE_ON)) this.prolSet.build({ wheel: telling || this.params.has('prolset') || !(this.prologue && this.prologue.done) });
     // (ROADMAP 12.5) Paintwood's Walls, and Art Night in them
     this.artnight = this.classic ? null : new ArtNight(this);
+    if (this.places) this.places.build();
     await breath('init');
     // (ROADMAP 12.7) INK ARCADE on Inkwood Boulevard
     this.arcade = this.classic ? null : new Arcade(this);
@@ -1447,6 +1452,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       if (this.money) this.money.update(dt);
       if (this.ink) this.ink.update(dt);
       if (this.gadgets) this.gadgets.update(dt);
+      if (this.places) this.places.update(dt);
       if (this.finds) this.finds.update(dt);
       if (this.freedraw) this.freedraw.update(this.realDt);
       if (this.signs) this.signs.update(dt);
@@ -1505,6 +1511,8 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
         // (ROADMAP 4.8: on the water, in the air)
         : v.kind === 'boat' ? { dist: v.jet ? 6.4 : 9.5, height: v.jet ? 2.4 : 3.2, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 160) }
         : v.kind === 'plane' ? { dist: 17, height: 4.6, shoulder: 0, fovMul: 1 + Math.min(0.2, v.speedAbs / 200) }
+        // (ROADMAP 29.5: the hover bike - a little higher than the motorbike's, it rides higher)
+        : v.kind === 'hoverbike' ? { dist: 5.2, height: 2.5, shoulder: 0, fovMul: 1 + Math.min(0.22, v.speedAbs / 140) }
         : { dist: 8.5, height: 3.1, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 200) };
       // (v5, ROADMAP 18: under a car park's deck the camera keeps under the deck over it - lower,
       // closer; game/prologue/garage.js)
@@ -1603,7 +1611,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       // (riding a bike seen from your own eyes: not your own head in the way)
       if (!this.perf.bench && !(this.hoodCam && player.inVehicle && player.inVehicle.kind === 'bike')) player.draw(this.camera.position);
       // your headlights on the road ahead at night (ROADMAP 4.3)
-      if (!this.classic && player.inVehicle && (player.inVehicle.kind === 'car' || player.inVehicle.kind === 'bike') && this.daynight && this.daynight.night > 0.3) {
+      if (!this.classic && player.inVehicle && (player.inVehicle.kind === 'car' || player.inVehicle.kind === 'bike' || player.inVehicle.kind === 'hoverbike') && this.daynight && this.daynight.night > 0.3) {
         const v = player.inVehicle;
         const fx = Math.sin(v.yaw);
         const fz = Math.cos(v.yaw);
@@ -1653,6 +1661,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       this.animals.draw(fr);
       this.chute.draw(fr);
       this.pickups.draw(fr);
+      if (this.places) this.places.draw(fr);
       if (this.finds) this.finds.draw(fr);
       if (this.money) this.money.draw(fr);
       if (this.knock) this.knock.draw(fr);
@@ -2645,6 +2654,8 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       else if (!touch && pv.kind === 'boat') prompt = pv.dive ? tr('C — לצלול · רווח — לעלות · E — לצאת (ליד החוף)', 'C — dive · Space — surface · E — get out (near the shore)') : tr('E — לצאת (ליד החוף או המזח)', 'E — get out (near the shore or the pier)');
       else if (!touch && pv.kind === 'balloon') prompt = tr('רווח — המבער (למעלה) · C — למטה · WASD — להטות · E — לצאת', 'Space — the burner (up) · C — down · WASD — tilt · E — get out');
       else if (!touch && pv.model === 'bicycle') prompt = tr('H — פעמון · E — לצאת', 'H — bell · E — get out');
+      // (ROADMAP 29.5: the hover bike's hop)
+      else if (!touch && pv.kind === 'hoverbike') prompt = tr('רווח — קפיצה קטנה · E — לצאת', 'Space — a little hop · E — get out');
       // (ROADMAP 11.8: one drawn to go more than one way, a gun on it, a spring under it)
       if (!touch && pv.drawn) {
         const more = [];
@@ -2656,7 +2667,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
         if (more.length && pv.kind !== 'plane' && pv.kind !== 'balloon') prompt = tr(`${more.join(' · ')} · E — לצאת`, `${more.join(' · ')} · E — get out`);
       }
       // (a gun in hand: out of the window, ROADMAP 4.7)
-      if (!touch && !this.classic && (pv.kind === 'car' || pv.kind === 'bike') && !pv.turret && this.weapons.current.def.kind === 'gun') prompt = tr('קליק — ירי מהחלון · E — לצאת', 'Click — shoot from the window · E — get out');
+      if (!touch && !this.classic && (pv.kind === 'car' || pv.kind === 'bike' || pv.kind === 'hoverbike') && !pv.turret && this.weapons.current.def.kind === 'gun') prompt = tr('קליק — ירי מהחלון · E — לצאת', 'Click — shoot from the window · E — get out');
       // (at the service station: what stopping here does, game/garage.js)
       const gp = this.garage.prompt();
       if (gp) prompt = gp;
@@ -2807,7 +2818,8 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       // the pedals (and the stick away, css/style.css): the handbrake where there are wheels to lock,
       // the turbo where there are jets
       const wheels = btns && (v.kind === 'car' || v.kind === 'bike');
-      const jets = wheels && !!v.jets;
+      // (ROADMAP 29.5: the hover bike with a turbo or a jet mounted on it too - it has no wheels to lock)
+      const jets = (wheels || (btns && v.kind === 'hoverbike')) && !!v.jets;
       const pk = `${btns}|${wheels}|${jets}`;
       if (pk !== this.pedalKey) {
         this.pedalKey = pk;

@@ -524,6 +524,152 @@ export const RIDEKITS = {
     return { parts: { w0: { kit: wr, at: RA }, w1: { kit: wf, at: FA } }, head: HEAD };
   },
 
+  // ---------------------------------------------------------------------------------------------- the hover bike
+  // (ROADMAP 29.5, plan item 6) A motorbike with no wheels, on two ducted hover pods: a sleek fairing drawn out from a
+  // pointed nose to a tail with its lamp and a little thruster, a cream line down its side, vents scribed in it; a stepped
+  // seat with its stitching and a pillion hump; a small raked screen, a dash that glows, bars with their grips, levers and
+  // mirrors; footrests on their hangers; a keel under it from pod to pod. Each pod hangs in a yoke on two pins along the
+  // bike - it tilts there with the lean (game/vehicles.js) - a duct with its chromed intake ring and a grille over it, the
+  // vanes and the hub inside, and under it a glowing ring and disc. (The pods and the fans in them are parts of their own.)
+  // Its frame: the pods' undersides at y = 0 - it rides 0.6 m over that (game/rides.js updateHover).
+  hoverbike(K, M) {
+    const TEAL = C(0.07, 0.5, 0.53);
+    const TEAL2 = C(0.04, 0.33, 0.37);
+    const GLOW = C(0.45, 0.96, 1.0);
+    const Kit = K.constructor;
+    const PZ = [-0.74, 0.78];
+    const PY = 0.15;
+    // --- the fairing: one skin from the tail to the nose, higher over the tank
+    const fair = [
+      ring(-1.24, 0.03, 0.44, 0.5, { e: 0.8, eb: 0.9, n: 16 }),
+      ring(-1.08, 0.13, 0.36, 0.62, { e: 0.6, eb: 0.9, n: 16 }),
+      ring(-0.78, 0.2, 0.36, 0.6, { e: 0.55, eb: 0.9, n: 16 }),
+      ring(-0.36, 0.22, 0.34, 0.57, { e: 0.55, eb: 0.9, n: 16 }),
+      ring(-0.04, 0.25, 0.32, 0.7, { e: 0.6, eb: 0.9, n: 16 }),
+      ring(0.36, 0.26, 0.33, 0.76, { e: 0.6, eb: 0.9, n: 16 }),
+      ring(0.74, 0.23, 0.37, 0.7, { e: 0.6, eb: 0.9, n: 16 }),
+      ring(1.04, 0.16, 0.4, 0.6, { e: 0.65, eb: 0.9, n: 16 }),
+      ring(1.24, 0.07, 0.44, 0.52, { e: 0.75, eb: 0.9, n: 16 }),
+      ring(1.34, 0.01, 0.47, 0.48, { e: 0.9, eb: 0.9, n: 16 }),
+    ];
+    K.add(M.paint, loft(fair), TEAL);
+    // (its belly darker, the keel under it from pod to pod)
+    K.add(M.paint, loft([ring(-1.0, 0.13, 0.35, 0.42, { e: 0.6, n: 12 }), ring(-0.2, 0.21, 0.31, 0.4, { e: 0.6, n: 12 }), ring(0.6, 0.21, 0.34, 0.42, { e: 0.6, n: 12 }), ring(1.1, 0.12, 0.4, 0.46, { e: 0.6, n: 12 })]), TEAL2);
+    K.add(M.metal, plate(rounded([[-0.4, 0.33], [0.42, 0.33], [0.34, 0.24], [-0.32, 0.24]], 0.03, 2), -0.05, 0.05, { bevel: 0.01 }), P.steel);
+    // (the cream line down each side, the vents behind the nose, the maker's tag)
+    for (const s of [1, -1]) {
+      K.add(M.paint, pipe([[s * 0.11, 0.55, -1.12], [s * 0.2, 0.5, -0.78], [s * 0.225, 0.46, -0.36], [s * 0.252, 0.47, 0.0], [s * 0.262, 0.5, 0.36], [s * 0.232, 0.5, 0.74], [s * 0.16, 0.5, 1.04], [s * 0.05, 0.47, 1.28]], 0.014, { steps: 40, tension: 0.3, segs: 5 }), P.white);
+      for (let i = 0; i < 4; i++) K.add(M.matte, cbox(-0.004, 0, -0.06, 0.004, 0.012, 0.06, 0.002).rotateY(s * 0.12).translate(s * (0.258 - i * 0.004), 0.58 - i * 0.035, 0.52 + i * 0.03), P.ink);
+      K.add(M.matte, plate(rounded([[-0.2, 0.39], [0.12, 0.39], [0.1, 0.43], [-0.18, 0.43]], 0.01, 2), s * 0.226, s * 0.232, { bevel: 0.002 }), P.label);
+      // (the footrests on their hangers, the rubber on them)
+      K.add(M.metal, plate(rounded([[-0.16, 0.12], [0.04, 0.12], [0.08, 0.36], [-0.12, 0.36]], 0.02, 2), s * 0.2, s * 0.22, { bevel: 0.006 }), P.steel2);
+      K.add(M.metal, rod([s * 0.22, 0.15, -0.06], [s * 0.34, 0.15, -0.06], 0.016, 0.016, 8), P.chrome);
+      K.add(M.round, lathe([[0.26, 0.0], [0.26, 0.026], [0.36, 0.026], [0.365, 0.02], [0.365, 0.0]], { axis: 'x', y: 0.15, z: -0.06, segs: 8 }).scale(s, 1, 1), P.rubber);
+    }
+    // --- each pod's yoke: an arm down to a pin ahead of the pod and one behind it (the pod turns on them)
+    for (const pz of PZ) {
+      for (const e of [-1, 1]) {
+        const zp = pz + e * 0.37;
+        K.add(M.metal, plate(rounded([[zp - 0.05, PY - 0.02], [zp + 0.05, PY - 0.02], [pz + e * 0.2 + 0.06, 0.4], [pz + e * 0.2 - 0.06, 0.4]], 0.015, 2), -0.035, 0.035, { bevel: 0.008 }), P.steel2);
+        K.add(M.metal, lathe([[zp - 0.05, 0.0], [zp - 0.05, 0.03], [zp + 0.05, 0.03], [zp + 0.05, 0.0]], { y: PY, segs: 10 }), P.chrome);
+      }
+    }
+    // --- the seat: the rider's, stepped up behind to a pillion hump; its piping; the grab rail
+    const seat = [
+      ring(-1.02, 0.08, 0.56, 0.64, { e: 0.6, n: 12 }),
+      ring(-0.9, 0.13, 0.56, 0.71, { e: 0.6, n: 12 }),
+      ring(-0.7, 0.15, 0.55, 0.7, { e: 0.6, n: 12 }),
+      ring(-0.58, 0.17, 0.54, 0.62, { e: 0.6, n: 12 }),
+      ring(-0.3, 0.18, 0.52, 0.62, { e: 0.6, n: 12 }),
+      ring(-0.06, 0.16, 0.58, 0.64, { e: 0.6, n: 12 }),
+    ];
+    K.add(M.matte, loft(seat), P.ink);
+    for (const s of [1, -1]) K.add(M.matte, pipe([[s * 0.06, 0.64, -1.0], [s * 0.12, 0.7, -0.84], [s * 0.15, 0.66, -0.64], [s * 0.172, 0.615, -0.4], [s * 0.15, 0.63, -0.08]], 0.006, { steps: 24, segs: 4 }), P.red);
+    K.add(M.metal, pipe([[-0.15, 0.6, -0.86], [-0.17, 0.66, -1.06], [0, 0.69, -1.14], [0.17, 0.66, -1.06], [0.15, 0.6, -0.86]], 0.014, { steps: 20, tension: 0.3, segs: 6 }), P.steel2);
+    // (the filler cap on the tank)
+    K.add(M.metal, lathe([[0.75, 0.0], [0.75, 0.04], [0.762, 0.04], [0.768, 0.03], [0.768, 0.0]], { axis: 'y', z: 0.3, segs: 12 }), P.chrome);
+    // --- the steering: the head, the bars, grips, levers; the dash; the screen; the mirrors
+    K.add(M.paint, rod([0, 0.7, 0.72], [0, 0.94, 0.66], 0.05, 0.04, 10), TEAL2);
+    K.add(M.metal, rod([-0.3, 0.97, 0.64], [0.3, 0.97, 0.64], 0.014, 0.014, 8), P.steel2);
+    K.add(M.metal, cbox(-0.07, 0.93, 0.6, 0.07, 0.98, 0.7, 0.01), P.steel);
+    for (const s of [1, -1]) {
+      K.add(M.round, lathe([[0.2, 0.0], [0.2, 0.022], [0.32, 0.02], [0.326, 0.026], [0.33, 0.0]], { axis: 'x', y: 0.97, z: 0.64, segs: 10 }).scale(s, 1, 1), P.rubber);
+      K.add(M.metal, pipe([[s * 0.17, 0.975, 0.66], [s * 0.22, 0.98, 0.72], [s * 0.31, 0.96, 0.7]], 0.005, { steps: 8, segs: 4 }), P.chrome);
+      K.add(M.metal, pipe([[s * 0.12, 0.98, 0.66], [s * 0.24, 1.08, 0.7], [s * 0.3, 1.13, 0.68]], 0.007, { steps: 10, segs: 5 }), P.ink);
+      K.add(M.round, cbox(s * 0.3 - 0.055, 1.11, 0.67, s * 0.3 + 0.055, 1.17, 0.7, 0.012), P.ink);
+      K.add(M.glass, cbox(s * 0.3 - 0.046, 1.12, 0.666, s * 0.3 + 0.046, 1.16, 0.672, 0.004), P.glassD);
+    }
+    K.add(M.matte, tilted(cbox(-0.08, 0.86, 0.72, 0.08, 0.9, 0.84, 0.01), -0.5, 0.88, 0.78), P.ink);
+    K.add(M.glow, tilted(cbox(-0.06, 0.9, 0.74, 0.06, 0.903, 0.82, 0.002), -0.5, 0.88, 0.78), GLOW);
+    K.add(M.glass, plate(rounded([[0.84, 0.66], [1.0, 0.61], [0.86, 0.95], [0.78, 0.93]], 0.03, 3), -0.17, 0.17, { bevel: 0.012 }), P.glassD);
+    for (const s of [1, -1]) K.add(M.metal, pipe([[s * 0.16, 0.66, 0.88], [s * 0.17, 0.8, 0.83], [s * 0.13, 0.93, 0.8]], 0.006, { steps: 10, segs: 4 }), P.chrome);
+    // --- the nose: its two lamps, the intake under them; the tail: its lamp, the thruster and its ring, the plate
+    for (const s of [1, -1]) K.add(M.glow, lathe([[0.0, 0.0], [0.0, 0.04], [0.012, 0.035], [0.02, 0.0]], { segs: 10 }).scale(1.4, 0.7, 1).rotateY(s * 0.42).translate(s * 0.07, 0.52, 1.22), P.lamp);
+    K.add(M.matte, plate(rounded([[1.12, 0.41], [1.27, 0.44], [1.27, 0.46], [1.12, 0.45]], 0.008, 2), -0.07, 0.07, { bevel: 0.004 }), P.ink);
+    K.add(M.glow, cbox(-0.08, 0.5, -1.22, 0.08, 0.55, -1.19, 0.008), P.navRed);
+    K.add(M.metal, lathe([[-1.34, 0.05], [-1.33, 0.075], [-1.24, 0.08], [-1.16, 0.07]], { y: 0.41, segs: 14 }), P.steel);
+    K.add(M.glow, lathe([[-1.338, 0.052], [-1.338, 0.0]], { y: 0.41, segs: 12 }), GLOW);
+    K.add(M.matte, tilted(cbox(-0.08, 0.34, -1.18, 0.08, 0.42, -1.17, 0.004), 0.35, 0.38, -1.18), P.label);
+    // --- the pods (each a part of its own: it tilts in its yoke) and the fans in them (they turn)
+    const pod = (r) => {
+      const Pk = new Kit();
+      const h = 0.29;
+      const y0 = -PY;
+      // (the duct: out round its side, in over its lip and down its bore)
+      Pk.add(M.paint, lathe([[y0 + 0.0, r - 0.05], [y0 + 0.025, r - 0.005], [y0 + 0.2, r + 0.004], [y0 + h - 0.03, r - 0.012], [y0 + h - 0.01, r - 0.04], [y0 + h - 0.03, r - 0.062], [y0 + 0.03, r - 0.065], [y0 + 0.0, r - 0.05]], { axis: 'y', segs: 24 }), TEAL2);
+      Pk.add(M.paint, lathe([[y0 + 0.1, r + 0.006], [y0 + 0.16, r + 0.006]], { axis: 'y', segs: 24 }), P.white);
+      // (the intake ring, chromed, round its lip; the grille over the intake)
+      Pk.add(M.metal, new THREE.TorusGeometry(r - 0.035, 0.018, 8, 28).rotateX(Math.PI / 2).translate(0, y0 + h - 0.006, 0), P.chrome);
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI;
+        Pk.add(M.metal, cbox(-(r - 0.06), y0 + h - 0.03, -0.006, r - 0.06, y0 + h - 0.018, 0.006, 0.002).rotateY(a), P.steel);
+      }
+      Pk.add(M.metal, lathe([[y0 + h - 0.035, r * 0.42], [y0 + h - 0.02, r * 0.42], [y0 + h - 0.02, r * 0.38], [y0 + h - 0.035, r * 0.38]], { axis: 'y', segs: 16 }), P.steel2);
+      // (the hub inside, its spinner; four vanes from it to the duct)
+      Pk.add(M.metal, lathe([[y0 + 0.05, 0.0], [y0 + 0.05, 0.05], [y0 + 0.08, 0.075], [y0 + 0.17, 0.075], [y0 + 0.21, 0.04], [y0 + 0.22, 0.0]], { axis: 'y', segs: 12 }), P.steel2);
+      for (let k = 0; k < 4; k++) Pk.add(M.metal, cbox(0.07, y0 + 0.06, -0.008, r - 0.06, y0 + 0.09, 0.008, 0.003).rotateY((k / 4) * Math.PI * 2 + 0.4), P.steel);
+      // (underneath: the glowing disc, a brighter ring round it, the dark lip)
+      Pk.add(M.glow, lathe([[y0 + 0.014, 0.0], [y0 + 0.014, r - 0.07]], { axis: 'y', segs: 20 }), GLOW);
+      Pk.add(M.glow, lathe([[y0 + 0.008, r - 0.068], [y0 + 0.008, r - 0.048]], { axis: 'y', segs: 24 }), C(0.8, 1.0, 1.0));
+      Pk.add(M.glow, lathe([[y0 - 0.002, r - 0.046], [y0 + 0.022, r - 0.002]], { axis: 'y', segs: 24 }), GLOW);
+      // (a lamp on each side of it)
+      for (const s of [1, -1]) Pk.add(M.glow, cbox(s * (r + 0.002) - 0.006, y0 + 0.12, -0.03, s * (r + 0.002) + 0.006, y0 + 0.14, 0.03, 0.003), s > 0 ? P.navRed : P.navGreen);
+      return Pk;
+    };
+    const fan = (r) => {
+      const Fk = new Kit();
+      for (let k = 0; k < 7; k++) {
+        const b = plate(rounded([[-0.035, 0.0], [0.035, 0.0], [0.045, r], [-0.02, r]], 0.006, 2), -0.004, 0.004, { bevel: 0.002 });
+        // (the blade's length out along x, flat across the duct, its pitch)
+        b.rotateZ(-Math.PI / 2);
+        b.rotateX(0.5);
+        b.rotateY((k / 7) * Math.PI * 2);
+        b.translate(0, 0.0, 0);
+        Fk.add(M.metal, b, P.steel2);
+      }
+      return Fk;
+    };
+    // (a skirt of light round the foot of each pod - it shows at dusk and grows with the dark: game/vehicles.js)
+    const halo = (r) => {
+      const Hk = new Kit();
+      Hk.add(M.glow, lathe([[0.012, r + 0.2], [0.012, r - 0.03]], { axis: 'y', segs: 28 }), C(0.32, 0.82, 1.0));
+      Hk.add(M.glow, lathe([[0.008, r - 0.03], [0.008, r + 0.2]], { axis: 'y', segs: 28 }), C(0.32, 0.82, 1.0));
+      return Hk;
+    };
+    const rR = 0.35;
+    const rF = 0.33;
+    return {
+      parts: {
+        podR: { kit: pod(rR), at: [0, PY, PZ[0]] },
+        podF: { kit: pod(rF), at: [0, PY, PZ[1]] },
+        fanR: { kit: fan(rR - 0.075), at: [0, PY - 0.01, PZ[0]] },
+        fanF: { kit: fan(rF - 0.075), at: [0, PY - 0.01, PZ[1]] },
+        haloR: { kit: halo(rR), at: [0, 0, PZ[0]] },
+        haloF: { kit: halo(rF), at: [0, 0, PZ[1]] },
+      },
+    };
+  },
+
   // ---------------------------------------------------------------------------------------------- the helicopter
   // A light helicopter folded from a notebook's page - its blue rules still round the cabin - and built as one is: a
   // bubble of glass in its frame, a door each side, the engine's cowl behind with its intake and its pipe, the mast

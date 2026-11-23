@@ -251,6 +251,9 @@ export class BuildTray {
     const g = this.game;
     const play = g.gear && g.gear.play;
     if (ITEMS[id] && play && !play.isOpen(id)) return tr('עוד נעול', 'Still locked');
+    // (a part of the tray's own, opened by a find in the city - the hover pads, with the hover bike's drawing)
+    const F = !ITEMS[id] && play && play.finding ? play.finding() : null;
+    if (F && !F.partOpen(id)) return tr('עוד נעול — הציור שלו מחכה בעיר', 'Still locked — its drawing waits in the city');
     // (the gun mount: a gun in the hand to put on it - or one on it already)
     if (id === 'handgun' && !g.weapons.mountable(g.weapons.current) && !(v && v.fuse && v.fuse.parts.some((p) => p.hand))) return tr('צריך נשק ביד', 'Needs a gun in your hand');
     return null;
@@ -391,6 +394,15 @@ export class BuildTray {
       fz.popDelay = 0;
       if (!res) return null;
       g.weapons.unhand(slot);
+    } else if (it.hover) {
+      // (ROADMAP 29.5: the hover pads, where its wheels are - game/fuse.js buildVeh)
+      part = { type: 'hover', v: 'pads', n: { size: r2(size) }, at: on([0, 0.15, 0]).map(r2), ink: inkI, t0: g.time, cost: 0, id: rnd() };
+      fz.justAdded = part;
+      fz.popDelay = 120 + pop;
+      const res = fz.onVehicle(v, part);
+      fz.justAdded = null;
+      fz.popDelay = 0;
+      if (!res) return null;
     } else if (it.link) {
       part = { type: 'link', v: it.link, n: { size: 1 }, at: on(linkAt(it.link, D, K)).map(r2), ink: inkI, t0: g.time, cost: 0, id: rnd() };
       fz.justAdded = part;
@@ -916,6 +928,7 @@ export class BuildTray {
     const hood = [0, K && K.hood ? K.hood.y : D.h * 0.55, K && K.hood ? K.hood.z : D.hl * 0.6];
     if (id === 'mg') return [{ key: 'hood', at: hood, name: tr('מכסה המנוע', 'Hood') }, { key: 'roof', at: [0, roof, 0], name: tr('גג — מסתובב לכל כיוון', 'Roof — turns all the way round') }, { key: 'tail', at: [0, roof * 0.8, -D.hl * 0.82], name: tr('מאחור', 'Rear') }];
     if (id === 'jet') return [{ key: 'tail', at: [0, low, -D.hl], name: tr('זנב — דחיפה קדימה', 'Tail — pushes forward') }, { key: 'roof', at: [0, roof + 0.16, -D.hl * 0.35], name: tr('גג — דחיפה קדימה', 'Roof — pushes forward') }, { key: 'under', at: [0, 0.3, -D.hl * 0.2], name: tr('תחתית — קפיצה וריחוף קצר', 'Underneath — a hop and a short hover') }];
+    if (id === 'hover') return [{ key: '', at: [0, 0.15, 0], name: '' }];
     if (id === 'prop') return [{ key: 'tail', at: [0, low + 0.35, -D.hl], name: tr('זנב — דחיפה קדימה', 'Tail — pushes forward') }, { key: 'under', at: [0, 0.3, -D.hl * 0.2], name: tr('תחתית — מאט נפילה', 'Underneath — slows a fall') }];
     const on = this.partsOn(id)[0];
     if (on && on.at) return [{ key: '', at: ctx.off ? [on.at[0] - ctx.off[0], on.at[1] - ctx.off[1], on.at[2] - ctx.off[2]] : on.at, name: '' }];

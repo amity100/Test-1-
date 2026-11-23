@@ -3,8 +3,9 @@ import { readMark, asType, shapeOf, onItAll } from './fusemark.js';
 import { readDrawing, buildDrawn, floatK, wingGlide, rotorLift, takeoffOf, WING_TOP } from './fusedraw.js';
 import { PartPen } from './partpen.js';
 import { boxOf, along, pathLen } from './signshape.js';
-import { wheelModel, wingModel, rotorModel, jetModel, packModel, springModel, bumperModel, barrelModel, ramModel, sideBladeModel, bladeModel, carArmorModel, vestModel, balloonModel, magnetModel, starModel, boltModel, smokeModel, chuteModel, floatModel, propModel, spikesModel, linkModel, handMountModel, paintOf } from './fusemodel.js';
-import { isWater } from './rides.js';
+import { wheelModel, wingModel, rotorModel, jetModel, packModel, springModel, bumperModel, barrelModel, ramModel, sideBladeModel, bladeModel, carArmorModel, vestModel, balloonModel, magnetModel, starModel, boltModel, smokeModel, chuteModel, floatModel, propModel, spikesModel, linkModel, handMountModel, paintOf, hoverPadModel } from './fusemodel.js';
+import { isWater, HOVER } from './rides.js';
+import { flashLight } from '../render/materials.js';
 import { KINDS, skinHit } from '../render/cars.js';
 import { INKS } from './freeform.js';
 import { gunOf } from './partsum.js';
@@ -74,12 +75,14 @@ export const PARTS = {
   gear: { name: tr('מתקן', 'Gadget'), mark: '', cost: 10, col: [0.6, 0.62, 0.66] },
   // (ROADMAP 28) what joins things - the coupler, the mode shift, the chassis link, the cargo mount (game/buildtray.js)
   link: { name: tr('חיבור', 'Link'), mark: '', cost: 6, col: [0.5, 0.52, 0.57] },
+  // (ROADMAP 29.5) the hover bike's pods in place of a ride's wheels (game/buildtray.js, traycat.js 'hover')
+  hover: { name: tr('כריות ריחוף', 'Hover Pads'), mark: '', cost: 10, col: [0.16, 0.62, 0.64] },
 };
 export const PART_ORDER = ['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float', 'spike'];
 
 // what a part can be put on
 const ALLOW = {
-  veh: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float', 'spike', 'deco3', 'gear', 'prop', 'link']),
+  veh: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'smoke', 'chute', 'float', 'spike', 'deco3', 'gear', 'prop', 'link', 'hover']),
   hero: new Set(['wheel', 'wing', 'rotor', 'jet', 'spring', 'barrel', 'blade', 'armor', 'balloon', 'magnet', 'star', 'bolt', 'chute']),
   weapon: new Set(['barrel', 'blade', 'spring', 'magnet', 'jet', 'wing', 'armor', 'rotor']),
   car: new Set(['balloon', 'rotor', 'jet', 'spring', 'magnet', 'wheel', 'barrel', 'wing']),
@@ -121,6 +124,11 @@ const EDGE_DARK = [0.1, 0.09, 0.16];
 // (ROADMAP 11.21) star power: how long it lasts; how high floats keep a car on the water
 const STAR_T = 10;
 const WATER_RIDE = -0.96;
+// (ROADMAP 29.5) the sea's face, that hover pads ride over
+const SEA_FACE = -0.78;
+const PAD_LIGHT = [0.4, 0.92, 1.0];
+const PAD_DUST = [0.76, 0.71, 0.62];
+const PAD_SPRAY = [0.88, 0.95, 1];
 // (the ink each costs: the part's, a little more for a big one)
 const INK_EL = [null, null, 'fire', 'blast', 'shock', 'glue', 'water', 'ink', 'bounce', 'tippex', 'light'];
 
@@ -1272,6 +1280,15 @@ export class Fuse {
         const side = Math.round(clamp(30 + (n.len || 1) * 20, 30, 80));
         v.blades = { side: Math.max(side, (v.blades && v.blades.side) || 0), rear: true };
         v.spikes = { dmg: side };
+      } else if (p.type === 'hover') {
+        // (ROADMAP 29.5) hover pads in place of its wheels (folded away): it floats as the hover bike does, HOVER.h over the
+        // road, the sand and the sea (floor, sea), its body up on them and bobbing (game/vehicles.js bodyPose); on its cushion
+        // of air it slides a little more; down off a jump the pads catch it (cushion)
+        fz.hover = { h: HOVER.h };
+        fz.lift = Math.max(fz.lift || 0, HOVER.h);
+        fz.hideWheels = true;
+        H.grip *= 0.8;
+        v.safeFall = true;
       }
       // (ROADMAP 11.28) a thing of the pen: what it is beyond its part, at its level (game/gear.js)
       if (p.item && this.game.gear) this.game.gear.apply(v, p, H, fz);
@@ -1320,6 +1337,12 @@ export class Fuse {
     v.handling = H;
     v.spaceIsMine = B.spaceIsMine || !!(fz.jump || fz.rotor || fz.balloon || fz.vtol || fz.wingFly);
     v.fuseUp = !!(fz.jump || fz.rotor >= 1 || fz.balloon >= 1 || fz.vtol || fz.wingFly);
+    // (ROADMAP 29.5: on hover pads a motorbike's, a plane's own wheels are folded away; off them, back)
+    if (v.kind !== 'car' && v.wheels && (fz.hover || v.hoverHid)) {
+      for (const w of v.wheels) if (w) w.visible = !fz.hover;
+      v.hoverHid = !!fz.hover;
+    }
+    if (!fz.hover && v.hoverBob) v.hoverBob = 0;
     v.fz = R.parts.length ? fz : null;
     // (the touch buttons: ▲ to jump, to go up)
     if (v.driver === this.game.player) this.game.upDownKey = null;
@@ -1541,6 +1564,20 @@ export class Fuse {
         const m = spikesModel(D, clamp(p.n.len || 1, 0.4, 3), K ? K.clear : 0.25);
         root.add(m);
         R.models.push({ p, m, role: 'spike' });
+      } else if (p.type === 'hover') {
+        // (ROADMAP 29.5) a pod where each wheel was - its underside HOVER.h over the floor (a car's, a motorbike's body is up
+        // on them by fz.lift; a ride of its own frame stands that high itself, game/fuse.js rideFloor); beside the hover
+        // bike's own pods, outriggers
+        const bike = v.kind === 'hoverbike';
+        const spots = bike ? [-1, 1].flatMap((sd) => [-0.55, 0.55].map((z) => ({ x: sd * (D.hw + 0.22), z }))) : v.kind === 'tank' ? [-1, 1].flatMap((sd) => [-0.6, 0.6].map((t) => ({ x: sd * D.hw * 0.55, z: t * D.hl }))) : vehWheelSpots(v, K0, D);
+        const r = clamp((K0 ? K0.r : D.hw * 0.6) * (bike ? 0.55 : 1.05), 0.2, 0.44);
+        const y = v.kind === 'car' || v.kind === 'bike' ? Math.max(0, (fz.lift || 0) - HOVER.h) : bike ? 0.12 : 0;
+        for (const sp of spots) {
+          const m = hoverPadModel(r, col);
+          m.position.set(sp.x, y, sp.z);
+          root.add(m);
+          R.models.push({ p, m, role: 'hover' });
+        }
       }
     }
     // (ROADMAP 29.5) on a ride that is not a car each part goes where its place there is: a drawn one by the shift it was
@@ -1656,7 +1693,11 @@ export class Fuse {
     const fz = v.fz;
     if (!fz) return 1;
     // (ROADMAP 15.3) drawn parts: every lift and push added up (game/inkparts.js)
-    if (fz.par) return airPar(this, v, dt, input);
+    if (fz.par) {
+      const k = airPar(this, v, dt, input);
+      if (fz.hover) this.cushion(v, dt);
+      return k;
+    }
     const g = this.game;
     const up = !!input && (input.keys.has('Space') || input.flyUp);
     const down = !!input && (input.keys.has('KeyC') || input.flyDown);
@@ -1779,7 +1820,17 @@ export class Fuse {
       }
     }
     v.fzLifting = lifting;
+    if (fz.hover) this.cushion(v, dt);
     return pull;
+  }
+
+  // (ROADMAP 29.5) hover pads, coming down: as the floor comes up under them they catch it - the nearer, and the faster it
+  // comes down, the harder (the hover bike has its own: game/rides.js updateHover)
+  cushion(v, dt) {
+    if (v.kind === 'hoverbike' || !(v.vy < 0)) return;
+    const f = v.hoverFloor ? v.hoverFloor(v.pos.x, v.pos.z, (v.pos.y || 0) + 0.3).y : groundHeight(v.pos.x, v.pos.z);
+    const soft = -(2.5 + 6 * Math.max(0, (v.pos.y || 0) - f));
+    if (v.vy < soft) v.vy = Math.min(soft, v.vy + 90 * dt);
   }
 
   // what it stands on: up kerbs and steps (teeth, huge wheels), onto roofs (when it flies)
@@ -1789,6 +1840,17 @@ export class Fuse {
     if (v.fzSink) return g - Math.min(1.9, v.fzSink * 1.1);
     const fz = v.fz;
     if (!fz) return g;
+    // (ROADMAP 29.5) hover pads: over the ground as it is (not half sunk into the sand, as tyres are) and over the sea's face -
+    // the body up on them (fz.lift), bobbing a little, more standing still (bodyPose)
+    if (fz.hover && v.hoverFloor) {
+      const F = v.hoverFloor(v.pos.x, v.pos.z, (v.pos.y || 0) + 0.3);
+      v.fzWet = F.wet;
+      g = F.y;
+      const t = this.game.time;
+      const seed = v.hoverSeed || (v.hoverSeed = 1 + Math.abs(v.pos.x * 0.37 + v.pos.z * 0.11) % 3);
+      const rest = 1 - Math.min(1, Math.abs(v.speed || 0) / 6);
+      v.hoverBob = (Math.sin(t * 2.3 + seed) * 0.035 + Math.sin(t * 3.7 + seed * 2) * 0.012) * (0.35 + 0.65 * rest) + (v.fzWet ? Math.sin(t * 1.6 + v.pos.x * 0.13 + v.pos.z * 0.07) * 0.04 : 0);
+    }
     if (fz.float && fz.float.k >= 1) {
       v.fzWet = isWater(v.pos.x, v.pos.z);
       // (ROADMAP 11.28: a submarine's dive, game/gearmove2.js)
@@ -1882,13 +1944,16 @@ export class Fuse {
     const x = v.pos.x;
     const z = v.pos.z;
     if (v.kind === 'boat' && isWater(x, z)) return { y: -0.8 - (v.draft || 0), wet: true };
+    // (ROADMAP 29.5) hover pads under it: it stands HOVER.h over the sea's face, the ground as it is, a roof
+    const hv = v.fz && v.fz.hover ? v.fz.hover.h : 0;
+    if (hv && isWater(x, z)) return { y: SEA_FACE + hv, wet: true };
     const gh = groundHeight(x, z);
-    const y1 = v.kind === 'tank' ? gh * 0.5 : Math.max(gh, -0.8);
+    const y1 = v.kind === 'tank' && !hv ? gh * 0.5 : Math.max(gh, -0.8);
     // (a roof, a deck: a floor well over the ground there - not a kerb, a bench, a low wall it drives past as it always did)
     const y0 = (v.pos.y || 0) + 0.3;
     let y = y1;
-    for (const f of [g.gadgets && g.gadgets.floorAt(x, z, y0), g.gear && g.gear.floorAt(x, z, y0), g.mission && g.mission.floorAt(x, z, y0)]) if (f > y1 + 0.6) y = Math.max(y, f);
-    return { y, wet: false };
+    for (const f of [g.gadgets && g.gadgets.floorAt(x, z, y0 - hv), g.gear && g.gear.floorAt(x, z, y0 - hv), g.mission && g.mission.floorAt(x, z, y0 - hv)]) if (f > y1 + 0.6) y = Math.max(y, f);
+    return { y: y + hv, wet: false };
   }
 
   // (ROADMAP 29.5) a ride that is not a car (game/rides.js, game/vehicles.js): its turbo, its jet engine burning - Shift, a
@@ -2458,6 +2523,8 @@ export class Fuse {
       if (fz.zap) this.zap(pv, fz.zap, dt, false);
       if (fz.smoke) this.smokeOut(pv, fz.smoke, dt);
       if (pv.fzChute && !pv.air) pv.fzChute = 0;
+      // (ROADMAP 29.5) hover pads at work (the hover bike's own: game/rides.js)
+      if (fz.hover && pv.kind !== 'hoverbike') this.hoverPads(pv, dt);
       if (fz.float && pv.fzWet) {
         const cap = fz.float.cap || 14;
         if (Math.abs(pv.speed) > cap) pv.speed = Math.sign(pv.speed) * cap;
@@ -2489,6 +2556,31 @@ export class Fuse {
     if (this.tagEl && this.tagT > 0) {
       this.tagT -= g.realDt || dt;
       if (this.tagT <= 0) this.tagEl.classList.remove('on');
+    }
+  }
+
+  // (ROADMAP 29.5) hover pads at work under the ride you are in: the soft light they throw down on what is under them -
+  // more at night - and a ring of dust pushed out over the road and the sand, spray off the sea
+  hoverPads(v, dt) {
+    const g = this.game;
+    const fz = v.fz;
+    // (what it is over: a car's, a motorbike's place is on it - their bodies up on the pads; a ride of its own frame stands
+    // the pads' height over it)
+    const wet = !!v.fzWet || (v.kind !== 'car' && v.kind !== 'bike' && isWater(v.pos.x, v.pos.z));
+    const fy = wet ? SEA_FACE : (v.pos.y || 0) - (v.kind === 'car' || v.kind === 'bike' ? 0 : fz.hover.h);
+    const night = g.daynight ? g.daynight.night : 0;
+    flashLight(v.pos.x, fy + 0.55, v.pos.z, 6.5, PAD_LIGHT, 0.5 + 2.6 * night);
+    if (v.air) return;
+    const sp = Math.abs(v.speed || 0);
+    v.padRingT = (v.padRingT || 0) - dt;
+    if (v.padRingT <= 0) {
+      v.padRingT = sp > 3 ? 0.2 : 0.45;
+      const back = sp > 3 ? (v.halfLen || 2) * 0.4 : 0;
+      g.fx.ring(v.pos.x - Math.sin(v.yaw) * back, fy + 0.04, v.pos.z - Math.cos(v.yaw) * back, 0.5, 2.2 + sp * 0.03, 0.55, wet ? PAD_SPRAY : PAD_DUST, 3.5);
+    }
+    if (wet && Math.random() < dt * (4 + sp * 0.6)) {
+      const a = Math.random() * Math.PI * 2;
+      g.fx.splash(v.pos.x + Math.cos(a) * 0.9, SEA_FACE + 0.04, v.pos.z + Math.sin(a) * 0.9, 2, 1.4 + sp * 0.1, PAD_SPRAY);
     }
   }
 
@@ -2551,7 +2643,7 @@ export class Fuse {
     const deck = (g.mission ? g.mission.floorAt(v.pos.x, v.pos.z, v.pos.y || 0) > -0.5 : false) || (g.gear ? g.gear.floorAt(v.pos.x, v.pos.z, v.pos.y || 0) > -0.5 : false);
     const wet = !v.air && !v.dead && (v.kind === 'car' || v.kind === 'bike') && !v.drawn && (v.pos.x > WATER_X + 3 || (v.pos.x < WEST_EDGE - 30 && groundHeight(v.pos.x, v.pos.z) < -0.79)) && isWater(v.pos.x, v.pos.z) && !deck;
     const fl = v.fz && v.fz.float;
-    if (!wet || (fl && fl.k >= 1)) {
+    if (!wet || (fl && fl.k >= 1) || (v.fz && v.fz.hover)) {
       v.fzSink = 0;
       return;
     }
@@ -3613,6 +3705,23 @@ const RIDE_FRAME = {
       tail: { clear: 1.25 },
     },
   },
+  // (ROADMAP 29.5) the hover bike: its frame's floor its pods' undersides
+  hoverbike: {
+    hl: 1.34, hw: 0.36, roof: 0.72, clear: 0.3, hood: [0.66, 0.98], belt: 0.5, z0: 0,
+    at: {
+      // (on the tail behind the seat's hump)
+      roof: { roof: 0.66, z: -1.08 },
+      dash: { hood: [0.9, 0.78] },
+      above: { roof: 1.95, z: -0.4 },
+      // (up on a mast from the tail, its blades over the rider's head)
+      rotor: { roof: 2.05, z: -1.08, post: 0.66, hl: 0.9 },
+      // (out of its sides at the tank)
+      sides: { roof: 0.62, z: 0.2, clear: 0.35 },
+      body: { hl: 1.1 },
+      // (at its tail, by its thruster)
+      tail: { hl: 1.36, clear: 0.2, belt: 0.52 },
+    },
+  },
   tank: {
     hl: 3.3, hw: 1.95, roof: 1.62, clear: 0.2, hood: [1.62, 2.45], belt: 1.58, z0: 0,
     at: {
@@ -3661,6 +3770,8 @@ const RIDE_H = {
   copter: { mass: 1.5, power: 10, top: 24 },
   plane: { mass: 1.1, power: 8, top: 48 },
   tank: { mass: 2, power: 8, top: 11 },
+  // (ROADMAP 29.5: light, quick, sharp in a turn - game/rides.js HOVER)
+  hoverbike: { mass: 0.55, power: HOVER.power, top: HOVER.top, steer: HOVER.steer, grip: HOVER.grip },
 };
 function rideH(v) {
   const r = !v.drawn && !v.hybrid && RIDE_H[v.model || v.kind];
@@ -3814,6 +3925,8 @@ function vehRule(p, v) {
       return fz.float && fz.float.k < 1
         ? { name: tr('מצופים קטנים', 'Small floats'), rule: tr('קטנים מדי בשבילה — במים היא שוקעת לאט. צריך ארוכים ועבים יותר', 'Too small for it — on water it sinks slowly. It needs longer, thicker ones') }
         : { name: tr('מצופים', 'Floats'), rule: tr('נוסעים לתוך הים — והיא צפה ושטה', 'Drive into the sea — and it floats and sails'), nums: tr('במים עד 14 מ׳/ש', 'Up to 14 m/s on water') };
+    case 'hover':
+      return { name: tr('כריות ריחוף', 'Hover Pads'), rule: tr(`מרחפת ${fmt(HOVER.h)} מ׳ מעל הכביש, החול והמים — גם לתוך הים`, `It hovers ${fmt(HOVER.h)} m over the road, the sand and the water — into the sea too`), use: tr('נוסעים כרגיל', 'Drive as usual') };
     case 'spike':
       return { name: tr('קוצים', 'Spikes'), rule: tr('ניידת שנצמדת אליכם נהרסת, ומי שנוגע בצד נחתך', 'A police car that rams you gets wrecked, and whoever touches the side gets cut'), nums: tr(`נזק ${v.spikes ? v.spikes.dmg : 40}`, `Damage ${v.spikes ? v.spikes.dmg : 40}`) };
     case 'deco3':

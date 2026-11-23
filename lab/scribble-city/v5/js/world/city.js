@@ -20,7 +20,7 @@ import { buildStreets, turnWheel } from './streets.js';
 import { boardAtlas } from './boards.js';
 import { STREET_ADS } from './ads.js';
 import { BOUNDS } from './layout.js';
-import { BLUEPRINT_MORE } from '../game/blueprints.js';
+import { BLUEPRINT_ROOFS } from '../game/blueprints.js';
 import { MAINLAND_ON, WEST_X, NORTH_Z, SEA_Z } from './mainland/plan.js';
 import { buildCauseways, buildHills, farGround, buildShore } from './mainland/ground.js';
 import { buildMainlandTowers } from './mainland/far.js';
@@ -89,7 +89,7 @@ export async function buildCity(scene, o = {}) {
   // everything printed in the city (blueprints, ads, street names) is one texture; the big ads on
   // the roofs and the walls are seen from far away, the little boards only up close
   // (the album's new pages are on boards up on the roofs, ROADMAP 5.1: not with ?classic)
-  ctx.atlas = boardAtlas(o.roofs ? BLUEPRINT_MORE : null);
+  ctx.atlas = boardAtlas(o.roofs ? BLUEPRINT_ROOFS : null);
   const boardOpts = { kind: 'box', map: ctx.atlas.texture, emMap: ctx.atlas.texture, emissive: new THREE.Color(0.2, 0.2, 0.19), ang: 1.45, wash: 0.86, line: 0.45, gloss: 0.1 };
   M.board = makeSurface({ ...boardOpts, objMask: true });
   M.adWall = makeSurface({ ...boardOpts, emissive: new THREE.Color(0.24, 0.23, 0.21) });

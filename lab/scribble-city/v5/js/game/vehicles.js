@@ -3,7 +3,7 @@ import { BLUEPRINTS } from './blueprints.js';
 import { Kit, itemMats, warpFor, linC } from './items.js';
 import { groundHeight, worldEdge, pageDist, PAGE } from '../world/layout.js';
 import { drawWipers, wiperSweep, KINDS, sidePoint } from '../render/cars.js';
-import { MODELS, RIDES, PEDAL, seatOn, updateBoat, updatePlane, drawWake, made } from './rides.js';
+import { MODELS, RIDES, PEDAL, seatOn, updateBoat, updatePlane, drawWake, made, updateHover } from './rides.js';
 import { hybridStep, updateBalloon } from './hybrid.js';
 import { clamp, damp, dampAngle, angleDiff } from '../core/util.js';
 
@@ -43,6 +43,8 @@ const VEH = {
   plane: { width: 9.6, hp: 170, len: 3.8 },
   // (ROADMAP 11.8: a hot air balloon, drawn)
   balloon: { width: 3, hp: 140, len: 1.5 },
+  // (ROADMAP 29.5: the hover bike - light, a little less tough than the motorbike)
+  hoverbike: { width: 0.72, hp: 110, len: 1.34 },
 };
 
 // (v5, ROADMAP 11.41) the catalog's cars, drawn from nothing: each one of the city's car shapes
@@ -391,6 +393,8 @@ class Vehicle {
     else if (this.kind === 'car' || this.kind === 'bike') this.updateCar(dt, input);
     else if (this.kind === 'tank') this.updateTank(dt, input);
     else if (this.kind === 'boat') updateBoat(this, dt, input);
+    // (ROADMAP 29.5: on its pods, over the road, the sand, the roofs and the sea - game/rides.js)
+    else if (this.kind === 'hoverbike') updateHover(this, dt, input);
     else if (this.kind === 'plane') {
       updatePlane(this, dt, input);
       if (this.dead) return;
@@ -404,6 +408,8 @@ class Vehicle {
     this.wheelSpin += (this.speed * dt) / 0.36;
     if (this.kind === 'car') return;
     this.group.position.copy(this.pos);
+    // (ROADMAP 29.5: a motorbike, a bicycle on hover pads - up on them, bobbing: game/fuse.js)
+    if (this.kind === 'bike' && this.fz && this.fz.hover) this.group.position.y += this.fz.lift + (this.hoverBob || 0);
     this.group.rotation.set(0, this.yaw, 0);
     this.group.scale.setScalar(pop);
     // (ROADMAP 11.12: a drawn one - how it stands, its propellers and fans going round)
@@ -424,6 +430,26 @@ class Vehicle {
         const side = (this.vx || 0) * Math.cos(this.yaw) - (this.vz || 0) * Math.sin(this.yaw);
         this.body.rotation.z = Math.sin(this.time * 0.9) * 0.02 + clamp(side * 0.01, -0.08, 0.08);
         this.body.rotation.x = Math.sin(this.time * 0.7 + 1) * 0.015 - clamp((this.speed || 0) * 0.01, -0.06, 0.06);
+      } else if (this.kind === 'hoverbike') {
+        // (ROADMAP 29.5) leaning into its turn, its nose up and down; each pod tilts in its yoke further into the lean and
+        // back as it pushes on, the fans in them spinning - faster with its speed
+        this.body.rotation.x = this.pitchV || 0;
+        this.body.rotation.z = this.rollV || 0;
+        const tiltZ = (this.rollV || 0) * 0.7;
+        const tiltX = clamp(-(this.accelL || 0) * 0.015, -0.15, 0.15);
+        for (const p of this.pods) {
+          p.rotation.z = damp(p.rotation.z, tiltZ, 8, dt);
+          p.rotation.x = damp(p.rotation.x, tiltX, 6, dt);
+        }
+        const spin = dt * ((this.driver ? 30 : 16) + this.speedAbs * 1.4);
+        for (const f of this.fans) f.rotation.y += spin;
+        // (the skirt of light round the pods' feet: none by day, wider and wider as it gets dark)
+        const night = this.game.daynight ? this.game.daynight.night : 0;
+        const hk = 0.55 + 0.6 * Math.min(1, night * 1.4);
+        for (const h of this.halos) {
+          h.visible = night > 0.08;
+          h.scale.set(hk, 1, hk);
+        }
       } else if (this.kind === 'plane') {
         this.body.rotation.x = -(this.pitch || 0);
         this.body.rotation.z = -(this.roll || 0);
@@ -460,7 +486,7 @@ class Vehicle {
   bodyPose() {
     const wob = this.grade === 'fail' || this.grade === 'wonky' ? Math.abs(Math.sin(this.wheelSpin * 2)) * 0.06 * this.q.wobble * Math.min(1, this.speedAbs / 3) : 0;
     const B = this._bp || (this._bp = { lift: 0, tilt: 0, roll: 0, roofY: 1.4, scale: 1 });
-    B.lift = wob + (this.fzDip || 0) + (this.fz && this.fz.lift ? this.fz.lift : 0) + (this.fz && this.fz.bump ? Math.abs(Math.sin(this.wheelSpin * 2)) * 0.1 * Math.min(1, this.speedAbs / 3) : 0);
+    B.lift = wob + (this.fzDip || 0) + (this.fz && this.fz.lift ? this.fz.lift : 0) + (this.fz && this.fz.bump ? Math.abs(Math.sin(this.wheelSpin * 2)) * 0.1 * Math.min(1, this.speedAbs / 3) : 0) + (this.hoverBob || 0);
     B.roll = (this.grade === 'fail' ? Math.sin(this.time * 7) * 0.03 : 0) + (this.bodyRoll || 0);
     B.tilt = (this.bodyPitch || 0) + (this.floorTilt || 0);
     B.roofY = (KINDS[this.carKind] || KINDS.sedan).roofY || 1.4;
@@ -612,6 +638,25 @@ class Vehicle {
         }
       }
     }
+  }
+
+  // (ROADMAP 29.5) what is under the hover bike's pods at (x, z) - they at y: the ground as it is (the sand not sunk into as
+  // tyres sink into it), the sea's face, a ramp, a bridge drawn, a roof, a ledge, a bench - what they can float up onto -
+  // the story's car parks, the lab's bridge. { y, wet }
+  hoverFloor(x, z, y) {
+    const g = this.game;
+    const gh = groundHeight(x, z);
+    const sea = gh < -0.785;
+    let f = sea ? -0.78 : gh;
+    // (a ramp's top: 0 where there is none)
+    const ra = rampAt(x, z);
+    if (ra > 0) f = Math.max(f, ra);
+    if (DECKS.length) f = Math.max(f, deckAt(x, z, y));
+    if (g.gadgets) f = Math.max(f, g.gadgets.floorAt(x, z, y));
+    if (g.gear && g.gear.floorAt) f = Math.max(f, g.gear.floorAt(x, z, y));
+    if (g.mission) f = Math.max(f, g.mission.floorAt(x, z, y));
+    if (g.prolSet && g.prolSet.built) f = Math.max(f, g.prolSet.floorAt(x, z, y));
+    return { y: f, wet: sea && f <= -0.78 + 1e-3 };
   }
 
   // (v5) held at the edge of the world, its way on out of it taken off it - no wall in the air
@@ -1609,12 +1654,14 @@ class Vehicle {
     const fz = Math.cos(this.yaw);
     const s = this.seat === true ? [0, 1.0, -0.3] : this.seatPos || [0, 1.0, -0.3];
     const b = this.bar || [0, 1.38, 0.82];
-    fig.pos.set(this.pos.x + fx * s[2], this.pos.y + s[1] - 0.48, this.pos.z + fz * s[2]);
+    // (ROADMAP 29.5: up on hover pads)
+    const up = this.fz && this.fz.hover ? this.fz.lift + (this.hoverBob || 0) : 0;
+    fig.pos.set(this.pos.x + fx * s[2], this.pos.y + s[1] - 0.48 + up, this.pos.z + fz * s[2]);
     fig.yaw = this.yaw;
     fig.sit = 1;
     fig.speed = 0;
     if (!fig.wheel) fig.wheel = new THREE.Vector3();
-    fig.wheel.set(this.pos.x + fx * b[2], this.pos.y + b[1], this.pos.z + fz * b[2]);
+    fig.wheel.set(this.pos.x + fx * b[2], this.pos.y + b[1] + up, this.pos.z + fz * b[2]);
     // (shooting off the bike: one hand on the bars, ROADMAP 4.7; or held up at something - the
     // prologue's pencil: game/rides.js seatOn, holdUpR)
     fig.reachR = fig.holdUpR || (fig.shootOut ? null : fig.wheel);
@@ -1850,7 +1897,7 @@ export class Vehicles {
   drawExtras(cars) {
     const game = this.game;
     // (the boats' wakes: game/rides.js)
-    for (const v of this.list) if (v.kind === 'boat' && v.wake) drawWake(v, game.figures, game.time);
+    for (const v of this.list) if ((v.kind === 'boat' || v.kind === 'hoverbike') && v.wake) drawWake(v, game.figures, game.time);
     const cam = game.camera.position;
     const S = this.skidList;
     if (S && S.length) {
