@@ -518,7 +518,7 @@ export class Finds {
       if (s.page && s.page.userData.paper) {
         const u = s.page.userData.paper.uniforms;
         const h = g.daynight ? g.daynight.hour : 17.6;
-        const dayK = clamp((h - 8) / 3, 0, 1) * clamp((17 - h) / 2.5, 0, 1);
+        const dayK = clamp((h - 7) / 2, 0, 1) * clamp((17.6 - h) / 1.2, 0, 1);
         u.uAlbedo.value.setScalar(1 - 0.32 * dayK);
         u.uEmissive.value.setRGB(0.36, 0.36, 0.34).multiplyScalar(1 - 0.85 * dayK);
       }
