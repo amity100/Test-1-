@@ -5,6 +5,7 @@ import { Route } from '../world/roofs.js';
 import { buildGarage, GAR } from './placegarage.js';
 import { buildParkRoof, PARK_ROOF, buildHelipad, PAD, buildSurfRoof, SURF } from './placeroofs.js';
 import { VanDriver } from './placedrive.js';
+import { Gym } from './placegym.js';
 
 // (ROADMAP 29.5) The places of the first five drawings found in the city (game/finds.js), built on the island at run time
 // with the Kit the prologue's car park is built with (game/items.js, game/prologue/carpark.js):
@@ -14,6 +15,8 @@ import { VanDriver } from './placedrive.js';
 //   dualrotor  The Calypso's surf club on its roof, across Ocean Drive from the pier: the back of its sign
 //   hoverbike  SALT & SPANNER, the surfers' mechanic going round Hotel Row and the beach front: the board inside its side
 //              that lifts, while it stands at a stop (placedrive.js, placevan.js)
+//   ironfists  9TH STREET GYM, the boxing gym on the corner of Meridian and 9th Street (the two buildings there taken out at run
+//              time): the office's wall to the room; its ring, its bags, its coach (placegym.js, game/boxing.js)
 // A spot: { x, y, z, nx, ny, nz, ux, uy, uz, w } - the middle of the drawing, its surface's way out, its up along the
 // surface, its width; the van's also parked (true while its side is up) and moves, the same object kept up to date.
 //
@@ -33,7 +36,8 @@ export class Places {
     this.routes = [];
     this.lights = [];
     this.van = null;
-    this.spots = { rocket: null, wings: null, inkhawk: null, dualrotor: null, hoverbike: null };
+    this.spots = { rocket: null, wings: null, inkhawk: null, dualrotor: null, hoverbike: null, ironfists: null };
+    this.gym = null;
     // (per place: its draws - one a pen - and its triangles)
     this.stats = {};
   }
@@ -112,6 +116,17 @@ export class Places {
       this.spots.dualrotor = { x: SG.x - 0.012, y: surfY + SG.y0 + 1.5, z: (SG.z0 + SG.z1) / 2, nx: -1, ny: 0, nz: 0, ux: 0, uy: 1, uz: 0, w: 3.0 };
       this.lights.push(addLight(SG.x - 2.4, surfY + 3.4, (SG.z0 + SG.z1) / 2, 8, [1.0, 0.85, 0.62], 0.9));
       this.ladder(SURF.x0, SURF.ladderZ, 0.15, surfY);
+    } else if (k === 5 || k === 6) {
+      // ---- 9TH STREET GYM: the corner's lot cleared (a frame), the gym put up on it (the next). Whatever goes wrong in it, the
+      // rest of the places are built all the same
+      try {
+        if (k === 5) {
+          this.gym = new Gym(this);
+          this.gym.clear();
+        } else if (this.gym) this.gym.build();
+      } catch (e) {
+        console.error('[places] the gym', e);
+      }
     } else {
       // ---- SALT & SPANNER
       const D = (this.van = new VanDriver(g, M));
@@ -216,6 +231,7 @@ export class Places {
       this.step();
     }
     if (this.van) this.van.update(dt);
+    if (this.gym && this.gym.built) this.gym.update(dt);
     // (far off: not drawn)
     const c = this.game.camera.position;
     for (const p of this.list) {
@@ -223,6 +239,19 @@ export class Places {
       const z = p.moves ? this.van.pos.z : p.cz;
       p.group.visible = Math.abs(c.x - x) < p.far && Math.abs(c.z - z) < p.far;
     }
+  }
+
+  // (the gym's: what E does there and what the prompt says, game/game.js; the room you are in, for player.indoor)
+  target() {
+    return this.gym ? this.gym.target() : null;
+  }
+
+  interact() {
+    return this.gym ? this.gym.interact() : false;
+  }
+
+  roomAt(x, z, y = null) {
+    return this.gym ? this.gym.roomAt(x, z, y) : null;
   }
 
   // the van's lights on the street after dark: its headlamps on the road ahead, the light in its open side
@@ -261,9 +290,11 @@ export class Places {
     this.routes = [];
     if (this.van) this.van.detach();
     this.van = null;
+    if (this.gym) this.gym.dispose();
+    this.gym = null;
     this.built = false;
     this.stepN = 0;
-    this.spots = { rocket: null, wings: null, inkhawk: null, dualrotor: null, hoverbike: null };
+    this.spots = { rocket: null, wings: null, inkhawk: null, dualrotor: null, hoverbike: null, ironfists: null };
   }
 }
 

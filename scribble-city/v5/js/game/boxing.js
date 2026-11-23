@@ -233,7 +233,7 @@ export class Boxing {
     const P = this.game.player;
     const x = r && r.x !== undefined ? r.x : P.pos.x;
     const z = r && r.z !== undefined ? r.z : P.pos.z;
-    return { x, z, y: r && r.y !== undefined ? r.y : groundHeight(x, z), half: (r && r.half) || 3, yaw: (r && r.yaw) || 0 };
+    return { x, z, y: r && r.y !== undefined ? r.y : groundHeight(x, z), half: (r && r.half) || 3, yaw: (r && r.yaw) || 0, ceil: (r && r.ceil) || 0 };
   }
 
   begin(ring, opp, prof) {
@@ -306,6 +306,9 @@ export class Boxing {
     this.camFocus.set((b.f[0].x + b.f[1].x) / 2, ring.y, (b.f[0].z + b.f[1].z) / 2);
     g.camRig.focus = this.camFocus;
     this.camYaw = null;
+    this.camSide = 1;
+    this.sideT = 0;
+    this.sideHold = 0;
     this.quit = false;
     this.hsT = 0;
     this.slowT = 0;
@@ -330,6 +333,12 @@ export class Boxing {
     if (this.saved) {
       fig.carry = this.saved.carry;
       fig.carryL = this.saved.carryL;
+      // (the weapon he had before the bout back in his hands - quietly, no card for it)
+      const W = g.weapons;
+      if (W && this.saved.index !== W.index && this.saved.index < W.slots.length) {
+        W.index = this.saved.index;
+        if (g.hud && g.hud.updateWeapon) g.hud.updateWeapon();
+      }
     }
     const c = this.opp;
     if (c) {
@@ -406,6 +415,15 @@ export class Boxing {
     if (b.training) this.pinTarget();
     this.events();
     this.sync(dt);
+    // (where the camera would be - side on to the two, as camOpts wants it - for the sim to keep the man who is not down out of
+    // its way during a count; from the bout's own numbers, so the same fight comes out wherever it is stepped)
+    const ca = this.camAt || (this.camAt = { x: 0, z: 0 });
+    const A0 = b.f[0];
+    const B0 = b.f[1];
+    const cw = Math.atan2(B0.x - A0.x, B0.z - A0.z) + (this.camSide || 1) * (Math.PI / 2 - 0.42);
+    ca.x = (A0.x + B0.x) / 2 - Math.sin(cw) * 3.5;
+    ca.z = (A0.z + B0.z) / 2 - Math.cos(cw) * 3.5;
+    b.camAt = ca;
     if (this.hud) this.hud.frame(this, rdt);
     // the crowd's murmur, now and then
     if (this.mode === 'bout') {
@@ -934,12 +952,39 @@ export class Boxing {
     // (the line from you to him; the camera at its side, you on the left of the picture)
     const th = Math.atan2(B.x - A.x, B.z - A.z);
     const train = !!b.training;
-    const want = th + (Math.PI / 2 - (train ? 0.62 : 0.42));
+    const bias = Math.PI / 2 - (train ? 0.62 : 0.42);
     // (the camera's own: the mouse or the look pad do not turn it in the ring)
     if (this.camYaw === null) {
       this.camYaw = R.yaw;
       this.camPitch = R.pitch;
     }
+    // (its side: yours, you on the left - unless a post or a wall stands in its way there and the other side is clear; then a
+    // cut to the other side, kept a while, never flicking between them)
+    this.sideT -= rdt;
+    this.sideHold -= rdt;
+    if (this.sideT <= 0 && this.sideHold <= 0) {
+      this.sideT = 0.3;
+      const col = g.world && g.world.collision;
+      if (col && col.raycast) {
+        const L = (2.25 + Math.min(1.6, d) * 0.8) * 0.95;
+        const fy = this.ringY + 1.2;
+        const free = (sd) => {
+          const yw = th + sd * bias;
+          const h = col.raycast(this.camFocus.x, fy, this.camFocus.z, -Math.sin(yw) * 0.99, 0.14, -Math.cos(yw) * 0.99, L);
+          return h ? h.t : L;
+        };
+        const here = free(this.camSide);
+        if (here < L * 0.6) {
+          const there = free(-this.camSide);
+          if (there > here + 0.8) {
+            this.camSide = -this.camSide;
+            this.sideHold = 2.5;
+            this.camYaw = th + this.camSide * bias;
+          }
+        }
+      }
+    }
+    const want = th + this.camSide * bias;
     const dy = wrap(want - this.camYaw);
     this.camYaw += dy * (1 - Math.exp(-rdt * (Math.abs(dy) > 1.2 ? 2.5 : 4.5)));
     const pw = counting ? -0.22 : -0.14;
@@ -959,8 +1004,9 @@ export class Boxing {
     co.minY = this.ringY + 0.35;
     co.shoulder = 0;
     // (under the gym's ceiling, as the game's own camera keeps under a room's: game/game.js player.indoor)
+    // (or the ring's own: ring.ceil, the ceiling's height over the gym, as the gym gives it)
     const IR = g.player.indoor;
-    co.maxY = IR && IR.height ? IR.floor + IR.height - 0.3 : undefined;
+    co.maxY = this.ring && this.ring.ceil ? this.ring.ceil - 0.3 : IR && IR.height ? IR.floor + IR.height - 0.3 : undefined;
     return co;
   }
 
