@@ -38,8 +38,9 @@ function waypoints() {
   W.push([11.5, 326.5, 0], [11.0, 306, 0]);
   // (onto the sidewalk at the pier's gate, along it, back into the lane)
   W.push([11.0, 262, 3], [16.0, 250, 4], [16.0, 236, 4], [11.0, 223, 4]);
-  // (up to 9th Street, left; down Collins, left; along 7th, right onto the boulevard going south)
-  W.push([11.0, 27.2, 8.8], [-67.75, 27.2, 12.55], [-67.75, 166.8, 11.6], [3.0, 166.8, 9.8]);
+  // (over into the inner lane for the left turn ahead; up to 9th Street, left; down Collins, left; along 7th, right onto the
+  // boulevard going south)
+  W.push([11.0, 130, 0], [7.1, 104, 0], [7.1, 27.2, 6.6], [-67.75, 27.2, 12.55], [-67.75, 166.8, 11.6], [3.0, 166.8, 9.8]);
   // (into the curb by Hotel Mirage and out again)
   W.push([3.0, 199.5, 3.5], [-1.55, 207.5, 3.5], [-1.55, 220.5, 3.5], [3.0, 228.5, 3.5]);
   // (on to the end of the boulevard, over to the right, round the loop)
@@ -142,7 +143,7 @@ export class VanDriver {
     // (a light's line: where the front bumper stops; yield: the lane of what comes the other way - a box, the way it comes)
     this.gates = [
       { node: nodeAt(3, 4), axis: 'ns', ...this.at(11.0, 172 + BUMP) },
-      { node: nodeAt(3, 3), axis: 'ns', ...this.at(11.0, 36 + BUMP), yield: { x0: 0.5, z0: -60, x1: 6.2, z1: 35, fx: 0, fz: 1 } },
+      { node: nodeAt(3, 3), axis: 'ns', ...this.at(7.1, 36 + BUMP), yield: { x0: 0.5, z0: -60, x1: 6.2, z1: 35, fx: 0, fz: 1 } },
       { node: nodeAt(2, 3), axis: 'ew', ...this.at(-55.2 + BUMP, 27.2), yield: { x0: -132, z0: 29.4, x1: -58, z1: 34.5, fx: 1, fz: 0 } },
       { node: nodeAt(2, 4), axis: 'ns', ...this.at(-67.75, 155.2 - BUMP), yield: { x0: -66, z0: 159, x1: -58.5, z1: 238, fx: 0, fz: -1 } },
       { node: nodeAt(3, 4), axis: 'ew', ...this.at(-6.8 - BUMP, 166.8) },
@@ -164,12 +165,13 @@ export class VanDriver {
     this.t = 0;
     this.why = '';
     this.waitT = 0;
+    this.yieldT = 0;
     // its drawing: the board inside the side that lifts (the same object, kept up to date)
     this.spot = { x: 0, y: 0, z: 0, nx: 1, ny: 0, nz: 0, ux: 0, uy: 1, uz: 0, w: 3.0, parked: true, moves: true };
     // what the traffic finds in its way (game/traffic.js ahead, by game/gadgets.js ramps), its front, middle and back
     // (as wide as one of the traffic's own of its width: game/traffic.js ahead, 0.8 + its half width over a car's)
     // (what free() is working with: the van's nose, its look ahead, the nearest found)
-    this.fw = { look: 0, sF: 0, fx: 0, fz: 1, bx: 0, bz: 0, reach: 0, best: Infinity };
+    this.fw = { look: 0, sF: 0, fx: 0, fz: 1, bx: 0, bz: 0, reach: 0, best: Infinity, who: null };
     this.blockers = [-2.2, 0, 2.2].map(() => ({ cx: 0, cz: 0, r: 0.8 + (VAN.half - 0.98), back: 0 }));
     this.boxes = null;
     this.pose(0);
@@ -333,6 +335,16 @@ export class VanDriver {
     this.braking = this.v < this.vPrev - 0.02 || (this.v < 0.15 && want < 0.3);
     this.vPrev = this.v;
     this.waitT = this.v < 0.15 ? this.waitT + dt : 0;
+    // (held up in a crossing by one of the traffic that is held up by it in turn - a car across its way, stopped for it:
+    // for a few seconds it lets that one see past it, its notice kept at its back only, for whoever is behind it)
+    const o = this.fw.who;
+    if (this.why === 'way' && this.waitT > 4 && o && o.halfLen !== undefined && Math.abs(o.speed || 0) < 0.3 && this.yieldT <= 0) {
+      let dh = (o.yaw || 0) - this.yawNow;
+      while (dh > Math.PI) dh -= Math.PI * 2;
+      while (dh < -Math.PI) dh += Math.PI * 2;
+      if (Math.abs(dh) > 0.6) this.yieldT = 5;
+    }
+    if (this.yieldT > 0) this.yieldT -= dt;
     this.s = (this.s + this.v * dt) % P.len;
     this.outT += dt;
   }
@@ -364,46 +376,47 @@ export class VanDriver {
     F.bz = this.pos.z + F.fz * VAN.len * 0.5;
     F.reach = F.look + 4;
     F.best = Infinity;
+    F.who = null;
     const p = g.player;
     if (p) {
       if (p.inVehicle) {
         const v = p.inVehicle;
-        if (!(v.flies && v.alt > 2)) this.testLong(v.pos.x, v.pos.z, v.yaw || 0, (v.halfLen || 2.3) * 0.7, 1.0);
-      } else if (p.mode !== 'dead') this.testAt(p.pos.x, p.pos.z, 0.45);
+        if (!(v.flies && v.alt > 2)) this.testLong(v.pos.x, v.pos.z, v.yaw || 0, (v.halfLen || 2.3) * 0.7, 1.0, v);
+      } else if (p.mode !== 'dead') this.testAt(p.pos.x, p.pos.z, 0.45, p);
     }
     const V = g.vehicles ? g.vehicles.list : null;
     if (V) {
       for (let i = 0; i < V.length; i++) {
         const v = V[i];
         if (v.dead || (p && p.inVehicle === v) || (v.flies && v.alt > 2)) continue;
-        this.testLong(v.pos.x, v.pos.z, v.yaw || 0, (v.halfLen || 2.0) * 0.7, 1.0);
+        this.testLong(v.pos.x, v.pos.z, v.yaw || 0, (v.halfLen || 2.0) * 0.7, 1.0, v);
       }
     }
     const T = g.traffic ? g.traffic.list : null;
-    if (T) for (let i = 0; i < T.length; i++) this.testLong(T[i].pos.x, T[i].pos.z, T[i].yaw, (T[i].halfLen || 2.3) * 0.75, T[i].halfWid || 1.0);
+    if (T) for (let i = 0; i < T.length; i++) this.testLong(T[i].pos.x, T[i].pos.z, T[i].yaw, (T[i].halfLen || 2.3) * 0.75, T[i].halfWid || 1.0, T[i]);
     const H = g.civilians ? g.civilians.list : null;
     if (H) {
       for (let i = 0; i < H.length; i++) {
         const h = H[i];
-        if (!h.inside && !h.gone && h.alive !== false) this.testAt(h.pos.x, h.pos.z, 0.4);
+        if (!h.inside && !h.gone && h.alive !== false) this.testAt(h.pos.x, h.pos.z, 0.4, h);
       }
     }
     const E = g.enemies ? g.enemies.list : null;
-    if (E) for (let i = 0; i < E.length; i++) if (E[i].alive) this.testAt(E[i].pos.x, E[i].pos.z, 0.45);
+    if (E) for (let i = 0; i < E.length; i++) if (E[i].alive) this.testAt(E[i].pos.x, E[i].pos.z, 0.45, E[i]);
     return F.best;
   }
 
   // a long thing (a car): its back, middle and front
-  testLong(x, z, yaw, hl, r) {
+  testLong(x, z, yaw, hl, r, who) {
     const sx = Math.sin(yaw) * hl;
     const sz = Math.cos(yaw) * hl;
-    this.testAt(x - sx, z - sz, r);
-    this.testAt(x, z, r);
-    this.testAt(x + sx, z + sz, r);
+    this.testAt(x - sx, z - sz, r, who);
+    this.testAt(x, z, r, who);
+    this.testAt(x + sx, z + sz, r, who);
   }
 
   // one thing at (x, z), r round: on the van's way ahead (within its look)? the nearest so far kept
-  testAt(x, z, r) {
+  testAt(x, z, r, who) {
     const F = this.fw;
     const dx = x - F.bx;
     const dz = z - F.bz;
@@ -420,6 +433,7 @@ export class VanDriver {
       const ez = z - _o.z;
       if (ex * ex + ez * ez < lim * lim) {
         F.best = Math.max(0, ds - r - BUMP * 0.5);
+        F.who = who;
         return;
       }
     }
@@ -487,7 +501,7 @@ export class VanDriver {
     this.brake.visible = !this.stop && !!this.braking;
     // the traffic's notice of it
     for (let k = 0; k < 3; k++) {
-      const o = (k - 1) * 2.2;
+      const o = this.yieldT > 0 ? -2.6 : (k - 1) * 2.2;
       this.blockers[k].cx = x + fx * o;
       this.blockers[k].cz = z + fz * o;
     }

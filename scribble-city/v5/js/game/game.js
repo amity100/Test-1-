@@ -109,6 +109,7 @@ import { Fire } from './fire.js';
 import { Gadgets } from './gadgets.js';
 import { FreeDraw } from '../ui/freedraw.js';
 import { Finds } from './finds.js';
+import { Places } from './places.js';
 import { Signs } from './signs.js';
 import { Fuse } from './fuse.js';
 import { Gear } from './gear.js';
@@ -388,6 +389,9 @@ export class Game {
     this.freedraw = this.classic ? null : new FreeDraw(this);
     // (ROADMAP 29.5) drawings found in the city: the start kit, what is locked till found, the drawings on the walls
     this.finds = this.classic ? null : new Finds(this);
+    // (ROADMAP 29.5) the places built for the finds: the racing garage, the car park's roof, the helipad, the surf
+    // club, the mechanic's van (game/places.js) - built once the opening story is over, one a frame
+    this.places = this.classic ? null : new Places(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: tr('כישורים', 'Skills'), glyph: 'skills', fill: '#bfe7a6' });
     if (this.money) this.phone.addApp({ id: 'bank', name: tr('בנק', 'Bank'), glyph: 'bank', fill: '#fff3c4' });
     if (this.props) this.phone.addApp({ id: 'props', name: tr('נכסים', 'Property'), glyph: 'deed', fill: '#c8f0b0' });
@@ -407,6 +411,7 @@ export class Game {
     if (this.prolSet && !this.lab && (telling || this.params.has('prolset') || (this.prologue && this.prologue.done) || !PROLOGUE_ON)) this.prolSet.build({ wheel: telling || this.params.has('prolset') || !(this.prologue && this.prologue.done) });
     // (ROADMAP 12.5) Paintwood's Walls, and Art Night in them
     this.artnight = this.classic ? null : new ArtNight(this);
+    if (this.places) this.places.build();
     await breath('init');
     // (ROADMAP 12.7) INK ARCADE on Inkwood Boulevard
     this.arcade = this.classic ? null : new Arcade(this);
@@ -1447,6 +1452,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       if (this.money) this.money.update(dt);
       if (this.ink) this.ink.update(dt);
       if (this.gadgets) this.gadgets.update(dt);
+      if (this.places) this.places.update(dt);
       if (this.finds) this.finds.update(dt);
       if (this.freedraw) this.freedraw.update(this.realDt);
       if (this.signs) this.signs.update(dt);
@@ -1655,6 +1661,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       this.animals.draw(fr);
       this.chute.draw(fr);
       this.pickups.draw(fr);
+      if (this.places) this.places.draw(fr);
       if (this.finds) this.finds.draw(fr);
       if (this.money) this.money.draw(fr);
       if (this.knock) this.knock.draw(fr);
