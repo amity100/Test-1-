@@ -51,10 +51,10 @@ export const PROFILES = {
   rookie: { id: 'rookie', name: 'Kid Ricky', spd: 0.9, pow: 0.82, hp: 90, stam: 0.9, def: 0.85, aggr: 0.4, guard: 0.3, slip: 0.06, duck: 0.03, react: 0.38, read: 0, tell: 0.26, feint: 0, punish: 0.2, range: 0.98, foot: 0.45, adapt: 0.15, combos: ['1', '1', '1-2', '2', '1-1', '3'], bounce: 0.8, m: 1, glove: [0.85, 0.12, 0.12] },
   outboxer: { id: 'outboxer', name: 'Tommy "Quick" Vance', spd: 1.06, pow: 0.7, hp: 92, stam: 1.12, def: 1.0, aggr: 0.34, guard: 0.36, slip: 0.28, duck: 0.08, react: 0.27, read: 0.08, tell: 0.18, feint: 0.15, punish: 0.55, range: 1.06, foot: 1.0, adapt: 0.4, combos: ['1', '1-1', '1-2', '1-1-2', '1-2', 'b1-1', '1-2-3'], bounce: 1.45, m: 1, glove: [0.12, 0.3, 0.75] },
   brawler: { id: 'brawler', name: 'Big Sal Moreno', spd: 0.9, pow: 1.4, hp: 130, stam: 1.1, def: 1.05, aggr: 0.95, guard: 0.55, slip: 0.05, duck: 0.12, react: 0.28, read: 0.05, tell: 0.2, feint: 0.05, punish: 0.35, range: 0.72, foot: 0.3, adapt: 0.7, combos: ['3', '2-3', 'b3-3', '3-4', 'b2-b3', '1-2-3', '4-3'], bounce: 0.5, m: 1, glove: [0.1, 0.1, 0.12] },
-  counter: { id: 'counter', name: 'Lefty Okafor', spd: 1.05, pow: 1.05, hp: 100, stam: 1.0, def: 1.12, aggr: 0.3, guard: 0.6, slip: 0.4, duck: 0.22, react: 0.22, read: 0.18, tell: 0.16, feint: 0.25, punish: 0.75, range: 0.95, foot: 0.6, adapt: 0.5, combos: ['2', '2-3', '1-2', '3-2'], bounce: 0.9, m: -1, glove: [0.9, 0.75, 0.15] },
-  champion: { id: 'champion', name: 'Marcus "The Ink" Hale', spd: 1.1, pow: 1.04, hp: 105, stam: 1.2, def: 1.08, aggr: 0.5, guard: 0.58, slip: 0.34, duck: 0.2, react: 0.22, read: 0.18, tell: 0.13, feint: 0.3, punish: 0.8, range: 0.9, foot: 0.8, adapt: 0.85, combos: ['1-2', '1-2-3', '2-3-2', '1-1-2', 'b1-2-3', '3-b3', '1-b2-3', '2-3-4'], bounce: 1.1, m: 1, glove: [0.86, 0.68, 0.22] },
+  counter: { id: 'counter', name: 'Lefty Okafor', spd: 1.06, pow: 1.12, hp: 104, stam: 1.0, def: 1.14, aggr: 0.32, guard: 0.6, slip: 0.42, duck: 0.22, react: 0.21, read: 0.2, tell: 0.16, feint: 0.25, punish: 0.85, range: 0.95, foot: 0.6, adapt: 0.5, combos: ['2', '2-3', '1-2', '3-2'], bounce: 0.9, m: -1, glove: [0.9, 0.75, 0.15] },
+  champion: { id: 'champion', name: 'Marcus "The Ink" Hale', spd: 1.1, pow: 1.08, hp: 108, stam: 1.2, def: 1.1, aggr: 0.55, guard: 0.6, slip: 0.35, duck: 0.2, react: 0.21, read: 0.22, tell: 0.13, feint: 0.3, punish: 0.8, range: 0.9, foot: 0.8, adapt: 0.85, combos: ['1-2', '1-2-3', '2-3-2', '1-1-2', 'b1-2-3', '3-b3', '1-b2-3', '2-3-4'], bounce: 1.1, m: 1, glove: [0.86, 0.68, 0.22] },
 };
-export const LADDER = ['rookie', 'brawler', 'counter', 'outboxer', 'champion'];
+export const LADDER = ['rookie', 'outboxer', 'counter', 'brawler', 'champion'];
 
 // a combo string into its punches: '1-b2-3' -> ['jab', 'bcross', 'hook']
 const NUM = { 1: 'jab', 2: 'cross', 3: 'hook', 4: 'upper' };
@@ -79,7 +79,7 @@ export class Rand {
 // his right, mz in), the guard held, a punch pressed (and whether as a body shot), a slip (-1 left, 1 right), a duck, taps to
 // get up
 export function newIntent() {
-  return { mx: 0, mz: 0, guard: false, press: null, slip: 0, duck: false, tap: 0, feint: false, tell: 0 };
+  return { mx: 0, mz: 0, guard: false, press: null, press2: null, slip: 0, duck: false, tap: 0, feint: false, tell: 0 };
 }
 
 class Fighter {
@@ -123,6 +123,7 @@ class Fighter {
     this.punchId = 0;
     this.buf = null;
     this.bufT = 0;
+    this.buf2 = null;
     this.dbuf = 0;
     this.dbufT = 0;
     this.guard = false;
@@ -317,6 +318,7 @@ export class Bout {
     }
     for (const it of this.intent) {
       it.press = null;
+      it.press2 = null;
       it.slip = 0;
       it.duck = false;
       it.tap = 0;
@@ -356,22 +358,37 @@ export class Bout {
     f.st += h;
     f.counterT = Math.max(0, f.counterT - h);
     f.bufT -= h;
-    if (f.bufT <= 0) f.buf = null;
+    // (the first press waiting run out: the one behind it takes its place, with a window of its own)
+    if (f.bufT <= 0 && f.buf) this.nextBuf(f, 0.22);
     if (f.hitT >= 0) f.hitT += h;
     if (f.blockT >= 0) f.blockT += h;
     f.wobble = Math.max(0, f.wobble - h * 7);
     f.corner = false;
-    // (a press into the buffer: it comes out at the first moment it can - 0.22 s)
+    // (a press into the buffer: it comes out at the first moment it can - 0.22 s. Two deep: 1-2-3 tapped quickly while the jab is
+    // still out keeps its order - the cross waits first, the hook behind it - and is not the hook alone, the cross lost)
     // (a slip or a duck pressed while still busy - the end of a punch, a blow's stun: kept a moment, done when he is free)
     if (it.slip || it.duck) {
       f.dbuf = it.slip || 2;
       f.dbufT = 0.16;
     } else if ((f.dbufT -= h) <= 0) f.dbuf = 0;
-    if (it.press) {
-      f.buf = it.press;
-      f.bufT = 0.22;
-      f.bufTell = it.tell || 0;
-      f.bufFeint = !!it.feint;
+    // (and a second press that came while no step ran - a blow's stop of the picture holds the clock: both kept, in order)
+    for (let q = 0; q < 2; q++) {
+      const pr = q === 0 ? it.press : it.press2;
+      if (!pr) continue;
+      if (f.buf && f.state !== 'idle') {
+        f.buf2 = pr;
+        f.buf2Tell = q === 0 ? it.tell || 0 : 0;
+        f.buf2Feint = q === 0 && !!it.feint;
+      } else if (f.buf && q === 1) {
+        f.buf2 = pr;
+        f.buf2Tell = 0;
+        f.buf2Feint = false;
+      } else {
+        f.buf = pr;
+        f.bufT = 0.22;
+        f.bufTell = q === 0 ? it.tell || 0 : 0;
+        f.bufFeint = q === 0 && !!it.feint;
+      }
     }
     // the stamina and the health coming back
     const sinceP = this.t - f.lastPunch;
@@ -396,7 +413,8 @@ export class Bout {
         // (the next one out of this one, in its cancel window)
         if (f.buf && MOVES[f.buf] && f.move.chain.includes(MOVES[f.buf].base) && f.mt >= this.cancelAt(f)) {
           this.startPunch(f, f.buf, 0, false, true);
-          f.buf = null;
+          // (the one behind it waits for this one's own window)
+          this.nextBuf(f, this.cancelAt(f) + 0.14);
           break;
         }
         if (f.mt >= f.endAt) {
@@ -498,8 +516,17 @@ export class Bout {
     }
     if (f.buf) {
       this.startPunch(f, f.buf, f.bufTell || 0, f.bufFeint, false);
-      f.buf = null;
+      this.nextBuf(f, f.state === 'punch' ? this.cancelAt(f) + 0.14 : 0.22);
     }
+  }
+
+  // the press behind the first one moved up (with a window of t seconds), or none
+  nextBuf(f, t) {
+    f.buf = f.buf2 || null;
+    f.bufTell = f.buf2Tell || 0;
+    f.bufFeint = !!f.buf2Feint;
+    f.bufT = f.buf ? t : 0;
+    f.buf2 = null;
   }
 
   cancelAt(f) {
@@ -636,8 +663,20 @@ export class Bout {
     const h = this.ring.half;
     const c = f._c || (f._c = { x: 0, z: 0 });
     const sd = f.i === 0 ? -1 : 1;
-    // (the downed man's corner is his own; the other goes to a neutral one while the count goes on)
+    // (the downed man's corner is his own; the other goes to a neutral one while the count goes on - of the two, the one further
+    // from where the count is watched from, game/boxing.js camAt, so that he is not walked in front of it)
     const neutral = this.phase === 'count' && this.downed !== f.i;
+    if (neutral && this.camAt) {
+      const q = this._nq || (this._nq = { x: 0, z: 0 });
+      this.fromRing(sd * (h - 0.75), -sd * (h - 0.75), c);
+      this.fromRing(-sd * (h - 0.75), sd * (h - 0.75), q);
+      const A = this.camAt;
+      if ((q.x - A.x) ** 2 + (q.z - A.z) ** 2 > (c.x - A.x) ** 2 + (c.z - A.z) ** 2) {
+        c.x = q.x;
+        c.z = q.z;
+      }
+      return c;
+    }
     this.fromRing(sd * (h - 0.75), (neutral ? -sd : sd) * (h - 0.75), c);
     return c;
   }

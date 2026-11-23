@@ -473,7 +473,8 @@ function punchHand(P, B, nx, ny, nz, S) {
     // up from under: down by the waist with the dip, then driven up into the chin (or under the ribs), the palm to himself
     const tx = 0.02 - nx;
     const uy = ty - (B.body ? 0.02 : 0.15);
-    const uz = Math.min(tz - 0.04, 0.52);
+    // (never further than an uppercut goes: thrown from too far, it rises short - not a straight one)
+    const uz = Math.min(tz - 0.04, 0.47);
     const cx = 0.12;
     const cy = -0.36;
     const cz = 0.12;
@@ -491,7 +492,7 @@ function punchHand(P, B, nx, ny, nz, S) {
     }
     ex = side * 0.25;
     ey = -1;
-    ez = mix(-0.15, -0.55, s);
+    ez = mix(-0.15, -0.7, s);
     P.nrx = mix(-0.85, 0, s);
     P.nry = mix(-0.3, 0, s);
     P.nrz = mix(0.1, -1, s);

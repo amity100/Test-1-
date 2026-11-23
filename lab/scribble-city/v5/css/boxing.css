@@ -129,6 +129,7 @@ body.touch .bxh-up-bar { width: 220px; }
 body.touch .bxh-d-call { font-size: 36px; }
 body.touch .bxh-d-rate { font-size: 22px; min-height: 22px; }
 body.touch .bxh-drill { top: 64px; padding: 5px 16px 7px; }
-body.touch .bxh-help { font-size: 11px; bottom: auto; top: 58px; }
+/* (the hint at the bottom, in the strip between the stick and the buttons - never over the bars, the call or the count) */
+body.touch .bxh-help { font-size: 11px; left: 40%; max-width: 44vw; bottom: max(8px, env(safe-area-inset-bottom)); }
 body.touch .bxh-c-win { font-size: 34px; }
 body.touch .bxh-card.final { min-width: 280px; padding: 10px 20px 12px; }

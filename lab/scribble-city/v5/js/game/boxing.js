@@ -143,6 +143,28 @@ export class Boxing {
     return true;
   }
 
+  // (ROADMAP 29.5) the gym's ladder: the next man you have not beaten (game/boxsim.js LADDER), in this ring. o: anything
+  // startBout takes (onEnd...). The champion beaten, the champion again (a rematch).
+  startLadderBout(ring, o = {}) {
+    const id = this.nextOpponent();
+    const P = PROFILES[id];
+    return this.startBout({ ...o, ring, opponent: { name: P.name, profile: id, look: o.look || null } });
+  }
+
+  // for the gym's board: who is next, your record, whether the champion has been beaten; the ladder in order (who is beaten)
+  ladderInfo() {
+    const s = this.stats;
+    const id = this.nextOpponent();
+    return {
+      next: id,
+      nextName: PROFILES[id].name,
+      record: { ...s.record },
+      championBeaten: s.beaten.includes('champion'),
+      ladder: LADDER.map((k) => ({ id: k, name: PROFILES[k].name, beaten: s.beaten.includes(k) })),
+      stats: { power: s.power, speed: s.speed, stamina: s.stamina, defence: s.defence },
+    };
+  }
+
   // the gym's work: kind 'mitts' (a coach calls the combos: o.coach { look, name }), 'heavybag' or 'speedbag' (o.bag { x, z, y }:
   // the bag; o.onHit(move, power) for the gym to swing it); o.at { x, z, y, yaw }: where you stand; o.onEnd(result)
   startTraining(kind, o = {}) {
@@ -150,7 +172,8 @@ export class Boxing {
     const P = g.player;
     if (this.active) this.stop('replaced');
     if (!P || P.mode !== 'foot' || P.inVehicle) return false;
-    const at = o.at || { x: P.pos.x, z: P.pos.z, y: P.pos.y, yaw: P.yaw };
+    const at0 = o.at || { x: P.pos.x, z: P.pos.z, y: P.pos.y, yaw: P.yaw };
+    const at = { x: at0.x, z: at0.z, y: at0.y !== undefined ? at0.y : groundHeight(at0.x, at0.z), yaw: at0.yaw || 0 };
     const fx = Math.sin(at.yaw || 0);
     const fz = Math.cos(at.yaw || 0);
     const dist = kind === 'mitts' ? 0.98 : kind === 'speedbag' ? 0.52 : 0.82;
@@ -210,7 +233,7 @@ export class Boxing {
     const P = this.game.player;
     const x = r && r.x !== undefined ? r.x : P.pos.x;
     const z = r && r.z !== undefined ? r.z : P.pos.z;
-    return { x, z, y: r && r.y !== undefined ? r.y : groundHeight(x, z), half: (r && r.half) || 3, yaw: (r && r.yaw) || 0 };
+    return { x, z, y: r && r.y !== undefined ? r.y : groundHeight(x, z), half: (r && r.half) || 3, yaw: (r && r.yaw) || 0, ceil: (r && r.ceil) || 0 };
   }
 
   begin(ring, opp, prof) {
@@ -283,6 +306,9 @@ export class Boxing {
     this.camFocus.set((b.f[0].x + b.f[1].x) / 2, ring.y, (b.f[0].z + b.f[1].z) / 2);
     g.camRig.focus = this.camFocus;
     this.camYaw = null;
+    this.camSide = 1;
+    this.sideT = 0;
+    this.sideHold = 0;
     this.quit = false;
     this.hsT = 0;
     this.slowT = 0;
@@ -307,6 +333,12 @@ export class Boxing {
     if (this.saved) {
       fig.carry = this.saved.carry;
       fig.carryL = this.saved.carryL;
+      // (the weapon he had before the bout back in his hands - quietly, no card for it)
+      const W = g.weapons;
+      if (W && this.saved.index !== W.index && this.saved.index < W.slots.length) {
+        W.index = this.saved.index;
+        if (g.hud && g.hud.updateWeapon) g.hud.updateWeapon();
+      }
     }
     const c = this.opp;
     if (c) {
@@ -383,6 +415,15 @@ export class Boxing {
     if (b.training) this.pinTarget();
     this.events();
     this.sync(dt);
+    // (where the camera would be - side on to the two, as camOpts wants it - for the sim to keep the man who is not down out of
+    // its way during a count; from the bout's own numbers, so the same fight comes out wherever it is stepped)
+    const ca = this.camAt || (this.camAt = { x: 0, z: 0 });
+    const A0 = b.f[0];
+    const B0 = b.f[1];
+    const cw = Math.atan2(B0.x - A0.x, B0.z - A0.z) + (this.camSide || 1) * (Math.PI / 2 - 0.42);
+    ca.x = (A0.x + B0.x) / 2 - Math.sin(cw) * 3.5;
+    ca.z = (A0.z + B0.z) / 2 - Math.cos(cw) * 3.5;
+    b.camAt = ca;
     if (this.hud) this.hud.frame(this, rdt);
     // the crowd's murmur, now and then
     if (this.mode === 'bout') {
@@ -450,7 +491,10 @@ export class Boxing {
     if (P.has('KeyL') || P.has('BoxHook') || this.gpP(PAD.hook)) press = 'hook';
     if (P.has('KeyI') || P.has('BoxUpper') || this.gpP(PAD.upper)) press = 'upper';
     if (press) {
-      it.press = body ? 'b' + press : press;
+      // (a press not yet taken by a step of the bout - in a blow's stop of the picture none runs - is kept: the next goes behind it)
+      const p = body ? 'b' + press : press;
+      if (it.press) it.press2 = p;
+      else it.press = p;
       it.tap += 1;
       this.lastPress = press;
     }
@@ -642,22 +686,17 @@ export class Boxing {
     let face;
     fig.reachR = null;
     fig.reachL = null;
-    const cam = this.game.camera.position;
+    // (the camera's way into the picture, flat: he keeps beyond whoever it is on - never between it and them)
+    const cy = this.camYaw === null ? this.game.camRig.yaw : this.camYaw;
+    const vx = Math.sin(cy);
+    const vz = Math.cos(cy);
     if (b.phase === 'count' && b.downed >= 0) {
-      // over him, on the far side from the camera, a step off
+      // over him, beyond him from the camera, a step off to the side his head is
       const D = b.f[b.downed];
-      const O = b.f[1 - b.downed];
-      let px = -(O.z - D.z);
-      let pz = O.x - D.x;
-      const pl = Math.hypot(px, pz) || 1;
-      px /= pl;
-      pz /= pl;
-      if (px * (cam.x - D.x) + pz * (cam.z - D.z) > 0) {
-        px = -px;
-        pz = -pz;
-      }
-      tx = D.x + px * 0.95;
-      tz = D.z + pz * 0.95;
+      const hx = -Math.sin(D.yaw);
+      const hz = -Math.cos(D.yaw);
+      tx = D.x + vx * 0.85 + hx * 0.35;
+      tz = D.z + vz * 0.85 + hz * 0.35;
       face = Math.atan2(D.x - tx, D.z - tz);
       // (the arm: up through the second, down on the number)
       const j = fig.j;
@@ -675,15 +714,9 @@ export class Boxing {
       const mx = (A.x + B.x) / 2;
       const mz = (A.z + B.z) / 2;
       const d = b.dist() || 1;
-      let px = -(B.z - A.z) / d;
-      let pz = (B.x - A.x) / d;
-      if (px * (cam.x - mx) + pz * (cam.z - mz) > 0) {
-        px = -px;
-        pz = -pz;
-      }
-      // (and toward his end of it - clear of both, in the picture's corner)
-      tx = mx + px * 2.0 + ((B.x - A.x) / d) * 0.95;
-      tz = mz + pz * 2.0 + ((B.z - A.z) / d) * 0.95;
+      // (beyond the two of them, and toward his end - clear of both, in the picture's corner)
+      tx = mx + vx * 2.0 + ((B.x - A.x) / d) * 0.95;
+      tz = mz + vz * 2.0 + ((B.z - A.z) / d) * 0.95;
       face = Math.atan2(mx - tx, mz - tz);
       // (it is over: the winner's arm up - his own up in the air for him)
       if (b.result && this.overT > 0.6 && fig.j && fig.j.shoulderR) {
@@ -922,12 +955,39 @@ export class Boxing {
     // (the line from you to him; the camera at its side, you on the left of the picture)
     const th = Math.atan2(B.x - A.x, B.z - A.z);
     const train = !!b.training;
-    const want = th + (Math.PI / 2 - (train ? 0.62 : 0.42));
+    const bias = Math.PI / 2 - (train ? 0.62 : 0.42);
     // (the camera's own: the mouse or the look pad do not turn it in the ring)
     if (this.camYaw === null) {
       this.camYaw = R.yaw;
       this.camPitch = R.pitch;
     }
+    // (its side: yours, you on the left - unless a post or a wall stands in its way there and the other side is clear; then a
+    // cut to the other side, kept a while, never flicking between them)
+    this.sideT -= rdt;
+    this.sideHold -= rdt;
+    if (this.sideT <= 0 && this.sideHold <= 0) {
+      this.sideT = 0.3;
+      const col = g.world && g.world.collision;
+      if (col && col.raycast) {
+        const L = (2.25 + Math.min(1.6, d) * 0.8) * 0.95;
+        const fy = this.ringY + 1.2;
+        const free = (sd) => {
+          const yw = th + sd * bias;
+          const h = col.raycast(this.camFocus.x, fy, this.camFocus.z, -Math.sin(yw) * 0.99, 0.14, -Math.cos(yw) * 0.99, L);
+          return h ? h.t : L;
+        };
+        const here = free(this.camSide);
+        if (here < L * 0.75) {
+          const there = free(-this.camSide);
+          if (there > here + 0.8) {
+            this.camSide = -this.camSide;
+            this.sideHold = 2.5;
+            this.camYaw = th + this.camSide * bias;
+          }
+        }
+      }
+    }
+    const want = th + this.camSide * bias;
     const dy = wrap(want - this.camYaw);
     this.camYaw += dy * (1 - Math.exp(-rdt * (Math.abs(dy) > 1.2 ? 2.5 : 4.5)));
     const pw = counting ? -0.22 : -0.14;
@@ -941,14 +1001,15 @@ export class Boxing {
     const wide = b.phase === 'rest' || b.phase === 'intro' || (b.phase === 'over' && this.overT > 1.5) ? 1 : 0;
     this.wide = (this.wide || 0) + (wide - (this.wide || 0)) * (1 - Math.exp(-rdt * 1.5));
     const co = this.co;
-    co.dist = (2.25 + Math.min(1.6, d) * 0.8) * (1 - 0.33 * this.punchIn) + 1.6 * this.wide + (counting ? 0.3 : 0);
+    co.dist = (2.25 + Math.min(1.6, d) * 0.8) * (1 - 0.33 * this.punchIn) + 1.0 * this.wide + (counting ? 0.3 : 0);
     co.height = 1.22 - 0.12 * this.punchIn + 0.35 * this.wide - (counting ? 0.25 : 0);
     co.fovMul = 1 - 0.1 * this.punchIn;
     co.minY = this.ringY + 0.35;
     co.shoulder = 0;
     // (under the gym's ceiling, as the game's own camera keeps under a room's: game/game.js player.indoor)
+    // (or the ring's own: ring.ceil, the ceiling's height over the gym, as the gym gives it)
     const IR = g.player.indoor;
-    co.maxY = IR && IR.height ? IR.floor + IR.height - 0.3 : undefined;
+    co.maxY = this.ring && this.ring.ceil ? this.ring.ceil - 0.3 : IR && IR.height ? IR.floor + IR.height - 0.3 : undefined;
     return co;
   }
 
