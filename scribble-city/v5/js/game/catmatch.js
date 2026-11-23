@@ -327,6 +327,30 @@ export function tooEarly(m, have) {
   return have < Math.min(2, m.n) || (m.hit < parts && m.score < 0.75) || m.cov < 0.62 || m.prec < 0.5 || m.score < MATCH_MIN;
 }
 
+// (ROADMAP 29.5, the owner's word: a drawing found in the city, copied by finger - read against that drawing alone, never
+// "it looks like something else"; alike within reason, not to the hair) how alike it must be (the score), and how much of
+// its parts may be missing or drawn where it has none; tools/test-catalog.mjs TARGET=1 measures them: its own copies
+// taken, other things' drawings and doodles refused
+export const COPY_MIN = 0.6;
+export const COPY_MISS = 0.34;
+export const COPY_EXTRA = 0.34;
+export function copyReady(m, have) {
+  return m.score >= COPY_MIN && drawnWhole(m, have) && m.miss <= COPY_MISS && m.extra <= COPY_EXTRA && !tooEarly(m, have);
+}
+// (and a drawing plainly of another thing on its shelf - a rifle drawn where an eraser launcher is to be copied - is not
+// taken, though it is never named: the copy is read against the shelf, and refused when another thing ranks this far
+// above it. TARGET=1 RIVAL=0.2: its own copies 93.6% taken, other things' 3.9%, doodles 0.3%)
+export const COPY_RIVAL = 0.2;
+export function copyRead(strokes, id, shelf) {
+  const all = matchCatalog(strokes, shelf && shelf.includes(id) ? shelf : [id]);
+  if (!all) return null;
+  const m = all.list.find((x) => x.id === id);
+  if (!m) return null;
+  const riv = all.list.find((x) => x.id !== id);
+  const rival = !!(riv && riv.rank > m.rank + COPY_RIVAL);
+  return { m, have: all.have, rival, ready: copyReady(m, all.have) && !rival };
+}
+
 // (ROADMAP 11.43) a thing picked (tapped in the legend) is made only if that is what is drawn: as
 // like it as the likeliest, or near it (two things that look alike: either) - the drawing of
 // another thing does not become the one tapped

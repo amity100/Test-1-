@@ -6,7 +6,7 @@ const KEY = 'scribble-city-v5-settings';
 // (2: ROADMAP 15.5 - "every blueprint open" was on by itself until then; a save from before keeps
 // everything else, and begins the story. 3: round 22 - the frames' pace as the device likes it, a
 // steady 30 on a phone: a save from before keeps everything but its pace)
-const VERSION = 3;
+const VERSION = 4;
 
 export const DEFAULTS = {
   sound: true,
@@ -46,7 +46,7 @@ export const DEFAULTS = {
   // every drawing and part open, the ink without end; off (as a new game begins), the story: found,
   // learned and opened up along the way). (v5, ROADMAP 18.9: on for a new player - the trial is to
   // have all of it to play with: every drawing, every part on the car)
-  allOpen: true,
+  allOpen: false,
   // (ROADMAP 11.24, the lab) drawing on your car: 'parts' - a category said (a weapon, movement,
   // protection), then drawn, and which of its things it is read (game/partpen.js, ROADMAP 11.25);
   // 'old', as in 11.22 - what is drawn is read as what it looks like, where it is
@@ -69,7 +69,8 @@ export class Settings {
     if (!s || typeof s !== 'object' || !s.v || !(s.version <= VERSION)) return;
     for (const k of Object.keys(DEFAULTS)) {
       if (!(k in s.v)) continue;
-      if (k === 'allOpen' && !(s.version >= 2)) continue;
+      // (ROADMAP 29.5: drawings found in the city - the sandbox off for everyone once, then as chosen)
+      if (k === 'allOpen' && !(s.version >= 4)) continue;
       if (k === 'pace' && !(s.version >= 3)) continue;
       if (k === 'voices') continue;
       const d = DEFAULTS[k];

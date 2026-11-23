@@ -2270,3 +2270,8 @@ body.paused .bt, body.paused .bt-stage, body.paused .bt-fx, body.paused .bt-trac
 .bt-mode kbd { position: absolute; right: -6px; top: -6px; font: 700 10px Rubik, sans-serif; background: var(--ink); color: var(--paper-2); border-radius: 5px; padding: 1px 4px; }
 body.paused .bt-mode, body.fd-open .bt-mode, body.bt-open .bt-mode, body.phone-cam .bt-mode, body.phone-cam .bt-btn { display: none; }
 body:not(.touch) .bt-mode { left: auto; right: 24px; bottom: 150px; }
+
+/* (ROADMAP 29.5) copying a drawing found in the city: the picture at the top alone, nothing else to pick */
+body.fd-copy .fd-leg, body.fd-copy #fd-album { display: none !important; }
+.fe-st.ok { color: #2f8a3e; }
+.fe-st.no { color: #b8541f; }

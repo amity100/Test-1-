@@ -15,8 +15,9 @@ import { tr } from '../core/lang.js';
 export const WEAPON_DEFS = {
   pencil: { id: 'pencil', name: tr('עיפרון-מחק', 'Pencil-eraser'), kind: 'melee', damage: 34, rate: 2.4, range: 2.7 },
   paint: { id: 'paint', name: tr('אקדח צבע', 'Paint gun'), kind: 'gun', projectile: 'paint', damage: 10, rate: 7.5, speed: 46, gravity: 6, spread: 0.016, ammo: 90, hands: 1 },
-  rifle: { id: 'rifle', name: tr('רובה עפרונות', 'Pencil rifle'), kind: 'gun', projectile: 'pencil', damage: 27, rate: 3.4, speed: 92, gravity: 2.5, spread: 0.005, ammo: 40, hands: 2 },
-  bazooka: { id: 'bazooka', name: tr('בזוקת מחקים', 'Eraser bazooka'), kind: 'gun', projectile: 'eraser', damage: 150, radius: 6.5, rate: 0.8, speed: 36, gravity: 4, spread: 0.004, ammo: 8, hands: 2 },
+  // (ROADMAP 29.5, the plan's M16: three pencils a pull - rate is inside the burst, burstGap the pause before the next)
+  rifle: { id: 'rifle', name: tr('M16 עפרונות', 'M16 pencil rifle'), kind: 'gun', projectile: 'pencil', damage: 17, rate: 13, burst: 3, burstGap: 0.26, speed: 96, gravity: 2.5, spread: 0.007, ammo: 120, hands: 2, kick: 0.05, recoil: 0.012 },
+  bazooka: { id: 'bazooka', name: tr('RL-7 מחק', 'RL-7 Eraser'), kind: 'gun', projectile: 'eraser', damage: 150, radius: 6.5, rate: 0.8, speed: 36, gravity: 4, spread: 0.004, ammo: 8, hands: 2 },
   // police gear you can pick up
   pen: { id: 'pen', name: tr('עט-אקדח', 'Pen pistol'), kind: 'gun', projectile: 'ink', damage: 15, rate: 4, speed: 78, gravity: 3, spread: 0.008, ammo: 24, hands: 1, gear: true },
   m4: { id: 'm4', name: tr('רובה צבע M4', 'M4 paint rifle'), kind: 'gun', projectile: 'paint', damage: 8, rate: 10, speed: 64, gravity: 4, spread: 0.02, ammo: 60, hands: 2, gear: true },
@@ -38,6 +39,8 @@ export const WEAPON_DEFS = {
   paintmg: { id: 'paintmg', name: tr('מקלע צבע', 'Paint machine gun'), kind: 'gun', projectile: 'paintmg', damage: 11, rate: 14, speed: 58, gravity: 5, spread: 0.034, ammo: 380, hands: 2, sound: 'paint' },
   // (ROADMAP 28.19) the heavy one: belt-fed, heavy graphite slugs, a tracer every fourth; steady off its bipod on a
   // knee, wild on the move; it weighs on whoever carries it (game/arms.js its model, game/armfx.js what it does)
+  // (ROADMAP 29.5, the plan's start kit) the marker SMG: a short, fast stream of marker ink - steady up close, wider at range
+  mp5: { id: 'mp5', name: tr('תת-מקלע טושים', 'Marker SMG'), kind: 'gun', projectile: 'marker', damage: 10, rate: 12.5, speed: 84, gravity: 2.6, spread: 0.02, ammo: 240, hands: 2, kick: 0.032, recoil: 0.01, sound: 'smg', colors: [[0.12, 0.32, 0.86], [0.08, 0.1, 0.14], [0.84, 0.14, 0.18]] },
   mag: { id: 'mag', name: tr('מאג', 'MAG'), kind: 'gun', projectile: 'slug', damage: 22, rate: 10.8, speed: 135, gravity: 1.2, spread: 0.026, ammo: 300, hands: 2, kick: 0.09, sound: 'mag', tracer: 4, heavy: 0.84 },
 };
 
@@ -258,6 +261,8 @@ export class Weapons {
     if (i < 0 || i >= this.slots.length) return;
     this.index = i;
     this.jam = 0;
+    // (a burst not finished is not carried to another gun)
+    for (const s of this.slots) s.burstLeft = 0;
     this.game.hud.updateWeapon();
     this.game.audio.play('switch');
     // (the first time the fists come out: how a fight goes, ROADMAP 5.4)
@@ -363,6 +368,8 @@ export class Weapons {
     } else if (canAct && (def.kind === 'gun' || def.kind === 'throw')) {
       const ready = !def.spin || slot.spin > 0.4;
       const out = def.projectile === 'scissors' && slot.out;
+      // (a burst cut off by an empty magazine is not finished by itself after the reload)
+      if (slot.burstLeft > 0 && game.arsenal && !game.arsenal.ready(slot)) slot.burstLeft = 0;
       // (ROADMAP 11.11, parts 2) a blade drawn on its mouth: someone right in front of you - a
       // stab, not a shot
       if (def.bayonet && onFoot && input.fire && this.cooldown <= 0 && this.swingT < 0 && this.within(def.bayonet.range)) {
@@ -372,10 +379,11 @@ export class Weapons {
         this.cooldown = 0.6;
         game.audio.play('slash');
       // (not while it reloads, nor with its magazine empty: ROADMAP 6.6)
-      } else if (input.fire && this.cooldown <= 0 && ready && !out && (!game.arsenal || game.arsenal.ready(slot))) {
+      } else if ((input.fire || slot.burstLeft > 0) && this.cooldown <= 0 && ready && !out && (!game.arsenal || game.arsenal.ready(slot))) {
         if (this.jam > 0) {
           // still jammed
-        } else if (Math.random() < GRADE[slot.grade].jam) {
+          slot.burstLeft = 0;
+        } else if (!(slot.burstLeft > 0) && Math.random() < GRADE[slot.grade].jam) {
           this.jam = 1.3;
           this.cooldown = 0.4;
           const h = player.fig.j.handR;
@@ -460,7 +468,9 @@ export class Weapons {
   // what a turret of it is to game/vehicles.js: as quick as it is in the hand
   mountSpec(hand) {
     const def = WEAPON_DEFS[hand.id] || WEAPON_DEFS.paint;
-    return { type: 'hand', hand, reload: 1 / def.rate, r: 0.05, len: 1, dmg: def.damage, speed: def.speed, spread: def.spread, quiet: !!def.quiet };
+    // (a gun that fires in bursts: on a mount, its rounds spread evenly over the time its bursts take)
+    const rate = def.burst ? def.burst / (def.burst / def.rate + (def.burstGap || 0.25)) : def.rate;
+    return { type: 'hand', hand, reload: 1 / rate, r: 0.05, len: 1, dmg: def.damage, speed: def.speed, spread: def.spread, quiet: !!def.quiet };
   }
 
   // out of the hand (onto the mount), and back into it
@@ -544,6 +554,11 @@ export class Weapons {
     const g = GRADE[slot.grade];
     const player = game.player;
     this.cooldown = 1 / (def.rate * (def.spin ? 0.3 + 0.7 * slot.spin : 1));
+    // (ROADMAP 29.5: a burst - its rounds at the gun's own rate, then the pause; the trigger held, the next burst)
+    if (def.burst) {
+      slot.burstLeft = (slot.burstLeft > 0 ? slot.burstLeft : def.burst) - 1;
+      if (slot.burstLeft <= 0) this.cooldown = def.burstGap || 0.25;
+    }
     this.lastFire = game.time;
     const sp = def.speed * g.speed;
     const sad = slot.grade === 'fail';
@@ -688,7 +703,7 @@ export class Weapons {
     if (kind === 'tippex') fx.spray(x, y, z, -ux, -uy + 0.3, -uz, 8, 4.5, WHITE_OUT, { cone: 0.7, wide: 5, len: 0.12 });
     else if (kind === 'paint' || kind === 'paintmg' || kind === 'crayon' || kind === 'paintball') fx.spray(x, y, z, -ux, -uy + 0.3, -uz, 6, 4, color || PAINT_COLORS, { cone: 0.7, wide: 4, len: 0.1 });
     else if (kind === 'ink') fx.spray(x, y, z, -ux, -uy + 0.3, -uz, 5, 3.5, PEN_BLUE, { cone: 0.6, wide: 3.5, len: 0.09 });
-    else if (kind === 'marker') fx.spray(x, y, z, -ux, -uy + 0.3, -uz, 7, 4.5, MARKER_RED, { cone: 0.6, wide: 4, len: 0.12 });
+    else if (kind === 'marker') fx.spray(x, y, z, -ux, -uy + 0.3, -uz, 7, 4.5, color || MARKER_RED, { cone: 0.6, wide: 4, len: 0.12 });
     else if (kind === 'pencil' || kind === 'shaving') {
       fx.spray(x, y, z, -ux, -uy + 0.4, -uz, 4, 3, GRAPHITE, { cone: 0.8, bits: true, len: 0.04, life: 0.6 });
       fx.spray(x, y, z, -ux, -uy + 0.4, -uz, 3, 3, WOOD, { cone: 0.8, bits: true, len: 0.05, life: 0.7 });
@@ -1664,8 +1679,11 @@ export class Weapons {
       fr.lineXYZ(pr.x - ux * 0.1, pr.y - uy * 0.1, pr.z - uz * 0.1, pr.x - ux * 0.9, pr.y - uy * 0.9, pr.z - uz * 0.9, PEN_BLUE, 1.4, pr.seed + 1, 0.55, 0.04, 0);
     } else if (pr.kind === 'marker') {
       // (ROADMAP 11.43) the police marksman's round: a stroke of red marker, long and fast
-      fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.16, pr.y - uy * 0.16, pr.z - uz * 0.16, MARKER_RED, 8, pr.seed, 1, 0.02, 0);
-      fr.lineXYZ(pr.x - ux * 0.16, pr.y - uy * 0.16, pr.z - uz * 0.16, pr.x - ux * 2.6, pr.y - uy * 2.6, pr.z - uz * 2.6, MARKER_RED, 2.2, pr.seed + 1, 0.6, 0.02, 0);
+      // (ROADMAP 29.5: the marker SMG's in its own inks - shorter streaks, a stream of them)
+      const mc = pr.color || MARKER_RED;
+      const tl = pr.color ? 1.4 : 2.6;
+      fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.16, pr.y - uy * 0.16, pr.z - uz * 0.16, mc, 8, pr.seed, 1, 0.02, 0);
+      fr.lineXYZ(pr.x - ux * 0.16, pr.y - uy * 0.16, pr.z - uz * 0.16, pr.x - ux * tl, pr.y - uy * tl, pr.z - uz * tl, mc, 2.2, pr.seed + 1, 0.6, 0.02, 0);
     } else if (pr.kind === 'paintball') {
       fr.lineXYZ(pr.x, pr.y, pr.z, pr.x - ux * 0.07, pr.y - uy * 0.07, pr.z - uz * 0.07, pr.color, 7, pr.seed, 1, 0.08, 0);
       fr.lineXYZ(pr.x - ux * 0.08, pr.y - uy * 0.08, pr.z - uz * 0.08, pr.x - ux * 0.5, pr.y - uy * 0.5, pr.z - uz * 0.5, pr.color, 1.2, pr.seed + 1, 0.5, 0.04, 0);
@@ -1706,7 +1724,7 @@ export class Weapons {
     const hurtKind = hurtOf(kind);
     if (hit.type === 'civ') {
       game.civilians.damage(hit.civ, new THREE.Vector3(hit.x, hit.y, hit.z), hurtKind, pr.damage);
-      if (kind === 'paint' || kind === 'crayon' || kind === 'paintmg' || kind === 'tippex') hit.civ.fig.paint(pr.color);
+      if (kind === 'paint' || kind === 'crayon' || kind === 'paintmg' || kind === 'tippex' || (kind === 'marker' && pr.color)) hit.civ.fig.paint(pr.color);
       if (kind === 'glue') hit.civ.glueT = pr.stick;
       fx.impact(hit.x, hit.y, hit.z, 0.6);
       this.hitFx(kind, hit, ux, uy, uz, pr.color);
@@ -1718,7 +1736,7 @@ export class Weapons {
       // (a hit of yours: the shooting skill, ROADMAP 5.6)
       if (game.skills && pr.owner === 'player' && e.alive) game.skills.add('shoot', Math.min(1.5, pr.damage / 25));
       game.enemies.damage(e, hit.part, pr.damage, new THREE.Vector3(hit.x, hit.y, hit.z), new THREE.Vector3(ux, uy, uz), hurtKind);
-      if (kind === 'paint' || kind === 'ink' || kind === 'crayon' || kind === 'paintmg' || kind === 'tippex') e.paint(kind === 'ink' ? PEN_BLUE : pr.color);
+      if (kind === 'paint' || kind === 'ink' || kind === 'crayon' || kind === 'paintmg' || kind === 'tippex' || (kind === 'marker' && pr.color)) e.paint(kind === 'ink' ? PEN_BLUE : pr.color);
       if (kind === 'staple') e.pinT = Math.max(e.pinT || 0, pr.pin || 0.4);
       if (kind === 'glue') {
         e.glueT = pr.stick || 4;

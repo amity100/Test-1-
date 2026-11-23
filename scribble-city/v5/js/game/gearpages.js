@@ -49,7 +49,7 @@ export class GearPages {
   }
 
   get on() {
-    return !this.G.play.all();
+    return !this.G.play.free();
   }
 
   left() {

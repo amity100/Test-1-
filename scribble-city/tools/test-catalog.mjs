@@ -4,9 +4,10 @@
 // What it tells: how often each thing is read as itself; what it is taken for when it is not; and the things that light up
 // for drawings that are not them - the owner's word: "things that keep popping up as if we tried to draw them".
 // usage: node tools/test-catalog.mjs [samples per level] (MEMORY=1: and with the pen's memory of a few picks - drawmemory.js;
-// VARIANT=1: lines broken in two and the drawing turned a little)
+// VARIANT=1: lines broken in two and the drawing turned a little; TARGET=1: copying a drawing found in the city - each thing
+// read against itself alone, its own copies taken, other things' copies and doodles refused - ui/freedraw.js readTarget)
 import { BLUEPRINTS } from '../v5/js/game/blueprints.js';
-import { matchCatalog, shelfIds, SHELVES, tooEarly, drawnWhole, MATCH_MIN, PICK_SLACK } from '../v5/js/game/catmatch.js';
+import { matchCatalog, shelfIds, SHELVES, tooEarly, drawnWhole, copyReady, MATCH_MIN, PICK_SLACK } from '../v5/js/game/catmatch.js';
 import { DrawMemory } from '../v5/js/game/drawmemory.js';
 
 const N = +(process.argv[2] || 16);
@@ -194,6 +195,66 @@ if (memory) {
   for (const id of ['rifle', 'katana', 'car', 'bike', 'paint']) {
     for (let k = 0; k < 2; k++) memory.learn(memory.signature(humanCopy(BLUEPRINTS[id], 'okay', rnd).map((p) => ({ p }))), id);
   }
+}
+
+// (ROADMAP 29.5) TARGET=1: copying one drawing - read against it alone (catmatch.js copyReady)
+if (process.env.TARGET) {
+  const ids = SHELVES.flatMap((sh) => shelfIds(sh));
+  const only = process.env.IDS ? process.env.IDS.split(',') : ids;
+  const others = ids.map((id) => ({ id, S: [0, 1].map(() => humanCopy(BLUEPRINTS[id], 'okay', rnd)) }));
+  const doodles = [];
+  for (const [name, f] of Object.entries(DOODLES)) for (let k = 0; k < 2; k++) doodles.push({ name, S: hand(f(), rnd) });
+  for (let k = 0; k < 10; k++) doodles.push({ name: 'scribble', S: scribble(rnd) });
+  const rows = [];
+  let tot = { own: 0, ownN: 0, oth: 0, othN: 0, doo: 0, dooN: 0 };
+  for (const id of only) {
+    const bp = BLUEPRINTS[id];
+    if (!bp) continue;
+    const shelfAll = shelfIds(SHELVES.find((sh) => shelfIds(sh).includes(id)));
+    const take = (S) => {
+      const st = S.map((p) => ({ p }));
+      if (process.env.RIVAL) {
+        const all = matchCatalog(st, shelfAll);
+        if (!all) return false;
+        const me = all.list.find((x) => x.id === id);
+        if (!me || !copyReady(me, all.have)) return false;
+        const riv = all.list.find((x) => x.id !== id);
+        return !(riv && riv.rank > me.rank + +process.env.RIVAL);
+      }
+      const all = matchCatalog(st, [id]);
+      return !!(all && copyReady(all.best, all.have));
+    };
+    const r = { id, own: {}, other: 0, otherN: 0, by: [], doodle: 0, doodleN: doodles.length, doodBy: [] };
+    for (const lv of Object.keys(LEVELS)) {
+      let n = 0;
+      for (let k = 0; k < N; k++) n += take(humanCopy(bp, lv, rnd)) ? 1 : 0;
+      r.own[lv] = Math.round((100 * n) / N);
+      tot.own += n;
+      tot.ownN += N;
+    }
+    for (const o of others) {
+      if (o.id === id) continue;
+      for (const S of o.S) {
+        r.otherN++;
+        if (take(S)) {
+          r.other++;
+          if (!r.by.includes(o.id)) r.by.push(o.id);
+        }
+      }
+    }
+    for (const d of doodles) if (take(d.S)) {
+      r.doodle++;
+      if (!r.doodBy.includes(d.name)) r.doodBy.push(d.name);
+    }
+    tot.oth += r.other;
+    tot.othN += r.otherN;
+    tot.doo += r.doodle;
+    tot.dooN += r.doodleN;
+    rows.push(r);
+  }
+  console.table(rows.map((r) => ({ id: r.id, 'good %': r.own.good, 'okay %': r.own.okay, 'sloppy %': r.own.sloppy, 'others taken %': Math.round((100 * r.other) / Math.max(1, r.otherN)), 'taken from': r.by.slice(0, 5).join(' '), 'doodles taken': r.doodBy.join(' ') })));
+  console.log(`own copies taken ${((100 * tot.own) / tot.ownN).toFixed(1)}% · other things' copies taken ${((100 * tot.oth) / tot.othN).toFixed(1)}% · doodles taken ${((100 * tot.doo) / tot.dooN).toFixed(1)}%`);
+  process.exit(0);
 }
 
 const report = {};
