@@ -334,6 +334,10 @@ export class CityMap {
       add({ cat: 'place', glyph: 'gym', x: -195.5, z: 44.4, name: tr('מכון האיגרוף 9TH STREET', '9TH STREET GYM'), note: tr('פינת מרידיאן ורחוב 9. זירה, קרבות מול יריבים, אימון כריות עם מאמן, שקים', 'Meridian & 9th. A ring, bouts against a ladder of fighters, the mitts with a coach, the bags') });
     }
     const F = g.finds;
+    // (the old blueprint signs to photograph: not a way to get a drawing while they are found in the city - off the map then)
+    if (!this.bpSigns) this.bpSigns = this.items.filter((it) => it.cat === 'blueprint');
+    this.items = this.items.filter((it) => it.cat !== 'blueprint');
+    if (!(F && F.on)) this.items.push(...this.bpSigns);
     if (F && F.on) {
       for (const sp of F.ensureSpots()) {
         if (F.has(sp.f.id)) continue;
