@@ -649,6 +649,13 @@ export const RIDEKITS = {
       }
       return Fk;
     };
+    // (a skirt of light round the foot of each pod - it shows at dusk and grows with the dark: game/vehicles.js)
+    const halo = (r) => {
+      const Hk = new Kit();
+      Hk.add(M.glow, lathe([[0.012, r + 0.2], [0.012, r - 0.03]], { axis: 'y', segs: 28 }), C(0.32, 0.82, 1.0));
+      Hk.add(M.glow, lathe([[0.008, r - 0.03], [0.008, r + 0.2]], { axis: 'y', segs: 28 }), C(0.32, 0.82, 1.0));
+      return Hk;
+    };
     const rR = 0.35;
     const rF = 0.33;
     return {
@@ -657,6 +664,8 @@ export const RIDEKITS = {
         podF: { kit: pod(rF), at: [0, PY, PZ[1]] },
         fanR: { kit: fan(rR - 0.075), at: [0, PY - 0.01, PZ[0]] },
         fanF: { kit: fan(rF - 0.075), at: [0, PY - 0.01, PZ[1]] },
+        haloR: { kit: halo(rR), at: [0, 0, PZ[0]] },
+        haloF: { kit: halo(rF), at: [0, 0, PZ[1]] },
       },
     };
   },

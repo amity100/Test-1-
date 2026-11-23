@@ -443,6 +443,13 @@ class Vehicle {
         }
         const spin = dt * ((this.driver ? 30 : 16) + this.speedAbs * 1.4);
         for (const f of this.fans) f.rotation.y += spin;
+        // (the skirt of light round the pods' feet: none by day, wider and wider as it gets dark)
+        const night = this.game.daynight ? this.game.daynight.night : 0;
+        const hk = 0.55 + 0.6 * Math.min(1, night * 1.4);
+        for (const h of this.halos) {
+          h.visible = night > 0.08;
+          h.scale.set(hk, 1, hk);
+        }
       } else if (this.kind === 'plane') {
         this.body.rotation.x = -(this.pitch || 0);
         this.body.rotation.z = -(this.roll || 0);

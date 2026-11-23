@@ -97,6 +97,21 @@ export const FINDS = [
     where: tr('על גג חנות הגלישה ליד הטיילת', 'On the roof of the surf shop by the boardwalk'),
     at: (world, game) => placeSpot(game, 'dualrotor'),
   },
+  {
+    id: 'hoverbike',
+    title: 'HOVER BIKE',
+    bp: 'hoverbike',
+    // (and its pods for any ride: in the parts tray from the day it is found)
+    alsoPart: 'hover',
+    // (its board in the van is 3.68 m wide: the page a little narrower than the spot's own)
+    w: 2.8,
+    stage: 1,
+    line: tr('אופנוע בלי גלגלים, על שני תרמילי ריחוף: מעל הכביש, החול והים. ואת התרמילים שלו אפשר לשים על כל כלי.', 'A motorbike with no wheels, on two hover pods: over the road, the sand and the sea. And its pods go on any ride.'),
+    how: { touch: tr('מציירים אותו מהעיפרון, ברכבים · ▲ קפיצה · על כלי אחר: "חלקים" ← משטחי ריחוף', 'Draw it from the pencil, under rides · ▲ hops · on another ride: "Parts" → Hover Pads'), keys: tr('מציירים אותו מהעיפרון, ברכבים · רווח קפיצה · על כלי אחר: Q ← חלקים ← משטחי ריחוף', 'Draw it from the pencil, under rides · Space hops · on another ride: Q → Parts → Hover Pads') },
+    tryText: tr('נסו אותו עכשיו: עלו עליו ורכבו מהחוף אל הים', 'Try it now: get on and ride off the beach onto the sea'),
+    where: tr('בוואן של המכונאי של הגולשים (SALT & SPANNER) — עוצר ליד החוף, ליד המזח וליד מלון מיראז׳', "In the surfers' mechanic's van (SALT & SPANNER) — it stops by the beach, at the pier and by Hotel Mirage"),
+    at: (world, game) => placeSpot(game, 'hoverbike'),
+  },
 ];
 
 const BY_ID = Object.fromEntries(FINDS.map((f) => [f.id, f]));
@@ -335,7 +350,7 @@ export class Finds {
       if (!live) continue;
       const bp = BLUEPRINTS[f.draw || f.bp];
       const b = bp ? blueprintBounds(bp) : { x0: 0, y0: 0, w: 100, h: 50 };
-      const W = live.w || 2.6;
+      const W = f.w || live.w || 2.6;
       const H = (W * b.h) / Math.max(1, b.w);
       // (each stroke laid on its surface: points in metres across (u) and up (v) it, its length along it)
       const strokes = (bp ? bp.strokes : []).map((st) => {
@@ -413,7 +428,7 @@ export class Finds {
   lockedBy(kind, id) {
     for (const s of this.ensureSpots()) {
       const f = s.f;
-      if ((kind === 'bp' ? f.bp : f.part) !== id) continue;
+      if (kind === 'bp' ? f.bp !== id : f.part !== id && f.alsoPart !== id) continue;
       if (kind === 'part' && f.lv) continue;
       if (!this.has(f.id)) return f;
     }
@@ -442,7 +457,7 @@ export class Finds {
   }
 
   findOf(id) {
-    return FINDS.find((f) => f.bp === id || (f.part === id && !f.lv)) || null;
+    return FINDS.find((f) => f.bp === id || ((f.part === id || f.alsoPart === id) && !f.lv)) || null;
   }
 
   // where one not found yet is (the album's hint)
@@ -679,6 +694,8 @@ export class Finds {
     }
     // (a part: learned for the tray - no tracing over its guide first - and on the ride you came in, if it is near)
     if (f.part) this.partFound(f);
+    // (a ride found with a part of its own for other rides: that part learned for the tray too, not put on anything)
+    if (f.alsoPart && g.tray && g.tray.store && g.tray.store.learned && !g.tray.store.learned[f.alsoPart] && g.tray.learnAll) g.tray.learnAll([f.alsoPart]);
     const F = g.freedraw;
     if (F) {
       F.legSig = '';
@@ -765,6 +782,11 @@ export class Finds {
     const v = g.player.inVehicle;
     if (!v) return false;
     if (f.bp === 'copter') return v.model === 'copter' || v.kind === 'copter' ? v.pos.y - (v.groundY || 0) > 6 || (v.air && v.pos.y > 8) : false;
+    // (the hover bike: ridden at speed a couple of seconds)
+    if (f.bp === 'hoverbike') {
+      if (v.kind === 'hoverbike' && Math.abs(v.speedAbs || v.speed || 0) > 12) T.air += dt;
+      return T.air > 2;
+    }
     const fz = v.fz;
     if (!fz) return false;
     if (f.part === 'jet') return !!(fz.par || fz.jet || fz.thrust) && (g.input.boost || g.input.keys.has('ShiftLeft') || g.input.keys.has('ShiftRight')) && (v.speed || 0) > 12;

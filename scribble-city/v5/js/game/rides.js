@@ -170,8 +170,15 @@ function hoverbikeModel(grade) {
     pod.add(fan);
     fan.position.set(0, -0.01, 0);
   }
+  // (and the skirt of light round each one's foot)
+  for (const [pod, halo] of [[parts.podR, parts.haloR], [parts.podF, parts.haloF]]) {
+    body.remove(halo);
+    pod.add(halo);
+    halo.position.set(0, -pod.position.y, 0);
+    halo.visible = false;
+  }
   return {
-    body, pods: [parts.podR, parts.podF], fans: [parts.fanR, parts.fanF], pose: 'hover', seatAt: [0, 0.6, -0.36], bar: [0, 0.97, 0.64], grip: 0.3,
+    body, pods: [parts.podR, parts.podF], fans: [parts.fanR, parts.fanF], halos: [parts.haloR, parts.haloF], pose: 'hover', seatAt: [0, 0.6, -0.36], bar: [0, 0.97, 0.64], grip: 0.3,
     halfLen: 1.34, halfWid: 0.36, heightM: 1.15, radius: 0.95, circles: [-0.75, 0, 0.75], circleR: 0.5, spaceIsMine: true,
   };
 }

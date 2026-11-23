@@ -2818,7 +2818,8 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       // the pedals (and the stick away, css/style.css): the handbrake where there are wheels to lock,
       // the turbo where there are jets
       const wheels = btns && (v.kind === 'car' || v.kind === 'bike');
-      const jets = wheels && !!v.jets;
+      // (ROADMAP 29.5: the hover bike with a turbo or a jet mounted on it too - it has no wheels to lock)
+      const jets = (wheels || (btns && v.kind === 'hoverbike')) && !!v.jets;
       const pk = `${btns}|${wheels}|${jets}`;
       if (pk !== this.pedalKey) {
         this.pedalKey = pk;
