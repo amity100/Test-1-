@@ -1104,6 +1104,59 @@ Object.assign(BLUEPRINTS, {
   },
 });
 
+// (ROADMAP 29.5) the car's parts found in the city, as their drawings on the walls - copied by finger to have them (game/finds.js).
+// Never on the pen's shelves (hidden): read only against one another when one is being copied
+Object.assign(BLUEPRINTS, {
+  p_jet: {
+    id: 'p_jet',
+    name: tr('מאיץ רקטי', 'Rocket Booster'),
+    nameEn: 'ROCKET BOOSTER',
+    kind: 'part',
+    hidden: true,
+    difficulty: 2,
+    desc: tr('מנוע רקטי לכל כלי: דחיפה אדירה על דלק משלו, גם באוויר.', 'A rocket motor for any ride: a huge push on its own fuel, in the air too.'),
+    strokes: [
+      { label: tr('גוף', 'body'), en: 'body', pts: close([[6, 40], [14, 30], [70, 30], [70, 50], [14, 50]]) },
+      { label: tr('נחיר', 'nozzle'), en: 'nozzle', pts: close([[70, 33], [96, 24], [96, 56], [70, 47]]) },
+      { label: tr('כנפון', 'fin'), en: 'fin', pts: [[22, 30], [12, 14], [40, 30]] },
+    ],
+    fills: [{ poly: [[6, 40], [14, 30], [70, 30], [70, 50], [14, 50]], color: '#c8483c' }],
+    scale: 1,
+  },
+  p_wing: {
+    id: 'p_wing',
+    name: tr('כנפיים — דרגה 2', 'Wings — level 2'),
+    nameEn: 'WINGS LEVEL 2',
+    kind: 'part',
+    hidden: true,
+    difficulty: 2,
+    desc: tr('זוג כנפיים חזק יותר: ממריאות מוקדם, מטפסות כמו מטוס קרב, עד גובה המגדלים.', 'A stronger pair of wings: they lift off sooner, climb like a fighter, up to the towers.'),
+    strokes: [
+      { label: tr('כנף שמאל', 'left wing'), en: 'left wing', pts: close([[46, 36], [4, 50], [6, 58], [46, 50]]) },
+      { label: tr('כנף ימין', 'right wing'), en: 'right wing', pts: close([[54, 36], [96, 50], [94, 58], [54, 50]]) },
+      { label: tr('גוף', 'body'), en: 'body', pts: close([[46, 24], [54, 24], [54, 70], [46, 70]]) },
+    ],
+    fills: [{ poly: [[46, 36], [4, 50], [6, 58], [46, 50]], color: '#3d7bd9' }],
+    scale: 1,
+  },
+  p_rotor2: {
+    id: 'p_rotor2',
+    name: tr('רוטור כפול', 'Dual Rotor'),
+    nameEn: 'DUAL ROTOR',
+    kind: 'part',
+    hidden: true,
+    difficulty: 3,
+    desc: tr('שני רוטורים על קורה: מרים כל כלי, גם כבד, ועף מהר וגבוה.', 'Two rotors on a beam: lifts any ride, a heavy one too, and flies fast and high.'),
+    strokes: [
+      { label: tr('רוטור', 'rotor'), en: 'rotor', pts: circle(26, 34, 22) },
+      { label: tr('רוטור', 'rotor'), en: 'rotor', pts: circle(74, 34, 22) },
+      { label: tr('קורה ותורן', 'beam and mast'), en: 'beam', pts: [[26, 34], [74, 34], [50, 34], [50, 64]] },
+    ],
+    fills: [],
+    scale: 1,
+  },
+});
+
 // (ROADMAP 28) rides put away: not on the pen's shelves, not read from a drawing - the ids, the models and what already
 // holds one are as they were. later: a later tier's. (The guns are all as they were before stage 1: ROADMAP 28.16.) ?allgear=1 brings them all back to the shelves
 const ALL_GEAR = typeof location !== 'undefined' && /[?&]allgear=1/.test(location.search);

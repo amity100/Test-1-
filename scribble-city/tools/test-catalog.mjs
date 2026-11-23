@@ -201,7 +201,8 @@ if (memory) {
 if (process.env.TARGET) {
   const ids = SHELVES.flatMap((sh) => shelfIds(sh));
   const only = process.env.IDS ? process.env.IDS.split(',') : ids;
-  const others = ids.map((id) => ({ id, S: [0, 1].map(() => humanCopy(BLUEPRINTS[id], 'okay', rnd)) }));
+  const PARTS0 = Object.values(BLUEPRINTS).filter((b) => b.kind === 'part').map((b) => b.id);
+  const others = [...ids, ...PARTS0].map((id) => ({ id, S: [0, 1].map(() => humanCopy(BLUEPRINTS[id], 'okay', rnd)) }));
   const doodles = [];
   for (const [name, f] of Object.entries(DOODLES)) for (let k = 0; k < 2; k++) doodles.push({ name, S: hand(f(), rnd) });
   for (let k = 0; k < 10; k++) doodles.push({ name: 'scribble', S: scribble(rnd) });
@@ -210,7 +211,9 @@ if (process.env.TARGET) {
   for (const id of only) {
     const bp = BLUEPRINTS[id];
     if (!bp) continue;
-    const shelfAll = shelfIds(SHELVES.find((sh) => shelfIds(sh).includes(id)));
+    // (a part found in the city is read against the other parts; a thing of the shelves against its shelf)
+    const PARTS = Object.values(BLUEPRINTS).filter((b) => b.kind === 'part').map((b) => b.id);
+    const shelfAll = BLUEPRINTS[id].kind === 'part' ? [...PARTS, ...SHELVES.flatMap((sh) => shelfIds(sh))] : shelfIds(SHELVES.find((sh) => shelfIds(sh).includes(id)));
     const take = (S) => {
       const st = S.map((p) => ({ p }));
       if (process.env.RIVAL) {

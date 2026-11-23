@@ -10,11 +10,11 @@ import { repaintBoard } from '../world/boards.js';
 // shotgun, the ink grenades; the cars and the motorbike; the ramp, the barrier, the bridge; and on the car the turbo,
 // strong wings, the hydraulic jump, a basic machine gun and light armour. The rest of the plan's list is found: a
 // drawing somewhere off to the side of a place, which stands out as you come near it - the lines catch the light from
-// 25 m, a slow sheen running along them like wet ink under a lamp; from 10 m a warm light on the wall round it and the
-// lines inked again one by one, as if an unseen hand went over them, a pencil's faint scratching from where it is;
-// from 3 m: E - copy it. The player draws it himself, by finger, and the game reads the drawing against that one
-// drawing alone (never "it looks like something else" - ui/freedraw.js copy); alike enough, it is real in front of him,
-// with a card that says what it is and how it is used, and the first try of it there and then.
+// 25 m, a slow sheen running along them like wet ink under a lamp; from 10 m a warm light round it and the lines inked
+// again one by one, as if an unseen hand went over them, a pencil's faint scratching from where it is; from 3 m: E -
+// copy it. The player draws it himself, by finger, and the game reads the drawing against that one drawing alone
+// (never "it looks like something else" - ui/freedraw.js copy); alike enough, it is real in front of him, with a card
+// that says what it is and how it is used, and the first try of it there and then.
 //
 // A thing on the list is locked only once its place is in the world (a stage built): till then it stays open as it
 // was. What is not on the plan's lists at all stays open, as it was. The sandbox (the settings' "every drawing and
@@ -28,14 +28,15 @@ export const START_BP = new Set(['paint', 'rifle', 'mp5', 'shotgun', 'inkbomb', 
 export const START_PARTS = { turbo: 1, wing: 2, jump: 1, mg: 1, armor: 1 };
 // the parts whose level is found, not bought
 const FOUND_LEVELS = new Set(['wing', 'turbo']);
+// what a part's copy is read against: the other parts, and everything on the pen's shelves
+const PART_IDS = () => Object.values(BLUEPRINTS).filter((b) => b.kind === 'part').map((b) => b.id);
 
-// the finds. bp: a blueprint it opens; part: a part of the car's (with lv: the level it brings); at: its place (a
-// function of the world: null while that place is not built yet)
+// the finds. bp: a blueprint it opens (copied as that blueprint); part: a part of the car's it opens, or lv: the level of
+// it it brings (copied as the part's drawing, draw); at(world, game): its place - null while that place is not built
 export const FINDS = [
   {
     id: 'rl7',
     title: 'RL-7 ERASER',
-    name: tr('RL-7 מחק', 'RL-7 Eraser'),
     bp: 'bazooka',
     stage: 1,
     line: tr('משגר מחק ענק: כל מה שהוא פוגע בו נמחק מהדף — מכוניות, קירות, אנשים.', 'Fires a giant eraser: whatever it hits is rubbed off the page — cars, walls, people.'),
@@ -45,9 +46,63 @@ export const FINDS = [
     at: (world) => alleyWall(world, 0, 3, 118, -1),
     board: 'bazooka',
   },
+  {
+    id: 'booster',
+    title: 'ROCKET BOOSTER',
+    part: 'jet',
+    draw: 'p_jet',
+    stage: 1,
+    line: tr('מנוע רקטי שמתחבר לכל כלי — מכונית, אופנוע, סירה, מסוק. דחיפה אדירה על דלק משלו, גם באוויר.', 'A rocket motor that goes on any ride — a car, a bike, a boat, a helicopter. A huge push on its own fuel, in the air too.'),
+    how: { touch: tr('ברכב: "חלקים" ← מאיץ רקטי · כפתור הטורבו מפעיל', 'In a ride: "Parts" → Rocket Booster · the boost button fires it'), keys: tr('ברכב: Q ← חלקים ← מאיץ רקטי · Shift מפעיל', 'In a ride: Q → Parts → Rocket Booster · Shift fires it') },
+    tryText: tr('נסו אותו עכשיו: הרכיבו על רכב והדליקו', 'Try it now: put it on a ride and light it'),
+    where: tr('במוסך המרוצים, מעבר לרחוב 5 מול חניון הקומות', 'In the racing garage, across 5th Street from the parking garage'),
+    at: (world, game) => placeSpot(game, 'rocket'),
+  },
+  {
+    id: 'wings2',
+    title: 'WINGS — LEVEL 2',
+    part: 'wing',
+    lv: 3,
+    draw: 'p_wing',
+    stage: 1,
+    line: tr('הכנפיים שלכם, חזקות יותר: ממריאות מוקדם, מטפסות כמו מטוס קרב, טסות מהר יותר — עד גובה המגדלים.', 'Your wings, stronger: they lift off sooner, climb like a fighter, cruise faster — up to the towers.'),
+    how: { touch: tr('על כל כלי עם כנפיים — מעכשיו בדרגה הזו', 'On every ride with wings — at this level from now on'), keys: tr('על כל כלי עם כנפיים — מעכשיו בדרגה הזו', 'On every ride with wings — at this level from now on') },
+    tryText: tr('נסו אותן עכשיו: קפצו מהגג ועופו מעל המגדלים', 'Try them now: jump off the roof and fly over the towers'),
+    where: tr('על גג חניון הקומות ברחוב 5, ליד הקצה', 'On the roof of the parking garage on 5th Street, by the edge'),
+    at: (world, game) => placeSpot(game, 'wings'),
+  },
+  {
+    id: 'inkhawk',
+    title: 'INKHAWK H1',
+    bp: 'copter',
+    stage: 1,
+    line: tr('מסוק תקיפה קל: ממריא מכל מקום, מרחף, יורה מטוסי נייר מהאף.', 'A light attack helicopter: takes off from anywhere, hovers, fires paper planes from its nose.'),
+    how: { touch: tr('כפתורי למעלה/למטה, הג׳ויסטיק מטה, ונגיעה בירי', 'The up/down buttons, the stick steers, tap fire'), keys: tr('רווח/C למעלה ולמטה · WASD · קליק לירות', 'Space/C up and down · WASD · click to fire') },
+    tryText: tr('נסו אותו עכשיו: המריאו מהמנחת', 'Try it now: take off from the pad'),
+    where: tr('על מנחת המסוקים בגג במרכז העיר — וושינגטון–קולינס, רחובות 15–13', 'On the helipad on a downtown roof — Washington–Collins, 15th to 13th'),
+    at: (world, game) => placeSpot(game, 'inkhawk'),
+  },
+  {
+    id: 'dualrotor',
+    title: 'DUAL ROTOR',
+    part: 'rotor',
+    draw: 'p_rotor2',
+    stage: 1,
+    line: tr('שני רוטורים על קורה: מרימים כל כלי — גם כבד — ועפים מהר וגבוה.', 'Two rotors on a beam: they lift any ride — a heavy one too — and fly fast and high.'),
+    how: { touch: tr('ברכב: "חלקים" ← רוטור · כפתור הקפיצה ממריא', 'In a ride: "Parts" → Rotor · the jump button lifts off'), keys: tr('ברכב: Q ← חלקים ← רוטור · רווח ממריא', 'In a ride: Q → Parts → Rotor · Space lifts off') },
+    tryText: tr('נסו אותו עכשיו: הרכיבו על רכב והמריאו', 'Try it now: put it on a ride and lift off'),
+    where: tr('על גג חנות הגלישה ליד הטיילת', 'On the roof of the surf shop by the boardwalk'),
+    at: (world, game) => placeSpot(game, 'dualrotor'),
+  },
 ];
 
 const BY_ID = Object.fromEntries(FINDS.map((f) => [f.id, f]));
+
+// a place built for a find (game/places.js): its spot, or null while it is not there
+function placeSpot(game, id) {
+  const P = game.places;
+  return P && P.spot ? P.spot(id) : null;
+}
 
 // a spot on the wall of a gang's alley: the alley of block (col, row), at z, on its east (+1) or west (-1) wall - the
 // wall found by a ray from the lane's middle
@@ -59,7 +114,7 @@ function alleyWall(world, col, row, z, side) {
   let x = side > 0 ? a.x1 : a.x0;
   const hit = col3 && col3.raycast(cx, 2.2, z, side, 0, 0, 12, SEE_THROUGH);
   if (hit) x = hit.x;
-  return { x: x - side * 0.04, y: 2.75, z, nx: -side, nz: 0, w: 3.3 };
+  return { x: x - side * 0.04, y: 2.75, z, nx: -side, ny: 0, nz: 0, ux: 0, uy: 1, uz: 0, w: 3.3 };
 }
 
 // (a ray to the alley's wall goes past what stands in the alley)
@@ -79,7 +134,8 @@ export class Finds {
   constructor(game) {
     this.game = game;
     this.state = this.load();
-    this.spots = null;
+    this.spots = [];
+    this.spotsAt = -1;
     this.copying = null;
     this.card = null;
     this.trying = null;
@@ -119,40 +175,78 @@ export class Finds {
     return this.state.found.includes(fid);
   }
 
-  // the places, worked out once the world is there
+  // the places, worked out once the world is there - and again while a find still has none (a place built later)
   ensureSpots() {
-    if (this.spots) return this.spots;
     const w = this.game.world;
-    if (!w) return [];
-    this.spots = [];
+    if (!w) return this.spots;
+    if (this.spots.length === FINDS.length) return this.spots;
+    const t = this.game.time || 0;
+    if (this.spotsAt >= 0 && t - this.spotsAt < 2) return this.spots;
+    this.spotsAt = t;
     for (const f of FINDS) {
-      const s = f.at ? f.at(w) : null;
-      if (!s) continue;
-      const bp = BLUEPRINTS[f.bp];
+      if (this.spots.some((s) => s.f === f)) continue;
+      const live = f.at ? f.at(w, this.game) : null;
+      if (!live) continue;
+      const bp = BLUEPRINTS[f.draw || f.bp];
       const b = bp ? blueprintBounds(bp) : { x0: 0, y0: 0, w: 100, h: 50 };
-      const W = s.w || 2.6;
+      const W = live.w || 2.6;
       const H = (W * b.h) / Math.max(1, b.w);
-      const rx = s.nz;
-      const rz = -s.nx;
-      // (each stroke laid on the wall: points in metres, its length along it)
+      // (each stroke laid on its surface: points in metres across (u) and up (v) it, its length along it)
       const strokes = (bp ? bp.strokes : []).map((st) => {
-        const pts = st.pts.map(([x, y]) => {
-          const u = ((x - b.x0) / Math.max(1, b.w) - 0.5) * W;
-          const v = (0.5 - (y - b.y0) / Math.max(1, b.h)) * H;
-          return [s.x + rx * u, s.y + v, s.z + rz * u];
-        });
+        const uv = st.pts.map(([x, y]) => [((x - b.x0) / Math.max(1, b.w) - 0.5) * W, (0.5 - (y - b.y0) / Math.max(1, b.h)) * H]);
         let len = 0;
         const at = [0];
-        for (let i = 1; i < pts.length; i++) {
-          len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1], pts[i][2] - pts[i - 1][2]);
+        for (let i = 1; i < uv.length; i++) {
+          len += Math.hypot(uv[i][0] - uv[i - 1][0], uv[i][1] - uv[i - 1][1]);
           at.push(len);
         }
-        return { pts, at, len };
+        return { uv, at, len, pts: uv.map(() => [0, 0, 0]) };
       });
       const total = strokes.reduce((a, q) => a + q.len, 0) || 1;
-      this.spots.push({ f, ...s, W, H, strokes, total, seed: 4100 + this.spots.length * 97 });
+      const s = { f, live, W, H, strokes, total, seed: 4100 + FINDS.indexOf(f) * 97, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 1 };
+      this.place(s);
+      this.spots.push(s);
     }
     return this.spots;
+  }
+
+  // its frame on its surface, from the place as it is now (a van drives on: its spot with it)
+  place(s) {
+    const L = s.live;
+    const nx = L.nx || 0;
+    const ny = L.ny || 0;
+    const nz = L.nz || 0;
+    let ux = L.ux;
+    let uy = L.uy;
+    let uz = L.uz;
+    if (ux === undefined) {
+      ux = 0;
+      uy = 1;
+      uz = 0;
+    }
+    // right = up x normal (a viewer facing the surface reads it left to right)
+    const rx = uy * nz - uz * ny;
+    const ry = uz * nx - ux * nz;
+    const rz = ux * ny - uy * nx;
+    s.x = L.x;
+    s.y = L.y;
+    s.z = L.z;
+    s.nx = nx;
+    s.ny = ny;
+    s.nz = nz;
+    // (lifted a hair off it, so the lines are not in the wall)
+    const ox = L.x + nx * 0.03;
+    const oy = L.y + ny * 0.03;
+    const oz = L.z + nz * 0.03;
+    for (const st of s.strokes) {
+      for (let i = 0; i < st.uv.length; i++) {
+        const [u, v] = st.uv[i];
+        const p = st.pts[i];
+        p[0] = ox + rx * u + ux * v;
+        p[1] = oy + ry * u + uy * v;
+        p[2] = oz + rz * u + uz * v;
+      }
+    }
   }
 
   // ------------------------------------------------------------------ what is open (ui/album.js, game/gearplay.js)
@@ -203,17 +297,20 @@ export class Finds {
   update(dt) {
     if (!this.on) return;
     const g = this.game;
+    const spots = this.ensureSpots();
     // (the printed board of a thing to be found: rubbed out by the Erasers - the drawing is on the wall nearby)
-    if (!this.boardsDone) {
+    if (!this.boardsDone && spots.length) {
       this.boardsDone = true;
-      for (const s of this.ensureSpots()) if (s.f.board && !this.has(s.f.id)) repaintBoard(s.f.board, 'erased');
+      for (const s of spots) if (s.f.board && !this.has(s.f.id)) repaintBoard(s.f.board, 'erased');
     }
     const p = g.player;
     const at = p.inVehicle ? p.inVehicle.pos : p.pos;
     this.scratchT -= dt;
-    for (const s of this.ensureSpots()) {
+    for (const s of spots) {
       if (this.has(s.f.id)) continue;
-      const d = Math.hypot(s.x - at.x, s.z - at.z);
+      // (a place that moves: its drawing with it)
+      if (s.live.moves || s.live.parked !== undefined) this.place(s);
+      const d = Math.hypot(s.x - at.x, (s.y - at.y) * 0.8, s.z - at.z);
       if (d > SHEEN_FAR + 5) {
         this.vibed.delete(s.f.id);
         continue;
@@ -239,23 +336,23 @@ export class Finds {
     this.tickTry(dt);
   }
 
-  // the lines on the wall: chalk; from 25 m a sheen along them; from 10 m the light and the inking again
+  // the lines on the surface: a pencil's; from 25 m a sheen along them; from 10 m the light and the inking again
   draw(fr) {
     if (!this.on) return;
     const g = this.game;
     const cam = g.camera.position;
     const t = g.time;
     const night = g.daynight ? g.daynight.night : 0;
-    for (const s of this.ensureSpots()) {
+    for (const s of this.spots) {
       const fade = this.fading.find((q) => q.s === s);
       if (this.has(s.f.id) && !fade) continue;
-      const d = Math.hypot(s.x - cam.x, s.z - cam.z);
-      if (d > 70) continue;
-      // (seen from behind the wall: nothing)
-      if ((cam.x - s.x) * s.nx + (cam.z - s.z) * s.nz < 0) continue;
+      const d = Math.hypot(s.x - cam.x, s.y - cam.y, s.z - cam.z);
+      if (d > 75) continue;
+      // (seen from behind its surface: nothing)
+      if ((cam.x - s.x) * s.nx + (cam.y - s.y) * s.ny + (cam.z - s.z) * s.nz < 0) continue;
       const out = fade ? 1 - clamp(fade.t / 1.4, 0, 1) : 1;
       const sheen = clamp((SHEEN_FAR - d) / (SHEEN_FAR - NEAR), 0, 1);
-      const near = clamp((NEAR - d) / (NEAR - REACH), 0, 1) * (d < NEAR ? 1 : 0);
+      const near = d < NEAR ? clamp((NEAR - d) / (NEAR - REACH), 0, 1) : 0;
       const lit = Math.max(sheen * 0.55, d < NEAR ? 0.6 + 0.4 * near : 0);
       // (a slow run of light along all the lines, every 3.6 s; near, one stroke at a time is gone over)
       const run = ((t % 3.6) / 2.6) * s.total;
@@ -268,7 +365,7 @@ export class Finds {
           const a = P[i - 1];
           const b = P[i];
           const mid = base + (st.at[i - 1] + st.at[i]) / 2;
-          // the chalk itself
+          // the pencil's line itself
           const w0 = 3.4 + lit * 1.6;
           const col = lit > 0 ? mix(CHALK, GOLD, lit * 0.85) : CHALK;
           const alpha = (0.62 + lit * 0.38) * out;
@@ -289,29 +386,35 @@ export class Finds {
         }
         base += st.len;
       });
-      // (from 10 m: a warm light on the wall round it - more at night)
+      // (from 10 m: a warm light round it - more at night)
       if (d < NEAR + 4) {
         const k3 = clamp((NEAR + 4 - d) / 6, 0, 1) * out;
-        flashLight(s.x + s.nx * 1.1, s.y + 0.2, s.z + s.nz * 1.1, 4.6, WARM, (0.7 + 1.1 * night) * k3);
+        flashLight(s.x + s.nx * 1.1, s.y + s.ny * 1.1 + 0.2, s.z + s.nz * 1.1, 4.6, WARM, (0.7 + 1.1 * night) * k3);
       }
     }
     for (const q of this.fading) q.t += g.realDt || 1 / 60;
     this.fading = this.fading.filter((q) => q.t < 1.4);
   }
 
-  // within reach and facing it: E - copy it
+  // within reach and before it: E - copy it
   target() {
     if (!this.on || this.copying) return null;
     const g = this.game;
     const p = g.player;
     if (p.mode !== 'foot' || p.inVehicle) return null;
-    for (const s of this.ensureSpots()) {
+    for (const s of this.spots) {
       if (this.has(s.f.id)) continue;
-      if (Math.abs(s.x - p.pos.x) > REACH + 1 || Math.abs(s.z - p.pos.z) > REACH + 1) continue;
-      const d = Math.hypot(s.x - p.pos.x, s.z - p.pos.z);
-      if (d > REACH) continue;
-      // (in front of it, not round the corner of the wall)
-      if ((p.pos.x - s.x) * s.nx + (p.pos.z - s.z) * s.nz < 0.2) continue;
+      if (Math.abs(s.x - p.pos.x) > REACH + 2 || Math.abs(s.z - p.pos.z) > REACH + 2) continue;
+      const dy = s.ny > 0.7 ? 0 : Math.max(0, Math.abs(s.y - (p.pos.y + 1.2)) - 1.6);
+      const d = Math.hypot(s.x - p.pos.x, dy, s.z - p.pos.z);
+      // (a drawing on a floor is read from on it, a little further off)
+      if (d > (s.ny > 0.7 ? REACH + 1.8 : REACH)) continue;
+      // (on its side, not round the corner of the wall; on the same floor as it)
+      if (s.ny > 0.7) {
+        if (Math.abs(p.pos.y - s.y) > 1.2) continue;
+      } else if ((p.pos.x - s.x) * s.nx + (p.pos.z - s.z) * s.nz < 0.2) continue;
+      // (on a van: while it stands)
+      if (s.live.parked === false) return { s, wait: true, label: tr(`${s.f.title} — על הוואן; חכו שיעצור`, `${s.f.title} — on the van; wait for it to stop`) };
       return { s, label: tr(`E — להעתיק את הציור (${s.f.title})`, `E — copy the drawing (${s.f.title})`) };
     }
     return null;
@@ -319,7 +422,7 @@ export class Finds {
 
   interact() {
     const T = this.target();
-    if (!T) return false;
+    if (!T || T.wait) return !!(T && T.wait);
     return this.beginCopy(T.s);
   }
 
@@ -328,13 +431,16 @@ export class Finds {
     const g = this.game;
     const F = g.freedraw;
     const f = s.f;
-    if (!F || !f.bp) return false;
-    // (facing the wall as he draws from it)
+    const id = f.draw || f.bp;
+    if (!F || !id) return false;
+    // (facing it as he draws from it)
     const p = g.player;
-    if (p.fig) p.faceYaw = Math.atan2(-s.nx, -s.nz);
+    if (p.fig && s.ny < 0.7) p.faceYaw = Math.atan2(-s.nx, -s.nz);
     this.copying = s;
-    const ok = F.copy(f.bp, {
+    const ok = F.copy(id, {
       title: f.title,
+      rivals: BLUEPRINTS[id].kind === 'part' ? PART_IDS() : null,
+      atY: s.ny > 0.7 ? s.y : null,
       onDone: (res) => this.found(s, res),
       onCancel: () => {
         this.copying = null;
@@ -344,7 +450,7 @@ export class Finds {
     return ok;
   }
 
-  // copied, and real: kept, its drawing gone from the wall, its card, its try
+  // copied, and real: kept, its drawing gone from the surface, its card, its try
   found(s, res) {
     const g = this.game;
     const f = s.f;
@@ -357,17 +463,51 @@ export class Finds {
     if (g.fx) {
       for (let i = 0; i < 6; i++) {
         const u = (Math.random() - 0.5) * s.W;
-        g.fx.crumbs(s.x + s.nz * u + s.nx * 0.2, s.y + (Math.random() - 0.5) * s.H, s.z - s.nx * u + s.nz * 0.2, 4, 1.2);
+        g.fx.crumbs(s.x + s.nz * u + s.nx * 0.2, s.y + s.ny * 0.2 + (s.ny > 0.7 ? 0 : (Math.random() - 0.5) * s.H), s.z - s.nx * u + s.nz * 0.2, 4, 1.2);
       }
     }
-    if (g.album && g.album.save) g.album.save();
+    // (a part: learned for the tray - no tracing over its guide first - and on the ride you came in, if it is near)
+    if (f.part) this.partFound(f);
     const F = g.freedraw;
     if (F) {
       F.legSig = '';
       if (F.showLegend) F.showLegend();
     }
     // (the card once it is in the hand)
-    setTimeout(() => this.showCard(f, res), 1700);
+    setTimeout(() => this.showCard(f, res), f.part ? 900 : 1700);
+  }
+
+  partFound(f) {
+    const g = this.game;
+    const T = g.tray;
+    if (T && T.store && T.store.learned && !T.store.learned[f.part] && T.learnAll) T.learnAll([f.part]);
+    // (a level found: the wings already on every ride take it at once)
+    if (f.lv && g.fuse && g.vehicles) {
+      for (const v of g.vehicles.list || []) {
+        const parts = v.fuse && v.fuse.parts;
+        if (!parts || !parts.some((q) => q.item === f.part)) continue;
+        for (const q of parts) if (q.item === f.part) q.lv = Math.max(q.lv || 1, f.lv);
+        try {
+          g.fuse.applyVeh(v);
+          g.fuse.buildVeh(v);
+        } catch (e) {
+          // (a ride that cannot be rebuilt now takes it the next time it is)
+        }
+      }
+    }
+    // (on the ride he came in, near: on it now)
+    const p = g.player;
+    const v = p.lastVehicle && p.lastVehicle.pos && Math.hypot(p.lastVehicle.pos.x - p.pos.x, p.lastVehicle.pos.z - p.pos.z) < 40 ? p.lastVehicle : null;
+    if (!f.lv && v && T && T.attach) {
+      const was = T.v;
+      try {
+        T.v = v;
+        T.attach(f.part, { force: true, quiet: true });
+      } catch (e) {
+        // (not on this one: the tray has it)
+      }
+      T.v = was;
+    }
   }
 
   // ------------------------------------------------------------------ the card and the first try
@@ -378,7 +518,7 @@ export class Finds {
     const el = document.createElement('div');
     el.className = 'find-card';
     const how = g.touch ? f.how.touch : f.how.keys;
-    const grade = res && res.grade ? { perfect: tr('העתקה מושלמת', 'A perfect copy'), good: tr('העתקה טובה', 'A good copy'), wonky: tr('העתקה עקומה — עובד, פחות חזק', 'A wonky copy — it works, weaker'), fail: tr('העתקה גרועה', 'A poor copy') }[res.grade] : '';
+    const grade = res && res.grade && !f.part ? { perfect: tr('העתקה מושלמת', 'A perfect copy'), good: tr('העתקה טובה', 'A good copy'), wonky: tr('העתקה עקומה — עובד, פחות חזק', 'A wonky copy — it works, weaker'), fail: tr('העתקה גרועה', 'A poor copy') }[res.grade] : '';
     el.innerHTML = `<div class="fc-k">${tr('נמצא', 'FOUND')}</div><div class="fc-t">${f.title}</div><div class="fc-l">${f.line}</div><div class="fc-h">${how}</div>${grade ? `<div class="fc-g">${grade}</div>` : ''}`;
     document.body.appendChild(el);
     this.card = el;
@@ -389,7 +529,7 @@ export class Finds {
       setTimeout(() => el.remove(), 700);
       if (this.card === el) this.card = null;
       this.startTry(f);
-    }, 5200);
+    }, 5600);
   }
 
   startTry(f) {
@@ -402,7 +542,27 @@ export class Finds {
     document.body.appendChild(el);
     requestAnimationFrame(() => el.classList.add('on'));
     const W = g.weapons;
-    this.trying = { f, el, t: 0, from: W ? W.lastFire || 0 : 0 };
+    this.trying = { f, el, t: 0, from: W ? W.lastFire || 0 : 0, air: 0 };
+  }
+
+  // the first try, seen done: a weapon fired; a ride flown or driven; a part put to work
+  tryDone(T, dt) {
+    const g = this.game;
+    const f = T.f;
+    const W = g.weapons;
+    if (f.bp && BLUEPRINTS[f.bp] && BLUEPRINTS[f.bp].kind === 'weapon') return !!(W && W.current && W.current.def && W.current.def.id === f.bp && (W.lastFire || 0) > T.from);
+    const v = g.player.inVehicle;
+    if (!v) return false;
+    if (f.bp === 'copter') return v.model === 'copter' || v.kind === 'copter' ? v.pos.y - (v.groundY || 0) > 6 || (v.air && v.pos.y > 8) : false;
+    const fz = v.fz;
+    if (!fz) return false;
+    if (f.part === 'jet') return !!(fz.par || fz.jet || fz.thrust) && (g.input.boost || g.input.keys.has('ShiftLeft') || g.input.keys.has('ShiftRight')) && (v.speed || 0) > 12;
+    if (f.part === 'rotor') return !!fz.rotor && v.air && v.pos.y > 6;
+    if (f.part === 'wing') {
+      if (v.air && fz.wingCeil && v.pos.y > 45) T.air += dt;
+      return T.air > 1.5;
+    }
+    return false;
   }
 
   tickTry(dt) {
@@ -410,15 +570,13 @@ export class Finds {
     if (!T) return;
     const g = this.game;
     T.t += dt;
-    const W = g.weapons;
-    let done = false;
-    if (T.f.bp && W && W.current && W.current.def && W.current.def.id === T.f.bp && (W.lastFire || 0) > T.from) done = true;
-    if (done || T.t > 90) {
+    const done = this.tryDone(T, dt);
+    if (done || T.t > 150) {
       T.el.classList.remove('on');
       setTimeout(() => T.el.remove(), 600);
       this.trying = null;
       if (done) {
-        g.hud.toast(tr(`זה ${T.f.title}. מעכשיו הוא בספרייה שלכם — בעיפרון, נגיעה בו, ומוכן תוך שנייה`, `That's the ${T.f.title}. It's in your library now — the pencil, tap it, ready in a second`), 'good', 4.2);
+        g.hud.toast(T.f.part ? tr(`זה ${T.f.title}. מעכשיו הוא במגש החלקים — על כל כלי`, `That's the ${T.f.title}. It's in the parts tray now — for any ride`) : tr(`זה ${T.f.title}. מעכשיו הוא בספרייה שלכם — בעיפרון, נגיעה בו, ומוכן תוך שנייה`, `That's the ${T.f.title}. It's in your library now — the pencil, tap it, ready in a second`), 'good', 4.2);
         if (g.audio) g.audio.play('cheer', 0.5);
       }
     }

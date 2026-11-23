@@ -704,7 +704,7 @@ export class FreeDraw {
         // (ROADMAP 15.2: the shelves - weapons, vehicles, gear - with the arrows; right to left, as
         // the legend reads)
         mine();
-        const SH = this.game.inventions ? [...SHELVES, 'inv'] : SHELVES;
+        const SH = [...SHELVES, ...(this.game.inventions ? ['inv'] : []), ...(this.freeOk() ? ['free'] : [])];
         const i = SH.indexOf(this.shelf);
         this.setShelf(SH[(i + (k === 'ArrowLeft' ? 1 : SH.length - 1)) % SH.length]);
       } else if (this.catalogOn() && /^(Digit|Numpad)[1-9]$/.test(k)) {
@@ -1674,7 +1674,19 @@ export class FreeDraw {
   // read against the legend's category (game/catmatch.js); the likeliest lights; a thing of more parts
   // needs more lines; how alike it is decides how well it comes out.
   catalogOn() {
-    return !this.game.lab && !this.carOpen && !this.game.classic;
+    return !this.game.lab && !this.carOpen && !this.game.classic && this.shelf !== 'free';
+  }
+
+  // (ROADMAP 29.5, the plan's start kit: free drawing in the regular game too - a tab of its own, chosen, never a guess
+  // the catalog falls back to) anything at all, read from its lines as the lab reads it, at a basic strength; a drawing
+  // found in the city is the real thing at its full
+  freeOk() {
+    const g = this.game;
+    return !g.lab && !g.classic && !(g.prologue && g.prologue.active);
+  }
+
+  freeOn() {
+    return this.shelf === 'free' && !this.carOpen && this.freeOk();
   }
 
   // (found, or all open: the album's own say - ui/album.js)
@@ -1689,7 +1701,11 @@ export class FreeDraw {
   }
 
   setShelf(shelf) {
-    if ((!SHELVES.includes(shelf) && shelf !== 'inv') || shelf === this.shelf) return;
+    if ((!SHELVES.includes(shelf) && shelf !== 'inv' && !(shelf === 'free' && this.freeOk())) || shelf === this.shelf) return;
+    if (shelf === 'free' || this.shelf === 'free') {
+      this.force = null;
+      this.cats.clear && this.cats.clear();
+    }
     this.shelf = shelf;
     // (another shelf: the ramp, bridge or barrier that was said is let go)
     if (this.world) {
@@ -1741,7 +1757,9 @@ export class FreeDraw {
   readTarget() {
     const id = this.target.id;
     const bp = BLUEPRINTS[id];
-    const C = bp ? copyRead(this.strokes, id, shelfIds(shelfOf(bp))) : null;
+    // (a part's drawing against the other parts and everything on the shelves; a thing of the shelves against its shelf)
+    const rivals = this.target.rivals ? [...this.target.rivals, ...SHELVES.flatMap((sh) => shelfIds(sh))] : bp ? shelfIds(shelfOf(bp)) : null;
+    const C = bp ? copyRead(this.strokes, id, rivals) : null;
     if (!C) return null;
     const all = { have: C.have };
     const b = C.m;
@@ -1756,6 +1774,8 @@ export class FreeDraw {
   copy(id, o = {}) {
     const game = this.game;
     const bp = BLUEPRINTS[id];
+    // (on the free drawing's tab: the catalog's again for the copy)
+    if (this.shelf === 'free') this.shelf = 'weapon';
     if (!bp || !this.catalogOn()) return false;
     if (game.player.mode !== 'foot') {
       game.hud.toast(tr('צריך לצאת מהרכב כדי להעתיק את הציור', 'Get out of the car to copy the drawing'), 'info', 2.4);
@@ -1767,7 +1787,7 @@ export class FreeDraw {
     if (sh !== this.shelf) this.setShelf(sh);
     this.strokes = [];
     this.bake();
-    this.target = { id, title: o.title || bp.name, onDone: o.onDone || null, onCancel: o.onCancel || null };
+    this.target = { id, title: o.title || bp.name, rivals: o.rivals || null, atY: o.atY !== undefined ? o.atY : null, onDone: o.onDone || null, onCancel: o.onCancel || null };
     document.body.classList.add('fd-copy');
     this.force = id;
     this.read();
@@ -1795,7 +1815,8 @@ export class FreeDraw {
   showLegend() {
     const el = this.legEl;
     if (!el) return;
-    const on = this.isOpen && this.catalogOn();
+    const free = this.isOpen && this.freeOn();
+    const on = this.isOpen && (this.catalogOn() || free);
     // (on a phone: along the bottom up to the tools down the right edge, clear of them)
     if (on && this.game.touch) {
       const right = Math.round(window.innerWidth - this.toolsEl.getBoundingClientRect().left + 8);
@@ -1814,6 +1835,7 @@ export class FreeDraw {
     if (sig === this.legSig) return;
     this.legSig = sig;
     document.body.classList.toggle('fd-catalog', on);
+    document.body.classList.toggle('fd-free', free);
     document.body.classList.toggle('fd-early', early);
     if (!on) {
       el.innerHTML = '';
@@ -1832,7 +1854,12 @@ export class FreeDraw {
       return;
     }
     const INV = this.game.inventions;
-    const tabs = SHELVES.map((sh) => `<button class="fd-shelf${sh === this.shelf ? ' on' : ''}" data-s="${sh}">${SHELF_NAME[sh]}</button>`).join('') + (INV ? tr(`<button class="fd-shelf inv${this.shelf === 'inv' ? ' on' : ''}" data-s="inv">✦ המצאות</button>`, `<button class="fd-shelf inv${this.shelf === 'inv' ? ' on' : ''}" data-s="inv">✦ Inventions</button>`) : '');
+    const tabs = SHELVES.map((sh) => `<button class="fd-shelf${sh === this.shelf ? ' on' : ''}" data-s="${sh}">${SHELF_NAME[sh]}</button>`).join('') + (INV ? tr(`<button class="fd-shelf inv${this.shelf === 'inv' ? ' on' : ''}" data-s="inv">✦ המצאות</button>`, `<button class="fd-shelf inv${this.shelf === 'inv' ? ' on' : ''}" data-s="inv">✦ Inventions</button>`) : '') + (this.freeOk() ? `<button class="fd-shelf free${this.shelf === 'free' ? ' on' : ''}" data-s="free">${tr('✎ ציור חופשי', '✎ Free drawing')}</button>` : '');
+    if (free) {
+      // (ROADMAP 29.5) the free drawing's tab: anything at all, from its lines - at a basic strength
+      el.innerHTML = `<div class="fd-shelves">${tabs}<span class="fd-leg-say">${tr('ציירו כל דבר — נשק, רכב, ציוד — והמשחק יבנה אותו מהקווים שלכם, בעוצמה בסיסית. ציור שנמצא בעיר הוא הדבר האמיתי, בכל העוצמה', 'Draw anything — a weapon, a ride, gear — and the game builds it from your lines, at a basic strength. A drawing found in the city is the real thing, at full strength')}</span></div>`;
+      return;
+    }
     if (this.shelf === 'inv' && INV) {
       // (ROADMAP 15.5) what you invented and kept: a touch (or its number) and it is here, parts and all
       const its = INV.list.length
@@ -2115,6 +2142,23 @@ export class FreeDraw {
     const game = this.game;
     const bp = R.bp;
     const res = { grade: R.grade, score: Math.round(R.score * 100) };
+    // (ROADMAP 29.5) a part of the car's copied from a wall: no thing made in the air - its lines go, the find has it
+    if (bp.kind === 'part') {
+      const T = this.target && this.target.id === bp.id ? this.target : null;
+      this.target = null;
+      document.body.classList.remove('fd-copy');
+      this.flyAway();
+      this.strokes = [];
+      this.force = null;
+      this.R = null;
+      this.cardDirty = true;
+      this.bake();
+      this.close();
+      this.info();
+      if (game.audio) game.audio.play('cheer', 0.4);
+      if (T && T.onDone) T.onDone({ grade: res.grade, score: res.score, part: true });
+      return;
+    }
     const where = this.drawnAt();
     const cam = game.camera;
     const D = 2.3;
@@ -2136,6 +2180,13 @@ export class FreeDraw {
         plan.frame = makeFrame(cam, v.pos, sp.q, 1, box);
         plan.autoEnter = true;
       }
+    }
+    // (ROADMAP 29.5: copied from a drawing on a roof's floor - a helipad - it stands on that floor, not on the street below)
+    if (plan.vehicle && this.target && this.target.id === bp.id && this.target.atY !== null) {
+      const v = plan.vehicle;
+      v.pos.y = this.target.atY;
+      v.group.position.copy(v.pos);
+      plan.frame = makeFrame(cam, v.pos, plan.frame && plan.frame.q ? plan.frame.q : v.group.quaternion, 1, v.kind === 'car' ? game.cars.boxOf(v.carKind) : localBox(v.group));
     }
     // (ROADMAP 15.5) an invention: its parts go on once its car is real (game/game.js)
     if (opts.parts && plan.vehicle) {
@@ -2734,7 +2785,8 @@ export class FreeDraw {
     const game = this.game;
     const W = game.weapons;
     const m = buildWeapon(R);
-    const def = R.def;
+    // (ROADMAP 29.5: drawn freehand in the regular game - a basic strength; the lab's as it was)
+    const def = !game.lab && R.def && R.def.damage ? { ...R.def, damage: Math.round(R.def.damage * 0.72), free: R.def.free } : R.def;
     W.add(def, 'good', m, undefined);
     const slot = W.current;
     // (the HUD's picture of it, and the drawing again for a save: game/save.js)
