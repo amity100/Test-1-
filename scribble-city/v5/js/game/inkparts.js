@@ -310,15 +310,7 @@ export function preDrivePar(F, v, dt, input) {
   const up = !!input && (input.keys.has('Space') || input.flyUp);
   const boost = !!input && (input.keys.has('ShiftLeft') || input.keys.has('ShiftRight') || input.boost || (input.pad && input.pad.sprint));
   const mv = input ? input.readMove() : { x: 0, y: 0 };
-  if (fz.jetFuelMax) {
-    if (!v.air) fz.jetFuel = Math.min(fz.jetFuelMax, fz.jetFuel + dt * 0.55);
-    if (boost && (fz.thrust || fz.side || fz.retro) && fz.jetFuel > 0) {
-      fz.jetFuel = Math.max(0, fz.jetFuel - dt);
-      if (fz.jetFuel <= 0 && v.driver === g.player) F.say(tr('הטורבו ריק — מתמלא כשנוסעים על הקרקע', 'The turbo is empty — it refills while you drive on the ground'), 'info');
-    }
-    // (an empty one does not push - on the ground either)
-    if (fz.thrust) v.jets = fz.jetFuel > 0.05 ? Math.max(1, v.fzBase ? v.fzBase.jets || 1 : 1) : (v.fzBase && v.fzBase.jets) || 0;
-  }
+  parFuel(F, v, dt, boost, !v.air);
   const hx = Math.sin(v.yaw);
   const hz = Math.cos(v.yaw);
   if (!v.air) {
@@ -350,6 +342,21 @@ export function preDrivePar(F, v, dt, input) {
   }
 }
 
+// its jets' fuel: back while it fills (fill - on the ground, for a car), out while they burn (boost); an empty one does
+// not push. (ROADMAP 29.5: the plane, the helicopter fill it while they do not burn - game/fuse.js rideBoost)
+export function parFuel(F, v, dt, boost, fill) {
+  const fz = v.fz;
+  if (!fz || !fz.jetFuelMax) return;
+  if (fill) fz.jetFuel = Math.min(fz.jetFuelMax, fz.jetFuel + dt * 0.55);
+  if (boost && (fz.thrust || fz.side || fz.retro) && fz.jetFuel > 0) {
+    fz.jetFuel = Math.max(0, fz.jetFuel - dt);
+    const flies = v.kind === 'plane' || v.kind === 'copter';
+    if (fz.jetFuel <= 0 && v.driver === F.game.player) F.say(flies ? tr('מנוע הסילון ריק — מתמלא כשלא לוחצים', 'The jet engine is empty — it refills while you let it be') : tr('הטורבו ריק — מתמלא כשנוסעים על הקרקע', 'The turbo is empty — it refills while you drive on the ground'), 'info');
+  }
+  // (an empty one does not push - on the ground either)
+  if (fz.thrust) v.jets = fz.jetFuel > 0.05 ? Math.max(1, v.fzBase ? v.fzBase.jets || 1 : 1) : (v.fzBase && v.fzBase.jets) || 0;
+}
+
 // (game/fuse.js air) in the air: every part's lift added up - wings' with its speed, a rotor's, the
 // jets under it while ▲ is held and they have fuel, a balloon's, a propeller pushing up - and every
 // push along its own way. Held up (all of it at least its weight): ▲ climbs as fast as the spare lets
@@ -373,7 +380,9 @@ export function airPar(F, v, dt, input) {
   const firing = boost && fuel && !!(fz.thrust || fz.side || fz.retro);
   if (firing && fz.jetFuelMax) fz.jetFuel = Math.max(0, fz.jetFuel - dt);
   // the lift of each, a share of its weight
-  const Lw = fz.wingA ? Math.min(2.4, (Math.max(0, fwd) / fz.takeoff) ** 2) : 0;
+  // (ROADMAP 29.5: the tray's folding wings too, beside a drawn jet engine - they lifted it off in preDrive, and here
+  // they held nothing up: SKYBEAST fell back onto the road)
+  const Lw = fz.wingA || fz.wingFly ? Math.min(2.4, (Math.max(0, fwd) / fz.takeoff) ** 2) : 0;
   const Lr = fz.rotor || 0;
   let Lj = 0;
   if (fz.vtol && up && fz.vtol.fuel > 0) {

@@ -44,7 +44,7 @@ export const EXTRA = {
     icon: '<path d="M3 9 H17 L20 8 V11 H17 V12 H11 L10 15 H7 L8 12 H3 Z M12 15 V19 M8 19 H16"/>',
   },
   coupler: {
-    cat: 'link', link: 'coupler', name: tr('מצמד אוניברסלי', 'Universal Coupler'), does: tr('כל רכיב על כל כלי — צריח על סירה, שריון על מסוק. מגיע עם הרכבים החדשים', 'Any part on any ride — a turret on a boat, armor on a helicopter. Comes with the new rides'), use: 'always', soon: true,
+    cat: 'link', link: 'coupler', name: tr('מצמד אוניברסלי', 'Universal Coupler'), does: tr('מחבר שני כלים מכל סוג לאחד — מסוק שמרים מכונית, סירה שגוררת אופנוע ים. בקרוב', 'Joins two rides of any kind into one — a helicopter that lifts a car, a boat that tows a jet ski. Soon'), use: 'always', soon: true,
     icon: '<circle cx="8" cy="12" r="5"/><circle cx="16" cy="12" r="5"/><path d="M11 12 H13"/>',
   },
   modeshift: {
@@ -78,24 +78,17 @@ export const SIZE = {
 export const SIZED = new Set(['jet', 'prop', 'wing', 'rotor', 'balloon', 'chute', 'mg', 'armor', 'bullbar']);
 
 // what a part needs of the ride it goes on: null (it fits), or why not in a few words
-const DRIVES = new Set(['car', 'bike']);
-// (on a boat, a helicopter, a plane, a tank: what fires and what protects - through the coupler)
-const ANY_RIDE = new Set(['mg', 'missiles', 'harpoon', 'net', 'tesla', 'armor', 'smoke', 'repair', 'jammer', 'repaint', 'coupler', 'rewind']);
+// (ROADMAP 29.5, the owner's word in 29.3: the parts are mounted, not built in - every one goes on every ride, a boat, a
+// helicopter, a plane, a tank as on a car, each at its own place there: game/fuse.js rideFrame)
 export function fits(id, v) {
   const it = info(id);
   if (!it) return tr('לא קיים', 'No such part');
   if (it.soon) return tr('בקרוב', 'Soon');
   if (!v) return tr('צריך רכב', 'Needs a ride');
-  if (DRIVES.has(v.kind) && !v.hybrid) return null;
-  // (ROADMAP 28: a boat, a helicopter, a plane take parts once they have places of their own for them - with the new
-  // rides, through the coupler; till then the tray is a car's and a motorbike's)
-  if (!COUPLER_ON || !ANY_RIDE.has(id)) return tr('רק על מכונית', 'Cars only');
   return null;
 }
-const COUPLER_ON = false;
-export const buildsOn = (v) => !!v && ((DRIVES.has(v.kind) && !v.hybrid) || COUPLER_ON);
-// (a ride that is not a car takes its parts through the coupler: it goes on with the first of them)
-export const needsCoupler = (v) => COUPLER_ON && !!v && (!DRIVES.has(v.kind) || !!v.hybrid);
+// (not a ride drawn to go more than one way - game/hybrid.js has a way of going of its own for each)
+export const buildsOn = (v) => !!v && !v.dead && !v.hybrid;
 
 // ------------------------------------------------------------------ the fusion book
 // has: the tray ids on the car. Each: its parts (any of a group in [..]), its name, what it gives, the hint
@@ -193,7 +186,7 @@ export function fusionApply(v, parts, H, fz) {
 // weight (1: as it left the factory), power (1: as it left), lift (1: it flies), float (1: it floats)
 export function metersOf(v) {
   const B = v.fzBase;
-  const H0 = (B && B.handling) || v.handling || { mass: 1.25, power: 10, top: 28 };
+  const H0 = (B && B.handling) || v.fzRideH || v.handling || { mass: 1.25, power: 10, top: 28 };
   const H = v.handling || H0;
   const fz = v.fz || {};
   const m0 = H0.mass || 1.25;

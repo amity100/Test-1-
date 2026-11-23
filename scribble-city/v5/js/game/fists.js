@@ -77,6 +77,11 @@ export class Fists {
     const game = this.game;
     const P = game.player;
     const fig = P.fig;
+    // (ROADMAP 29.5: in the ring the fists are the bout's - game/boxing.js: nothing thrown from here, nobody struck the street's way)
+    if (game.boxing && game.boxing.active) {
+      this.idle(fig, dt);
+      return;
+    }
     if (this.stunT > 0) this.stunT -= dt;
     this.chainT += dt;
     if (this.chainT > CHAIN) this.step = 0;

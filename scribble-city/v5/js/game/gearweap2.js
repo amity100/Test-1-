@@ -9,6 +9,7 @@ import { cops, cars, hold, wreck, blast, ring, onCar } from './gearfx.js';
 // ball, the drone - kits for game/gear.js. What fires, fires paint or Tipp-Ex.
 
 const _a = { x: 0, y: 0, z: 0 };
+const NO_OFF = [0, 0, 0];
 const _b = { x: 0, y: 0, z: 0 };
 const _v = new THREE.Vector3();
 const _d = new THREE.Vector3();
@@ -85,7 +86,9 @@ export const WEAP2 = {
         const tg = i === 0 ? s.target : ahead(G, v, 80, 0.4, used) || s.target;
         if (tg) used.add(tg);
         const side = i % 2 ? -1 : 1;
-        onCar(v, side * (0.11 + (i >> 1) * 0.17), (p.n && p.n.top ? p.n.top[1] : 2) - 0.1, 0.4, _a);
+        // (ROADMAP 29.5: on a ride that is not a car, off its pod where it was put there - p.off)
+        const o = p.off || NO_OFF;
+        onCar(v, side * (0.11 + (i >> 1) * 0.17), (p.n && p.n.top ? p.n.top[1] : 2) - 0.1 + o[1], 0.4 + o[2], _a);
         G.live.push({ kit: 'missile', x: _a.x, y: _a.y, z: _a.z, vx: Math.sin(v.yaw) * (14 + (v.speed || 0)), vy: 4, vz: Math.cos(v.yaw) * (14 + (v.speed || 0)), t0: g.time + i * 0.14, target: tg, lv, split: lv >= 3 });
       }
       g.audio.play('bazooka', 0.75);
@@ -251,7 +254,9 @@ export const WEAP2 = {
       for (let i = 0; i < n; i++) {
         const c = ahead(G, v, 40, 0.75, used);
         if (c) used.add(c);
-        const L = { kit: 'tether', v, c, side: i ? -1 : 1, t0: g.time, lv, from: p.n && p.n.muzzle ? p.n.muzzle : [0, 1.4, 2.4] };
+        const m = p.n && p.n.muzzle ? p.n.muzzle : [0, 1.4, 2.4];
+        const o = p.off || NO_OFF;
+        const L = { kit: 'tether', v, c, side: i ? -1 : 1, t0: g.time, lv, from: [m[0], m[1] + o[1], m[2] + o[2]] };
         s.lines.push(L);
         G.live.push(L);
       }
@@ -324,7 +329,9 @@ export const WEAP2 = {
       if (!K || !K.fire || !G.use(p)) return;
       const g = G.game;
       const c = ahead(G, v, 34, 0.6);
-      onCar(v, 0, 2, -0.15, _a);
+      // (ROADMAP 29.5: on a ride that is not a car, out of its launcher where it was put there)
+      if (p.off) onCar(v, 0, p.at[1] + 0.25, p.at[2], _a);
+      else onCar(v, 0, 2, -0.15, _a);
       G.live.push({ kit: 'netshot', x0: _a.x, y0: _a.y, z0: _a.z, c, t0: g.time, lv, yaw: v.yaw });
       g.audio.play('whoosh', 0.8);
       g.audio.play('pop', 0.5);

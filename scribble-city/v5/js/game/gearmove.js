@@ -47,7 +47,7 @@ export const MOVE = {
           G.stats.boosts++;
           // (ROADMAP 28.24: it lights - a flash and a ring at each pipe, sparks out of it)
           for (const sx of lv >= 3 ? [0] : [-1, 1]) {
-            const e = lv >= 3 ? onCar(v, 0, 1.7, -2.5) : onCar(v, sx * 0.5, 0.36, -2.25);
+            const e = pipeOf(v, p, sx, 0) || (lv >= 3 ? onCar(v, 0, 1.7, -2.5) : onCar(v, sx * 0.5, 0.36, -2.25));
             g.fx.flash(e.x, e.y, e.z, lv >= 3 ? 1.5 : 0.8, lv >= 3 ? [2, 1.2, 0.5] : [0.9, 1.4, 2.2]);
             g.fx.ring(e.x, e.y, e.z, 0.1, lv >= 3 ? 1.3 : 0.7, 0.22, lv >= 3 ? [1, 0.6, 0.2] : [0.6, 0.85, 1], 3);
             g.fx.sparks(e.x, e.y, e.z, 5, lv >= 3 ? [1.8, 1, 0.3] : [0.7, 1.2, 2]);
@@ -58,7 +58,8 @@ export const MOVE = {
         s.popT = (s.popT || 0) - dt;
         if (s.popT <= 0) {
           s.popT = 0.16 + Math.random() * 0.22;
-          const e = lv >= 3 ? onCar(v, 0, 1.7, -2.6) : onCar(v, (Math.random() < 0.5 ? -1 : 1) * 0.5, 0.36, -2.3);
+          const sx = Math.random() < 0.5 ? -1 : 1;
+          const e = pipeOf(v, p, lv >= 3 ? 0 : sx, 0.05) || (lv >= 3 ? onCar(v, 0, 1.7, -2.6) : onCar(v, sx * 0.5, 0.36, -2.3));
           g.fx.sparks(e.x, e.y, e.z, 2, lv >= 3 ? [1.8, 1, 0.3] : [0.7, 1.2, 2]);
           if (lv >= 3) g.fx.smoke(e.x, e.y + 0.1, e.z, 0.9);
         }
@@ -433,6 +434,16 @@ export const MOVE = {
     },
   },
 };
+
+// (ROADMAP 29.5) on a ride that is not a car: where its flame comes out there - its design's pipe (the other side's for a
+// pair, sx), set where it was put (p.off); null on a car, which has its own numbers
+function pipeOf(v, p, sx, back) {
+  const G = p.off && p.shape && p.shape.groups && p.shape.groups.flame;
+  if (!G) return null;
+  const [x, y, z] = G.at;
+  const o = p.off;
+  return onCar(v, (p.shape.mirror && sx < 0 ? -x : x) + o[0], y + o[1], z + o[2] - back);
+}
 
 // the turn from a to b, the short way
 function angle(a, b) {

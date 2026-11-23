@@ -245,3 +245,11 @@ export function frame(ox, oz, fx, fz) {
     },
   };
 }
+
+// a round part along x, from x0 to x1, its axis at (y, z)
+export function cylX(K, mat, r, x0, x1, y, z, color, segs = 14) {
+  const g = new THREE.CylinderGeometry(r, r, Math.abs(x1 - x0), segs, 1);
+  g.rotateZ(Math.PI / 2);
+  g.translate((x0 + x1) / 2, y, z);
+  return K.add(mat, g, color);
+}

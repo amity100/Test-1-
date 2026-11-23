@@ -280,6 +280,21 @@ export class Gear {
     const has = (u) => show && parts.some((p) => ITEMS[p.item].use === u);
     if (this.rewindBtn) this.rewindBtn.classList.toggle('hidden', !(g.touch && has('rewind')));
     if (this.guardBtn) this.guardBtn.classList.toggle('hidden', !(g.touch && (has('guard') || has('eject'))));
+    // (ROADMAP 29.5: a turbo, a jet engine on a ride with no wheels - a boat, a helicopter, a plane, a tank: the phone's
+    // turbo button, which game/game.js shows only where there are wheels to drive. Shown here, and hidden here again)
+    const bb = this.boostEl || (this.boostEl = typeof document !== 'undefined' ? document.getElementById('btn-boost') : null);
+    if (bb) {
+      const fz = v && v.fz;
+      const want = show && g.touch && !!g.input && !!g.input.driveButtons && v.kind !== 'car' && v.kind !== 'bike' && !!fz && !!(fz.nitro || fz.jetFuelMax);
+      if (want && bb.classList.contains('hidden')) {
+        bb.classList.remove('hidden');
+        this.boostShown = true;
+      } else if (!want && this.boostShown) {
+        // (a car's, a motorbike's is game/game.js's own again)
+        if (!(v && (v.kind === 'car' || v.kind === 'bike'))) bb.classList.add('hidden');
+        this.boostShown = false;
+      }
+    }
     if (!this.barEl) return;
     const meters = [];
     if (show) {

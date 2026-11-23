@@ -3,7 +3,8 @@ import { tr } from '../core/lang.js';
 import { Kit, itemMats, linC } from './items.js';
 import { clamp } from '../core/util.js';
 import { BLUEPRINTS, blueprintBounds } from './blueprints.js';
-import { flashLight } from '../render/materials.js';
+import { flashLight, makeSurface, canvasTexture } from '../render/materials.js';
+import { canvas } from '../world/kit.js';
 import { repaintBoard } from '../world/boards.js';
 
 // (ROADMAP 29.4-29.5, the owner's word: "build it all, in order") Drawings found in the city.
@@ -122,12 +123,83 @@ function alleyWall(world, col, row, z, side) {
 // (the owner's word: a find is a drawing on a page - a white sheet that stands out from what it is on, never ink on the wall in
 // the wall's own colour) the sheet: a little wider and taller than the drawing, bowed off its surface in the middle, taped at
 // the corners with masking tape; one per find, built once
-// (past white: the look's grade takes a colour over 1 to the page's own white, so the sheet is white whatever light is on it)
-const PAPER = [1.22, 1.19, 1.12];
+// (the owner's second word: "a clear white background you can see") the drawing is printed on the sheet itself - a
+// pencil's lines on white paper, in a texture - and the sheet glows a little of its own, like the island's road signs,
+// so it reads white in the sun, at dusk and at night alike; the gold light runs over it as lines in the world
 const PAPER_EDGE = linC(0.86, 0.83, 0.76);
 const TAPE = linC(0.9, 0.84, 0.66);
+// (the drawing's lines raised off the sheet a hair, in dark ink: the look's inker outlines each as it does all the city's
+// edges, so the lines read bold on the white in any light - a printed line alone is washed out by the look's paper)
+const INK = linC(0.07, 0.06, 0.06);
+const INK_W = 0.05;
+// (a stroke's pieces as one part, so the inker outlines the stroke and not each piece of it)
+function mergeGeos(list) {
+  const gs = list.map((g) => (g.index ? g.toNonIndexed() : g));
+  let n = 0;
+  for (const g of gs) n += g.attributes.position.count;
+  const pos = new Float32Array(n * 3);
+  const nor = new Float32Array(n * 3);
+  const uv = new Float32Array(n * 2);
+  let k = 0;
+  for (const g of gs) {
+    pos.set(g.attributes.position.array, k * 3);
+    nor.set(g.attributes.normal.array, k * 3);
+    if (g.attributes.uv) uv.set(g.attributes.uv.array, k * 2);
+    k += g.attributes.position.count;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return out;
+}
 const pageSize = (W, H) => [W * 1.16 + 0.24, H * 1.2 + 0.34];
-function pageModel(W, H) {
+// (its picture: the paper, a faint grain, the drawing in soft graphite - gone over twice, as a hand does)
+function pageTexture(PW, PH, strokes, seed) {
+  const cw = 1024;
+  const chh = Math.max(256, Math.min(1024, Math.round((cw * PH) / PW)));
+  const c = canvas(cw, chh);
+  const g = c.getContext('2d');
+  const sx = cw / PW;
+  const sy = chh / PH;
+  g.fillStyle = '#f8f6ef';
+  g.fillRect(0, 0, cw, chh);
+  let r = seed * 7919 + 17;
+  const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+  // (the paper's grain: a few thousand specks a shade off white, and a breath of shadow toward its edges)
+  for (let i = 0; i < 2600; i++) {
+    g.fillStyle = rnd() < 0.5 ? 'rgba(120,110,95,0.07)' : 'rgba(255,255,255,0.5)';
+    g.fillRect(rnd() * cw, rnd() * chh, 1 + rnd() * 2, 1 + rnd() * 2);
+  }
+  const vg = g.createRadialGradient(cw / 2, chh / 2, Math.min(cw, chh) * 0.35, cw / 2, chh / 2, Math.max(cw, chh) * 0.75);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(90,75,50,0.12)');
+  g.fillStyle = vg;
+  g.fillRect(0, 0, cw, chh);
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  const X = (u) => (u + PW / 2) * sx;
+  const Y = (v) => (PH / 2 - v) * sy;
+  for (const [pass, col, wm, j] of [
+    [0, 'rgba(40,34,30,0.55)', 1.25, 0.9],
+    [1, 'rgba(28,23,20,0.92)', 0.82, 0],
+  ]) {
+    for (const st of strokes) {
+      const P = st.uv;
+      if (P.length < 2) continue;
+      g.strokeStyle = col;
+      g.lineWidth = 0.05 * sx * wm;
+      g.beginPath();
+      const jx = (rnd() - 0.5) * j * 6;
+      const jy = (rnd() - 0.5) * j * 6;
+      g.moveTo(X(P[0][0]) + jx, Y(P[0][1]) + jy);
+      for (let i = 1; i < P.length; i++) g.lineTo(X(P[i][0]) + jx + (rnd() - 0.5) * pass, Y(P[i][1]) + jy + (rnd() - 0.5) * pass);
+      g.stroke();
+    }
+  }
+  return canvasTexture(c);
+}
+function pageModel(W, H, strokes, seed) {
   const [PW, PH] = pageSize(W, H);
   const K = new Kit();
   const M = itemMats();
@@ -140,7 +212,40 @@ function pageModel(W, H) {
     pa.setZ(i, 0.018 * (1 - x * x) * (1 - 0.5 * y * y) + (x > 0.7 && y < -0.7 ? 0.02 * (x - 0.7) * (-0.7 - y) * 11 : 0));
   }
   g.computeVertexNormals();
-  K.add(M.matte, g, PAPER);
+  // (where the sheet stands off the wall at a point of it - the same bow as its plane above)
+  const bow = (u, v) => {
+    const x = u / (PW / 2);
+    const y = v / (PH / 2);
+    return 0.018 * (1 - x * x) * (1 - 0.5 * y * y) + (x > 0.7 && y < -0.7 ? 0.02 * (x - 0.7) * (-0.7 - y) * 11 : 0);
+  };
+  for (const st of strokes) {
+    // (points closer than 6 cm merged: fewer pieces, the same line)
+    const P = [];
+    for (const q of st.uv) if (!P.length || Math.hypot(q[0] - P[P.length - 1][0], q[1] - P[P.length - 1][1]) > 0.06) P.push(q);
+    const last = st.uv[st.uv.length - 1];
+    if (P.length && P[P.length - 1] !== last) P.push(last);
+    const parts = [];
+    for (let i = 0; i < P.length; i++) {
+      const [u, v] = P[i];
+      // (a round joint at each point, so a turn has no gap)
+      const c = new THREE.CylinderGeometry(INK_W / 2, INK_W / 2, 0.012, 8);
+      c.rotateX(Math.PI / 2);
+      c.translate(u, v, bow(u, v) + 0.006);
+      parts.push(c);
+      if (i === 0) continue;
+      const [u0, v0] = P[i - 1];
+      const L = Math.hypot(u - u0, v - v0);
+      if (L < 1e-3) continue;
+      const b = new THREE.BoxGeometry(L, INK_W, 0.012);
+      b.rotateZ(Math.atan2(v - v0, u - u0));
+      b.translate((u + u0) / 2, (v + v0) / 2, bow((u + u0) / 2, (v + v0) / 2) + 0.006);
+      parts.push(b);
+    }
+    if (parts.length) K.add(M.matte, mergeGeos(parts), INK);
+  }
+  const tex = pageTexture(PW, PH, strokes, seed);
+  const paper = makeSurface({ kind: 'uv', vcolor: true, map: tex, emMap: tex, emissive: new THREE.Color(0.36, 0.36, 0.34), uvScale: PW, ang: 1.4, wash: 0.9, density: 0.4, line: 0.55 });
+  K.add(paper, g, [1, 1, 1]);
   // (its edge seen as a thin darker line: a sheet, not a light)
   for (const [x0, y0, x1, y1] of [[-PW / 2, -PH / 2, PW / 2, -PH / 2 + 0.012], [-PW / 2, PH / 2 - 0.012, PW / 2, PH / 2], [-PW / 2, -PH / 2, -PW / 2 + 0.012, PH / 2], [PW / 2 - 0.012, -PH / 2, PW / 2, PH / 2]]) K.box(M.matte, x0, y0, 0.001, x1, y1, 0.004, PAPER_EDGE);
   for (const [sx, sy] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
@@ -151,6 +256,7 @@ function pageModel(W, H) {
   }
   const root = K.build({ seed: 0.41 });
   root.matrixAutoUpdate = false;
+  root.userData.tex = tex;
   return root;
 }
 
@@ -159,7 +265,7 @@ const SEE_THROUGH = new Set(['pole', 'prop', 'tree', 'cover', 'car', 'board', 'f
 
 const SHEEN_FAR = 25;
 const NEAR = 10;
-const REACH = 3.2;
+const REACH = 4;
 // the lines: a pencil's on the wall, dark (the look pales what is light - a light line on a sunlit wall is lost); their
 // light: deep gold ink, the colour of all that can be taken
 const CHALK = [0.1, 0.08, 0.08];
@@ -245,7 +351,7 @@ export class Finds {
       const s = { f, live, W, H, strokes, total, seed: 4100 + FINDS.indexOf(f) * 97, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 1, page: null };
       // (its page, on its surface - not once it is taken)
       if (!this.has(f.id) && this.game.scene) {
-        s.page = pageModel(W, H);
+        s.page = pageModel(W, H, strokes, s.seed);
         this.game.scene.add(s.page);
         s.page.visible = this.on;
       }
@@ -425,10 +531,11 @@ export class Finds {
           const alpha = 0.9 * out;
           // the sheen passing: a band of deep gold a metre and a half long
           const dr = Math.abs(mid - run);
+          const printed = !!s.page;
           if (sheen > 0 && dr < 0.75) {
             const k2 = (1 - dr / 0.75) * sheen;
             fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], mix(CHALK, GOLD_DEEP, Math.min(1, k2 * 1.4)), w0 + 1.8 * k2, s.seed + k * 31 + i, alpha, 0.003, 0);
-          } else fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], lit > 0.5 ? mix(CHALK, GOLD_DEEP, (lit - 0.5) * 0.5) : CHALK, w0, s.seed + k * 31 + i, alpha, 0.003, 0);
+          } else if (!printed) fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], lit > 0.5 ? mix(CHALK, GOLD_DEEP, (lit - 0.5) * 0.5) : CHALK, w0, s.seed + k * 31 + i, alpha, 0.003, 0);
           // (near: a soft warm halo round the lines on the page)
           if (lit > 0.4) fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], GOLD_HOT, 9 + 6 * near, s.seed + 500 + k * 31 + i, (0.06 + 0.1 * near + 0.06 * night) * out, 0.004, 0);
           // (the stroke gone over now: the pencil's line drawn fresh, up to where the hand is)

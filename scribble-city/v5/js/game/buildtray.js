@@ -3,7 +3,7 @@ import { tr } from '../core/lang.js';
 import { clamp, damp } from '../core/util.js';
 import { ITEMS } from './itemcat.js';
 import { nOf } from './partpen.js';
-import { TABS, TAB_NAME, TAB_ICON, TRAY, TRAY_IDS, SIZE, SIZED, info, fits, needsCoupler, buildsOn, trayIdOf, trayIdsOn, fusionsOf, fusionOf, FUSIONS, metersOf, hintOf } from './traycat.js';
+import { TABS, TAB_NAME, TAB_ICON, TRAY, TRAY_IDS, SIZE, SIZED, info, fits, buildsOn, trayIdOf, trayIdsOn, fusionsOf, fusionOf, FUSIONS, metersOf, hintOf } from './traycat.js';
 // (ROADMAP 28.8, 28.9) The parts tray: the way things are put on a ride.
 //
 // A part is drawn once - over a big guide of it, on a card - and from then on it is in the tray. In a ride, or beside
@@ -275,10 +275,6 @@ export class BuildTray {
       this.trace(id, o);
       return null;
     }
-    // (a ride that is not a car: through the coupler - it goes on first, by itself)
-    if (id !== 'coupler' && needsCoupler(v) && !trayIdsOn(v).has('coupler')) {
-      if (!this.attach('coupler', { force: true, quiet: true, noUndo: o.noUndo, group: o.group })) return null;
-    }
     const on = this.partsOn(id);
     const pair = this.mirror && PAIRS.has(id) && !o.single;
     // (one of each - a pair of the ones that come in pairs - and no more than the ride carries)
@@ -325,9 +321,12 @@ export class BuildTray {
     const g = this.game;
     const fz = g.fuse;
     const it = info(id);
-    const ctx = fz.drawCtx(v);
+    // (ROADMAP 29.5: on a ride that is not a car, in the frame of where it goes there - and off: where that is on it)
+    const ctx = fz.drawCtx(v, id);
     const D = ctx.D;
     const K = ctx.K;
+    const off = ctx.off || [0, 0, 0];
+    const on = (q) => [q[0] + off[0], q[1] + off[1], q[2] + off[2]];
     const [L0, S0] = SIZE[id] || [1.2, 0.9];
     const L = L0 * size;
     const S = S0 * size;
@@ -367,11 +366,12 @@ export class BuildTray {
         at = [sx * Math.min(0.55, D.hw * 0.5), roof + 0.16, -D.hl * 0.35];
         dir = [0, 0, -1];
       } else {
-        at = [sx * Math.min(0.55, D.hw * 0.55), it.par === 'prop' ? low + 0.35 : low + 0.05, -D.hl - 0.05];
+        // (one alone at the middle of the tail - or beside what is there, a speedboat's outboard: ctx.tailX)
+        at = [sx ? sx * Math.min(0.55, D.hw * 0.55) : ctx.tailX || 0, it.par === 'prop' ? low + 0.35 : low + 0.05, -D.hl - 0.05];
         dir = [0, 0, -1];
       }
       const len = it.par === 'jet' ? clamp(L / 1.2, 0.5, 3) : clamp(L, 0.4, 3);
-      part = { par: true, ink: inkI, t0: g.time, cost: 0, id: rnd(), type: it.par, v: m === 'under' ? 'under' : 'back', n: { len: r2(len), size: r2(len) }, at: at.map(r2), dir };
+      part = { par: true, ink: inkI, t0: g.time, cost: 0, id: rnd(), type: it.par, v: m === 'under' ? 'under' : 'back', n: { len: r2(len), size: r2(len) }, at: on(at).map(r2), dir };
       fz.justAdded = part;
       fz.popDelay = 120 + pop;
       const res = fz.onVehicle(v, part);
@@ -383,7 +383,7 @@ export class BuildTray {
       const slot = g.weapons.current;
       if (!g.weapons.mountable(slot)) return null;
       const roof = K ? K.roofY : D.h;
-      part = { type: 'barrel', v: 'turret', n: { len: 1, r: 0.05 }, at: [0, r2(roof), r2(-D.hl * 0.05)], ink: inkI, t0: g.time, cost: 0, id: rnd(), hand: { id: slot.def.id, grade: slot.grade, score: slot.score === undefined ? 0.8 : slot.score, mods: slot.mods ? [...slot.mods] : null, ammo: Number.isFinite(slot.ammo) ? slot.ammo : -1 } };
+      part = { type: 'barrel', v: 'turret', n: { len: 1, r: 0.05 }, at: on([0, roof, -D.hl * 0.05]).map(r2), ink: inkI, t0: g.time, cost: 0, id: rnd(), hand: { id: slot.def.id, grade: slot.grade, score: slot.score === undefined ? 0.8 : slot.score, mods: slot.mods ? [...slot.mods] : null, ammo: Number.isFinite(slot.ammo) ? slot.ammo : -1 } };
       fz.justAdded = part;
       fz.popDelay = 120 + pop;
       const res = fz.onVehicle(v, part);
@@ -392,7 +392,7 @@ export class BuildTray {
       if (!res) return null;
       g.weapons.unhand(slot);
     } else if (it.link) {
-      part = { type: 'link', v: it.link, n: { size: 1 }, at: linkAt(it.link, D, K), ink: inkI, t0: g.time, cost: 0, id: rnd() };
+      part = { type: 'link', v: it.link, n: { size: 1 }, at: on(linkAt(it.link, D, K)).map(r2), ink: inkI, t0: g.time, cost: 0, id: rnd() };
       fz.justAdded = part;
       fz.popDelay = 120 + pop;
       const res = fz.onVehicle(v, part);
@@ -422,10 +422,7 @@ export class BuildTray {
     const v = this.v;
     const on = this.partsOn(id);
     if (!v || !on.length) return false;
-    // (the coupler off a ride that needs it: what it held comes off with it)
-    let also = [];
-    if (id === 'coupler' && needsCoupler(v)) also = v.fuse.parts.filter((p) => trayIdOf(p) !== 'coupler');
-    for (const q of [...on, ...also]) {
+    for (const q of on) {
       // (the gun off its mount: back in your hand)
       if (q.hand) g.weapons.rehand(q.hand);
       const [ax, ay, az] = q.at || [0, 1, 0];
@@ -435,7 +432,7 @@ export class BuildTray {
       fz.removeVeh(v, q, true);
     }
     if (fz.last && on.includes(fz.last.part)) fz.last = null;
-    if (!o.noUndo) this.undoStack.push({ op: 'rem', id, parts: [...on, ...also] });
+    if (!o.noUndo) this.undoStack.push({ op: 'rem', id, parts: [...on] });
     if (this.sel && on.includes(this.sel)) this.sel = null;
     g.audio.play('rubber', 0.45);
     this.stats.off++;
@@ -623,7 +620,8 @@ export class BuildTray {
     const v = this.v;
     const p = this.sel;
     if (!v || !this.nudgable(p)) return false;
-    const D = g.fuse.drawCtx(v).D;
+    const C = g.fuse.drawCtx(v);
+    const D = C.size || C.D;
     const d = dir === 'f' ? [0, 0.15] : dir === 'b' ? [0, -0.15] : dir === 'l' ? [-0.1, 0] : [0.1, 0];
     p.at[0] = r2(clamp(p.at[0] + d[0], -D.hw * 0.7, D.hw * 0.7));
     p.at[2] = r2(clamp(p.at[2] + d[1], -D.hl - 0.1, D.hl * 0.7));
@@ -904,7 +902,13 @@ export class BuildTray {
   mountsOf(id, v = this.v) {
     const fz = this.game.fuse;
     if (!v || !fz) return [];
-    const ctx = fz.drawCtx(v);
+    // (ROADMAP 29.5: on a ride that is not a car, its frame for that part - each place set where it is on the ride)
+    const ctx = fz.drawCtx(v, id);
+    const off = ctx.off;
+    return this.mountsIn(id, v, ctx).map((m) => (off ? { ...m, at: [m.at[0] + off[0], m.at[1] + off[1], m.at[2] + off[2]] } : m));
+  }
+
+  mountsIn(id, v, ctx) {
     const D = ctx.D;
     const K = ctx.K;
     const roof = K ? K.roofY : D.h;
@@ -914,7 +918,7 @@ export class BuildTray {
     if (id === 'jet') return [{ key: 'tail', at: [0, low, -D.hl], name: tr('זנב — דחיפה קדימה', 'Tail — pushes forward') }, { key: 'roof', at: [0, roof + 0.16, -D.hl * 0.35], name: tr('גג — דחיפה קדימה', 'Roof — pushes forward') }, { key: 'under', at: [0, 0.3, -D.hl * 0.2], name: tr('תחתית — קפיצה וריחוף קצר', 'Underneath — a hop and a short hover') }];
     if (id === 'prop') return [{ key: 'tail', at: [0, low + 0.35, -D.hl], name: tr('זנב — דחיפה קדימה', 'Tail — pushes forward') }, { key: 'under', at: [0, 0.3, -D.hl * 0.2], name: tr('תחתית — מאט נפילה', 'Underneath — slows a fall') }];
     const on = this.partsOn(id)[0];
-    if (on && on.at) return [{ key: '', at: on.at, name: '' }];
+    if (on && on.at) return [{ key: '', at: ctx.off ? [on.at[0] - ctx.off[0], on.at[1] - ctx.off[1], on.at[2] - ctx.off[2]] : on.at, name: '' }];
     const it = info(id);
     if (it && it.link) return [{ key: '', at: linkAt(it.link, D, K), name: '' }];
     const NAT = { roof: [0, roof, 0], above: [0, roof + 1.5, 0], hood, nose: [0, low, D.hl], tail: [0, low, -D.hl], under: [0, 0.2, 0], body: [D.hw, roof * 0.55, 0], sides: [D.hw, roof * 0.55, 0], wheels: [D.hw, 0.35, D.hl * 0.6], dash: [0, hood[1] + 0.2, hood[2] - 0.7], trunk: [0, roof * 0.7, -D.hl + 0.25], rack: [0, roof + 0.12, -0.3] };
@@ -1176,7 +1180,9 @@ export class BuildTray {
       return;
     }
     const cam = g.camera;
-    const D = g.fuse.drawCtx(v).D;
+    // (ROADMAP 29.5: all of a ride that is not a car - its boom, its wings)
+    const C = g.fuse.drawCtx(v);
+    const D = C.size || C.D;
     const fz = v.fz || {};
     const lift = fz.lift || 0;
     // (how far out and how high it reaches with its parts)
@@ -1187,6 +1193,8 @@ export class BuildTray {
       else if (p.type === 'rotor') rad = Math.max(rad, (p.n.span || 3) * 0.55);
       else if (p.type === 'balloon') top = Math.max(top, D.h + 1.6 + (p.n.d || 2) * 1.25);
       else if (p.type === 'chute') top = Math.max(top, D.h + 0.6);
+      // (ROADMAP 29.5: on a ride that is not a car, as high as its parts go - a rotor up on its mast over a jet ski)
+      if (C.size && p.at) top = Math.max(top, p.at[1] + 0.4);
     }
     const tanY = Math.tan(((cam.fov || 50) * Math.PI) / 360);
     const tanX = tanY * (cam.aspect || 1.6);
