@@ -4,7 +4,7 @@ import { nextId, quadGeo } from './kit.js';
 import { Collision } from './collision.js';
 import { CURB, groundHeight } from './layout.js';
 import { FH, GROUND } from './deco.js';
-import { BLUEPRINT_MORE } from '../game/blueprints.js';
+import { BLUEPRINT_ROOFS } from '../game/blueprints.js';
 
 // (ROADMAP 5.1; never with ?classic) Up on the roofs.
 //
@@ -542,7 +542,7 @@ export function buildRoofs(ctx) {
   for (const r of routes) (r.info.tops || (r.info.tops = [])).push(r.last);
   // the album's new pages: on roofs spread over the city, the first not far from where you start
   const boards = [];
-  const more = BLUEPRINT_MORE.slice();
+  const more = BLUEPRINT_ROOFS.slice();
   if (more.length && routes.length && ctx.atlas.rects[`bb_${more[0]}`]) {
     const chosen = [];
     const far = (r) => (chosen.length ? Math.min(...chosen.map((c) => Math.hypot(c.last.x - r.last.x, c.last.z - r.last.z))) : 1e9);

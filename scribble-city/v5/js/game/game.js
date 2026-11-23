@@ -1505,6 +1505,8 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
         // (ROADMAP 4.8: on the water, in the air)
         : v.kind === 'boat' ? { dist: v.jet ? 6.4 : 9.5, height: v.jet ? 2.4 : 3.2, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 160) }
         : v.kind === 'plane' ? { dist: 17, height: 4.6, shoulder: 0, fovMul: 1 + Math.min(0.2, v.speedAbs / 200) }
+        // (ROADMAP 29.5: the hover bike - a little higher than the motorbike's, it rides higher)
+        : v.kind === 'hoverbike' ? { dist: 5.2, height: 2.5, shoulder: 0, fovMul: 1 + Math.min(0.22, v.speedAbs / 140) }
         : { dist: 8.5, height: 3.1, shoulder: 0, fovMul: 1 + Math.min(0.15, v.speedAbs / 200) };
       // (v5, ROADMAP 18: under a car park's deck the camera keeps under the deck over it - lower,
       // closer; game/prologue/garage.js)
@@ -1603,7 +1605,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       // (riding a bike seen from your own eyes: not your own head in the way)
       if (!this.perf.bench && !(this.hoodCam && player.inVehicle && player.inVehicle.kind === 'bike')) player.draw(this.camera.position);
       // your headlights on the road ahead at night (ROADMAP 4.3)
-      if (!this.classic && player.inVehicle && (player.inVehicle.kind === 'car' || player.inVehicle.kind === 'bike') && this.daynight && this.daynight.night > 0.3) {
+      if (!this.classic && player.inVehicle && (player.inVehicle.kind === 'car' || player.inVehicle.kind === 'bike' || player.inVehicle.kind === 'hoverbike') && this.daynight && this.daynight.night > 0.3) {
         const v = player.inVehicle;
         const fx = Math.sin(v.yaw);
         const fz = Math.cos(v.yaw);
@@ -2645,6 +2647,8 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       else if (!touch && pv.kind === 'boat') prompt = pv.dive ? tr('C — לצלול · רווח — לעלות · E — לצאת (ליד החוף)', 'C — dive · Space — surface · E — get out (near the shore)') : tr('E — לצאת (ליד החוף או המזח)', 'E — get out (near the shore or the pier)');
       else if (!touch && pv.kind === 'balloon') prompt = tr('רווח — המבער (למעלה) · C — למטה · WASD — להטות · E — לצאת', 'Space — the burner (up) · C — down · WASD — tilt · E — get out');
       else if (!touch && pv.model === 'bicycle') prompt = tr('H — פעמון · E — לצאת', 'H — bell · E — get out');
+      // (ROADMAP 29.5: the hover bike's hop)
+      else if (!touch && pv.kind === 'hoverbike') prompt = tr('רווח — קפיצה קטנה · E — לצאת', 'Space — a little hop · E — get out');
       // (ROADMAP 11.8: one drawn to go more than one way, a gun on it, a spring under it)
       if (!touch && pv.drawn) {
         const more = [];
@@ -2656,7 +2660,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
         if (more.length && pv.kind !== 'plane' && pv.kind !== 'balloon') prompt = tr(`${more.join(' · ')} · E — לצאת`, `${more.join(' · ')} · E — get out`);
       }
       // (a gun in hand: out of the window, ROADMAP 4.7)
-      if (!touch && !this.classic && (pv.kind === 'car' || pv.kind === 'bike') && !pv.turret && this.weapons.current.def.kind === 'gun') prompt = tr('קליק — ירי מהחלון · E — לצאת', 'Click — shoot from the window · E — get out');
+      if (!touch && !this.classic && (pv.kind === 'car' || pv.kind === 'bike' || pv.kind === 'hoverbike') && !pv.turret && this.weapons.current.def.kind === 'gun') prompt = tr('קליק — ירי מהחלון · E — לצאת', 'Click — shoot from the window · E — get out');
       // (at the service station: what stopping here does, game/garage.js)
       const gp = this.garage.prompt();
       if (gp) prompt = gp;

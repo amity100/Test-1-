@@ -321,7 +321,7 @@ export class Weapons {
     const onFoot = player.mode === 'foot' && !game.inBar && !game.dialog.open && !slot.present && !(game.arrest && game.arrest.frozen);
     // (ROADMAP 4.7; not with ?classic) in a car or on a bike: a gun out of the window
     const v = player.inVehicle;
-    const seated = !game.classic && player.mode === 'vehicle' && v && (v.kind === 'car' || v.kind === 'bike') && !v.dead && !game.dialog.open && !(game.garage && game.garage.state) && !(game.paintshop && game.paintshop.open);
+    const seated = !game.classic && player.mode === 'vehicle' && v && (v.kind === 'car' || v.kind === 'bike' || v.kind === 'hoverbike') && !v.dead && !game.dialog.open && !(game.garage && game.garage.state) && !(game.paintshop && game.paintshop.open);
     // (not from one with a cannon drawn on it: the click is the cannon's, ROADMAP 11.6)
     const driveBy = seated && def.kind === 'gun' && !slot.present && !v.turret && !v.fuseGuns && !(v.fz && v.fz.flame);
     const canAct = onFoot || driveBy;

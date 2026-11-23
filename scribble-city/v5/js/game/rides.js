@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { Kit, itemMats, warpFor, linC } from './items.js';
-import { groundHeight, WATER_X, PIER, PROM_X1 } from '../world/layout.js';
+import { groundHeight, WATER_X, PIER, PROM_X1, SAND_X0 } from '../world/layout.js';
 import { clamp, damp } from '../core/util.js';
 import { RIDE } from './doodle.js';
 import { RIDEKITS } from './ridemodels.js';
+import { flashLight } from '../render/materials.js';
 
 import { tr } from '../core/lang.js';
 // (ROADMAP 4.8; never with ?classic: they are drawn only from the album's new pages) The new
@@ -158,9 +159,26 @@ function planeModel(grade) {
   return { body, wheels: [parts.w0, parts.w1, parts.w2], prop: parts.prop, pose: 'pilot', seatAt: [0, 1.32, 0.55], bar: [0, 1.5, 1.05], grip: 0.1, halfLen: 3.8, halfWid: 1.1, span: 5.0, heightM: 2.9, radius: 3.0 };
 }
 
-export const MODELS = { bicycle: bicycleModel, scooter: scooterModel, jetski: jetskiModel, boat: boatModel, plane: planeModel };
+// ------------------------------------------------------------------ the hover bike
+// (ROADMAP 29.5, plan item 6: its model - game/ridemodels.js; its pods tilt in their yokes with the lean, the fans in them
+// turn - game/vehicles.js; how it goes - updateHover)
+function hoverbikeModel(grade) {
+  const { body, parts } = made('hoverbike', grade, 7);
+  // (each fan inside its pod: it tilts with it)
+  for (const [pod, fan] of [[parts.podR, parts.fanR], [parts.podF, parts.fanF]]) {
+    body.remove(fan);
+    pod.add(fan);
+    fan.position.set(0, -0.01, 0);
+  }
+  return {
+    body, pods: [parts.podR, parts.podF], fans: [parts.fanR, parts.fanF], pose: 'hover', seatAt: [0, 0.6, -0.36], bar: [0, 0.97, 0.64], grip: 0.3,
+    halfLen: 1.34, halfWid: 0.36, heightM: 1.15, radius: 0.95, circles: [-0.75, 0, 0.75], circleR: 0.5, spaceIsMine: true,
+  };
+}
+
+export const MODELS = { bicycle: bicycleModel, scooter: scooterModel, jetski: jetskiModel, boat: boatModel, plane: planeModel, hoverbike: hoverbikeModel };
 // which way each of them rides
-export const RIDES = { bicycle: 'bike', scooter: 'bike', jetski: 'boat', boat: 'boat', plane: 'plane' };
+export const RIDES = { bicycle: 'bike', scooter: 'bike', jetski: 'boat', boat: 'boat', plane: 'plane', hoverbike: 'hoverbike' };
 // (the bicycle and the scooter are pedalled and kicked: no engine, no tank)
 export const PEDAL = new Set(['bicycle', 'scooter']);
 
@@ -172,15 +190,38 @@ export function seatOn(v, fig, dt) {
   // (its left: +x of its frame)
   const lx = fz;
   const lz = -fx;
-  const at = (p, out) => out.set(v.pos.x + fx * p[2] + lx * p[0], v.pos.y + p[1], v.pos.z + fz * p[2] + lz * p[0]);
+  // (ROADMAP 29.5: a bicycle, a scooter up on hover pads - game/fuse.js)
+  const up = v.kind === 'bike' && v.fz && v.fz.hover ? v.fz.lift + (v.hoverBob || 0) : 0;
+  const at = (p, out) => out.set(v.pos.x + fx * p[2] + lx * p[0], v.pos.y + up + p[1], v.pos.z + fz * p[2] + lz * p[0]);
   const lift = v.bob || 0;
+  if (v.pose === 'hover') {
+    // (ROADMAP 29.5: astride the hover bike as on the motorbike - his seat and its bars where its body has them this moment,
+    // leaned into the turn, pitched, bobbing on its pods)
+    v.group.updateMatrixWorld(true);
+    const M = v.body.matrixWorld;
+    _b.set(v.seatAt[0], v.seatAt[1], v.seatAt[2]).applyMatrix4(M);
+    fig.pos.set(_b.x, _b.y - 0.48, _b.z);
+    fig.ride = 0;
+    fig.sit = 1;
+    fig.yaw = v.yaw;
+    fig.speed = 0;
+    if (!fig.wheel) fig.wheel = new THREE.Vector3();
+    if (!fig.wheelL) fig.wheelL = new THREE.Vector3();
+    const b = v.bar;
+    fig.wheel.set(b[0] - v.grip, b[1], b[2]).applyMatrix4(M);
+    fig.wheelL.set(b[0] + v.grip, b[1], b[2]).applyMatrix4(M);
+    fig.reachR = fig.holdUpR || (fig.shootOut ? null : fig.wheel);
+    fig.reachL = fig.wheelL;
+    fig.update(dt);
+    return;
+  }
   if (v.pose === 'pedal') {
-    fig.pos.set(v.pos.x, v.pos.y + lift, v.pos.z);
+    fig.pos.set(v.pos.x, v.pos.y + up + lift, v.pos.z);
     fig.ride = 1;
     fig.sit = 0;
     fig.crank = v.crankA || 0;
   } else if (v.pose === 'stand') {
-    fig.pos.set(v.pos.x - fx * 0.1, v.pos.y + v.deck, v.pos.z - fz * 0.1);
+    fig.pos.set(v.pos.x - fx * 0.1, v.pos.y + up + v.deck, v.pos.z - fz * 0.1);
     fig.ride = 0;
     fig.sit = 0;
   } else {
@@ -437,6 +478,246 @@ export function drawWake(v, fr, time) {
       const z0 = p.z + fx * spread * s;
       fr.lineXYZ(x0, -0.76, z0, x0 - fx * 0.7, -0.76, z0 - fz * 0.7, WAKE, 2.4, 5200 + i * 2 + (s > 0 ? 1 : 0), a, 0.01, 0);
     }
+  }
+}
+
+// ------------------------------------------------------------------ over it all: the hover bike
+// (ROADMAP 29.5, plan item 6) Two ducted pods hold it HOVER.h over whatever is under them - the road, the sand, a roof, the
+// sea - on a spring of air (it bobs a little standing, rises over a kerb, a step, a bench before its nose is on it). Light
+// and quick: faster than the jet ski, not as fast as the motorbike, sharper in a turn than either - and it turns a little
+// standing still, its pods pushing it round; on its cushion it slides out of a turn more than tyres let a bike. It leans
+// into its turns, its nose up as it speeds up and down as it slows. Off the beach into the sea and back without a stop. The
+// jump key: a little hop. Off a ledge it falls lighter than a car, and its pods catch it as the floor comes up under them -
+// it comes down softly. Parts mounted on it go as on a car (game/fuse.js preDrive, air: a rotor, wings, the hydraulics).
+// Its numbers, as a ride for the parts (game/fuse.js RIDE_H): top speed, power, steering, grip, sideways
+export const HOVER = { h: 0.6, top: 30, power: 19, steer: 2.5, grip: 6.5, hop: 6.2, fall: 15 };
+const SEA_FACE = -0.78;
+const HOVER_DUST = [0.76, 0.71, 0.62];
+const HOVER_SAND = [0.72, 0.6, 0.42];
+const HOVER_LIGHT = [0.4, 0.92, 1.0];
+export function updateHover(v, dt, input) {
+  const game = v.game;
+  const q = v.q;
+  const F = game.fuse;
+  const fz = v.fz;
+  const t = game.time;
+  if (v.vx === undefined || v.vy === undefined || v.yawRate === undefined) {
+    v.vx = Math.sin(v.yaw) * (v.speed || 0);
+    v.vz = Math.cos(v.yaw) * (v.speed || 0);
+    v.vy = 0;
+    v.yawRate = 0;
+    v.air = false;
+  }
+  let throttle = 0;
+  let steer = 0;
+  let press = false;
+  if (input) {
+    const mv = input.readMove();
+    throttle = mv.y;
+    steer = -mv.x;
+    press = input.wasPressed('Space') || (!!input.flyUp && !v.hopUpWas);
+    v.hopUpWas = !!input.flyUp;
+    if (q.stall && Math.random() < q.stall * dt * 3) v.stall = 0.6 + Math.random();
+  }
+  // (just got on: a moment before it goes - game/game.js tickEntry)
+  if (v.holdT > 0) {
+    v.holdT -= dt;
+    throttle = 0;
+    steer = 0;
+  }
+  if (v.stall > 0) {
+    v.stall -= dt;
+    throttle *= 0.1;
+    if (Math.random() < dt * 4) game.fx.smoke(v.pos.x - Math.sin(v.yaw) * 1.3, v.pos.y + 0.4, v.pos.z - Math.cos(v.yaw) * 1.3, 0.6);
+  }
+  // (a turbo, a jet mounted on it - Shift, the phone's turbo button; and what its parts make of it, by its own numbers)
+  const boost = F && fz ? F.rideBoost(v, dt, input) : 0;
+  const jk = boost ? fz.jetK || 1 : 1;
+  const H = v.handling;
+  const top = HOVER.top * q.speed * (H && H.top ? H.top / (HOVER.top * q.speed) : 1) * (1 + 0.4 * boost * jk);
+  const power = HOVER.power * q.accel * (H && H.power ? H.power / HOVER.power : 1) * (1 + 1.2 * boost * jk);
+  const steerK = H && H.steer ? H.steer / HOVER.steer : 1;
+  const grip = H && H.grip ? H.grip : HOVER.grip;
+  // (what is mounted on it lifts it off as it lifts a car: the hydraulics, a rotor, a balloon, wings at speed)
+  const lifts = !!(fz && (fz.jump || fz.rotor >= 1 || fz.balloon >= 1 || (fz.vtol && fz.vtol.fuel > 0.3) || (fz.wingFly && (v.speed || 0) >= fz.takeoff)));
+  if (F && fz && input) F.preDrive(v, dt, input);
+  // the hop
+  if (press && !lifts && !v.air) {
+    v.air = true;
+    v.vy = HOVER.hop;
+    v.hopT = t;
+    game.audio.play('whoosh', 0.35);
+    game.fx.ring(v.pos.x, v.pos.y - HOVER.h + 0.05, v.pos.z, 0.3, 1.8, 0.45, v.hoverWet ? SPRAY : HOVER_DUST, 3);
+  }
+  // the turn
+  const fx0 = Math.sin(v.yaw);
+  const fz0 = Math.cos(v.yaw);
+  let vL = v.vx * fx0 + v.vz * fz0;
+  const ctl = v.air && fz && fz.airCtl;
+  if (!ctl) {
+    const sp = Math.abs(vL);
+    const k = Math.max(0.3, Math.min(1, sp / 4)) * (1 - 0.35 * Math.min(1, sp / top)) * (v.air ? 0.4 : 1);
+    const want = (steer + (input ? q.pull * 0.5 : 0)) * HOVER.steer * steerK * k * (vL < -0.5 ? -1 : 1);
+    v.yawRate = damp(v.yawRate, want, 12, dt);
+  }
+  v.yaw += v.yawRate * dt;
+  const fx = Math.sin(v.yaw);
+  const fzz = Math.cos(v.yaw);
+  vL = v.vx * fx + v.vz * fzz;
+  let vS = -v.vx * fzz + v.vz * fx;
+  const v0 = vL;
+  if (!v.air) {
+    // the pods' push, their reverse; let go, it drifts to a stop on its cushion
+    if (throttle > 0) {
+      if (vL < -0.5) vL = Math.min(0, vL + 18 * throttle * dt);
+      else vL += power * throttle * dt * Math.pow(Math.max(0, 1 - Math.max(0, vL) / top), 0.6);
+    } else if (throttle < 0) {
+      if (vL > 0.5) vL = Math.max(0, vL + 16 * throttle * dt);
+      else vL = Math.max(-7 * q.speed, vL + power * 0.5 * throttle * dt);
+    } else vL -= vL * (0.4 + 0.002 * Math.abs(vL)) * dt;
+    // (faster than it goes by itself - a turbo let go: it slows back to it)
+    if (vL > top) vL = Math.max(top, vL - 6 * dt);
+    vS *= Math.exp(-grip * dt);
+  } else {
+    vL -= vL * 0.05 * dt;
+    vS *= Math.exp(-0.8 * dt);
+  }
+  v.vx = fx * vL - fzz * vS;
+  v.vz = fzz * vL + fx * vS;
+  v.accelL = damp(v.accelL || 0, (vL - v0) / Math.max(dt, 1e-3), 8, dt);
+  v.pos.x += v.vx * dt;
+  v.pos.z += v.vz * dt;
+  // up and down: what is under its pods - and just ahead of its nose, a step up rising to it a moment early
+  const sp = Math.abs(vL);
+  const FL = v.hoverFloor(v.pos.x, v.pos.z, v.pos.y + 0.4);
+  let fy = FL.y;
+  const dir = vL < 0 ? -1 : 1;
+  const ahead = v.hoverFloor(v.pos.x + fx * dir * 1.1, v.pos.z + fzz * dir * 1.1, v.pos.y + 0.4).y;
+  if (ahead > fy && ahead - fy < 1.2) fy = ahead;
+  const wet = FL.wet && fy <= SEA_FACE + 1e-3;
+  v.hoverWet = wet;
+  const rest = 1 - Math.min(1, sp / 6);
+  const seed = v.hoverSeed || (v.hoverSeed = 1 + (v.pos.x * 0.37 + v.pos.z * 0.11) % 3);
+  const wave = wet ? Math.sin(t * 1.6 + v.pos.x * 0.13 + v.pos.z * 0.07) * 0.05 : 0;
+  const bob = (Math.sin(t * 2.3 + seed) * 0.035 + Math.sin(t * 3.7 + seed * 2) * 0.012) * (0.35 + 0.65 * rest);
+  // (hover pads mounted on it as well: it rides higher on them)
+  const hh = HOVER.h + (fz && fz.hover ? 0.3 : 0);
+  const want = fy + hh + bob + wave;
+  const y0 = v.pos.y;
+  let landed = 0;
+  if (!v.air && v.pos.y - FL.y > hh + 0.9) {
+    // over a ledge: off it
+    v.air = true;
+    v.vy = Math.max(0, v.vy);
+  }
+  if (!v.air) {
+    // on its cushion of air: a spring, a little under-damped - it settles with a sway
+    const W = 10;
+    v.vy += (W * W * (want - v.pos.y) - 2 * 0.72 * W * v.vy) * dt;
+    v.pos.y += v.vy * dt;
+  } else {
+    const pull = fz && F ? F.air(v, dt, input) : 1;
+    v.vy -= HOVER.fall * dt * pull * (v.glide ? 1 - v.glide * (v.vy < 0 ? 1 : 0.4) : 1);
+    // (its pods catch it as the floor comes up under them: no faster down than it can stop from in what is left of the
+    // way - the nearer, the slower - and it comes down onto its cushion at a walk)
+    const soft = -(2.5 + 6 * Math.max(0, v.pos.y - FL.y - hh));
+    if (v.vy < soft) v.vy = Math.min(soft, v.vy + 90 * dt);
+    v.pos.y += v.vy * dt;
+    if (v.pos.y - FL.y <= hh + 0.12 && v.vy <= 1.5) {
+      landed = Math.max(0.01, -v.vy);
+      v.air = false;
+      v.fzWinged = false;
+    }
+  }
+  // (its pods never into the floor)
+  if (v.pos.y < fy + 0.15) {
+    if (v.air) landed = Math.max(0.01, -v.vy);
+    v.pos.y = fy + 0.15;
+    if (v.vy < 0) v.vy = 0;
+    v.air = false;
+  }
+  if (landed) {
+    // down: a soft thump, a ring of dust or of spray, its nose dips
+    v.pitchV = (v.pitchV || 0) + Math.min(0.12, landed * 0.015);
+    if (landed > 2) {
+      game.audio.play(wet ? 'splat' : 'jump', Math.min(0.5, 0.15 + landed * 0.03));
+      game.fx.ring(v.pos.x, fy + 0.05, v.pos.z, 0.4, 2.2 + Math.min(2, landed * 0.2), 0.55, wet ? SPRAY : HOVER_DUST, 4);
+      if (wet) game.fx.splash(v.pos.x, SEA_FACE + 0.03, v.pos.z, Math.round(6 + Math.min(14, landed * 1.5)), 2 + Math.min(3, landed * 0.3), SPRAY);
+      if (v.driver === game.player) game.camRig.addShake(Math.min(0.25, landed * 0.02));
+    }
+    if (landed > 18 && !v.safeFall) v.hurt((landed - 18) * 1.5);
+  }
+  v.climb = (v.pos.y - y0) / Math.max(dt, 1e-3);
+  // (on a roof: getting off is onto the roof - game/game.js exitVehicle)
+  v.onRoof = !v.air && FL.y > groundHeight(v.pos.x, v.pos.z) + 0.6 ? FL.y : 0;
+  // walls, the cars, the people: what stops it is what stands higher than its pods can float up onto (a wall, not a kerb)
+  v.speed = vL;
+  v.speedAbs = sp;
+  v.turn = v.yawRate;
+  v.slip = vS;
+  const yy = v.pos.y;
+  v.pos.y = yy - 0.25;
+  v.collideWorld(dt);
+  v.pos.y = yy;
+  if (v.speed !== vL) {
+    v.vx = fx * v.speed - fzz * vS * 0.3;
+    v.vz = fzz * v.speed + fx * vS * 0.3;
+  }
+  v.runOver();
+  // its body: leaning into the turn, its nose up as it speeds up, down as it slows, swaying a little at rest
+  const lean = clamp(-v.yawRate * Math.min(1, sp / 8) * 0.32, -0.55, 0.55);
+  v.rollV = damp(v.rollV || 0, lean + Math.sin(t * 1.7 + seed) * 0.014 * rest, 7, dt);
+  v.pitchV = damp(v.pitchV || 0, clamp(-(v.accelL || 0) * 0.012, -0.14, 0.14) - clamp((v.vy || 0) * 0.03, -0.12, 0.12) * (v.air ? 1 : 0.3) + Math.sin(t * 2.1 + seed) * 0.01 * rest, 5, dt);
+  hoverFx(v, dt, fy, wet, sp);
+  if (input) game.audio.engine(Math.min(1, 0.12 + (sp / Math.max(1, top)) * 0.85 + (v.air ? 0.08 : 0) + Math.abs(throttle) * 0.05), 'hover');
+}
+
+// what it stirs up under it: a ring of dust on the sand and the road, spray off the sea and its wake behind it; the soft
+// light under its pods - more at night
+function hoverFx(v, dt, fy, wet, sp) {
+  const game = v.game;
+  const h = v.pos.y - fy;
+  const near = clamp(1 - (h - HOVER.h) / 2, 0, 1);
+  const cam = game.camera ? game.camera.position : null;
+  const seen = !cam || Math.hypot(cam.x - v.pos.x, cam.z - v.pos.z) < 90;
+  const night = game.daynight ? game.daynight.night : 0;
+  // (the light it throws down on what is under it)
+  if (seen) flashLight(v.pos.x, fy + 0.55, v.pos.z, 5.5 + near * 1.5, HOVER_LIGHT, (0.5 + 2.6 * night) * (0.4 + 0.6 * near));
+  if (!seen || near <= 0.05) {
+    v.hoverRingT = 0;
+    return;
+  }
+  const fx = Math.sin(v.yaw);
+  const fz = Math.cos(v.yaw);
+  v.hoverRingT = (v.hoverRingT || 0) - dt;
+  if (v.hoverRingT <= 0) {
+    // (a ring of it pushed out from under it - quicker at speed)
+    v.hoverRingT = sp > 3 ? 0.16 : 0.42;
+    const back = sp > 3 ? 0.6 : 0;
+    const sand = !wet && v.pos.x > SAND_X0 && v.pos.x < WATER_X;
+    game.fx.ring(v.pos.x - fx * back, fy + 0.04, v.pos.z - fz * back, 0.35, 1.5 + sp * 0.03, 0.55, wet ? SPRAY : sand ? HOVER_SAND : HOVER_DUST, wet ? 3.5 : 4);
+    // (and the sand itself, kicked up at speed)
+    if (sand && sp > 4) game.fx.spray(v.pos.x - fx * 1.2, fy + 0.08, v.pos.z - fz * 1.2, -fx, 0.7, -fz, 4, 2 + sp * 0.1, HOVER_SAND, { cone: 0.55, life: 0.5, bits: true, len: 0.05 });
+  }
+  if (wet) {
+    // spray from under each pod, a plume behind it at speed; its wake on the water
+    if (Math.random() < dt * (5 + sp * 0.8)) {
+      const z0 = Math.random() < 0.5 ? -0.74 : 0.78;
+      game.fx.splash(v.pos.x + fx * z0 + (Math.random() - 0.5) * 0.5, SEA_FACE + 0.04, v.pos.z + fz * z0 + (Math.random() - 0.5) * 0.5, 2, 1.4 + sp * 0.1, SPRAY);
+    }
+    if (sp > 6 && Math.random() < dt * (4 + sp * 0.4)) game.fx.spray(v.pos.x - fx * 1.4, SEA_FACE + 0.1, v.pos.z - fz * 1.4, -fx, 0.7, -fz, 3, 2 + sp * 0.12, SPRAY, { cone: 0.35, life: 0.5, wide: 4 });
+    if (sp > 1) {
+      v.wake = v.wake || [];
+      v.wakeT = (v.wakeT || 0) - dt;
+      if (v.wakeT <= 0) {
+        v.wakeT = 0.14;
+        v.wake.push({ x: v.pos.x - fx * 1.2, z: v.pos.z - fz * 1.2, yaw: v.yaw, t: game.time, w: 0.45 });
+        if (v.wake.length > 32) v.wake.shift();
+      }
+    }
+  } else if (sp > 8 && v.pos.x > SAND_X0 && v.pos.x < WATER_X && Math.random() < dt * (2 + sp * 0.3)) {
+    // (on the sand at speed: a plume of it behind)
+    game.fx.sprite(Math.random() < 0.5 ? 'smoke0' : 'smoke1', v.pos.x - fx * 1.5, fy + 0.3, v.pos.z - fz * 1.5, { size: 0.5 + sp * 0.02, grow: 1.4, life: 0.6, vy: 0.6, alpha: 0.4, tint: HOVER_SAND });
   }
 }
 
