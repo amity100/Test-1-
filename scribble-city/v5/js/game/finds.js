@@ -1,4 +1,6 @@
+import * as THREE from 'three';
 import { tr } from '../core/lang.js';
+import { Kit, itemMats, linC } from './items.js';
 import { clamp } from '../core/util.js';
 import { BLUEPRINTS, blueprintBounds } from './blueprints.js';
 import { flashLight } from '../render/materials.js';
@@ -117,6 +119,41 @@ function alleyWall(world, col, row, z, side) {
   return { x: x - side * 0.04, y: 2.75, z, nx: -side, ny: 0, nz: 0, ux: 0, uy: 1, uz: 0, w: 3.3 };
 }
 
+// (the owner's word: a find is a drawing on a page - a white sheet that stands out from what it is on, never ink on the wall in
+// the wall's own colour) the sheet: a little wider and taller than the drawing, bowed off its surface in the middle, taped at
+// the corners with masking tape; one per find, built once
+// (past white: the look's grade takes a colour over 1 to the page's own white, so the sheet is white whatever light is on it)
+const PAPER = [1.22, 1.19, 1.12];
+const PAPER_EDGE = linC(0.86, 0.83, 0.76);
+const TAPE = linC(0.9, 0.84, 0.66);
+const pageSize = (W, H) => [W * 1.16 + 0.24, H * 1.2 + 0.34];
+function pageModel(W, H) {
+  const [PW, PH] = pageSize(W, H);
+  const K = new Kit();
+  const M = itemMats();
+  const g = new THREE.PlaneGeometry(PW, PH, 8, 4);
+  const pa = g.attributes.position;
+  for (let i = 0; i < pa.count; i++) {
+    const x = pa.getX(i) / (PW / 2);
+    const y = pa.getY(i) / (PH / 2);
+    // (bowed off the wall between its corners; a corner a little lifted)
+    pa.setZ(i, 0.018 * (1 - x * x) * (1 - 0.5 * y * y) + (x > 0.7 && y < -0.7 ? 0.02 * (x - 0.7) * (-0.7 - y) * 11 : 0));
+  }
+  g.computeVertexNormals();
+  K.add(M.matte, g, PAPER);
+  // (its edge seen as a thin darker line: a sheet, not a light)
+  for (const [x0, y0, x1, y1] of [[-PW / 2, -PH / 2, PW / 2, -PH / 2 + 0.012], [-PW / 2, PH / 2 - 0.012, PW / 2, PH / 2], [-PW / 2, -PH / 2, -PW / 2 + 0.012, PH / 2], [PW / 2 - 0.012, -PH / 2, PW / 2, PH / 2]]) K.box(M.matte, x0, y0, 0.001, x1, y1, 0.004, PAPER_EDGE);
+  for (const [sx, sy] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
+    const t = new THREE.BoxGeometry(0.24, 0.07, 0.004);
+    t.rotateZ(sx * sy * -0.7);
+    t.translate(sx * (PW / 2 - 0.05), sy * (PH / 2 - 0.05), 0.012);
+    K.add(M.matte, t, TAPE);
+  }
+  const root = K.build({ seed: 0.41 });
+  root.matrixAutoUpdate = false;
+  return root;
+}
+
 // (a ray to the alley's wall goes past what stands in the alley)
 const SEE_THROUGH = new Set(['pole', 'prop', 'tree', 'cover', 'car', 'board', 'fence', 'rail', 'furniture']);
 
@@ -125,9 +162,11 @@ const NEAR = 10;
 const REACH = 3.2;
 // the lines: a pencil's on the wall, dark (the look pales what is light - a light line on a sunlit wall is lost); their
 // light: deep gold ink, the colour of all that can be taken
-const CHALK = [0.14, 0.11, 0.1];
+const CHALK = [0.1, 0.08, 0.08];
 const GOLD = [0.9, 0.56, 0.12];
 const GOLD_HOT = [1.0, 0.74, 0.26];
+// (on the white page the lines stay dark; the light runs along them in a deep gold that reads on white)
+const GOLD_DEEP = [0.86, 0.46, 0.06];
 const WARM = [1.0, 0.7, 0.36];
 
 export class Finds {
@@ -203,7 +242,13 @@ export class Finds {
         return { uv, at, len, pts: uv.map(() => [0, 0, 0]) };
       });
       const total = strokes.reduce((a, q) => a + q.len, 0) || 1;
-      const s = { f, live, W, H, strokes, total, seed: 4100 + FINDS.indexOf(f) * 97, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 1 };
+      const s = { f, live, W, H, strokes, total, seed: 4100 + FINDS.indexOf(f) * 97, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 1, page: null };
+      // (its page, on its surface - not once it is taken)
+      if (!this.has(f.id) && this.game.scene) {
+        s.page = pageModel(W, H);
+        this.game.scene.add(s.page);
+        s.page.visible = this.on;
+      }
       this.place(s);
       this.spots.push(s);
     }
@@ -234,10 +279,17 @@ export class Finds {
     s.nx = nx;
     s.ny = ny;
     s.nz = nz;
-    // (lifted a hair off it, so the lines are not in the wall)
-    const ox = L.x + nx * 0.03;
-    const oy = L.y + ny * 0.03;
-    const oz = L.z + nz * 0.03;
+    // (the page on the surface; the lines on the page, a hair off it)
+    if (s.page && !s.taking) {
+      s.page.matrix.set(rx, ux, nx, L.x + nx * 0.012, ry, uy, ny, L.y + ny * 0.012, rz, uz, nz, L.z + nz * 0.012, 0, 0, 0, 1);
+      s.page.matrixWorldNeedsUpdate = true;
+    }
+    const ox = L.x + nx * 0.045;
+    const oy = L.y + ny * 0.045;
+    const oz = L.z + nz * 0.045;
+    // (the page's edge, for its light)
+    const [PW, PH] = pageSize(s.W, s.H);
+    s.rim = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [ox + rx * a * PW * 0.5 + ux * b * PH * 0.5, oy + ry * a * PW * 0.5 + uy * b * PH * 0.5, oz + rz * a * PW * 0.5 + uz * b * PH * 0.5]);
     for (const st of s.strokes) {
       for (let i = 0; i < st.uv.length; i++) {
         const [u, v] = st.uv[i];
@@ -338,7 +390,10 @@ export class Finds {
 
   // the lines on the surface: a pencil's; from 25 m a sheen along them; from 10 m the light and the inking again
   draw(fr) {
-    if (!this.on) return;
+    if (!this.on) {
+      for (const s of this.spots) if (s.page) s.page.visible = false;
+      return;
+    }
     const g = this.game;
     const cam = g.camera.position;
     const t = g.time;
@@ -350,7 +405,7 @@ export class Finds {
       if (d > 75) continue;
       // (seen from behind its surface: nothing)
       if ((cam.x - s.x) * s.nx + (cam.y - s.y) * s.ny + (cam.z - s.z) * s.nz < 0) continue;
-      const out = fade ? 1 - clamp(fade.t / 1.4, 0, 1) : 1;
+      const out = fade ? 1 - clamp(fade.t / 0.5, 0, 1) : 1;
       const sheen = clamp((SHEEN_FAR - d) / (SHEEN_FAR - NEAR), 0, 1);
       const near = d < NEAR ? clamp((NEAR - d) / (NEAR - REACH), 0, 1) : 0;
       const lit = Math.max(sheen * 0.55, d < NEAR ? 0.6 + 0.4 * near : 0);
@@ -365,35 +420,72 @@ export class Finds {
           const a = P[i - 1];
           const b = P[i];
           const mid = base + (st.at[i - 1] + st.at[i]) / 2;
-          // the pencil's line itself
-          const w0 = 3.4 + lit * 1.6;
-          const col = lit > 0 ? mix(CHALK, GOLD, lit * 0.85) : CHALK;
-          const alpha = (0.62 + lit * 0.38) * out;
-          // the sheen passing: a band of hot gold a metre and a half long
+          // the pencil's line itself: dark on the white page
+          const w0 = 3.6 + lit * 1.2;
+          const alpha = 0.9 * out;
+          // the sheen passing: a band of deep gold a metre and a half long
           const dr = Math.abs(mid - run);
           if (sheen > 0 && dr < 0.75) {
             const k2 = (1 - dr / 0.75) * sheen;
-            fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], GOLD_HOT, w0 + 2.2 * k2, s.seed + k * 31 + i, Math.min(1, alpha + 0.4 * k2) * out, 0.003, 0);
-          } else fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], col, w0, s.seed + k * 31 + i, alpha, 0.003, 0);
-          // (near: a soft halo round the lines - a glow, not sparks)
-          if (lit > 0.2) fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], GOLD_HOT, 12 + 8 * near, s.seed + 500 + k * 31 + i, (0.1 + 0.12 * lit + 0.08 * night) * out, 0.004, 0);
+            fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], mix(CHALK, GOLD_DEEP, Math.min(1, k2 * 1.4)), w0 + 1.8 * k2, s.seed + k * 31 + i, alpha, 0.003, 0);
+          } else fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], lit > 0.5 ? mix(CHALK, GOLD_DEEP, (lit - 0.5) * 0.5) : CHALK, w0, s.seed + k * 31 + i, alpha, 0.003, 0);
+          // (near: a soft warm halo round the lines on the page)
+          if (lit > 0.4) fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], GOLD_HOT, 9 + 6 * near, s.seed + 500 + k * 31 + i, (0.06 + 0.1 * near + 0.06 * night) * out, 0.004, 0);
           // (the stroke gone over now: the pencil's line drawn fresh, up to where the hand is)
           if (redo >= 0 && st.at[i - 1] < redo) {
             const f2 = Math.min(1, (redo - st.at[i - 1]) / Math.max(1e-3, st.at[i] - st.at[i - 1]));
             const e = [a[0] + (b[0] - a[0]) * f2, a[1] + (b[1] - a[1]) * f2, a[2] + (b[2] - a[2]) * f2];
-            fr.lineXYZ(a[0], a[1], a[2], e[0], e[1], e[2], GOLD_HOT, w0 + 2.2, s.seed + 900 + k * 31 + i, out, 0.002, 0);
+            fr.lineXYZ(a[0], a[1], a[2], e[0], e[1], e[2], GOLD_DEEP, w0 + 1.8, s.seed + 900 + k * 31 + i, out, 0.002, 0);
           }
         }
         base += st.len;
       });
+      // (the page catching the light: a gold rim round its edge, from 25 m faint, near it plain - more at night)
+      if (s.rim && lit > 0) {
+        for (let i = 0; i < 4; i++) {
+          const a = s.rim[i];
+          const b = s.rim[(i + 1) % 4];
+          fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], GOLD_HOT, 8 + 10 * near, s.seed + 1300 + i, (0.12 + 0.3 * lit + 0.12 * night) * out, 0.004, 0);
+          fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], GOLD, 2.6, s.seed + 1310 + i, (0.4 + 0.5 * lit) * out, 0.003, 0);
+        }
+      }
       // (from 10 m: a warm light round it - more at night)
       if (d < NEAR + 4) {
         const k3 = clamp((NEAR + 4 - d) / 6, 0, 1) * out;
         flashLight(s.x + s.nx * 1.1, s.y + s.ny * 1.1 + 0.2, s.z + s.nz * 1.1, 4.6, WARM, (0.7 + 1.1 * night) * k3);
       }
     }
-    for (const q of this.fading) q.t += g.realDt || 1 / 60;
-    this.fading = this.fading.filter((q) => q.t < 1.4);
+    for (const q of this.fading) {
+      q.t += g.realDt || 1 / 60;
+      // (the page taken off the wall: it peels away and goes to him, smaller as it goes)
+      const P = q.s.page;
+      if (P) {
+        const k = clamp((q.t - 0.5) / 0.9, 0, 1);
+        if (k >= 1) {
+          P.visible = false;
+          if (P.parent) P.parent.remove(P);
+          q.s.page = null;
+        } else if (k > 0) {
+          q.s.taking = true;
+          const h = g.player.pos;
+          const e = k * k * (3 - 2 * k);
+          const m = P.matrix.elements;
+          const sc = 1 - 0.85 * e;
+          const x = q.s.x + (h.x - q.s.x) * e;
+          const y = q.s.y + (h.y + 1.3 - q.s.y) * e + Math.sin(e * Math.PI) * 0.6;
+          const z = q.s.z + (h.z - q.s.z) * e;
+          const b = q.base || (q.base = m.slice(0, 12));
+          for (let i = 0; i < 11; i++) if (i % 4 !== 3) m[i] = b[i] * sc;
+          m[12] = x;
+          m[13] = y;
+          m[14] = z;
+          P.matrixWorldNeedsUpdate = true;
+        }
+      }
+    }
+    this.fading = this.fading.filter((q) => q.t < 1.4 || (q.s.page && q.s.page.visible));
+    // (not finding - the prologue, the sandbox: no pages)
+    for (const s of this.spots) if (s.page && !s.taking) s.page.visible = true;
   }
 
   // within reach and before it: E - copy it
