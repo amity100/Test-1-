@@ -138,7 +138,7 @@ const GLYPH_OF = { theatre: 'cinema', fashion: 'boutique', shoes: 'boutique', el
 // the legend: each group's sticker, its name, and from how close it shows (pixels a metre)
 const CATS = [
   // (ROADMAP 29.5) the drawings hung in the city to be found and copied (game/finds.js): where each is, until it is taken
-  { id: 'find', name: tr('ציורים למצוא', 'Drawings to find'), glyph: 'board', fill: '#ffffff', square: true, k: 0 },
+  { id: 'find', name: tr('ציורים למצוא', 'Drawings to find'), glyph: 'spray', fill: '#ffc21a', k: 0 },
   { id: 'blueprint', name: tr('שלטי שרטוטים', 'Blueprint signs'), glyph: 'board', fill: '#ffd23f', square: true, k: 0 },
   // (ROADMAP 8.2; none with ?classic) the places that can be yours (gold: yours)
   { id: 'prop', name: tr('נכסים', 'Property'), glyph: 'deed', fill: '#c8f0b0', k: 0, nc: true },
@@ -331,7 +331,7 @@ export class CityMap {
     const add = (o) => this.items.push({ ...o, live: true });
     const P = g.places;
     if (P && P.gym && P.gym.built) {
-      add({ cat: 'place', glyph: 'gym', x: -195.5, z: 44.4, name: tr('מכון האיגרוף 9TH STREET', '9TH STREET GYM'), note: tr('פינת מרידיאן ורחוב 9. זירה, קרבות מול יריבים, אימון כריות עם מאמן, שקים', 'Meridian & 9th. A ring, bouts against a ladder of fighters, the mitts with a coach, the bags') });
+      add({ cat: 'place', glyph: 'gym', big: true, x: -195.5, z: 44.4, name: tr('מכון האיגרוף 9TH STREET', '9TH STREET GYM'), note: tr('פינת מרידיאן ורחוב 9. זירה, קרבות מול יריבים, אימון כריות עם מאמן, שקים', 'Meridian & 9th. A ring, bouts against a ladder of fighters, the mitts with a coach, the bags') });
     }
     const F = g.finds;
     // (the old blueprint signs to photograph: not a way to get a drawing while they are found in the city - off the map then)
@@ -341,7 +341,7 @@ export class CityMap {
     if (F && F.on) {
       for (const sp of F.ensureSpots()) {
         if (F.has(sp.f.id)) continue;
-        add({ cat: 'find', glyph: 'board', x: sp.x, z: sp.z, name: sp.f.title, note: sp.f.where });
+        add({ cat: 'find', glyph: 'spray', x: sp.x, z: sp.z, name: sp.f.title, note: sp.f.where, big: true });
       }
     }
     const rank = Object.fromEntries(ORDER.map((id, i) => [id, i]));
