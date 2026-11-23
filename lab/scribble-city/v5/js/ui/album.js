@@ -85,8 +85,16 @@ export class Album {
     }
   }
 
+  // (ROADMAP 29.5, game/finds.js) found in the city: the start's kit, what was found, and what is not to be found
+  get finding() {
+    const F = this.game.finds;
+    return F && F.on ? F : null;
+  }
+
   has(id) {
     if (this.early) return EARLY_IDS.includes(id);
+    const F = this.finding;
+    if (F) return F.bpOpen(id);
     return this.allOpen ? !!BLUEPRINTS[id] : this.items.has(id);
   }
 
@@ -96,6 +104,9 @@ export class Album {
   known(id) {
     if (!BLUEPRINTS[id]) return false;
     if (this.early) return this.early.has(id);
+    // (ROADMAP 29.5: found is known - it was drawn by hand when it was copied)
+    const F = this.finding;
+    if (F) return F.bpOpen(id);
     // (the owner's word, again: every weapon and ride open from the start - ready at a touch, not first drawn over its lines
     // to be learned; drawn by hand it is still read and made, as ever)
     if (this.allOpen && !this.game.classic) return true;
@@ -125,6 +136,8 @@ export class Album {
   }
 
   add(id) {
+    // (ROADMAP 29.5: finding is by the drawings in the city, not by photos of the boards)
+    if (this.finding) return false;
     if (this.items.has(id) || (this.game.classic && this.has(id))) return false;
     this.items.set(id, { best: null });
     this.save();
@@ -147,7 +160,7 @@ export class Album {
 
   // one of the light ones still missing (not the tank, the copter, the minigun, the plane)
   giftAny(from) {
-    if (this.allOpen) return false;
+    if (this.allOpen || this.finding) return false;
     const left = this.order.filter((id) => !this.items.has(id) && BLUEPRINTS[id].difficulty <= 3);
     if (!left.length) return false;
     return this.gift(left[Math.floor(Math.random() * left.length)], from);
@@ -157,6 +170,10 @@ export class Album {
   // roof) and the shops or deeds that give it
   where(id) {
     const g = this.game;
+    // (ROADMAP 29.5) a drawing to be found: where it is
+    const F = this.finding;
+    const fw = F ? F.where(id) : null;
+    if (fw) return fw;
     const p = g.player.pos;
     let best = null;
     let bd = Infinity;
@@ -199,6 +216,7 @@ export class Album {
 
   get size() {
     if (this.early) return EARLY_IDS.length;
+    if (this.finding) return this.order.filter((id) => this.has(id)).length;
     return this.allOpen ? this.order.length : this.items.size;
   }
 

@@ -243,11 +243,14 @@ const WOOD = [0.9, 0.62, 0.3];
 const INKBLUE = [0.2, 0.36, 0.78];
 const GLUEW = [0.97, 0.97, 0.94];
 const GFX = {
-  rifle: { flash: 0.34, tongue: [3, 34, 0.7, 0.05], smoke: 0.2, out: { col: LACQUER, len: 0.032, late: 0.26, snd: 'bolt' }, warm: 0.22 },
+  // (ROADMAP 29.5: the M16 - a case out with every round, no bolt worked by hand)
+  rifle: { flash: 0.3, tongue: [3, 30, 0.6, 0.05], smoke: 0.12, out: { col: LACQUER, len: 0.026 }, warm: 0.16 },
   shotgun: { flash: 0.62, tongue: [7, 28, 0.6, 0.2], smoke: 0.42, warm: 0.5 },
   bazooka: { flash: 0.85, tongue: [5, 22, 0.8, 0.18], smoke: 0.5, back: true },
   planes: { smoke: 0.3 },
   stapler: { flash: 0.15, out: { col: STEEL, len: 0.012 }, warm: 0.06 },
+  // (ROADMAP 29.5: the marker SMG - a small flash, a mist of ink at the nib, a little brass case out each round)
+  mp5: { flash: 0.16, mist: [0.2, 0.3, 0.7], out: { col: BRASS, len: 0.014 }, warm: 0.05 },
   erasermg: { flash: 0.2, tongue: [2, 26, 0.4, 0.06], out: { col: PINK, len: 0.018 }, warm: 0.09 },
   minigun: { flash: 0.2, tongue: [2, 30, 0.5, 0.05], out: { col: WOOD, len: 0.03, up: 0.9 }, warm: 0.07 },
   tippex: { mist: WHITE, out: { col: WHITE, len: 0.014, sp: 1.6, up: -0.6 }, warm: 0 },

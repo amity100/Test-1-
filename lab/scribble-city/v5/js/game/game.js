@@ -108,6 +108,7 @@ import { Parties } from './parties.js';
 import { Fire } from './fire.js';
 import { Gadgets } from './gadgets.js';
 import { FreeDraw } from '../ui/freedraw.js';
+import { Finds } from './finds.js';
 import { Signs } from './signs.js';
 import { Fuse } from './fuse.js';
 import { Gear } from './gear.js';
@@ -385,6 +386,8 @@ export class Game {
     // (ROADMAP 11.23) the lab's first mission: the broken bridge - drawing on your car to get over
     this.mission = this.lab ? new BrokenBridge(this) : null;
     this.freedraw = this.classic ? null : new FreeDraw(this);
+    // (ROADMAP 29.5) drawings found in the city: the start kit, what is locked till found, the drawings on the walls
+    this.finds = this.classic ? null : new Finds(this);
     if (this.skills) this.phone.addApp({ id: 'skills', name: tr('כישורים', 'Skills'), glyph: 'skills', fill: '#bfe7a6' });
     if (this.money) this.phone.addApp({ id: 'bank', name: tr('בנק', 'Bank'), glyph: 'bank', fill: '#fff3c4' });
     if (this.props) this.phone.addApp({ id: 'props', name: tr('נכסים', 'Property'), glyph: 'deed', fill: '#c8f0b0' });
@@ -1444,6 +1447,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       if (this.money) this.money.update(dt);
       if (this.ink) this.ink.update(dt);
       if (this.gadgets) this.gadgets.update(dt);
+      if (this.finds) this.finds.update(dt);
       if (this.freedraw) this.freedraw.update(this.realDt);
       if (this.signs) this.signs.update(dt);
       if (this.fuse) this.fuse.update(dt);
@@ -1649,6 +1653,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       this.animals.draw(fr);
       this.chute.draw(fr);
       this.pickups.draw(fr);
+      if (this.finds) this.finds.draw(fr);
       if (this.money) this.money.draw(fr);
       if (this.knock) this.knock.draw(fr);
       if (this.graffiti) this.graffiti.draw(fr);
@@ -1744,7 +1749,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     if ((!this.freedraw && input.wasPressed('KeyQ')) || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
-      else if (p.mode === 'foot' && !(this.facelab && this.facelab.interact()) && !this.events.interact() && !(this.festival && this.festival.interact()) && !(this.artnight && this.artnight.interact()) && !(this.arcade && this.arcade.interact()) && !(this.casino && this.casino.interact()) && !(this.parties && this.parties.interact()) && !(this.fair && this.fair.interact()) && !(this.arenaGame && this.arenaGame.interact()) && !(this.friend && this.friend.interact()) && !(this.crowds && this.crowds.social && this.crowds.social.interact && this.crowds.social.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
+      else if (p.mode === 'foot' && !(this.facelab && this.facelab.interact()) && !(this.finds && this.finds.interact()) && !this.events.interact() && !(this.festival && this.festival.interact()) && !(this.artnight && this.artnight.interact()) && !(this.arcade && this.arcade.interact()) && !(this.casino && this.casino.interact()) && !(this.parties && this.parties.interact()) && !(this.fair && this.fair.interact()) && !(this.arenaGame && this.arenaGame.interact()) && !(this.friend && this.friend.interact()) && !(this.crowds && this.crowds.social && this.crowds.social.interact && this.crowds.social.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
       else if (p.mode === 'swim' && this.swim) this.swim.interact();
     }
     if (input.wasPressed('KeyM')) this.openMap();
@@ -1858,6 +1863,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
 
   takePhoto() {
     if (this.player.mode !== 'foot' && !this.player.inVehicle) return;
+    if (this.finds && this.finds.on) return;
     const flash = $('flash');
     flash.classList.remove('on');
     void flash.offsetWidth;
@@ -2658,6 +2664,11 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       const ft = this.facelab.target();
       const label = ft ? ft.label : tr('E — חזרה למשחק', 'E — back to the game');
       prompt = touch ? label.replace('E — ', '') : label;
+    } else if (p.mode === 'foot' && this.finds && this.finds.target()) {
+      // (ROADMAP 29.5: a drawing found on a wall - E to copy it, game/finds.js)
+      enter = true;
+      const ft = this.finds.target();
+      prompt = touch ? ft.label.replace('E — ', '') : ft.label;
     } else if (p.mode === 'foot' && this.events.prompt()) {
       // somebody near you needs a hand (game/events.js)
       enter = true;
@@ -2743,7 +2754,8 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
         enter = true;
         prompt = touch ? tr('להגיד שלום', 'Say hello') : tr('E — להגיד שלום', 'E — say hello');
       } else {
-        const b = this.photoTarget();
+        // (ROADMAP 29.5: while drawings are found in the city, the boards are not photographed for them)
+        const b = this.finds && this.finds.on ? null : this.photoTarget();
         if (b) {
           photo = true;
           prompt = this.album.has(b.id) ? tr(`${BLUEPRINTS[b.id].name} כבר באלבום`, `${BLUEPRINTS[b.id].name} is already in the album`) : touch ? tr('לצלם את השרטוט', 'Photograph the blueprint') : tr('F — לצלם את השרטוט', 'F — photograph the blueprint');

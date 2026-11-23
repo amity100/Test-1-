@@ -673,6 +673,14 @@ export class Audio {
         this.tone('triangle', 1700 + Math.random() * 500, 1500, 0.07, 0.025 * v, 0.03);
         break;
       // (ROADMAP 18) a handgun across a car park: the crack, its thump, the echo off the concrete
+      // (ROADMAP 29.5) the marker SMG: a quick, dry snap - lighter than a rifle, each a little different
+      case 'smg': {
+        const p = 0.93 + Math.random() * 0.14;
+        this.hiss(0.045, 0.42 * v, 3100 * p, 0.9, 'bandpass', 0, 1100);
+        this.tone('sine', 210 * p, 80, 0.07, 0.24 * v);
+        this.hiss(0.16, 0.07 * v, 1100, 0.6, 'lowpass', 0.03, 260);
+        break;
+      }
       case 'pistol':
         this.hiss(0.06, 0.55 * v, 2600, 0.8, 'bandpass', 0, 900);
         this.tone('sine', 150, 60, 0.12, 0.35 * v);

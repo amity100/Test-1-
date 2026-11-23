@@ -9,9 +9,9 @@ import { tr } from '../core/lang.js';
 //     weapon you drew (game/streetlife.js)
 
 // shots in a magazine (a weapon not here has none: the throwing things, the beam, melee)
-export const MAGS = { pen: 8, paint: 30, rifle: 10, bazooka: 1, m4: 30, shotgun: 6, stapler: 40, planes: 3, glue: 10, minigun: 150, tippex: 60, erasermg: 60, paintmg: 60, mag: 100 };
+export const MAGS = { pen: 8, paint: 30, rifle: 30, bazooka: 1, m4: 30, shotgun: 6, stapler: 40, planes: 3, glue: 10, minigun: 150, tippex: 60, erasermg: 60, paintmg: 60, mag: 100, mp5: 30 };
 // seconds to reload (1.4 when not here)
-const RELOAD_T = { bazooka: 2.2, shotgun: 2.0, minigun: 3.0, planes: 2.4, rifle: 1.6, launcher: 2.2, assault: 1.6, mag: 3.6 };
+const RELOAD_T = { bazooka: 2.2, shotgun: 2.0, minigun: 3.0, planes: 2.4, rifle: 1.6, launcher: 2.2, assault: 1.6, mag: 3.6, mp5: 1.5 };
 
 export class Arsenal {
   constructor(game) {

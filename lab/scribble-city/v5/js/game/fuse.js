@@ -1610,7 +1610,8 @@ export class Fuse {
     const up = !!input && (input.keys.has('Space') || input.flyUp);
     const down = !!input && (input.keys.has('KeyC') || input.flyDown);
     const mv = input ? input.readMove() : { x: 0, y: 0 };
-    const boost = !!input && (input.keys.has('ShiftLeft') || input.keys.has('ShiftRight') || (input.pad && input.pad.sprint));
+    // (ROADMAP 29.5: the phone's boost button too)
+    const boost = !!input && (input.keys.has('ShiftLeft') || input.keys.has('ShiftRight') || !!input.boost || (input.pad && input.pad.sprint));
     let pull = 1;
     // (no higher than this over the ground under it)
     const gy = groundHeight(v.pos.x, v.pos.z);
@@ -1680,7 +1681,9 @@ export class Fuse {
       const M = g.mission;
       const alt = Math.max(0, v.pos.y - Math.max(gy, M ? M.floorAt(v.pos.x, v.pos.z, v.pos.y) : -Infinity));
       const sink = Math.max(-7, -1.6 - alt * 1.1);
-      const want = v.pos.y > ceil ? -2 : up ? (lf >= 1 ? 4.5 * (fz.climb || 1) : -1.5) : down ? sink : lf >= 1 ? 0 : Math.max(sink, -7 * (1 - lf));
+      // (ROADMAP 29.5: the wings' own ceiling - the found pair's is the towers' height; a rotor's low one does not hold them)
+      const wceil = fz.wingCeil ? gy + fz.wingCeil : ceil;
+      const want = v.pos.y > wceil ? -2 : up ? (lf >= 1 ? 4.5 * (fz.climb || 1) : -1.5) : down ? sink : lf >= 1 ? 0 : Math.max(sink, -7 * (1 - lf));
       v.vy = damp(v.vy, want, 2.4, dt);
       pull = 0;
       lifting = lf >= 1;
@@ -1688,7 +1691,7 @@ export class Fuse {
       // (S its air brakes: down onto a short island from full speed)
       let a = mv.y > 0 ? (H.power || 14) * 0.55 * mv.y : mv.y < 0 ? 10 * mv.y : -0.6;
       if (up && lf >= 1) a -= 2;
-      const cap = (H.top || 28) * (fz.thrust && boost ? 1.6 : 1.15);
+      const cap = (H.top || 28) * (fz.thrust && boost ? 1.6 : fz.wingCruise || 1.15);
       const nsp = clamp(sp + a * dt, 0, Math.max(cap, sp - 3 * dt));
       const hx = Math.sin(v.yaw);
       const hz = Math.cos(v.yaw);

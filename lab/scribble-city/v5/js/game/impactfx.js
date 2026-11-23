@@ -40,7 +40,7 @@ const GRAPHITE_KINDS = new Set(['pencil', 'slug', 'shaving']);
 const PAINT_KINDS = new Set(['paint', 'paintmg', 'crayon', 'paintball', 'ink', 'marker']);
 
 // how often a kind's full effect may be made (s): a rifle's every shot, a machine gun's every second or third
-const GAP = { pencil: 0, slug: 0.16, shaving: 0.14, tippex: 0.16, paint: 0.1, paintmg: 0.15, crayon: 0.05, paintball: 0.1, ink: 0.1, marker: 0.1, rubber: 0.16 };
+const GAP = { pencil: 0.05, slug: 0.16, shaving: 0.14, tippex: 0.16, paint: 0.1, paintmg: 0.15, crayon: 0.05, paintball: 0.1, ink: 0.1, marker: 0.1, rubber: 0.16 };
 
 // a colour a little brighter or duller, never past the page's white
 const hdr = (c, k) => [Math.min(1.12, c[0] * Math.min(k, 1.2)), Math.min(1.12, c[1] * Math.min(k, 1.2)), Math.min(1.12, c[2] * Math.min(k, 1.2))];

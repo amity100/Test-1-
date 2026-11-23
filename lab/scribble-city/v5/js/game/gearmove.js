@@ -383,9 +383,16 @@ export const MOVE = {
   wing: {
     finish(G, v, p, parts, H, fz, lv) {
       if (lv <= 1) fz.wingFly = false;
+      // (ROADMAP 29.5, the owner's word: strong wings from the start, and only stronger later) level 2 - the start's:
+      // real flight, a brisk climb, over the roofs; level 3 - found on the car park's roof: it lifts off sooner, climbs
+      // like a fighter, cruises faster, and goes as high as the towers
+      if (lv >= 2) fz.climb = (fz.climb || 1) * (lv >= 3 ? 1.7 : 1.2);
       if (lv >= 3) {
         fz.thrust = Math.max(fz.thrust || 0, 14);
         fz.wingJet = true;
+        if (fz.takeoff) fz.takeoff *= 0.8;
+        fz.wingCeil = 150;
+        fz.wingCruise = 1.4;
       }
     },
     update(G, v, p, dt, s, K, lv) {

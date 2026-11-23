@@ -495,6 +495,51 @@ export function boardAtlas(more = null) {
   return ATLAS;
 }
 
+// (ROADMAP 29.5, game/finds.js) a blueprint's board painted again: 'erased' - rubbed out by the Erasers, a ghost of it
+// left under the smears and their tag over it (the drawing itself is on a wall nearby, to be found); 'print' - as it was
+export function repaintBoard(id, mode = 'print') {
+  if (!ATLAS || !ATLAS.rects[`bb_${id}`] || !BLUEPRINTS[id]) return false;
+  const r = ATLAS.rects[`bb_${id}`];
+  const [cx, cy] = r.px;
+  const tmp = makeCanvas(BIG_W, BIG_H);
+  const c = tmp.getContext('2d');
+  const sk = new Sketcher(c, 4243 + cx + cy);
+  blueprintBoard(sk, c, BIG_W, BIG_H, BLUEPRINTS[id]);
+  if (mode === 'erased') {
+    // the rubbing: wide pink-grey swathes back and forth, the paper showing through, crumbs of rubber
+    c.save();
+    c.globalCompositeOperation = 'source-over';
+    c.lineCap = 'round';
+    let a = 1013 + cx;
+    const rnd = () => {
+      a = (a * 16807) % 2147483647;
+      return a / 2147483647;
+    };
+    for (let i = 0; i < 26; i++) {
+      const y = 40 + rnd() * (BIG_H - 70);
+      c.strokeStyle = i % 3 ? 'rgba(247,244,236,0.86)' : 'rgba(236,196,200,0.55)';
+      c.lineWidth = 18 + rnd() * 26;
+      c.beginPath();
+      c.moveTo(24 + rnd() * 40, y);
+      c.quadraticCurveTo(BIG_W * 0.5, y + (rnd() - 0.5) * 50, BIG_W - 30 - rnd() * 60, y + (rnd() - 0.5) * 30);
+      c.stroke();
+    }
+    c.fillStyle = 'rgba(190,150,156,0.7)';
+    for (let i = 0; i < 70; i++) {
+      c.beginPath();
+      c.arc(30 + rnd() * (BIG_W - 60), 50 + rnd() * (BIG_H - 80), 1 + rnd() * 2.4, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.restore();
+    sprayTag(c, BIG_W, BIG_H, 'ERASED', '#e8e2d6', '#c8283c', 7717 + cx);
+  }
+  const ctx = ATLAS.canvas.getContext('2d');
+  ctx.clearRect(cx, cy, BIG_W, BIG_H);
+  ctx.drawImage(tmp, cx, cy);
+  ATLAS.texture.needsUpdate = true;
+  return true;
+}
+
 // [u0, v0, u1, v1] of a cell (v up, as the texture is flipped)
 function cell(cx, cy, w, h) {
   const pad = 1.5;

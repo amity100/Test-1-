@@ -103,8 +103,8 @@ export const BLUEPRINTS = {
   },
   bazooka: {
     id: 'bazooka',
-    name: tr('בזוקת מחקים', 'Eraser bazooka'),
-    nameEn: 'ERASER BAZOOKA',
+    name: tr('RL-7 מחק', 'RL-7 Eraser'),
+    nameEn: 'RL-7 ERASER',
     kind: 'weapon',
     difficulty: 3,
     desc: tr('משגרת מחק ענק שמוחק כל מה שמסביב.', 'Launches a giant eraser that erases everything around.'),
@@ -1060,6 +1060,27 @@ Object.assign(BLUEPRINTS, {
     anchors: { muzzle: [97, 42.5], grip: [32, 58] },
     scale: 1.5,
   },
+  // (ROADMAP 29.5, the plan's start kit) the marker SMG: drawn from its side - the body with its stock struts and a fat
+  // marker for a barrel, the curved magazine leaning forward, the grip
+  mp5: {
+    id: 'mp5',
+    name: tr('תת-מקלע טושים', 'Marker SMG'),
+    nameEn: 'MARKER SMG',
+    kind: 'weapon',
+    difficulty: 2,
+    desc: tr('תת-מקלע קצר ומהיר שיורה טוש: צרור צפוף של דיו בכל לחיצה ארוכה. מדויק מקרוב, מתפזר מרחוק.', 'A short, fast submachine gun that fires marker ink: a tight stream of it while you hold. Accurate up close, spreading at range.'),
+    strokes: [
+      { label: tr('גוף, קת וטוש', 'Body'), en: 'body', pts: close([[0, 24], [6, 24], [6, 30], [22, 30], [22, 22], [70, 22], [74, 26], [96, 26], [100, 30], [96, 34], [74, 34], [70, 38], [22, 38], [22, 34], [6, 34], [6, 40], [0, 40]]) },
+      { label: tr('מחסנית מעוקלת', 'curved magazine'), en: 'magazine', pts: close([[50, 38], [56, 38], [62, 54], [66, 68], [58, 70], [54, 56]]) },
+      { label: tr('ידית', 'grip'), en: 'grip', pts: [[32, 38], [28, 56], [38, 56], [40, 38]] },
+    ],
+    fills: [
+      { poly: [[0, 24], [6, 24], [6, 30], [22, 30], [22, 22], [70, 22], [74, 26], [96, 26], [100, 30], [96, 34], [74, 34], [70, 38], [22, 38], [22, 34], [6, 34], [6, 40], [0, 40]], color: '#3a3d46' },
+      { poly: [[50, 38], [56, 38], [62, 54], [66, 68], [58, 70], [54, 56]], color: '#2d6fd0' },
+    ],
+    anchors: { muzzle: [100, 30], grip: [34, 50] },
+    scale: 1,
+  },
   paramotor: {
     id: 'paramotor',
     name: tr('דריפטפאן P2', 'Driftfan P2'),
@@ -1099,7 +1120,7 @@ export const BLUEPRINT_ORDER = ['paint', 'rifle', 'car', 'bazooka', 'tank', 'shi
 // (ROADMAP 4.8: in the album, not with ?classic - and no boards of their own in the city)
 export const BLUEPRINT_MORE = ['scooter', 'bicycle', 'jetski', 'boat', 'plane'];
 // (ROADMAP 28: new things of the start - in the album and on the pen's shelf; no boards of their own in the city)
-export const BLUEPRINT_NEW = ['paramotor', 'mag'];
+export const BLUEPRINT_NEW = ['paramotor', 'mag', 'mp5'];
 // (ROADMAP 11.41: the catalog's cars - in the album, not with ?classic; no boards of their own)
 export const BLUEPRINT_CARS = ['streetline', 'muscle', 'nightshift', 'hyper', 'trailforge', 'driftvan', 'cargobrute', 'interceptor', 'limo', 'monster', 'armored', 'firetruck'];
 // (ROADMAP 9.2: in the album, not with ?classic; to be had in the shops, no boards of their own)

@@ -42,9 +42,20 @@ export class GearPlay {
     return this.lab && !this.prog;
   }
 
+  // (ROADMAP 29.5, game/finds.js) the regular game after the prologue: what is open is the start kit and what was found,
+  // the rest as the sandbox has it - no ink per use, a full car of parts, no blueprint pages
+  finding() {
+    const F = this.game.finds;
+    return !this.lab && F && F.on ? F : null;
+  }
+
+  free() {
+    return this.all() || !!this.finding();
+  }
+
   // (a use costs ink: in a game, not in the lab)
   costs() {
-    return !this.all();
+    return !this.free();
   }
 
   isOpen(id) {
@@ -55,17 +66,21 @@ export class GearPlay {
     // (ROADMAP 25: what flies waits for the jump, in the car park alone)
     if (carParkHold(this.game, id)) return false;
     if (!this.lab && isEarly(this.game)) return EARLY_GEAR.includes(id) || chaseGear(this.game, id);
+    const F = this.finding();
+    if (F) return F.partOpen(id);
     return this.all() || this.state.open.includes(id);
   }
 
   level(id) {
     if (this.all()) return this.labLv;
+    const F = this.finding();
+    if (F) return Math.max(F.partLevel(id), F.levelLocked(id) ? 0 : this.state.lv[id] || 0);
     return this.state.lv[id] || 1;
   }
 
   // how many of a category the car carries at once (the lab: as many as fit - game/fuse.js, eight)
   slots(cat) {
-    if (this.all()) return 8;
+    if (this.free()) return 8;
     const n = this.state.open.length;
     return n >= 24 ? 3 : n >= 12 ? 2 : 1;
   }
@@ -92,7 +107,7 @@ export class GearPlay {
 
   // a blueprint page found: the next thing opens - its id, or null (all open)
   page(why = null) {
-    if (this.all()) return null;
+    if (this.free()) return null;
     const id = this.next();
     this.state.pages++;
     if (id) this.state.open.push(id);
@@ -108,6 +123,9 @@ export class GearPlay {
 
   // the garage: a level bought - its price, or null
   price(id) {
+    // (the wings' and the turbo's next levels are found in the city, not bought)
+    const F = this.finding();
+    if (F && F.levelLocked(id)) return null;
     const lv = this.level(id);
     if (lv >= 3 || !this.isOpen(id)) return null;
     return PRICE[lv + 1][ITEMS[id].stage] || 1000;

@@ -19,7 +19,7 @@ import { PartView } from './partview.js';
 import { comboReward, comboName } from '../game/combos.js';
 import { fmt } from '../game/money.js';
 import { DrawMemory } from '../game/drawmemory.js';
-import { matchCatalog, gradeOf, drawnWhole, tooEarly, MATCH_MIN, PICK_SLACK, SHELVES, SHELF_NAME, shelfOf, shelfIds } from '../game/catmatch.js';
+import { matchCatalog, gradeOf, drawnWhole, tooEarly, copyRead, COPY_MIN, MATCH_MIN, PICK_SLACK, SHELVES, SHELF_NAME, shelfOf, shelfIds } from '../game/catmatch.js';
 import { BLUEPRINTS, blueprintBounds } from '../game/blueprints.js';
 import { PEN_CATS, PEN_REST, PEN_REST_TOUCH, parList } from '../game/partpen.js';
 import { DRAWN_ON, WORLD_SAY } from '../game/gadgets.js';
@@ -529,6 +529,11 @@ export class FreeDraw {
     // (round 16: the picture of the one being drawn - its ✕ lets it go)
     press($('fd-ref'), (e) => {
       if (!e.target.closest('[data-x]')) return;
+      // (ROADMAP 29.5: copying a drawing found in the city - its ✕ leaves the copy)
+      if (this.target) {
+        this.close();
+        return;
+      }
       this.choose(null);
       this.legSig = '';
       this.showLegend();
@@ -767,6 +772,14 @@ export class FreeDraw {
     if (!this.isOpen) return;
     const game = this.game;
     if (this.cur) this.penUp(true);
+    // (ROADMAP 29.5) a copy of a found drawing left before it was made: nothing found, it is still there to be copied
+    if (this.target) {
+      const T = this.target;
+      this.target = null;
+      this.force = null;
+      document.body.classList.remove('fd-copy');
+      if (T.onCancel) T.onCancel();
+    }
     // (ROADMAP 11.22: back to driving - the drawing on the car is made first; its tag goes with the
     // pen, off the driving buttons)
     if (this.group.length) this.finishGroup();
@@ -1666,6 +1679,8 @@ export class FreeDraw {
 
   // (found, or all open: the album's own say - ui/album.js)
   bpOpen(id) {
+    // (ROADMAP 29.5: the drawing being copied from a wall - open to be drawn, found or not)
+    if (this.target && this.target.id === id) return true;
     // (ROADMAP 25: what flies waits for the jump, in the car park alone - game/drawlock.js)
     if (carParkHold(this.game, id)) return false;
     const a = this.game.album;
@@ -1690,6 +1705,7 @@ export class FreeDraw {
   }
 
   readCatalog() {
+    if (this.target) return this.readTarget();
     const shelf = this.shelf;
     const ids = shelfIds(shelf).filter((id) => this.bpOpen(id));
     // (picked in the legend or by a chip; or drawn like one picked before - ROADMAP 11.37)
@@ -1719,9 +1735,55 @@ export class FreeDraw {
     return { cat: 'bp', bp, kind: bp.id, name: bp.name, choice: b.id, lit: b.id, score: b.score, like, whole, other, ready: like && whole && !other, grade: gradeOf(b.score), need: b.need, parts: b.n, have: all.have, missing: Math.max(0, b.n - b.hit), cost: costOfBp(bp), alts, remembered: !this.force && !!mem && pick === mem };
   }
 
+  // (ROADMAP 29.5, the owner's word: the game must not squint at a drawing of something else) copying a drawing found
+  // in the city: read against that one drawing alone - alike enough (not perfect: a fair likeness), with its parts there,
+  // and it is made; nothing else in the catalog is ever named
+  readTarget() {
+    const id = this.target.id;
+    const bp = BLUEPRINTS[id];
+    const C = bp ? copyRead(this.strokes, id, shelfIds(shelfOf(bp))) : null;
+    if (!C) return null;
+    const all = { have: C.have };
+    const b = C.m;
+    const like = b.score >= COPY_MIN && !C.rival;
+    const whole = drawnWhole(b, all.have);
+    const ready = C.ready;
+    return { cat: 'bp', bp, kind: id, name: bp.name, choice: id, lit: ready ? id : null, score: b.score, like, whole, other: null, ready, grade: gradeOf(Math.max(b.score, MATCH_MIN)), need: b.need, parts: b.n, have: all.have, missing: Math.max(0, b.n - b.hit), cost: 0, alts: [], remembered: false, copy: true };
+  }
+
+  // (ROADMAP 29.5) a drawing found in the city, copied here: the pen opened on it alone, its picture big at the top;
+  // o.onDone({ grade, score }) once it is real, o.onCancel() if the pen is shut first
+  copy(id, o = {}) {
+    const game = this.game;
+    const bp = BLUEPRINTS[id];
+    if (!bp || !this.catalogOn()) return false;
+    if (game.player.mode !== 'foot') {
+      game.hud.toast(tr('צריך לצאת מהרכב כדי להעתיק את הציור', 'Get out of the car to copy the drawing'), 'info', 2.4);
+      return false;
+    }
+    if (!this.isOpen) this.show();
+    if (!this.isOpen) return false;
+    const sh = shelfOf(bp);
+    if (sh !== this.shelf) this.setShelf(sh);
+    this.strokes = [];
+    this.bake();
+    this.target = { id, title: o.title || bp.name, onDone: o.onDone || null, onCancel: o.onCancel || null };
+    document.body.classList.add('fd-copy');
+    this.force = id;
+    this.read();
+    this.render();
+    this.legSig = '';
+    this.refSig = '';
+    this.showLegend();
+    game.hud.toast(tr(`ציירו את ${this.target.title} כמו שהוא על הקיר — וכשהוא מוכן, ${game.touch ? '✓' : 'Q'}`, `Draw the ${this.target.title} the way it is on the wall — and when it's ready, ${game.touch ? '✓' : 'Q'}`), 'info', 3.6);
+    game.audio.play('pageflip', 0.35);
+    return true;
+  }
+
   // (ROADMAP 11.43) why a drawing from the catalog is not made yet (null: it is) - long, said when
   // it is tried; short, on the tag
   notYetSay(R, long) {
+    if (R.copy && !R.ready && R.have < 2) return long ? tr('ממשיכים להעתיק — עוד כמה קווים', 'Keep copying — a few more lines') : tr('ממשיכים להעתיק', 'Keep copying');
     if (R.other) return long ? tr(`זה נראה כמו ${R.other}, לא ${R.name} — ציירו את מה שבחרתם, או בחרו אחר`, `That looks like ${R.other}, not ${R.name} — draw what you picked, or pick another`) : tr(`נראה כמו ${R.other}`, `Looks like ${R.other}`);
     if (R.have < R.need) return long ? tr(`${moreLines(R.need - R.have)} — ל${R.name} יש ${R.parts} חלקים`, `${moreLines(R.need - R.have)} — ${R.name} has ${R.parts} parts`) : tr(`${moreLines(R.need - R.have)} · ${R.parts} חלקים`, `${moreLines(R.need - R.have)} · ${R.parts} parts`);
     if (!R.whole) return long ? tr(`חלקים של ${R.name} חסרים או לא במקום — ציירו את כולו, כמו במקרא`, `Parts of ${R.name} are missing or out of place — draw all of it, like in the guide`) : tr('חלקים חסרים או לא במקום', 'Parts missing or out of place');
@@ -1748,7 +1810,7 @@ export class FreeDraw {
     const al = this.game.album;
     const st = (id) => (carParkHold(this.game, id) ? 'h' : !al ? 'k' : al.known(id) ? 'k' : al.toLearn(id) ? 'l' : this.bpOpen(id) ? 'k' : 'x');
     const early = on && isEarly(this.game);
-    const sig = `${on}|${early}|${this.shelf}|${lit}|${this.force || ''}|${this.world || ''}|${ids.map(st).join('')}|${early ? Object.values(EARLY_KIT).flat().map(st).join('') : ''}|${this.game.inventions ? this.game.inventions.list.map((o) => o.id + o.v).join() : ''}`;
+    const sig = `${on}|${this.target ? 'copy:' + this.target.id + ':' + !!(R && R.ready) + ':' + !!(R && R.have) : ''}|${early}|${this.shelf}|${lit}|${this.force || ''}|${this.world || ''}|${ids.map(st).join('')}|${early ? Object.values(EARLY_KIT).flat().map(st).join('') : ''}|${this.game.inventions ? this.game.inventions.list.map((o) => o.id + o.v).join() : ''}`;
     if (sig === this.legSig) return;
     this.legSig = sig;
     document.body.classList.toggle('fd-catalog', on);
@@ -1756,6 +1818,12 @@ export class FreeDraw {
     if (!on) {
       el.innerHTML = '';
       this.showRef(null);
+      return;
+    }
+    if (this.target) {
+      // (the legend is the copy's picture at the top alone: nothing else to pick, room to draw)
+      this.showRef(this.target.id);
+      el.innerHTML = '';
       return;
     }
     if (!early) this.showRef(this.force && BLUEPRINTS[this.force] && al && !al.known(this.force) ? this.force : null);
@@ -1987,6 +2055,18 @@ export class FreeDraw {
     const el = this.refEl;
     if (!el) return;
     const bp = id && BLUEPRINTS[id] ? BLUEPRINTS[id] : null;
+    // (ROADMAP 29.5) copying a drawing found in the city: its title, and how alike the copy is so far - never another name
+    if (bp && this.target && this.target.id === id) {
+      const R = this.R;
+      const st = R && R.ready ? 'ok' : R && R.have ? 'no' : 'go';
+      const sig2 = `copy:${id}:${st}`;
+      if (sig2 === this.refSig) return;
+      this.refSig = sig2;
+      el.classList.add('on');
+      const say = st === 'ok' ? tr(`✓ דומה — ${this.game.touch ? 'לחצו ✓' : 'Q'} והוא אמיתי`, `✓ Close enough — ${this.game.touch ? 'tap ✓' : 'press Q'} and it's real`) : st === 'no' ? tr('עוד לא דומה לציור שעל הקיר', "Not like the drawing on the wall yet") : tr('ציירו אותו כמו שהוא על הקיר', 'Draw it the way it is on the wall');
+      el.innerHTML = `<div class="fe-big">${bpSvg(bp)}</div><div class="fe-what"><b>${esc(this.target.title)}</b><span class="fe-st ${st}">${say}</span></div><button class="fe-x" data-x="1" aria-label="${tr('ביטול', 'Cancel')}">✕</button>`;
+      return;
+    }
     const sig = bp ? bp.id : '';
     if (sig === this.refSig) return;
     this.refSig = sig;
@@ -2083,6 +2163,17 @@ export class FreeDraw {
     }
     game.updateGoals();
     const strokes = this.strokes.map((s) => s.p);
+    // (ROADMAP 29.5) a copy of a drawing found in the city: done - not let go of as the pen shuts
+    const copied = this.target && this.target.id === bp.id ? this.target : null;
+    if (copied) {
+      this.target = null;
+      document.body.classList.remove('fd-copy');
+      // (made with a touch from now on: no first trace over its lines - game/buildtray.js firstWanted)
+      if (game.tray && game.tray.store && game.tray.store.learned) {
+        game.tray.store.learned[`bp:${bp.id}`] = game.tray.store.learned[`bp:${bp.id}`] || { copied: true };
+        if (game.tray.save) game.tray.save();
+      }
+    }
     this.flyAway();
     this.strokes = [];
     this.force = null;
@@ -2092,6 +2183,7 @@ export class FreeDraw {
     this.close();
     this.info();
     game.onDrawingDone(bp, res, strokes, plan);
+    if (copied && copied.onDone) copied.onDone({ grade: res.grade, score: res.score, plan });
     const slot = bp.kind === 'weapon' && game.weapons ? game.weapons.current : null;
     if (slot && slot.present) this.presenting = { slot, base: slot.present.matrix.clone(), follow: plan.follow, from: game.player.pos.clone() };
   }
