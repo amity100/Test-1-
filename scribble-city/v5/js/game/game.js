@@ -110,6 +110,7 @@ import { Gadgets } from './gadgets.js';
 import { FreeDraw } from '../ui/freedraw.js';
 import { Finds } from './finds.js';
 import { Places } from './places.js';
+import { Boxing } from './boxing.js';
 import { Signs } from './signs.js';
 import { Fuse } from './fuse.js';
 import { Gear } from './gear.js';
@@ -258,6 +259,8 @@ export class Game {
     await breath('init');
     // (v5, ROADMAP 11.17: game night at the Bayfront Arena - the players, the crowd, the score)
     this.arenaGame = this.classic ? null : new ArenaGame(this);
+    // (ROADMAP 29.5) the boxing gym's ring and its work: a bout you really fight, the mitts, the bags (game/boxing.js)
+    this.boxing = this.classic ? null : new Boxing(this);
     // (v5, ROADMAP 11.17: the people of the mainland's malls)
     this.mallLife = new MallLife(this);
     this.vignettes = new Vignettes(this);
@@ -1293,6 +1296,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     if (this.gear) dt *= this.gear.timeK(this.realDt);
     // (v5, ROADMAP 18: the prologue's slow motion - the drawing, the top of the jump)
     if (this.prologue) dt *= this.prologue.timeK();
+    if (this.boxing) dt *= this.boxing.timeK(this.realDt);
     this.time += dt;
     shared.uTime.value = this.time;
     // the gamepad first: it presses the same keys the keyboard does
@@ -1351,6 +1355,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       if (dt > 0 && this.weapons && this.weapons.hold) this.weapons.hold.assist(dt, Math.abs(look.x) + Math.abs(look.y) > 1.5);
     }
     if (dt > 0) {
+      if (this.boxing) this.boxing.update(dt);
       player.update(dt, input, this.camRig, this.weapons);
       // (round 15: getting into a car, GTA's way - his feet and hands the sequence's: tickEntry)
       if (this.entry) this.tickEntry(dt);
@@ -1543,7 +1548,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
         const zoom = aim && wd.zoom ? wd.zoom : 1;
         this.camRig.lookK = (aim ? 0.72 : 1) / zoom;
         // (on the big wheel or the carousel: further back, the ride and the view round it)
-        const ro = (this.fair && this.fair.camOpts()) || (this.arenaGame && this.arenaGame.camOpts());
+        const ro = (this.boxing && this.boxing.camOpts()) || (this.fair && this.fair.camOpts()) || (this.arenaGame && this.arenaGame.camOpts());
         // (a game played in the world: the camera held behind you, its screen in front - ui/minigame.js)
         const hold = this.minigames && this.minigames.camHold;
         if (hold) this.camRig.holdAt(dt, hold.pos, hold.look, hold.fov);
@@ -1619,6 +1624,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       }
       this.enemies.draw(this.camera.position);
       this.civilians.draw(this.camera.position);
+      if (this.boxing) this.boxing.draw();
       this.farCrowd.draw(this.camera.position);
       this.shopCrowd.draw(this.camera.position);
       if (this.festival) this.festival.draw(fr);

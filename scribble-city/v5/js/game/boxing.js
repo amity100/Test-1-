@@ -491,7 +491,10 @@ export class Boxing {
     if (P.has('KeyL') || P.has('BoxHook') || this.gpP(PAD.hook)) press = 'hook';
     if (P.has('KeyI') || P.has('BoxUpper') || this.gpP(PAD.upper)) press = 'upper';
     if (press) {
-      it.press = body ? 'b' + press : press;
+      // (a press not yet taken by a step of the bout - in a blow's stop of the picture none runs - is kept: the next goes behind it)
+      const p = body ? 'b' + press : press;
+      if (it.press) it.press2 = p;
+      else it.press = p;
       it.tap += 1;
       this.lastPress = press;
     }
@@ -974,7 +977,7 @@ export class Boxing {
           return h ? h.t : L;
         };
         const here = free(this.camSide);
-        if (here < L * 0.6) {
+        if (here < L * 0.75) {
           const there = free(-this.camSide);
           if (there > here + 0.8) {
             this.camSide = -this.camSide;

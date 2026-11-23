@@ -211,7 +211,11 @@ export function clearSite(game) {
   if (O && O.list) {
     for (const o of O.list) {
       if (!o || o.state !== 'here') continue;
-      if (!inCut((o.x0 + o.x1) / 2, 1, (o.z0 + o.z1) / 2)) continue;
+      const ox = (o.x0 + o.x1) / 2;
+      const oz = (o.z0 + o.z1) / 2;
+      // (and the street tree on Meridian's sidewalk right before the gym's door)
+      const door = o.kind === 'tree' && ox > -197.6 && ox < -194.5 && oz > 42.4 && oz < 46.4;
+      if (!door && !inCut(ox, 1, oz)) continue;
       O.remove(o);
       done.objs.push(o);
     }
@@ -404,6 +408,7 @@ const LAMP = linC(1.0, 0.93, 0.76);
 const NEON_R = linC(1.0, 0.14, 0.18);
 const NEON_W = linC(1.0, 0.95, 0.86);
 const OFFICE_W = linC(0.8, 0.84, 0.86);
+const NIGHT_WIN = linC(0.42, 0.31, 0.16);
 const LEATHER = [linC(0.7, 0.1, 0.1), linC(0.12, 0.12, 0.14), linC(0.62, 0.42, 0.24)];
 
 // the inside's pens: the city's own, under the room's lamps (no sun in here; nor any shadow of theirs)
@@ -466,7 +471,7 @@ function poster(K, M, x, y, z, nx, nz, w, h, bg, fg, lines, accent = null) {
 
 // the shell and everything in it. Y0: the ground. K: the shell (the city's pens, casting), KI: the inside (under its lamps),
 // KM: what swings (the bags; one pen, its parts' corners kept in order: returned), wall(x0, z0, x1, z1, y0, y1, tag): a solid
-export function buildGym(K, KI, KM, M, Y0, wall) {
+export function buildGym(K, KI, KM, M, Y0, wall, KN = null) {
   const G = GYM;
   const MI = gymMats();
   const { x0: X0, x1: X1, z0: Z0, z1: Z1, T } = G;
@@ -543,6 +548,8 @@ export function buildGym(K, KI, KM, M, Y0, wall) {
     const o = W ? X0 : Z0;
     const i = W ? xi0 : zi0;
     box(K, M.glass, a0, y0, o - 0.02, a1, y1, i + 0.02, GLASS);
+    // (after dark: the light inside in it, behind its bars - KN, shown at night only)
+    if (KN) box(KN, M.glow, a0, y0, o - 0.026, a1, y1, o - 0.021, NIGHT_WIN);
     // (the frame and the sill outside; the frame inside)
     box(K, M.metal, a0 - 0.08, y0 - 0.05, o - 0.08, a1 + 0.08, y0, o, CHAR);
     box(K, M.metal, a0 - 0.08, y1, o - 0.08, a1 + 0.08, y1 + 0.08, o, CHAR);
@@ -1179,7 +1186,8 @@ export class Gym {
     const K = new Kit();
     const KI = new Kit();
     const KM = new Kit();
-    this.movers = buildGym(K, KI, KM, M, Y0, wall);
+    const KN = new Kit();
+    this.movers = buildGym(K, KI, KM, M, Y0, wall, KN);
     const far = (name, d) => {
       const e = P.list.find((q) => q.name === name);
       if (e) e.far = d;
@@ -1190,6 +1198,15 @@ export class Gym {
     far('gym-in', 80);
     const gm = P.add('gym-move', KM, 0.73, cx, cz);
     far('gym-move', 55);
+    // (the windows lit from inside after dark: shown by the gym itself, at night and near enough)
+    const gn = (this.night = KN.build({ seed: 0.83 }));
+    gn.name = 'place-gym-night';
+    for (const m of gn.children) {
+      m.frustumCulled = true;
+      m.userData.noShadow = true;
+    }
+    gn.visible = false;
+    g.scene.add(gn);
     // (what swings: its corners as they hang still, to swing from)
     this.moveMesh = gm.children[0] || null;
     if (this.moveMesh) {
@@ -1303,6 +1320,7 @@ export class Gym {
     this.swing(dt);
     const g = this.game;
     const c = g.camera.position;
+    if (this.night) this.night.visible = !!g.daynight && g.daynight.night > 0.3 && Math.abs(c.x - this.cx) < 260 && Math.abs(c.z - this.cz) < 260;
     const near = Math.abs(c.x - this.cx) < 90 && Math.abs(c.z - this.cz) < 90;
     this.boardT -= dt;
     if (this.boardT <= 0) {
@@ -1639,6 +1657,13 @@ export class Gym {
     const LL = lightList();
     for (const id of this.lights) if (LL[id]) LL[id].on = false;
     this.lights = [];
+    if (this.night) {
+      g.scene.remove(this.night);
+      this.night.traverse((m) => {
+        if (m.isMesh) m.geometry.dispose();
+      });
+      this.night = null;
+    }
     restoreSite(g, this.site);
     this.site = null;
     this.board = null;

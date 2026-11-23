@@ -79,7 +79,7 @@ export class Rand {
 // his right, mz in), the guard held, a punch pressed (and whether as a body shot), a slip (-1 left, 1 right), a duck, taps to
 // get up
 export function newIntent() {
-  return { mx: 0, mz: 0, guard: false, press: null, slip: 0, duck: false, tap: 0, feint: false, tell: 0 };
+  return { mx: 0, mz: 0, guard: false, press: null, press2: null, slip: 0, duck: false, tap: 0, feint: false, tell: 0 };
 }
 
 class Fighter {
@@ -318,6 +318,7 @@ export class Bout {
     }
     for (const it of this.intent) {
       it.press = null;
+      it.press2 = null;
       it.slip = 0;
       it.duck = false;
       it.tap = 0;
@@ -370,16 +371,23 @@ export class Bout {
       f.dbuf = it.slip || 2;
       f.dbufT = 0.16;
     } else if ((f.dbufT -= h) <= 0) f.dbuf = 0;
-    if (it.press) {
+    // (and a second press that came while no step ran - a blow's stop of the picture holds the clock: both kept, in order)
+    for (let q = 0; q < 2; q++) {
+      const pr = q === 0 ? it.press : it.press2;
+      if (!pr) continue;
       if (f.buf && f.state !== 'idle') {
-        f.buf2 = it.press;
-        f.buf2Tell = it.tell || 0;
-        f.buf2Feint = !!it.feint;
+        f.buf2 = pr;
+        f.buf2Tell = q === 0 ? it.tell || 0 : 0;
+        f.buf2Feint = q === 0 && !!it.feint;
+      } else if (f.buf && q === 1) {
+        f.buf2 = pr;
+        f.buf2Tell = 0;
+        f.buf2Feint = false;
       } else {
-        f.buf = it.press;
+        f.buf = pr;
         f.bufT = 0.22;
-        f.bufTell = it.tell || 0;
-        f.bufFeint = !!it.feint;
+        f.bufTell = q === 0 ? it.tell || 0 : 0;
+        f.bufFeint = q === 0 && !!it.feint;
       }
     }
     // the stamina and the health coming back
