@@ -137,6 +137,8 @@ const GLYPH_OF = { theatre: 'cinema', fashion: 'boutique', shoes: 'boutique', el
 
 // the legend: each group's sticker, its name, and from how close it shows (pixels a metre)
 const CATS = [
+  // (ROADMAP 29.5) the drawings hung in the city to be found and copied (game/finds.js): where each is, until it is taken
+  { id: 'find', name: tr('ציורים למצוא', 'Drawings to find'), glyph: 'board', fill: '#ffffff', square: true, k: 0 },
   { id: 'blueprint', name: tr('שלטי שרטוטים', 'Blueprint signs'), glyph: 'board', fill: '#ffd23f', square: true, k: 0 },
   // (ROADMAP 8.2; none with ?classic) the places that can be yours (gold: yours)
   { id: 'prop', name: tr('נכסים', 'Property'), glyph: 'deed', fill: '#c8f0b0', k: 0, nc: true },
@@ -154,7 +156,7 @@ const CATS = [
   { id: 'gang', name: tr('שטחי כנופיות', 'Gang turf'), glyph: 'gang', fill: '#ffd0d0', k: 0 },
 ];
 const CAT = Object.fromEntries(CATS.map((c) => [c.id, c]));
-const ORDER = ['prop', 'blueprint', 'car', 'fun', 'place', 'hotel', 'food', 'shop', 'service', 'hide', 'bus'];
+const ORDER = ['find', 'prop', 'blueprint', 'car', 'fun', 'place', 'hotel', 'food', 'shop', 'service', 'hide', 'bus'];
 
 const HIDE_NOTE = {
   alley: tr('בקצה הסמטה', 'At the end of the alley'),
@@ -320,9 +322,33 @@ export class CityMap {
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.dirty());
   }
 
+  // (ROADMAP 29.5) what changes as the game goes on: the drawings still to be found (a van's where it is now), and the boxing
+  // gym once it stands - put on the map each time it is opened
+  syncLive() {
+    const g = this.game;
+    if (!this.items) return;
+    this.items = this.items.filter((it) => !it.live);
+    const add = (o) => this.items.push({ ...o, live: true });
+    const P = g.places;
+    if (P && P.gym && P.gym.built) {
+      add({ cat: 'place', glyph: 'gym', x: -195.5, z: 44.4, name: tr('מכון האיגרוף 9TH STREET', '9TH STREET GYM'), note: tr('פינת מרידיאן ורחוב 9. זירה, קרבות מול יריבים, אימון כריות עם מאמן, שקים', 'Meridian & 9th. A ring, bouts against a ladder of fighters, the mitts with a coach, the bags') });
+    }
+    const F = g.finds;
+    if (F && F.on) {
+      for (const sp of F.ensureSpots()) {
+        if (F.has(sp.f.id)) continue;
+        add({ cat: 'find', glyph: 'board', x: sp.x, z: sp.z, name: sp.f.title, note: sp.f.where });
+      }
+    }
+    const rank = Object.fromEntries(ORDER.map((id, i) => [id, i]));
+    this.items.sort((a, b) => (b.big ? 1 : 0) - (a.big ? 1 : 0) || (rank[a.cat] ?? 99) - (rank[b.cat] ?? 99));
+    if (this.dirty) this.dirty();
+  }
+
   show() {
     if (this.open) return;
     if (!this.built) this.build();
+    this.syncLive();
     this.open = true;
     this.openedAt = performance.now();
     this.el.classList.remove('hidden');

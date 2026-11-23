@@ -318,6 +318,7 @@ export class Finds {
     try {
       const o = JSON.parse(localStorage.getItem(KEY) || 'null');
       if (o && Array.isArray(o.found)) out.found = o.found.filter((id) => BY_ID[id]);
+      if (o && o.told) out.told = true;
     } catch (e) {
       // (no storage here: nothing found yet)
     }
@@ -476,6 +477,15 @@ export class Finds {
     if (!this.boardsDone && spots.length) {
       this.boardsDone = true;
       for (const s of spots) if (s.f.board && !this.has(s.f.id)) repaintBoard(s.f.board, 'erased');
+    }
+    // (once, the first time they are there: where to look for them - the map has each one, and the gym)
+    if (!this.state.told && spots.length && g.hud) {
+      this.toldT = (this.toldT || 0) + dt;
+      if (this.toldT > 6) {
+        this.state.told = true;
+        this.save();
+        g.hud.toast(g.touch ? tr('ציורים מחכים לכם בעיר — כל אחד מסומן במפה (ציורים למצוא). גם מכון האיגרוף במפה', 'Drawings are waiting for you in the city — each one is on the map (Drawings to find). The boxing gym is on it too') : tr('ציורים מחכים לכם בעיר — כל אחד מסומן במפה (M, ציורים למצוא). גם מכון האיגרוף במפה', 'Drawings are waiting for you in the city — each one is on the map (M, Drawings to find). The boxing gym is on it too'), 'info', 7);
+      }
     }
     const p = g.player;
     const at = p.inVehicle ? p.inVehicle.pos : p.pos;
