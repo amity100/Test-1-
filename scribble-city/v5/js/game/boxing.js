@@ -642,22 +642,17 @@ export class Boxing {
     let face;
     fig.reachR = null;
     fig.reachL = null;
-    const cam = this.game.camera.position;
+    // (the camera's way into the picture, flat: he keeps beyond whoever it is on - never between it and them)
+    const cy = this.camYaw === null ? this.game.camRig.yaw : this.camYaw;
+    const vx = Math.sin(cy);
+    const vz = Math.cos(cy);
     if (b.phase === 'count' && b.downed >= 0) {
-      // over him, on the far side from the camera, a step off
+      // over him, beyond him from the camera, a step off to the side his head is
       const D = b.f[b.downed];
-      const O = b.f[1 - b.downed];
-      let px = -(O.z - D.z);
-      let pz = O.x - D.x;
-      const pl = Math.hypot(px, pz) || 1;
-      px /= pl;
-      pz /= pl;
-      if (px * (cam.x - D.x) + pz * (cam.z - D.z) > 0) {
-        px = -px;
-        pz = -pz;
-      }
-      tx = D.x + px * 0.95;
-      tz = D.z + pz * 0.95;
+      const hx = -Math.sin(D.yaw);
+      const hz = -Math.cos(D.yaw);
+      tx = D.x + vx * 0.85 + hx * 0.35;
+      tz = D.z + vz * 0.85 + hz * 0.35;
       face = Math.atan2(D.x - tx, D.z - tz);
       // (the arm: up through the second, down on the number)
       const j = fig.j;
@@ -675,15 +670,9 @@ export class Boxing {
       const mx = (A.x + B.x) / 2;
       const mz = (A.z + B.z) / 2;
       const d = b.dist() || 1;
-      let px = -(B.z - A.z) / d;
-      let pz = (B.x - A.x) / d;
-      if (px * (cam.x - mx) + pz * (cam.z - mz) > 0) {
-        px = -px;
-        pz = -pz;
-      }
-      // (and toward his end of it - clear of both, in the picture's corner)
-      tx = mx + px * 2.0 + ((B.x - A.x) / d) * 0.95;
-      tz = mz + pz * 2.0 + ((B.z - A.z) / d) * 0.95;
+      // (beyond the two of them, and toward his end - clear of both, in the picture's corner)
+      tx = mx + vx * 2.0 + ((B.x - A.x) / d) * 0.95;
+      tz = mz + vz * 2.0 + ((B.z - A.z) / d) * 0.95;
       face = Math.atan2(mx - tx, mz - tz);
       // (it is over: the winner's arm up - his own up in the air for him)
       if (b.result && this.overT > 0.6 && fig.j && fig.j.shoulderR) {
