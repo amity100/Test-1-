@@ -245,7 +245,7 @@ function pageModel(W, H, strokes, seed) {
   }
   const tex = pageTexture(PW, PH, strokes, seed);
   const paper = makeSurface({ kind: 'uv', vcolor: true, map: tex, emMap: tex, emissive: new THREE.Color(0.36, 0.36, 0.34), uvScale: PW, ang: 1.4, wash: 0.9, density: 0.4, line: 0.55 });
-  K.add(paper, g, [1, 1, 1]);
+  K.add(paper, g, [0.86, 0.86, 0.84]);
   // (its edge seen as a thin darker line: a sheet, not a light)
   for (const [x0, y0, x1, y1] of [[-PW / 2, -PH / 2, PW / 2, -PH / 2 + 0.012], [-PW / 2, PH / 2 - 0.012, PW / 2, PH / 2], [-PW / 2, -PH / 2, -PW / 2 + 0.012, PH / 2], [PW / 2 - 0.012, -PH / 2, PW / 2, PH / 2]]) K.box(M.matte, x0, y0, 0.001, x1, y1, 0.004, PAPER_EDGE);
   for (const [sx, sy] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
@@ -537,7 +537,8 @@ export class Finds {
             fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], mix(CHALK, GOLD_DEEP, Math.min(1, k2 * 1.4)), w0 + 1.8 * k2, s.seed + k * 31 + i, alpha, 0.003, 0);
           } else if (!printed) fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], lit > 0.5 ? mix(CHALK, GOLD_DEEP, (lit - 0.5) * 0.5) : CHALK, w0, s.seed + k * 31 + i, alpha, 0.003, 0);
           // (near: a soft warm halo round the lines on the page)
-          if (lit > 0.4) fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], GOLD_HOT, 9 + 6 * near, s.seed + 500 + k * 31 + i, (0.06 + 0.1 * near + 0.06 * night) * out, 0.004, 0);
+          // (on a printed page by day it would only soften the ink: there it is a night thing)
+          if (lit > 0.4) fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], GOLD_HOT, 9 + 6 * near, s.seed + 500 + k * 31 + i, (0.06 + 0.1 * near + 0.06 * night) * (printed ? night : 1) * out, 0.004, 0);
           // (the stroke gone over now: the pencil's line drawn fresh, up to where the hand is)
           if (redo >= 0 && st.at[i - 1] < redo) {
             const f2 = Math.min(1, (redo - st.at[i - 1]) / Math.max(1e-3, st.at[i] - st.at[i - 1]));
@@ -559,7 +560,8 @@ export class Finds {
       // (from 10 m: a warm light round it - more at night)
       if (d < NEAR + 4) {
         const k3 = clamp((NEAR + 4 - d) / 6, 0, 1) * out;
-        flashLight(s.x + s.nx * 1.1, s.y + s.ny * 1.1 + 0.2, s.z + s.nz * 1.1, 4.6, WARM, (0.7 + 1.1 * night) * k3);
+        // (by day the sun is light enough: more of it would burn the page white over its drawing)
+        flashLight(s.x + s.nx * 1.1, s.y + s.ny * 1.1 + 0.2, s.z + s.nz * 1.1, 4.6, WARM, ((s.page ? 0.12 : 0.7) + 1.1 * night) * k3);
       }
     }
     for (const q of this.fading) {
