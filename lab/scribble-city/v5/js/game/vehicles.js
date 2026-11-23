@@ -1216,16 +1216,35 @@ class Vehicle {
       throttle = mv.y;
       turn = -mv.x;
     }
-    const maxF = 11 * q.speed;
-    this.speed = damp(this.speed, throttle * maxF, 1.6 * q.accel, dt);
-    this.yaw += turn * 1.05 * dt * (this.grade === 'fail' ? 0.4 : 1) + (input ? q.pull * 0.2 * dt : 0);
-    const f = this.fwd;
-    this.pos.x += f.x * this.speed * dt;
-    this.pos.z += f.z * this.speed * dt;
-    this.pos.y = damp(this.pos.y, groundHeight(this.pos.x, this.pos.z) * 0.5, 12, dt);
-    this.speedAbs = Math.abs(this.speed);
-    this.collideWorld(dt);
-    this.runOver();
+    // (ROADMAP 29.5) what is mounted on it: a turbo, a jet engine - Shift, the phone's turbo button: faster, harder, as on a
+    // car; its hydraulics, a rotor, wings with something that pushes - off the ground, flown as a car of yours is till it
+    // comes down again, on a roof as well (game/fuse.js rideAir, rideFloor)
+    const F = this.game.fuse;
+    const boost = F && this.fz ? F.rideBoost(this, dt, input) : 0;
+    const jk = boost ? this.fz.jetK || 1 : 1;
+    const flown = F && (this.air || this.fz) && F.rideAir(this, dt, input);
+    if (!flown) {
+      const R = this.fz && this.fz.ride;
+      const maxF = 11 * q.speed * (1 + 0.4 * boost * jk) * (R ? 1 + R.prop * 0.02 : 1);
+      this.speed = damp(this.speed, throttle * maxF, 1.6 * q.accel * (1 + 1.2 * boost * jk), dt);
+      this.yaw += turn * 1.05 * dt * (this.grade === 'fail' ? 0.4 : 1) + (input ? q.pull * 0.2 * dt : 0);
+      const f = this.fwd;
+      this.pos.x += f.x * this.speed * dt;
+      this.pos.z += f.z * this.speed * dt;
+      if (F && this.fz) {
+        // (with parts on it: what it stands on - up on a roof it came down on, and over its edge it falls)
+        const fy = F.rideFloor(this).y;
+        if (fy < this.pos.y - 0.6) {
+          this.air = true;
+          this.vy = 0;
+        } else this.pos.y = damp(this.pos.y, fy, 12, dt);
+      } else this.pos.y = damp(this.pos.y, groundHeight(this.pos.x, this.pos.z) * 0.5, 12, dt);
+      this.vx = f.x * this.speed;
+      this.vz = f.z * this.speed;
+      this.speedAbs = Math.abs(this.speed);
+      this.collideWorld(dt);
+      this.runOver();
+    }
     // the turret follows the camera
     if (input) {
       let want = this.game.camRig.yaw - this.yaw;
@@ -1456,6 +1475,12 @@ class Vehicle {
   updateCopter(dt, input) {
     const q = this.q;
     const game = this.game;
+    const F = game.fuse;
+    const parts = this.fz;
+    const R = parts && parts.ride ? parts.ride : null;
+    const turbo = !!(parts && (parts.nitro || parts.jetFuelMax));
+    const boost = F && parts ? F.rideBoost(this, dt, input) : 0;
+    const jk = boost ? parts.jetK || 1 : 1;
     let ax = 0;
     let az = 0;
     let up = 0;
@@ -1472,14 +1497,17 @@ class Vehicle {
       ax = fx * mv.y - fz * sx;
       az = fz * mv.y + fx * sx;
       if (input.keys.has('Space')) up += 1;
-      if (input.keys.has('KeyC') || input.keys.has('ControlLeft') || input.keys.has('ShiftLeft')) up -= 1;
+      // (ROADMAP 29.5: with a turbo on it Shift is the turbo's - C still takes it down)
+      if (input.keys.has('KeyC') || input.keys.has('ControlLeft') || (input.keys.has('ShiftLeft') && !turbo)) up -= 1;
       if (input.flyUp) up += 1;
       if (input.flyDown) up -= 1;
       this.yaw = dampAngle(this.yaw, cy, 1.5, dt);
     }
-    const maxS = 24 * q.speed;
-    this.vx = damp(this.vx || 0, ax * maxS, 1.6 * q.accel, dt);
-    this.vz = damp(this.vz || 0, az * maxS, 1.6 * q.accel, dt);
+    // (ROADMAP 29.5) what is mounted on it (game/fuse.js rideApply): wings - faster on; a turbo, a jet engine - Shift, the
+    // phone's turbo button: faster still, harder; a second rotor - it climbs faster, and higher
+    const maxS = 24 * q.speed * (R ? R.speedK * (1 + R.prop * 0.02) : 1) * (1 + 0.4 * boost * jk);
+    this.vx = damp(this.vx || 0, ax * maxS, 1.6 * q.accel * (1 + 0.8 * boost * jk), dt);
+    this.vz = damp(this.vz || 0, az * maxS, 1.6 * q.accel * (1 + 0.8 * boost * jk), dt);
     // (ROADMAP 11.12: its weight not under its rotor - it leans that way and drifts, flown or not)
     if (this.lean0 && this.alt > 1.2) {
       this.vx += Math.sin(this.yaw) * this.lean0 * 10 * dt;
@@ -1495,9 +1523,9 @@ class Vehicle {
         game.hud.toast(tr('אין רוטור זנב — הוא מסתובב סביב עצמו! ציירו רוטור קטן בזנב', 'No tail rotor — it spins around itself! Draw a small rotor on the tail'), 'info', 3);
       }
     }
-    const maxAlt = this.grade === 'fail' ? 1.2 : 70;
+    const maxAlt = this.grade === 'fail' ? 1.2 : 70 + (R ? R.ceil : 0);
     // (ROADMAP 11.15: what lifts it a little small for it - it rises slowly)
-    this.vy = damp(this.vy, up * 9 * (up > 0 ? q.climb || 1 : 1), 3, dt);
+    this.vy = damp(this.vy, up * 9 * (up > 0 ? (q.climb || 1) * (R ? R.climbK : 1) : 1), 3, dt);
     if (!this.driver) this.vy = damp(this.vy, (1.05 - this.alt) * 0.8, 1, dt);
     this.alt = clamp(this.alt + this.vy * dt, 1.0, maxAlt);
     if (q.wobble) {

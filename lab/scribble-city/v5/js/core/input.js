@@ -37,6 +37,9 @@ export class Input {
     this.lockRequest = null;
     this.lockFailures = 0;
     this.buttons = {};
+    // (ROADMAP 29.5: keys a contained game keeps to itself while it lasts - game/boxing.js's bout: wasPressed says no to them for
+    // everybody else; that game reads input.pressed itself)
+    this.grab = null;
     this.listeners = [];
     this._bind();
   }
@@ -374,6 +377,53 @@ export class Input {
         aimBtn.classList.toggle('on', this.aimLatch);
       }, { passive: false });
     }
+    // (ROADMAP 29.5: the ring's buttons - game/boxing.js, index.html #bx-pad: each a key of its own, the guard held; a swipe on the
+    // right side slips left or right, down ducks; a tap there counts toward getting up off the canvas)
+    const bx = (id, code, hold = false) => {
+      if (document.getElementById(id)) btn(id, code, hold);
+    };
+    bx('bx-jab', 'BoxJab');
+    bx('bx-cross', 'BoxCross');
+    bx('bx-hook', 'BoxHook');
+    bx('bx-upper', 'BoxUpper');
+    bx('bx-guard', 'BoxGuard', true);
+    bx('bx-slipl', 'BoxSlipL');
+    bx('bx-slipr', 'BoxSlipR');
+    bx('bx-duck', 'BoxDuck');
+    bx('bx-quit', 'BoxQuit');
+    const bz = document.getElementById('bx-zone');
+    if (bz) {
+      const sw = new Map();
+      bz.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        for (const t of e.changedTouches) sw.set(t.identifier, { x: t.clientX, y: t.clientY, t: performance.now(), done: false });
+      }, { passive: false });
+      bz.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        for (const t of e.changedTouches) {
+          const s = sw.get(t.identifier);
+          if (!s || s.done) continue;
+          const dx = t.clientX - s.x;
+          const dy = t.clientY - s.y;
+          if (Math.abs(dx) > 32 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+            s.done = true;
+            this.pressed.add(dx < 0 ? 'BoxSlipL' : 'BoxSlipR');
+          } else if (dy > 32 && dy > Math.abs(dx) * 1.2) {
+            s.done = true;
+            this.pressed.add('BoxDuck');
+          }
+        }
+      }, { passive: false });
+      const end = (e) => {
+        for (const t of e.changedTouches) {
+          const s = sw.get(t.identifier);
+          sw.delete(t.identifier);
+          if (s && !s.done && performance.now() - s.t < 300 && Math.hypot(t.clientX - s.x, t.clientY - s.y) < 14) this.pressed.add('BoxTap');
+        }
+      };
+      bz.addEventListener('touchend', end);
+      bz.addEventListener('touchcancel', end);
+    }
     const guard = document.getElementById('btn-guard');
     if (guard) {
       guard.addEventListener('touchstart', (e) => {
@@ -443,6 +493,7 @@ export class Input {
   }
 
   wasPressed(code) {
+    if (this.grab && this.grab.has(code)) return false;
     return this.pressed.has(code);
   }
 

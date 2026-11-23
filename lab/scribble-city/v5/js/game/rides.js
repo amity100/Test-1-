@@ -264,9 +264,13 @@ export function updateBoat(v, dt, input) {
   const q = v.q;
   const game = v.game;
   const jet = v.jet;
+  const F = game.fuse;
+  // (ROADMAP 29.5: a turbo, a jet engine mounted on it - Shift, the phone's turbo button: faster, harder, as on a car)
+  const boost = F && v.fz ? F.rideBoost(v, dt, input) : 0;
+  const jk = boost && v.fz ? v.fz.jetK || 1 : 1;
   // (ROADMAP 28.3: the Coastrunner faster than the speedboat it was - a jet ski is still the quicker off the mark)
-  const top = (jet ? 24 : 38) * q.speed;
-  const power = (jet ? 10 : 8.6) * q.accel;
+  const top = (jet ? 24 : 38) * q.speed * (1 + 0.4 * boost * jk);
+  const power = (jet ? 10 : 8.6) * q.accel * (1 + 1.2 * boost * jk);
   let throttle = 0;
   let steer = 0;
   if (input) {
@@ -278,6 +282,21 @@ export function updateBoat(v, dt, input) {
     v.vx = 0;
     v.vz = 0;
     v.yawRate = 0;
+  }
+  // (ROADMAP 29.5) off the water on what is mounted on it - a hop on its hydraulics, up on its wings at speed like a
+  // seaplane, a rotor - and flown as a car of yours is till it comes down again (game/fuse.js rideAir)
+  if (F && (v.air || v.fz) && F.rideAir(v, dt, input)) {
+    // (its bow up as it climbs, down as it dives; leaning into its turns)
+    v.pitchV = damp(v.pitchV || 0, clamp(-(v.vy || 0) * 0.035, -0.32, 0.32), 3, dt);
+    v.rollV = damp(v.rollV || 0, clamp(-(v.yawRate || 0) * 0.35, -0.5, 0.5), 3, dt);
+    if (input) game.audio.engine(0.35 + Math.min(1, v.speedAbs / top), jet ? 'bike' : 'boat');
+    return;
+  }
+  // (ROADMAP 29.5) down off its wings on the sand, a street, the pier, a roof: on its keel it scrapes along, slowly, back
+  // to the water - off an edge, it falls
+  if (F && v.fz && !isWater(v.pos.x, v.pos.z)) {
+    aground(v, dt, input, throttle, steer, power);
+    return;
   }
   // (ROADMAP 11.8) a submarine drawn: C takes it down under the waves (no one sees it there), Space
   // brings it up again
@@ -363,6 +382,43 @@ export function updateBoat(v, dt, input) {
   if (input) game.audio.engine(0.2 + v.speedAbs / top, v.sail || v.paddle ? 'pedal' : jet ? 'bike' : 'boat');
 }
 
+// (ROADMAP 29.5) a boat with parts on it, out of the water (game/fuse.js rideFloor): its engine pushes it a little on
+// its keel, the ground holds it back hard; it turns slowly
+function aground(v, dt, input, throttle, steer, power) {
+  const game = v.game;
+  const F = game.fuse;
+  const fx = Math.sin(v.yaw);
+  const fz = Math.cos(v.yaw);
+  // (wheels, tracks mounted under it: it drives on the land - an amphibian)
+  const rolls = !!(v.fz.wheels || v.fz.hideWheels);
+  let vL = v.vx * fx + v.vz * fz;
+  vL += throttle * power * (rolls ? 0.9 : 0.35) * dt;
+  vL -= vL * (rolls ? 0.5 : 2.4) * dt;
+  vL = clamp(vL, rolls ? -5 : -2, rolls ? 14 : 4);
+  v.yawRate = damp(v.yawRate || 0, steer * 0.7 * clamp(Math.abs(vL) / 1.5, 0.25, 1), 4, dt);
+  v.yaw += v.yawRate * dt;
+  const nx = Math.sin(v.yaw);
+  const nz = Math.cos(v.yaw);
+  v.vx = nx * vL;
+  v.vz = nz * vL;
+  v.pos.x += v.vx * dt;
+  v.pos.z += v.vz * dt;
+  const f = F.rideFloor(v);
+  if (f.y < v.pos.y - 0.6) {
+    // (over an edge: off it, falling - game/fuse.js rideAir)
+    v.air = true;
+    v.vy = 0;
+  } else if (!f.wet) v.pos.y = f.y > v.pos.y ? f.y : damp(v.pos.y, f.y, 10, dt);
+  v.pitchV = damp(v.pitchV || 0, 0, 4, dt);
+  v.rollV = damp(v.rollV || 0, 0.06, 4, dt);
+  v.speed = vL;
+  v.speedAbs = Math.abs(vL);
+  v.turn = steer;
+  if (v.collideWorld) v.collideWorld(dt);
+  if (!rolls && v.speedAbs > 0.6 && Math.random() < dt * 10) game.fx.crumbs(v.pos.x - nx * (v.halfLen || 1.5), v.pos.y + 0.1, v.pos.z - nz * (v.halfLen || 1.5), 2, 1.2, true);
+  if (input) game.audio.engine(0.15 + Math.abs(throttle) * 0.2, v.jet ? 'bike' : 'boat');
+}
+
 // the wake: a V of white lines spreading behind it, fading
 const WAKE = [0.95, 0.98, 1];
 export function drawWake(v, fr, time) {
@@ -389,9 +445,22 @@ const G = 9.8;
 export function updatePlane(v, dt, input) {
   const q = v.q;
   const game = v.game;
+  const F = game.fuse;
+  const fz = v.fz;
+  // (ROADMAP 29.5) what is mounted on it, in a plane's own way of going (game/fuse.js rideApply): wings - off the ground
+  // sooner, slower before it stalls, round tighter; a rotor, a balloon - it hangs in the air however slow, and lifts off
+  // where it stands; a turbo, a jet engine - Shift, the phone's turbo button: thrust, as on a car (then C alone noses
+  // it down); a parachute - down slowly; the water kit - it sets down on the sea; the hydraulics - a hop on its wheels
+  const R = fz && fz.ride ? fz.ride : null;
+  const turbo = !!(fz && (fz.nitro || fz.jetFuelMax));
+  const boost = F && fz ? F.rideBoost(v, dt, input) : 0;
+  const jk = boost ? fz.jetK || 1 : 1;
+  const chute = v.chute || (fz && fz.chute ? { sink: -(fz.chuteVy || -2.4) } : null);
+  const hover = !!(R && R.hover);
   let rollIn = 0;
   let pitchIn = 0;
   let brake = false;
+  let press = false;
   if (input) {
     const mv = input.readMove();
     if (mv.y > 0.1) v.thr = Math.min(1, (v.thr || 0) + dt * 0.7);
@@ -401,17 +470,19 @@ export function updatePlane(v, dt, input) {
     }
     rollIn = -mv.x;
     if (input.keys.has('Space') || input.flyUp) pitchIn += 1;
-    if (input.keys.has('KeyC') || input.keys.has('ControlLeft') || input.keys.has('ShiftLeft') || input.flyDown) pitchIn -= 1;
+    if (input.keys.has('KeyC') || input.keys.has('ControlLeft') || (input.keys.has('ShiftLeft') && !turbo) || input.flyDown) pitchIn -= 1;
+    press = input.wasPressed('Space') || (!!input.flyUp && !v.fzUpWas);
+    v.fzUpWas = !!input.flyUp;
   } else v.thr = Math.max(0, (v.thr || 0) - dt * 0.5);
   const thr = v.thr || 0;
-  const top = 48 * q.speed;
+  const top = 48 * q.speed * (1 + 0.4 * boost * jk);
   // (how slow it can fly before it falls: by its wings for its weight, if drawn of parts)
-  const stall = v.stallV || 17;
+  const stall = (v.stallV || 17) * (R ? R.stallK : 1);
   let s = v.speed || 0;
   v.pitch = v.pitch || 0;
   v.roll = v.roll || 0;
   // thrust, drag, and climbing costs speed (diving gives it)
-  s += (thr * 6.5 * q.accel - s * Math.abs(s) * 0.0028 - Math.sin(v.pitch) * G * (v.flying ? 1 : 0)) * dt;
+  s += ((thr + boost * 0.35) * 6.5 * q.accel * (1 + 1.2 * boost * jk) + (R && thr > 0 ? R.prop * 0.2 : 0) - s * Math.abs(s) * 0.0028 - Math.sin(v.pitch) * G * (v.flying ? 1 : 0)) * dt;
   const ground = Math.max(0, groundHeight(v.pos.x, v.pos.z));
   if (!v.flying) {
     // on the wheels: rolls, steers slowly (ROADMAP 11.13: even standing - it turns on its wheels,
@@ -423,19 +494,38 @@ export function updatePlane(v, dt, input) {
     v.yaw += rollIn * 0.55 * Math.max(0.45, Math.min(1, Math.abs(s) / 8)) * (s < -0.2 ? -1 : 1) * dt;
     v.pitch = damp(v.pitch, 0, 6, dt);
     v.roll = damp(v.roll, 0, 6, dt);
-    if (s > (v.takeoffV || 21) && pitchIn > 0) {
+    const off = (v.takeoffV || 21) * (R ? R.stallK : 1);
+    // (ROADMAP 29.5: its hydraulics - ▲ slow on its wheels, a hop)
+    if (press && fz && fz.jump && !hover && !v.hopY && s < off * 0.8) {
+      v.hopVy = fz.jump;
+      v.hopY = 0.001;
+      v.fzSpringT = game.time;
+      game.audio.play('jump', 0.7);
+    }
+    if (v.hopY) {
+      v.hopVy -= 20 * dt;
+      v.hopY = Math.max(0, v.hopY + v.hopVy * dt);
+      if (!v.hopY) {
+        game.audio.play('crash', 0.3);
+        game.camRig.addShake(0.15);
+      }
+    }
+    if ((s > off || (hover && !v.hopY)) && pitchIn > 0) {
       v.flying = true;
       v.vy = 1.5;
+      v.hopY = 0;
       game.audio.play('whoosh', 0.5);
     }
-    v.pos.y = ground;
+    v.pos.y = ground + (v.hopY || 0);
   } else {
     // the stick: it banks and pitches; banked, it turns; too slow, the nose drops
     v.roll = damp(v.roll, rollIn * 0.75, 2.2, dt);
     v.pitch = damp(v.pitch, pitchIn * 0.38, 1.6, dt);
     // (ROADMAP 11.12: its weight behind where its wings hold it - it pitches up and down by itself)
     if (v.pitchy) v.pitch += Math.sin((v.time || 0) * 2.4) * v.pitchy * 0.55 * dt;
-    if (s < stall) {
+    // (ROADMAP 29.5: held up by a rotor, a balloon - slow, it does not fall: ▲ ▼ take it up and down)
+    const held = hover && s < stall;
+    if (s < stall && !held) {
       v.pitch = damp(v.pitch, -0.45, 1.4, dt);
       if (!v.stallSaid) {
         v.stallSaid = true;
@@ -443,11 +533,13 @@ export function updatePlane(v, dt, input) {
       }
     } else v.stallSaid = false;
     s = clamp(s, 0, top);
-    v.yaw += v.roll * 0.85 * dt * clamp(s / 26, 0.4, 1.4);
-    const lift = clamp((s - stall) / 10, 0, 1);
-    v.vy = s * Math.sin(v.pitch) - (1 - lift) * 7;
+    v.yaw += v.roll * 0.85 * dt * clamp(s / 26, 0.4, 1.4) * (R ? R.turnK : 1);
+    // (ROADMAP 29.5: wings mounted on it - they hold it up the more for each m/s over its stall)
+    const lift = clamp((s - stall) / (10 * (R ? R.stallK : 1)), 0, 1);
+    v.vy = held ? damp(v.vy || 0, pitchIn * 5, 2.5, dt) : s * Math.sin(v.pitch) - (1 - lift) * 7;
+    if (held) v.pitch = damp(v.pitch, 0, 2, dt);
     // (a parachute drawn on it: down slowly however slow it flies - ROADMAP 11.8)
-    if (v.chute) v.vy = Math.max(v.vy, -v.chute.sink);
+    if (chute) v.vy = Math.max(v.vy, -chute.sink);
     v.pos.y += v.vy * dt;
     if (v.pos.y > 230) {
       v.pos.y = 230;
@@ -456,8 +548,10 @@ export function updatePlane(v, dt, input) {
     // down: a landing, or a crash
     const gnd = groundHeight(v.pos.x, v.pos.z);
     if (v.pos.y <= Math.max(gnd, -0.8)) {
-      // (one drawn to float too, gently enough: it sets down on the water - ROADMAP 11.8)
-      if (gnd < -0.5 && v.modes && v.modes.boat && v.vy >= -8 && Math.abs(v.roll) < 0.7) {
+      // (one drawn to float too, gently enough: it sets down on the water - ROADMAP 11.8; ROADMAP 29.5: or with the
+      // water kit on it)
+      const floats = (v.modes && v.modes.boat) || !!(fz && fz.float && fz.float.k >= 1);
+      if (gnd < -0.5 && floats && v.vy >= -8 && Math.abs(v.roll) < 0.7) {
         game.fx.splash(v.pos.x, -0.75, v.pos.z, 26, 4.5, [0.88, 0.95, 1]);
         game.audio.play('jump', 0.5);
         v.flying = false;
@@ -467,7 +561,7 @@ export function updatePlane(v, dt, input) {
         v.speed = s * 0.6;
         return;
       }
-      if (gnd < -0.5 || v.vy < -5.5 || Math.abs(v.roll) > (v.chute ? 0.9 : 0.5)) {
+      if (gnd < -0.5 || v.vy < -5.5 || Math.abs(v.roll) > (chute ? 0.9 : 0.5)) {
         if (gnd < -0.5) game.fx.splash(v.pos.x, -0.8, v.pos.z, 30, 6);
         v.destroy();
         return;

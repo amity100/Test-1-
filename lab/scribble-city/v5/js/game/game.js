@@ -2380,6 +2380,8 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     const p = this.player;
     const v = p.inVehicle;
     if (!v) return;
+    // (ROADMAP 29.5: the ride he came in - a part found on foot goes onto it, game/finds.js)
+    p.lastVehicle = v;
     // (ROADMAP 4.8) out of a boat: onto the promenade or the pier, if one is a step away
     let shore = null;
     if (v.kind === 'boat' && !v.dead) {

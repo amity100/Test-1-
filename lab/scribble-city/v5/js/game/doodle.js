@@ -6,6 +6,7 @@ import { GOLD } from './looks.js';
 import { carryShapes, carryStrokes, carryPose, heldIn } from './carry.js';
 import { TATTOO_LINES, TATTOO_INK } from './wardrobe.js';
 import { NECK_J, neckMove, headFrame } from '../render/neckbend.js';
+import { boxPose } from './boxrig.js';
 
 // The people's rig: joints for every pose (walk / run / aim / melee / sit / crawl / fall / dance /
 // carry), and the solid shapes of the body for bullets and the eraser (render/people.js dresses
@@ -233,6 +234,9 @@ export class Doodle {
     this.guard = 0;
     this.recoil = 0;
     this.recoilSide = 0;
+    // (ROADMAP 29.5: in a bout - game/boxing.js - what the boxer's body is doing; while it is set the whole pose is his,
+    // game/boxrig.js, and nothing else poses him)
+    this.box = null;
     // thrown by a car or a blast (ROADMAP 5.5, game/ragdoll.js): the ragdoll has the joints; just
     // up off the street, the pose eases out of how the body lay
     this.rag = null;
@@ -415,6 +419,20 @@ export class Doodle {
     }
     const f = this.forward.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     this.right.set(-f.z, 0, f.x);
+    if (this.box) {
+      boxPose(this, dt, ik);
+      if (this.unragT > 0) {
+        this.unragT = Math.max(0, this.unragT - dt);
+        const k = 1 - this.unragT / this.unragDur;
+        const e = k * k * (3 - 2 * k);
+        const from = this.unragJ;
+        for (const key in this.j) this.j[key].lerpVectors(from[key], this.j[key], e);
+      }
+      this.placeHead(dt);
+      this.center.lerpVectors(this.j.hip, this.j.neck, 0.5);
+      this.shapesDirty = true;
+      return;
+    }
     const sp = this.speed;
     // (characters round) a real pace of steps - about 1.8 a second at a walk, 3.3 at a run, 4.5 flat
     // out - the steps longer the faster (not legs spinning twice as fast as a runner's); stopping, the
@@ -827,7 +845,16 @@ export class Doodle {
       yaw = clamp(this.lookYaw - this.chestYaw, -1.2, 1.2);
       pitch = this.lookPitch - 0.03 * Math.min(1, Math.abs(this.lookYawV) / 5);
     }
-    neckMove(yaw, pitch, 0.06 * yaw + (this.rag ? 0 : this.headTilt), yb, this.neckD);
+    // (ROADMAP 29.5: a boxer's head turned back from his chest's turn to the man in front of him, and snapped round by a blow -
+    // game/boxrig.js)
+    const bx = this.box;
+    let roll = 0.06 * yaw + (this.rag ? 0 : this.headTilt);
+    if (bx && !this.rag) {
+      yaw = clamp(yaw + bx.hdy, -1.35, 1.35);
+      pitch += bx.hdp;
+      roll += bx.hdr;
+    }
+    neckMove(yaw, pitch, roll, yb, this.neckD);
     headFrame(O, r0, u0, f0, hs, J, this.neckD, j.headC, this.hr, this.hu, this.hf);
     j.neckTop.copy(j.headC).addScaledVector(this.hu, J.y * hs).addScaledVector(this.hf, J.z * hs);
     this.placed = true;

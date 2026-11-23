@@ -212,9 +212,15 @@ export function mountOf(id, ctx) {
     case 'none': at = [D.hw + 1.5, 0.6, 0]; break;
     default: at = [D.hw + 0.1, mid, -0.1];
   }
+  // (ROADMAP 29.5: a ride that is not a car - its frame where it is on it, game/fuse.js rideFrame)
+  const o = ctx.off;
+  if (o) at = [at[0] + o[0], at[1] + o[1], at[2] + o[2]];
   const pair = ITEMS[id].at === 'sides' || ITEMS[id].at === 'body' || ITEMS[id].at === 'wheels';
   return { at, to: pair ? [at, [-at[0], at[1], at[2]]] : [at] };
 }
+
+// (ROADMAP 29.5) a point of a ride's frame, on the ride (ctx.off: where that frame is on it)
+const shift = (q, o) => [q[0] + o[0], q[1] + o[1], q[2] + o[2]];
 
 // ------------------------------------------------------------------ the drawing, kept
 // (ROADMAP 11.26) the drawing as drawn, in metres by the car on the screen (x to the right, y up the
@@ -290,8 +296,19 @@ export function itemPart(id, n, ctx, inkI, time, d = null, lv = 1) {
   // rest its own lines, as drawn. ROADMAP 11.28: and every other thing - game/gearlook.js - at its level)
   const o = { side: d && d.side, flip: d && d.flip, ink: INKS[inkI], n, lv };
   const L = has ? (DESIGNED.has(id) && designOf(id, d.M, ctx, o)) || (GEAR_DESIGNED.has(id) && gearDesign(id, d.M, ctx, o)) || lookOf(id, d.M, ctx, { side: d.side, flip: d.flip }) : null;
+  // (ROADMAP 29.5) on a ride that is not a car: made in the frame of where it goes there (game/fuse.js rideFrame), and set
+  // where that is on it - the model by off (game/fuse.js buildVeh), where it holds and where the ink flies to with it; up
+  // on a mast from where that is (post)
+  const off = ctx.off && (ctx.off[0] || ctx.off[1] || ctx.off[2]) ? ctx.off : null;
+  if (L && off) {
+    L.at = shift(L.at, off);
+    for (const k of ['P3', 'T3', 'dash']) if (L[k]) L[k] = L[k].map((ln) => ln.map((q) => shift(q, off)));
+    if (L.focus && L.focus.at) L.focus = { ...L.focus, at: shift(L.focus.at, off) };
+  }
   const part = { type: it.type, v: it.v, n: { ...n, ...((L && L.n) || {}) }, at: L ? L.at : mountOf(id, ctx).at.slice(), ink: inkI, t0: time, cost: 0, item: id, lv, id: Math.random().toString(36).slice(2, 8) };
   if (L) part.shape = L.shape;
+  if (L && off) part.off = off.slice();
+  if (ctx.post !== undefined && ctx.K) part.post = [part.at[0], ctx.post + (off ? off[1] : 0), part.at[2], ctx.K.roofY + (off ? off[1] : 0) - 0.01];
   if (id === 'star') part.until = time + STAR_T;
   if (id === 'prop') {
     // (the floats it rides on: as long as the car - a propeller makes a boat of it)
@@ -689,7 +706,7 @@ export class PartPen {
       while (mine.length && mine.length >= G.play.slots(cat)) fz.removeVeh(v, mine.shift(), true);
     }
     // (ROADMAP 28: the tray's nitro is the bottle and the exhausts - the big engine is a part of its own: lvCap)
-    const { part, L } = itemPart(item, n, fz.drawCtx(v), inkI, this.game.time, d, Math.min(G ? G.level(item) : 1, this.lvCap || 3));
+    const { part, L } = itemPart(item, n, fz.drawCtx(v, item), inkI, this.game.time, d, Math.min(G ? G.level(item) : 1, this.lvCap || 3));
     // (ROADMAP 23.19: in the story's chase a machine gun goes on the roof and turns all the way round - they are behind him;
     // on the hood it turns only a little, ahead: game/fuse.js arc)
     if (item === 'mg' && this.game.prologue && this.game.prologue.chaseGun) {
@@ -745,7 +762,7 @@ export class PartPen {
     const t0 = performance.now();
     if (!L) {
       // (no drawing to go by: shrinking into its place)
-      const M = mountOf(part.item, this.fz.drawCtx(v));
+      const M = mountOf(part.item, this.fz.drawCtx(v, part.item));
       M.to.forEach((to, i) => this.flights.push({ v, from, at: to, c: inkI, t0, part: i ? null : part, a: i ? 0.55 : 1 }));
       return 1;
     }
@@ -1057,7 +1074,7 @@ export class PartPen {
     const f = frameOf(v);
     const a = 0.85 + 0.15 * Math.sin(now / 170);
     const w = 1 + 0.18 * Math.sin(now / 170);
-    for (const [n, L] of mountLines(this.live.item, this.fz.drawCtx(v)).entries()) {
+    for (const [n, L] of mountLines(this.live.item, this.fz.drawCtx(v, this.live.item)).entries()) {
       runIn(fr, f, L, HALO_C, 16 * w, 9600 + n * 7, a * 0.8);
       runIn(fr, f, L, MOUNT_C, 9 * w, 9600 + n * 7, a);
     }
@@ -1417,6 +1434,8 @@ function endsOf(L) {
 
 // where the thing goes, lit on the car while it is drawn: lines in its frame
 function mountLines(id, ctx) {
+  // (ROADMAP 29.5: on a ride that is not a car, drawn in its frame and set where that is on it)
+  if (ctx.off) return mountLines(id, { ...ctx, off: null }).map((ln) => ln.map((q) => shift(q, ctx.off)));
   const D = ctx.D;
   const M = mountOf(id, ctx);
   const [, y, z] = M.at;

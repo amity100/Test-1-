@@ -24,7 +24,9 @@ export const WEAP = {
       if (!G.use(p)) return;
       s.fired = g.time;
       const top = p.n && p.n.top ? p.n.top : [0, 2.1, -0.25];
-      onCar(v, top[0], top[1], top[2], _a);
+      // (ROADMAP 29.5: on a ride that is not a car, its ring where it was put there)
+      const o = p.off || [0, 0, 0];
+      onCar(v, top[0] + o[0], top[1] + o[1], top[2] + o[2], _a);
       let from = [_a.x, _a.y, _a.z];
       const done = new Set();
       const links = lv >= 3 ? 3 : 1;

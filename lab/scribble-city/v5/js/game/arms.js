@@ -379,76 +379,270 @@ export const ARMS = {
     };
   },
 
-  // ---------------------------------------------------------------------------------------------- the pencil rifle
-  // A bolt-action rifle as one is made - a stock of oiled cedar with a comb and a chequered grip, a round steel
-  // receiver with its bolt and handle, a box magazine, a scope in two rings - and its barrel a long yellow pencil,
-  // crimped into the receiver by its ferrule and sharpened at the muzzle.
+  // ---------------------------------------------------------------------------------------------- the M16 pencil rifle
+  // The service rifle of the later pattern as it is made: a forged upper and lower pinned together, the carrying handle
+  // with the rear sight on its back and the drum that raises it, the forward assist, the port with its cover dropped
+  // open and the brass deflector behind it, a fixed polymer stock and its butt plate with the trapdoor, a round ribbed
+  // handguard in two halves held by the slip ring, the front sight's post between its ears on the triangular base - and
+  // its barrel a long yellow pencil, its ferrule the barrel nut, sharpened at the muzzle. Through the open port: the
+  // next pencil lying in the magazine's lips.
   rifle(K, M) {
     const S = INK;
     const BY = 0.046; // the bore
-    const SY = 0.103; // the scope
-    // --- the stock: butt, comb, wrist and grip, forend
-    const stock = rounded([[-0.4, 0.046], [-0.25, 0.05], [-0.16, 0.032], [-0.07, 0.012], [0.03, 0.012], [0.03, 0.026], [0.45, 0.026], [0.462, 0.002], [0.44, -0.012], [0.2, -0.022], [0.11, -0.03], [0.0, -0.03], [-0.026, -0.108], [-0.082, -0.114], [-0.1, -0.056], [-0.4, -0.088]], 0.012, 4);
-    K.add(M.matte, plate(stock, -0.022, 0.022, { bevel: 0.009, bs: 2 }), S.cedar);
+    const UT = 0.074; // the upper's top
+    // --- the lower: the magazine well and its flared mouth, the grip with its finger swell, the guard
+    K.add(M.metal, plate(rounded([[-0.124, -0.002], [-0.03, -0.002], [-0.01, 0.006], [0.098, 0.006], [0.1, -0.054], [0.18, -0.058], [0.184, -0.002], [0.194, 0.024], [-0.124, 0.024]], 0.006, 3), -0.016, 0.016, { bevel: 0.004 }), S.alu);
+    K.add(M.metal, plate(rounded([[0.097, -0.048], [0.183, -0.052], [0.185, -0.062], [0.095, -0.058]], 0.003, 2), -0.0176, 0.0176, { bevel: 0.003 }), S.alu);
+    const grip = rounded([[-0.056, 0.004], [-0.008, 0.004], [-0.016, -0.036], [-0.011, -0.05], [-0.019, -0.062], [-0.03, -0.106], [-0.08, -0.11], [-0.092, -0.094]], 0.01, 4);
+    K.add(M.matte, plate(grip, -0.0138, 0.0138, { bevel: 0.006, bs: 2 }), S.polymer);
     for (const s of [1, -1]) {
-      // (the grain, the chequering on the grip and under the forend, a cheek piece)
-      for (const [z0, z1, y] of [[-0.38, -0.2, 0.02], [-0.36, -0.14, -0.012], [-0.39, -0.24, -0.046], [-0.3, -0.16, -0.062], [0.14, 0.4, 0.008], [0.2, 0.43, -0.006]]) K.add(M.matte, plate([[z0, y], [z1, y + 0.002], [z1, y + 0.0046], [z0, y + 0.003]], s * 0.0215, s * 0.0226, { bevel: 0.0004 }), S.cedar2);
-      K.add(M.matte, plate(rounded([[-0.082, -0.03], [-0.02, -0.03], [-0.036, -0.1], [-0.076, -0.104]], 0.008, 3), s * 0.021, s * 0.0232, { bevel: 0.001 }), S.cedar2);
-      for (let i = 0; i < 6; i++) K.add(M.matte, plate([[-0.076 + i * 0.002, -0.04 - i * 0.011], [-0.03 - i * 0.002, -0.04 - i * 0.011], [-0.031 - i * 0.002, -0.043 - i * 0.011], [-0.077 + i * 0.002, -0.043 - i * 0.011]], s * 0.0232, s * 0.0238, { bevel: 0.0003 }), S.cedar);
-      K.add(M.matte, plate(rounded([[0.2, -0.014], [0.4, -0.006], [0.4, 0.012], [0.2, 0.012]], 0.006, 3), s * 0.021, s * 0.0232, { bevel: 0.001 }), S.cedar2);
-      for (let i = 0; i < 9; i++) K.add(M.matte, plate([[0.212 + i * 0.02, -0.01], [0.216 + i * 0.02, -0.01], [0.226 + i * 0.02, 0.009], [0.222 + i * 0.02, 0.009]], s * 0.0232, s * 0.0238, { bevel: 0.0003 }), S.cedar);
+      for (let i = 0; i < 6; i++) K.add(M.matte, plate([[-0.074 - i * 0.002, -0.07 - i * 0.0062], [-0.04 - i * 0.002, -0.07 - i * 0.0062], [-0.041 - i * 0.002, -0.073 - i * 0.0062], [-0.075 - i * 0.002, -0.073 - i * 0.0062]], s * 0.0136, s * 0.0147, { bevel: 0.0005 }), S.steel);
+      // (its pins: the takedown pin and the pivot, the hammer's and the trigger's)
+      for (const [z, y] of [[-0.11, 0.014], [0.178, 0.012], [0.03, 0.013], [0.068, 0.011]]) screw(K, M.metal, s * 0.016, y, z, 0.0034, S.bright);
     }
-    K.add(M.matte, plate(rounded([[-0.34, 0.03], [-0.2, 0.036], [-0.19, 0.056], [-0.33, 0.058]], 0.01, 3), 0.014, 0.027, { bevel: 0.005, bs: 2 }), S.cedar);
-    pencilButt(K, M, -0.4, -0.088, 0.046, 0.022);
-    // (the sling's swivels)
-    for (const [z, y] of [[-0.32, -0.086], [0.4, -0.012]]) {
-      K.add(M.metal, cbox(-0.006, y - 0.004, z - 0.008, 0.006, y + 0.004, z + 0.008, 0.002), S.steel2);
-      K.add(M.metal, pipe([[-0.011, y - 0.004, z], [-0.011, y - 0.026, z + 0.002], [0.011, y - 0.026, z + 0.002], [0.011, y - 0.004, z]], 0.0024, { steps: 12, tension: 0.2 }), S.bright);
+    triggerGuard(K, M, 0.0, 0.094, 0.006, 0.042, S.alu, { hw: 0.007 });
+    // (the left: the selector turned back to its third mark, three rounds a pull; the bolt catch over the guard)
+    K.add(M.metal, lathe([[0.016, 0.0], [0.016, 0.0056], [0.0192, 0.0056], [0.0192, 0.0]], { axis: 'x', y: 0.013, z: -0.022, segs: 10 }), S.steel);
+    K.add(M.metal, plate(rounded([[-0.026, 0.009], [-0.05, 0.0075], [-0.054, 0.0125], [-0.05, 0.0165], [-0.022, 0.0165]], 0.002, 2), 0.0175, 0.0212, { bevel: 0.0012 }), S.steel);
+    for (const [z, y, c] of [[-0.002, 0.013, S.white], [-0.022, 0.021, S.white], [-0.058, 0.0125, S.red]]) K.add(M.matte, lathe([[0.016, 0.0], [0.016, 0.0016], [0.0164, 0.0016], [0.0164, 0.0]], { axis: 'x', y, z, segs: 6 }), c);
+    K.add(M.metal, plate(rounded([[0.084, 0.004], [0.098, 0.006], [0.098, 0.02], [0.086, 0.022]], 0.002, 2), 0.016, 0.0188, { bevel: 0.001 }), S.alu2);
+    // (the right: the magazine's catch in the fence round it)
+    K.add(M.metal, plate(rounded([[0.08, -0.016], [0.098, -0.016], [0.098, 0.008], [0.08, 0.008]], 0.004, 2), -0.0186, -0.016, { bevel: 0.001, holes: [rounded([[0.084, -0.0115], [0.094, -0.0115], [0.094, 0.0035], [0.084, 0.0035]], 0.004, 2)] }), S.alu);
+    K.add(M.metal, mirrored(lathe([[0.016, 0.0], [0.016, 0.0046], [0.0192, 0.0046], [0.0192, 0.0]], { axis: 'x', y: -0.004, z: 0.089, segs: 10 })), S.steel);
+
+    // --- the upper: its body, the port cut through its right wall; in the port the bolt held back and the next round in
+    // the magazine's lips; the cover dropped open under it, the deflector behind it, the forward assist
+    const up = rounded([[-0.124, 0.024], [0.194, 0.024], [0.194, UT], [-0.118, UT], [-0.124, UT - 0.008]], 0.005, 3);
+    const port = rounded([[0.012, 0.036], [0.1, 0.036], [0.1, 0.062], [0.012, 0.062]], 0.003, 2);
+    K.add(M.metal, plate(up, -0.0068, 0.017, { bevel: 0.005 }), S.alu);
+    K.add(M.metal, plate(up, -0.017, -0.0058, { bevel: 0.004, holes: [port] }), S.alu);
+    K.add(M.matte, cbox(-0.0074, 0.035, 0.011, -0.0062, 0.063, 0.101, 0.0003), S.black);
+    K.add(M.metal, cbox(-0.0158, 0.0375, 0.008, -0.0066, 0.0605, 0.027, 0.0012), S.steel3);
+    K.add(M.matte, lathe([[0.0272, 0.0], [0.0272, 0.0034]], { x: -0.0112, y: 0.049, segs: 8 }), S.black);
+    K.add(M.metal, cbox(-0.0158, 0.0352, 0.028, -0.0068, 0.0386, 0.099, 0.0006), S.alu2);
+    stubRound(K, M, -0.0112, 0.0436, 0.031, 0.066, 0.0056);
+    K.add(M.metal, cbox(-0.0194, 0.009, 0.012, -0.0174, 0.0335, 0.1, 0.001), S.alu2);
+    K.add(M.metal, lathe([[0.008, 0.0], [0.008, 0.0019], [0.104, 0.0019], [0.104, 0.0]], { x: -0.0178, y: 0.0342, segs: 6 }), S.bright);
+    K.add(M.metal, plate(rounded([[-0.032, 0.04], [0.008, 0.04], [0.008, 0.07], [-0.014, 0.072], [-0.032, 0.062]], 0.004, 2), -0.0256, -0.0165, { bevel: 0.003 }), S.alu);
+    K.add(M.metal, lathe([[-0.094, 0.0], [-0.094, 0.0086], [-0.044, 0.0086], [-0.034, 0.005], [-0.032, 0.0]], { x: -0.0215, y: 0.055, segs: 12 }), S.alu);
+    K.add(M.metal, lathe([[-0.113, 0.0], [-0.113, 0.0076], [-0.109, 0.0092], [-0.094, 0.0092], [-0.094, 0.0]], { x: -0.0215, y: 0.055, segs: 12 }), S.steel);
+    for (const z of [-0.107, -0.102, -0.097]) K.add(M.metal, lathe([[z, 0.0095], [z + 0.002, 0.0095]], { x: -0.0215, y: 0.055, segs: 12 }), S.steel3);
+    // (the charging handle under the rear sight, its latch on the left)
+    K.add(M.metal, cbox(-0.0115, UT - 0.018, -0.137, 0.0115, UT - 0.006, -0.122, 0.002), S.alu2);
+    K.add(M.metal, cbox(0.0115, UT - 0.017, -0.135, 0.018, UT - 0.008, -0.125, 0.0015), S.alu2);
+
+    // --- the carrying handle and the rear sight on its back: two ears, the aperture, the windage knob, the drum
+    const hdl = rounded([[-0.122, UT - 0.002], [0.174, UT - 0.002], [0.154, UT + 0.016], [0.126, UT + 0.046], [0.114, UT + 0.05], [-0.114, UT + 0.05], [-0.122, UT + 0.044]], 0.005, 3);
+    const gap = rounded([[-0.05, UT + 0.008], [0.124, UT + 0.008], [0.11, UT + 0.031], [-0.042, UT + 0.033], [-0.05, UT + 0.026]], 0.008, 3);
+    K.add(M.metal, plate(hdl, -0.0095, 0.0095, { bevel: 0.003, holes: [gap] }), S.alu);
+    K.add(M.matte, cbox(-0.0022, UT + 0.0494, -0.03, 0.0022, UT + 0.0508, 0.1, 0.0003), S.black);
+    K.add(M.matte, lathe([[UT + 0.049, 0.0], [UT + 0.049, 0.0032], [UT + 0.0512, 0.0032], [UT + 0.0512, 0.0]], { axis: 'y', z: 0.04, segs: 8 }), S.black);
+    for (const s of [1, -1]) K.add(M.metal, plate(rounded([[-0.112, UT + 0.046], [-0.076, UT + 0.046], [-0.081, UT + 0.062], [-0.09, UT + 0.067], [-0.102, UT + 0.062]], 0.003, 2), s * 0.0072, s * 0.011, { bevel: 0.001 }), S.alu);
+    K.add(M.metal, cbox(-0.0072, UT + 0.048, -0.097, 0.0072, UT + 0.066, -0.091, 0.001), S.steel3);
+    K.add(M.matte, lathe([[-0.0972, 0.0], [-0.0972, 0.0021]], { y: UT + 0.058, segs: 8 }), S.black);
+    K.add(M.metal, mirrored(lathe([[0.0095, 0.0], [0.0095, 0.0076], [0.018, 0.0076], [0.0196, 0.006], [0.0196, 0.0]], { axis: 'x', y: UT + 0.054, z: -0.094, segs: 12 })), S.steel);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      K.add(M.metal, rod([-0.011, UT + 0.054 + Math.sin(a) * 0.0078, -0.094 + Math.cos(a) * 0.0078], [-0.0176, UT + 0.054 + Math.sin(a) * 0.0078, -0.094 + Math.cos(a) * 0.0078], 0.0011, 0.0011, 4), S.steel3);
     }
-    // --- the action: the receiver, the port, the bolt with its shroud and handle
-    K.add(M.metal, lathe([[-0.05, 0.0], [-0.05, 0.0165], [-0.046, 0.0185], [0.2, 0.0185], [0.206, 0.016], [0.206, 0.0]], { y: BY, segs: 16 }), S.steel);
-    K.add(M.matte, plate([[0.06, BY - 0.002], [0.15, BY - 0.002], [0.15, BY + 0.013], [0.06, BY + 0.013]], -0.0192, -0.016, { bevel: 0.0004, r: 0.004 }), S.black);
-    K.add(M.metal, lathe([[0.066, 0.0], [0.066, 0.0112], [0.144, 0.0112], [0.144, 0.0]], { y: BY + 0.004, x: -0.004, segs: 10 }), S.bright);
-    K.add(M.metal, lathe([[-0.1, 0.0], [-0.1, 0.0105], [-0.094, 0.013], [-0.056, 0.0135], [-0.05, 0.0165]], { y: BY, segs: 12 }), S.steel2);
-    K.add(M.metal, rod([-0.014, BY, -0.03], [-0.05, BY - 0.026, -0.044], 0.0058, 0.0048, 8), S.bright);
-    K.add(M.metal, lathe([[-0.012, 0.0], [-0.009, 0.0085], [0.0, 0.0115], [0.009, 0.0085], [0.012, 0.0]], { axis: 'x', y: BY - 0.031, z: -0.046, segs: 10 }).translate(-0.058, 0, 0), S.bright);
-    K.add(M.metal, cbox(-0.0235, BY - 0.012, -0.012, -0.018, BY + 0.002, 0.006, 0.002), S.red);
-    for (const z of [-0.02, 0.18]) screw(K, M.metal, 0.0185, BY, z, 0.004, S.bright, { both: true });
-    // (under it: the magazine, its catch, the guard and the trigger)
-    K.add(M.metal, plate([[0.1, -0.03], [0.176, -0.026], [0.172, -0.082], [0.104, -0.088]], -0.016, 0.016, { bevel: 0.003, r: 0.005 }), S.steel2);
-    ridges(K, M.metal, 4, 0.11, 0.166, -0.078, -0.044, 0.016, S.steel3, { h: 0.0012 });
-    K.add(M.metal, cbox(-0.0175, -0.092, 0.1, 0.0175, -0.084, 0.176, 0.002), S.steel3);
-    K.add(M.metal, cbox(-0.005, -0.05, 0.088, 0.005, -0.03, 0.1, 0.002), S.bright);
-    triggerGuard(K, M, 0.0, 0.09, -0.03, 0.042, S.steel2);
-    // --- the scope: its tube and bells, its turrets, two rings on a rail, the glass
-    rail(K, M.metal, -0.02, 0.19, BY + 0.018, S.steel2, { w: 0.02 });
-    K.add(M.metal, lathe([[-0.12, 0.0], [-0.12, 0.0185], [-0.112, 0.0205], [-0.07, 0.0205], [-0.05, 0.0135], [0.2, 0.0135], [0.24, 0.0235], [0.33, 0.0245], [0.334, 0.022], [0.334, 0.0]], { y: SY, segs: 16 }), S.steel);
-    K.add(M.matte, lathe([[-0.126, 0.019], [-0.12, 0.021], [-0.108, 0.021]], { y: SY, segs: 16 }), S.polymer);
-    K.add(M.glass, lathe([[0.3345, 0.0215], [0.3345, 0.0]], { y: SY, segs: 16 }), S.lens);
-    K.add(M.glass, lathe([[-0.1205, 0.0], [-0.1205, 0.0165]], { y: SY, segs: 12 }), S.lens);
-    K.add(M.metal, cbox(-0.016, SY - 0.015, 0.06, 0.016, SY + 0.015, 0.1, 0.004), S.steel2);
-    K.add(M.metal, lathe([[SY + 0.015, 0.0], [SY + 0.015, 0.0115], [SY + 0.03, 0.0115], [SY + 0.033, 0.0095], [SY + 0.033, 0.0]], { axis: 'y', z: 0.08, segs: 12 }), S.steel3);
-    K.add(M.metal, mirrored(lathe([[0.016, 0.0], [0.016, 0.0115], [0.031, 0.0115], [0.034, 0.0095], [0.034, 0.0]], { axis: 'x', y: SY, z: 0.08, segs: 12 })), S.steel3);
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2;
-      K.add(M.metal, rod([Math.cos(a) * 0.0118, SY + 0.018, 0.08 + Math.sin(a) * 0.0118], [Math.cos(a) * 0.0118, SY + 0.029, 0.08 + Math.sin(a) * 0.0118], 0.0012, 0.0012, 4), S.bright);
-    }
-    for (const z of [-0.012, 0.15]) {
-      K.add(M.metal, lathe([[z, 0.0], [z, 0.018], [z + 0.022, 0.018], [z + 0.022, 0.0]], { y: SY, segs: 14 }), S.steel2);
-      K.add(M.metal, cbox(-0.012, BY + 0.024, z, 0.012, SY - 0.012, z + 0.022, 0.002), S.steel2);
-      screw(K, M.metal, 0.018, SY, z + 0.011, 0.0034, S.bright, { both: true });
-      screw(K, M.metal, 0.012, BY + 0.032, z + 0.011, 0.0034, S.bright, { both: true });
-    }
-    // --- the barrel: a pencil - its ferrule crimped into the receiver, six yellow sides, cut to a point at the muzzle
-    K.add(M.metal, lathe([[0.2, 0.0], [0.2, 0.0196], [0.25, 0.0196], [0.254, 0.0176], [0.254, 0.0]], { y: BY, segs: 16 }), S.brass);
-    for (const z of [0.21, 0.226, 0.24]) K.add(M.metal, lathe([[z, 0.0204], [z + 0.005, 0.0204]], { y: BY, segs: 16 }), S.steel3);
-    K.add(M.paint, hexbar(0.254, 0.76, 0.0168, 0.0168, { y: BY }), S.yellow);
-    for (const z of [0.3, 0.31, 0.7]) K.add(M.matte, hexbar(z, z + 0.004, 0.0171, 0.0171, { y: BY }), S.lead);
-    K.add(M.matte, cbox(-0.0006, BY + 0.0146, 0.36, 0.0006, BY + 0.0152, 0.52, 0.0002), S.brass);
+    K.add(M.metal, lathe([[-0.0104, 0.0], [-0.0104, 0.0128], [0.0104, 0.0128], [0.0104, 0.0]], { axis: 'x', y: UT + 0.03, z: -0.094, segs: 18 }), S.steel3);
+    K.add(M.matte, mirrored(lathe([[0.0105, 0.0], [0.0105, 0.0078], [0.0108, 0.0078], [0.0108, 0.0]], { axis: 'x', y: UT + 0.03, z: -0.094, segs: 12 })), S.steel);
+    K.add(M.matte, lathe([[0.0105, 0.0], [0.0105, 0.0078], [0.0108, 0.0078], [0.0108, 0.0]], { axis: 'x', y: UT + 0.03, z: -0.094, segs: 12 }), S.steel);
+
+    // --- the stock: fixed and long - polymer over the buffer, its comb in line with the bore; the plate and its door
+    const st = rounded([[-0.124, UT - 0.002], [-0.455, UT + 0.002], [-0.455, -0.1], [-0.44, -0.098], [-0.2, -0.008], [-0.15, 0.014], [-0.124, 0.02]], 0.012, 4);
+    K.add(M.matte, plate(st, -0.022, 0.022, { bevel: 0.009, bs: 2 }), S.polymer);
+    K.add(M.matte, plate(rounded([[-0.134, 0.018], [-0.124, 0.02], [-0.124, UT - 0.002], [-0.134, UT - 0.002]], 0.003, 2), -0.0178, 0.0178, { bevel: 0.003 }), S.polymer);
+    K.add(M.metal, plate(rounded([[-0.47, UT + 0.001], [-0.455, UT + 0.003], [-0.455, -0.101], [-0.47, -0.1]], 0.005, 2), -0.0228, 0.0228, { bevel: 0.004 }), S.alu2);
+    K.add(M.metal, cbox(-0.014, -0.08, -0.4715, 0.014, 0.05, -0.469, 0.002), S.alu);
+    K.add(M.metal, lathe([[-0.012, 0.0], [-0.012, 0.0028], [0.012, 0.0028], [0.012, 0.0]], { axis: 'x', y: -0.083, z: -0.4712, segs: 8 }), S.bright);
+    screw(K, M.metal, 0.0, UT + 0.003, -0.462, 0.0034, S.bright);
+    // (the sling's swivel under the butt)
+    K.add(M.metal, cbox(-0.006, -0.094, -0.428, 0.006, -0.084, -0.412, 0.002), S.alu2);
+    K.add(M.metal, pipe([[-0.011, -0.092, -0.42], [-0.011, -0.114, -0.418], [0.011, -0.114, -0.418], [0.011, -0.092, -0.42]], 0.0024, { steps: 12, tension: 0.2 }), S.bright);
+
+    // --- the barrel: a pencil - its brass ferrule for the barrel nut, crimped into the upper; six yellow sides to the
+    // point, its name stamped in gold along them
+    K.add(M.metal, lathe([[0.194, 0.0], [0.194, 0.0196], [0.238, 0.0196], [0.242, 0.0176], [0.242, 0.0]], { y: BY, segs: 16 }), S.brass);
+    for (const z of [0.2, 0.212, 0.224]) K.add(M.metal, lathe([[z, 0.0204], [z + 0.005, 0.0204]], { y: BY, segs: 16 }), S.steel3);
+    K.add(M.paint, hexbar(0.238, 0.76, 0.0168, 0.0168, { y: BY }), S.yellow);
+    for (const s of [1, -1]) K.add(M.matte, cbox(s * 0.0144, BY - 0.0022, 0.646, s * 0.0149, BY + 0.0022, 0.736, 0.0002), S.gold);
+    K.add(M.matte, hexbar(0.742, 0.746, 0.0171, 0.0171, { y: BY }), S.lead);
     K.add(M.matte, hexbar(0.76, 0.83, 0.0168, 0.0062, { y: BY }), S.tipwood);
     K.add(M.matte, lathe([[0.83, 0.0062], [0.862, 0.0034], [0.862, 0.0019], [0.84, 0.0019]], { y: BY, segs: 8, soft: 2 }), S.lead);
     K.add(M.matte, lathe([[0.8622, 0.0019], [0.8622, 0.0]], { y: BY, segs: 8 }), S.black);
-    return { muzzle: new THREE.Vector3(0, BY, 0.865), length: 1.34, hold: new THREE.Vector3(0, -0.016, 0.3), eject: new THREE.Vector3(-0.02, BY + 0.006, 0.1) };
+    // (the slip ring that holds the handguard's back, its sloped face to the receiver)
+    K.add(M.metal, lathe([[0.242, 0.0], [0.242, 0.0215], [0.25, 0.0345], [0.26, 0.0352], [0.264, 0.0325], [0.264, 0.0]], { y: BY, segs: 20 }), S.alu2);
+    // (the handguard: two round halves, ribbed round for the hand, the seam between them along each side; its cap)
+    K.add(M.matte, lathe([[0.262, 0.0], [0.262, 0.0306], [0.556, 0.0298], [0.556, 0.0]], { y: BY, segs: 20 }), S.polymer);
+    for (let i = 0; i < 21; i++) K.add(M.matte, lathe([[0.27 + i * 0.0136, 0.0305], [0.2745 + i * 0.0136, 0.0323], [0.279 + i * 0.0136, 0.0304]], { y: BY, segs: 16, soft: 0.5 }), C(0.17, 0.17, 0.2));
+    for (const s of [1, -1]) K.add(M.matte, cbox(s * 0.0294, BY - 0.0007, 0.264, s * 0.0326, BY + 0.0007, 0.558, 0.0002), S.black);
+    K.add(M.metal, lathe([[0.556, 0.0], [0.556, 0.0334], [0.564, 0.0334], [0.572, 0.0262], [0.58, 0.0222], [0.58, 0.0]], { y: BY, segs: 20 }), S.alu2);
+    // --- the front sight: its collar on the barrel and its pins, the triangle up to the ears, the post, the gas tube
+    // into it, the bayonet's lug and the sling's swivel under it
+    K.add(M.metal, lathe([[0.578, 0.0], [0.578, 0.0215], [0.632, 0.0215], [0.632, 0.0]], { y: BY, segs: 16 }), S.steel2);
+    for (const z of [0.588, 0.622]) screw(K, M.metal, 0.0215, BY + 0.008, z, 0.0026, S.bright, { both: true });
+    K.add(M.metal, plate(rounded([[0.58, BY + 0.012], [0.63, BY + 0.012], [0.614, BY + 0.066], [0.61, BY + 0.074], [0.598, BY + 0.074], [0.594, BY + 0.066]], 0.003, 2), -0.0075, 0.0075, { bevel: 0.002, holes: [rounded([[0.594, BY + 0.024], [0.616, BY + 0.024], [0.606, BY + 0.054], [0.603, BY + 0.054]], 0.003, 2)] }), S.steel2);
+    for (const s of [1, -1]) K.add(M.metal, plate(rounded([[0.594, BY + 0.064], [0.614, BY + 0.064], [0.612, BY + 0.084], [0.604, BY + 0.088], [0.596, BY + 0.084]], 0.003, 2), s * 0.0055, s * 0.0088, { bevel: 0.001 }), S.steel2);
+    K.add(M.metal, cbox(-0.0017, BY + 0.066, 0.6025, 0.0017, BY + 0.09, 0.6061, 0.0006), S.steel3);
+    K.add(M.metal, lathe([[0.57, 0.0], [0.57, 0.0028], [0.584, 0.0028]], { y: BY + 0.024, segs: 8 }), S.steel3);
+    K.add(M.metal, cbox(-0.0045, BY - 0.034, 0.602, 0.0045, BY - 0.02, 0.628, 0.0015), S.steel2);
+    K.add(M.metal, pipe([[0, BY - 0.02, 0.584], [0, BY - 0.038, 0.582], [0, BY - 0.038, 0.598], [0, BY - 0.02, 0.596]], 0.0022, { steps: 10, tension: 0.2 }), S.bright);
+
+    // --- the magazine: thirty rounds in a box, nearly straight, bowed forward toward its foot; the ribs pressed down its
+    // sides, the floor plate (its lips and the next round seen through the port)
+    const mf = [];
+    const mb = [];
+    const mc = [];
+    for (let i = 0; i <= 6; i++) {
+      const t = i / 6;
+      const y = -0.004 - 0.194 * t;
+      const zc = 0.141 + 0.03 * t * t;
+      mf.push([zc + 0.035, y]);
+      mb.unshift([zc - 0.035, y]);
+      mc.push([zc, y]);
+    }
+    K.add(M.metal, plate(rounded([...mf, ...mb], 0.004, 2), -0.0138, 0.0138, { bevel: 0.003 }), S.alu2);
+    for (const f of [-0.016, 0.014]) {
+      const a = mc.slice(2).map(([z, y]) => [z + f - 0.0022, y]);
+      const b = mc.slice(2).map(([z, y]) => [z + f + 0.0022, y]).reverse();
+      K.add(M.metal, plate([...a, ...b], -0.0148, 0.0148, { bevel: 0.0008 }), S.alu);
+    }
+    const [fz, fy] = mf[6];
+    const [bz, by] = mb[0];
+    K.add(M.metal, plate(rounded([[bz - 0.003, by + 0.004], [fz + 0.004, fy + 0.004], [fz + 0.004, fy - 0.008], [bz - 0.003, by - 0.008]], 0.003, 2), -0.0152, 0.0152, { bevel: 0.0025 }), S.steel2);
+    return { muzzle: new THREE.Vector3(0, BY, 0.865), length: 1.34, hold: new THREE.Vector3(0, BY - 0.031, 0.32), eject: new THREE.Vector3(-0.018, 0.05, 0.056) };
+  },
+
+  // ---------------------------------------------------------------------------------------------- the marker SMG
+  // The submachine gun of the roller-locked pattern as it is made: a receiver pressed out of sheet steel, the cocking
+  // tube running on over the barrel with its handle forward on the left, the hooded front sight at its end and the
+  // rotary drum at the back; a polymer trigger group with its grip, its big guard and the selector; a slim fore-end; a
+  // stock of two steel struts and a rubber pad, pulled out; the curved magazine leaning forward in its well - and for
+  // its barrel a fat felt-tip marker screwed into the front of the receiver: the ribbed ring it is gripped by, a blue
+  // label round its dark body, the chisel nib at the muzzle.
+  mp5(K, M) {
+    const S = INK;
+    const BY = 0.03; // the bore: the marker's axis
+    const CY = 0.056; // the cocking tube's
+    const CR = 0.0105;
+    const TY = 0.066; // the receiver's top
+    const W = 0.0165; // half the receiver's width
+    const HY = CY + 0.028; // the line of the sights
+    const blue = C(0.12, 0.32, 0.86);
+    const dark = C(0.08, 0.1, 0.14);
+    // --- the receiver: pressed steel, a rib down each side, the sleeves the stock's struts run in; its end cap and the
+    // stock's latch; the mount's notches on top; the port on the right and the bolt in it
+    K.add(M.metal, plate(rounded([[-0.112, 0.008], [0.134, 0.008], [0.134, 0.044], [0.128, TY], [-0.106, TY], [-0.112, TY - 0.006]], 0.004, 3), -W, W, { bevel: 0.004 }), S.steel);
+    for (const s of [1, -1]) {
+      K.add(M.metal, plate([[-0.1, 0.048], [0.124, 0.048], [0.124, 0.054], [-0.1, 0.054]], s * W, s * (W + 0.0014), { bevel: 0.0006, r: 0.002 }), S.steel2);
+      K.add(M.metal, cbox(s * W, 0.02, -0.112, s * (W + 0.0058), 0.034, -0.026, 0.0016), S.steel2);
+      for (const z of [-0.1, -0.04]) screw(K, M.metal, s * (W + 0.0058), 0.027, z, 0.0024, S.bright);
+    }
+    K.add(M.metal, plate(rounded([[-0.121, 0.012], [-0.11, 0.008], [-0.11, TY], [-0.121, TY - 0.004]], 0.002, 2), -W - 0.001, W + 0.001, { bevel: 0.002 }), S.steel2);
+    K.add(M.metal, cbox(-0.006, TY - 0.008, -0.127, 0.006, TY + 0.001, -0.116, 0.002), S.steel3);
+    for (const z of [-0.06, -0.046, 0.074, 0.088]) {
+      K.add(M.metal, cbox(-0.0112, TY - 0.001, z, 0.0112, TY + 0.0028, z + 0.009, 0.001), S.steel2);
+      K.add(M.matte, cbox(-0.0116, TY + 0.0004, z + 0.0032, 0.0116, TY + 0.003, z + 0.0058, 0.0003), S.black);
+    }
+    K.add(M.matte, plate([[0.03, 0.03], [0.074, 0.03], [0.074, 0.05], [0.03, 0.05]], -W - 0.001, -W + 0.001, { bevel: 0.0004, r: 0.003 }), S.black);
+    K.add(M.metal, cbox(-W - 0.0012, 0.0335, 0.033, -W + 0.0004, 0.0465, 0.047, 0.0006), S.steel3);
+    // (the magazine's well under its front, its catch behind it)
+    K.add(M.metal, plate(rounded([[0.074, 0.01], [0.136, 0.01], [0.136, -0.028], [0.13, -0.034], [0.082, -0.034], [0.074, -0.028]], 0.003, 2), -W - 0.0015, W + 0.0015, { bevel: 0.003 }), S.steel);
+    K.add(M.metal, plate(rounded([[0.064, -0.006], [0.074, -0.006], [0.075, -0.026], [0.068, -0.03]], 0.002, 2), -0.006, 0.006, { bevel: 0.0015 }), S.steel3);
+    K.add(M.metal, mirrored(lathe([[W + 0.0015, 0.0], [W + 0.0015, 0.0042], [W + 0.0042, 0.0042], [W + 0.0042, 0.0]], { axis: 'x', y: -0.012, z: 0.112, segs: 8 })), S.steel3);
+
+    // --- the rear sight: its base on the receiver's back, two ears, the drum between them and its four holes
+    const DZ = -0.08;
+    K.add(M.metal, cbox(-0.012, TY - 0.001, DZ - 0.02, 0.012, TY + 0.005, DZ + 0.018, 0.0015), S.steel2);
+    for (const s of [1, -1]) K.add(M.metal, plate(rounded([[DZ - 0.018, TY + 0.004], [DZ + 0.016, TY + 0.004], [DZ + 0.012, TY + 0.018], [DZ + 0.004, TY + 0.022], [DZ - 0.012, TY + 0.018]], 0.003, 2), s * 0.0094, s * 0.0124, { bevel: 0.001 }), S.steel2);
+    K.add(M.metal, lathe([[TY + 0.004, 0.0], [TY + 0.004, 0.0088], [TY + 0.026, 0.0088], [TY + 0.028, 0.0074], [TY + 0.028, 0.0]], { axis: 'y', z: DZ, segs: 14 }), S.steel3);
+    for (const z of [DZ - 0.0093, DZ + 0.0087]) K.add(M.matte, lathe([[z, 0.0], [z, 0.0026], [z + 0.0006, 0.0026], [z + 0.0006, 0.0]], { y: HY, segs: 8 }), S.black);
+    screw(K, M.metal, 0.0124, TY + 0.009, DZ - 0.01, 0.0024, S.bright, { both: true });
+
+    // --- the cocking tube over the barrel: its slot on the left, the handle folded out at its front
+    K.add(M.metal, lathe([[0.128, 0.0], [0.128, CR], [0.318, CR], [0.318, 0.0]], { y: CY, segs: 14 }), S.steel);
+    K.add(M.matte, plate([[0.17, CY - 0.0028], [0.3, CY - 0.0028], [0.3, CY + 0.0028], [0.17, CY + 0.0028]], CR - 0.0014, CR + 0.0008, { bevel: 0.0004, r: 0.002 }), S.black);
+    K.add(M.matte, plate([[0.17, CY], [0.177, CY], [0.177, CY + 0.008], [0.17, CY + 0.008]], CR - 0.0022, CR - 0.0002, { bevel: 0.0004 }), S.black);
+    K.add(M.metal, rod([CR - 0.002, CY + 0.001, 0.29], [CR + 0.024, CY + 0.012, 0.302], 0.0034, 0.0028, 8), S.steel2);
+    K.add(M.metal, lathe([[CR + 0.02, 0.0], [CR + 0.02, 0.0036], [CR + 0.023, 0.0048], [CR + 0.032, 0.0048], [CR + 0.034, 0.0034], [CR + 0.034, 0.0]], { axis: 'x', y: CY + 0.012, z: 0.302, segs: 10 }), S.polymer);
+
+    // --- the front sight at the tube's end: the block that joins tube and barrel, the hood, the post in it
+    const FZ = 0.318;
+    K.add(M.metal, plate(rounded([[FZ - 0.006, BY - 0.019], [FZ + 0.028, BY - 0.019], [FZ + 0.028, CY + 0.012], [FZ + 0.02, CY + 0.017], [FZ + 0.002, CY + 0.017], [FZ - 0.006, CY + 0.012]], 0.004, 3), -0.0125, 0.0125, { bevel: 0.003 }), S.steel2);
+    K.add(M.metal, lathe([[FZ + 0.0, 0.0094], [FZ + 0.0, 0.0118], [FZ + 0.026, 0.0118], [FZ + 0.026, 0.0094], [FZ + 0.0, 0.0094]], { y: HY, segs: 16 }), S.steel2);
+    K.add(M.metal, cbox(-0.0016, CY + 0.016, FZ + 0.011, 0.0016, HY + 0.003, FZ + 0.015, 0.0006), S.steel3);
+    screw(K, M.metal, 0.0125, BY, FZ + 0.011, 0.003, S.bright, { both: true });
+
+    // --- the slim fore-end: polymer round the barrel up to the tube, flared at its mouth, fluted along its sides
+    K.add(M.matte, lathe([[0.132, 0.0], [0.132, 0.0185], [0.138, 0.0205], [0.27, 0.0205], [0.28, 0.0238], [0.288, 0.0238], [0.29, 0.021], [0.29, 0.0]], { y: BY, segs: 18 }), S.polymer);
+    for (const s of [1, -1]) for (const dy of [-0.0095, 0.0, 0.0095]) {
+      const x = Math.sqrt(0.0205 * 0.0205 - dy * dy);
+      K.add(M.matte, cbox(s * (x - 0.0009), BY + dy - 0.0016, 0.152, s * (x + 0.0005), BY + dy + 0.0016, 0.26, 0.0004), S.black);
+    }
+
+    // --- the barrel: a fat marker - its dark body out of the receiver under the tube, the ribbed ring it screws into
+    // the sight's block by, the blue label, the shoulder, the cone that holds the nib, the chisel of felt
+    const RZ = FZ + 0.028;
+    K.add(M.paint, lathe([[0.13, 0.0], [0.13, 0.0135], [RZ, 0.0135], [RZ, 0.0]], { y: BY, segs: 16 }), dark);
+    K.add(M.matte, lathe([[RZ, 0.0], [RZ, 0.0152], [RZ + 0.022, 0.0152], [RZ + 0.022, 0.0]], { y: BY, segs: 16 }), S.alu);
+    for (let i = 0; i < 5; i++) K.add(M.matte, lathe([[RZ + 0.002 + i * 0.0042, 0.0152], [RZ + 0.0028 + i * 0.0042, 0.0165], [RZ + 0.0036 + i * 0.0042, 0.0165], [RZ + 0.0044 + i * 0.0042, 0.0152]], { y: BY, segs: 16 }), S.alu);
+    K.add(M.paint, lathe([[RZ + 0.022, 0.0], [RZ + 0.022, 0.0148], [RZ + 0.058, 0.0148], [RZ + 0.064, 0.0118], [RZ + 0.064, 0.0]], { y: BY, segs: 16 }), dark);
+    K.add(M.paint, lathe([[RZ + 0.026, 0.0151], [RZ + 0.054, 0.0151]], { y: BY, segs: 16 }), blue);
+    for (const z of [RZ + 0.0245, RZ + 0.054]) K.add(M.matte, lathe([[z, 0.0152], [z + 0.0015, 0.0152]], { y: BY, segs: 16 }), S.label);
+    K.add(M.matte, lathe([[RZ + 0.064, 0.0118], [RZ + 0.066, 0.0118], [RZ + 0.076, 0.0058], [RZ + 0.076, 0.0]], { y: BY, segs: 14 }), dark);
+    K.add(M.matte, plate([[RZ + 0.071, BY - 0.0056], [RZ + 0.09, BY - 0.0056], [RZ + 0.08, BY + 0.0056], [RZ + 0.071, BY + 0.0056]], -0.0036, 0.0036, { bevel: 0.0009 }), blue);
+
+    // --- the trigger group: one polymer moulding - its housing under the receiver, the grip, the big guard; its pins,
+    // the selector on the left and its marks
+    K.add(M.matte, plate(rounded([[-0.108, 0.0085], [0.074, 0.0085], [0.074, -0.002], [0.066, -0.01], [-0.1, -0.01], [-0.108, -0.002]], 0.004, 3), -0.0148, 0.0148, { bevel: 0.003 }), S.polymer);
+    const grip = rounded([[-0.054, 0.0], [-0.008, 0.0], [-0.03, -0.106], [-0.08, -0.11], [-0.092, -0.094]], 0.012, 4);
+    K.add(M.matte, plate(grip, -0.0145, 0.0145, { bevel: 0.006, bs: 2 }), S.polymer);
+    for (const s of [1, -1]) {
+      for (let i = 0; i < 7; i++) K.add(M.matte, plate([[-0.07 - i * 0.002, -0.02 - i * 0.012], [-0.034 - i * 0.004, -0.02 - i * 0.012], [-0.035 - i * 0.004, -0.024 - i * 0.012], [-0.071 - i * 0.002, -0.024 - i * 0.012]], s * 0.0143, s * 0.0154, { bevel: 0.0005 }), S.steel);
+      for (const z of [-0.098, 0.062]) screw(K, M.metal, s * 0.0148, 0.0, z, 0.0032, S.bright);
+    }
+    triggerGuard(K, M, -0.004, 0.07, -0.008, 0.046, S.polymer, { hw: 0.0085, t: 0.008 });
+    K.add(M.metal, lathe([[0.0148, 0.0], [0.0148, 0.0052], [0.0178, 0.0052], [0.0178, 0.0]], { axis: 'x', y: -0.001, z: -0.03, segs: 10 }), S.steel);
+    K.add(M.metal, plate(rounded([[-0.034, -0.0045], [-0.026, -0.0045], [-0.006, 0.0005], [-0.006, 0.0045], [-0.03, 0.003]], 0.002, 2), 0.0168, 0.0196, { bevel: 0.001 }), S.steel);
+    for (const [z, y, c] of [[-0.046, 0.002, S.white], [-0.008, 0.005, S.red], [-0.012, -0.005, S.red]]) K.add(M.matte, lathe([[0.0148, 0.0], [0.0148, 0.0017], [0.0152, 0.0017], [0.0152, 0.0]], { axis: 'x', y, z, segs: 6 }), c);
+
+    // --- the magazine: thirty rounds in a curve, leaning forward out of its well; a rib pressed down each side, the
+    // floor plate
+    const mf = [];
+    const mb = [];
+    const rib = [[], []];
+    for (let i = 0; i <= 7; i++) {
+      const t = i / 7;
+      const zc = 0.104 + 0.022 * t + 0.026 * t * t;
+      const y = -0.006 - 0.16 * t;
+      const dz = 0.022 + 0.052 * t;
+      const l = Math.hypot(dz, 0.16);
+      const nz = 0.16 / l;
+      const ny = dz / l;
+      mf.push([zc + nz * 0.0175, y + ny * 0.0175]);
+      mb.unshift([zc - nz * 0.0165, y - ny * 0.0165]);
+      if (i && i < 7) {
+        rib[0].push([zc + nz * 0.004, y + ny * 0.004]);
+        rib[1].unshift([zc - nz * 0.0015, y - ny * 0.0015]);
+      }
+    }
+    K.add(M.metal, plate(rounded([...mf, ...mb], 0.003, 2), -0.0122, 0.0122, { bevel: 0.0025 }), S.steel);
+    K.add(M.metal, plate([...rib[0], ...rib[1]], -0.0134, 0.0134, { bevel: 0.0008 }), S.steel2);
+    const [fz, fy] = mf[7];
+    const [bz, by] = mb[0];
+    const ux = (fz - bz) / Math.hypot(fz - bz, fy - by);
+    const uy = (fy - by) / Math.hypot(fz - bz, fy - by);
+    K.add(M.metal, plate(rounded([[bz - ux * 0.003 + uy * 0.004, by - uy * 0.003 - ux * 0.004], [fz + ux * 0.003 + uy * 0.004, fy + uy * 0.003 - ux * 0.004], [fz + ux * 0.003 - uy * 0.006, fy + uy * 0.003 + ux * 0.006], [bz - ux * 0.003 - uy * 0.006, by - uy * 0.003 + ux * 0.006]], 0.002, 2), -0.014, 0.014, { bevel: 0.002 }), S.steel2);
+
+    // --- the stock, pulled out: two steel struts out of their sleeves, the butt's frame where they meet, its rubber pad
+    const SZ = -0.234;
+    for (const s of [1, -1]) K.add(M.metal, rod([s * (W + 0.0029), 0.027, -0.03], [s * (W + 0.0029), 0.027, SZ], 0.0032, 0.0032, 8), S.steel2);
+    K.add(M.metal, plate(rounded([[SZ - 0.012, -0.056], [SZ + 0.002, -0.05], [SZ + 0.006, 0.036], [SZ - 0.002, 0.062], [SZ - 0.012, 0.066]], 0.006, 3), -0.0232, 0.0232, { bevel: 0.003 }), S.steel2);
+    for (const s of [1, -1]) K.add(M.metal, cbox(s * 0.0168, 0.02, SZ - 0.002, s * 0.0242, 0.034, SZ + 0.014, 0.002), S.steel2);
+    K.add(M.round, plate(rounded([[SZ - 0.026, -0.062], [SZ - 0.012, -0.058], [SZ - 0.012, 0.068], [SZ - 0.024, 0.066], [SZ - 0.029, 0.002]], 0.008, 3), -0.0244, 0.0244, { bevel: 0.006, bs: 2 }), S.polymer);
+    for (const y of [-0.04, -0.02, 0.0, 0.02, 0.04]) K.add(M.matte, cbox(-0.019, y - 0.0015, SZ - 0.0295, 0.019, y + 0.0015, SZ - 0.027, 0.0004), S.steel);
+    return { muzzle: new THREE.Vector3(0, BY - 0.004, RZ + 0.09), length: 0.7, hold: new THREE.Vector3(0, BY - 0.0205, 0.215), eject: new THREE.Vector3(-W - 0.002, 0.04, 0.052) };
   },
 
   // ---------------------------------------------------------------------------------------------- the paint gun

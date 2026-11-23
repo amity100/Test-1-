@@ -24,6 +24,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Gveret+Levin&family=Rubik:wght@400;500;600;800&family=Caveat:wght@500;700&family=Permanent+Marker&family=Anton&family=Cinzel:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/boxing.css">
 <script type="importmap">{ "imports": { "three": "../js/vendor/three.module.min.js" } }</script>
 </head>
 <body>
@@ -208,6 +209,19 @@
     <button id="btn-hands" class="tbtn small hidden" aria-label="Surrender" data-he-aria="להיכנע"><svg class="ico" viewBox="0 0 24 24"><path d="M7 21v-7.5M7 13.5 4.6 7.2M7 13.5 7.4 5.6M7 13.5 9.6 7M17 21v-7.5M17 13.5l2.4-6.3M17 13.5 16.6 5.6M17 13.5 14.4 7"/></svg></button>
     <button id="btn-pause" class="tbtn small" aria-label="Pause" data-he-aria="הפסקה"><svg class="ico" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></button>
     <button id="btn-phone" class="tbtn small" aria-label="Phone" data-he-aria="הטלפון"><svg class="ico" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg></button>
+    <!-- (ROADMAP 29.5) the ring's buttons: shown only in a bout or at the gym's work (body.boxing; core/input.js, game/boxing.js, css/boxing.css) - the punches under the right thumb, the guard held, slips and the duck (or swipe on the right side) -->
+    <div id="bx-pad">
+      <div id="bx-zone" aria-label="Swipe left or right to slip, down to duck" data-he-aria="החלקה ימינה או שמאלה להתחמקות, למטה להתכופפות"></div>
+      <button id="bx-jab" class="bxb" aria-label="Jab" data-he-aria="ג׳אב"><b>1</b><span data-he="ג׳אב">JAB</span></button>
+      <button id="bx-cross" class="bxb p2" aria-label="Cross" data-he-aria="קרוס"><b>2</b><span data-he="קרוס">CROSS</span></button>
+      <button id="bx-hook" class="bxb" aria-label="Hook" data-he-aria="הוק"><b>3</b><span data-he="הוק">HOOK</span></button>
+      <button id="bx-upper" class="bxb" aria-label="Uppercut" data-he-aria="אפרקאט"><b>4</b><span data-he="אפרקאט">UPPER</span></button>
+      <button id="bx-guard" class="bxb g" aria-label="Guard (hold)" data-he-aria="הגנה (להחזיק)"><svg viewBox="0 0 24 24"><path d="M12 2.8l7.5 3v5.4c0 4.9-3.2 8.4-7.5 10-4.3-1.6-7.5-5.1-7.5-10V5.8z"/></svg><span data-he="מגן">GUARD</span></button>
+      <button id="bx-slipl" class="bxb s" aria-label="Slip left" data-he-aria="התחמקות שמאלה"><b>&#9664;</b><span data-he="התחמק">SLIP</span></button>
+      <button id="bx-duck" class="bxb s" aria-label="Duck" data-he-aria="התכופפות"><b>&#9660;</b><span data-he="התכופף">DUCK</span></button>
+      <button id="bx-slipr" class="bxb s" aria-label="Slip right" data-he-aria="התחמקות ימינה"><b>&#9654;</b><span data-he="התחמק">SLIP</span></button>
+      <button id="bx-quit" class="bxb q" aria-label="Leave the ring" data-he-aria="לצאת מהזירה"><b>&#10005;</b></button>
+    </div>
   </div>
 
   <div id="flash"></div>
@@ -497,6 +511,6 @@
   } catch (e) {}
 })();
 </script>
-<script type="module" src="js/main.bundle.fab9ff7.js"></script>
+<script type="module" src="js/main.bundle.f5a9a8e.js"></script>
 </body>
 </html>

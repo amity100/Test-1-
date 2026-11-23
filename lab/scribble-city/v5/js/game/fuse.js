@@ -8,8 +8,10 @@ import { isWater } from './rides.js';
 import { KINDS, skinHit } from '../render/cars.js';
 import { INKS } from './freeform.js';
 import { gunOf } from './partsum.js';
-import { applyPar, finishPar, airPar, preDrivePar } from './inkparts.js';
-import { fusionApply } from './traycat.js';
+import { applyPar, finishPar, airPar, preDrivePar, parFuel } from './inkparts.js';
+import { fusionApply, trayIdOf } from './traycat.js';
+import { ITEMS } from './itemcat.js';
+import { Kit, itemMats, linC } from './items.js';
 import { HANDLING } from './vehicles.js';
 import { groundHeight, WATER_X, WEST_EDGE } from '../world/layout.js';
 import { clamp, damp } from '../core/util.js';
@@ -936,14 +938,23 @@ export class Fuse {
   // (ROADMAP 11.24) what a car of yours weighs, as its parts' physics take it (applyVeh)
   vehMass(v) {
     const B = v.fzBase;
-    const H0 = (B && B.handling) || (!B && v.handling) || HANDLING[v.kind === 'bike' ? v.model || 'bike' : v.carKind] || HANDLING.sedan;
+    const H0 = (B && B.handling) || (!B && v.handling) || rideH(v) || HANDLING[v.kind === 'bike' ? v.model || 'bike' : v.carKind] || HANDLING.sedan;
     let m = H0.mass || 1;
     if (v.fuse && v.fuse.parts.some((p) => p.type === 'armor')) m *= 1.2;
     return m;
   }
 
   // what game/fusedraw.js needs of a car of yours: its size, its kind, its wheels
-  drawCtx(v) {
+  // (ROADMAP 29.5: a ride that is not a car - its own body as the parts see it, by where the part goes on it, id: the
+  // tray's, the pen's thing - rideFrame; off: where that frame is on the ride, post: the foot of a mast up to it)
+  drawCtx(v, id = null) {
+    const RF = rideFrame(v, id);
+    if (RF) {
+      const z0 = RF.off[2];
+      // (size: all of it, wings and rotor too - what the tray's camera takes in)
+      const size = { hl: v.halfLen || RF.D.hl, hw: Math.max(v.halfWid || RF.D.hw, v.span || 0), h: v.heightM || RF.D.h };
+      return { D: RF.D, K: RF.K, r0: vehWheelR(v), spots: vehWheelSpots(v, null, RF.D).map((q) => ({ x: q.x, z: q.z - z0 })), off: RF.off, post: RF.post, tailX: RF.tailX, size };
+    }
     const D = vehDims(v);
     const K = v.kind === 'car' ? KINDS[v.carKind] || KINDS.sedan : null;
     return { D, K, r0: vehWheelR(v), spots: vehWheelSpots(v, K, D) };
@@ -1113,8 +1124,12 @@ export class Fuse {
       };
     }
     const B = v.fzBase;
-    const H0 = B.handling || HANDLING[v.kind === 'bike' ? v.model || 'bike' : v.carKind] || HANDLING.sedan;
+    // (ROADMAP 29.5: a ride that is not a car - its parts reckoned by its own weight and speed)
+    const RH = !B.handling && rideH(v);
+    const H0 = B.handling || RH || HANDLING[v.kind === 'bike' ? v.model || 'bike' : v.carKind] || HANDLING.sedan;
     const H = { ...H0 };
+    // (the tray's meters weigh it against that - game/traycat.js metersOf)
+    v.fzRideH = RH || null;
     const fz = { jetK: 1, step: 0, lift: 0, combos: [] };
     v.glide = B.glide;
     v.jets = B.jets;
@@ -1300,6 +1315,8 @@ export class Fuse {
     fusionApply(v, fold ? R.parts.filter((q) => !q.folded) : R.parts, H, fz);
     fz.fold = fold;
     fz.modes = R.parts.some((q) => q.type === 'link' && q.v === 'mode');
+    // (ROADMAP 29.5: and in a plane's, a helicopter's own way of going - game/rides.js, game/vehicles.js)
+    rideApply(R.parts, fz);
     v.handling = H;
     v.spaceIsMine = B.spaceIsMine || !!(fz.jump || fz.rotor || fz.balloon || fz.vtol || fz.wingFly);
     v.fuseUp = !!(fz.jump || fz.rotor >= 1 || fz.balloon >= 1 || fz.vtol || fz.wingFly);
@@ -1332,10 +1349,15 @@ export class Fuse {
     }
     if (!R.parts.length && !(R.decor && R.decor.length)) return;
     const root = new THREE.Group();
-    const D = vehDims(v);
-    const K = v.kind === 'car' ? KINDS[v.carKind] || KINDS.sedan : null;
+    const D0 = vehDims(v);
+    const K0 = v.kind === 'car' ? KINDS[v.carKind] || KINDS.sedan : null;
+    // (ROADMAP 29.5: a ride that is not a car - each part in the frame of where it goes on it)
+    const rides = !!rideFrame(v);
     const ink = (p) => INKS[p.ink] || null;
     for (const p of R.parts) {
+      const RF = rides ? rideFrame(v, trayIdOf(p)) : null;
+      const D = RF ? RF.D : D0;
+      const K = RF ? RF.K : K0;
       const col = paintOf(ink(p), PARTS[p.type].col);
       const fz = v.fz || {};
       // (ROADMAP 11.22: drawn on it - made of its own lines, where they were drawn)
@@ -1345,7 +1367,7 @@ export class Fuse {
         // one taken off, does not make all of them again - ROADMAP 11.27: designed ones too)
         const key = p.shape.look || p.shape.design ? body.join() : null;
         const kept = key && this.looks.get(p);
-        const ms = kept && kept.key === key ? kept.ms : buildDrawn(p, { D, K, spots: vehWheelSpots(v, K, D), wheelR: fz.wheels ? fz.wheels.r : null, lift: fz.lift || 0 }, body);
+        const ms = kept && kept.key === key ? kept.ms : buildDrawn(p, { D, K, spots: vehWheelSpots(v, K0, D), wheelR: fz.wheels ? fz.wheels.r : null, lift: fz.lift || 0 }, body);
         if (key) this.looks.set(p, { key, ms });
         for (const o of ms) {
           o.m.userData.lineC = line;
@@ -1363,7 +1385,7 @@ export class Fuse {
       }
       if (p.type === 'wheel') {
         const w = fz.wheels;
-        const spots = vehWheelSpots(v, K, D);
+        const spots = vehWheelSpots(v, K0, D);
         for (const s of spots) {
           const m = wheelModel(w.r, p.v, col, w.bumps || 10);
           m.position.set(s.x + Math.sign(s.x) * (p.v === 'big' || p.v === 'bigteeth' ? w.r * 0.25 : 0), w.r - (fz.lift || 0), s.z);
@@ -1426,7 +1448,9 @@ export class Fuse {
         const kind = p.v === 'turret' ? 'turret' : 'fixed';
         const m = p.hand ? handMountModel(p.hand) : barrelModel(p.n.len || 1.2, p.gun.r, kind, col);
         const roof = K ? K.roofY : D.h;
-        if (p.v === 'turret') m.position.set(clamp(p.at[0], -D.hw * 0.4, D.hw * 0.4), roof - 0.04, clamp(p.at[2], -D.hl * 0.45, D.hl * 0.35));
+        // (ROADMAP 29.5: the gun mount on a ride that is not a car - where it was put, game/buildtray.js make)
+        if (RF && p.hand) m.position.set(p.at[0], p.at[1] - 0.04, p.at[2]);
+        else if (p.v === 'turret') m.position.set(clamp(p.at[0], -D.hw * 0.4, D.hw * 0.4), roof - 0.04, clamp(p.at[2], -D.hl * 0.45, D.hl * 0.35));
         else if (p.v === 'front') m.position.set(clamp(p.at[0], -D.hw * 0.6, D.hw * 0.6), K ? K.hood.y - 0.05 : D.h * 0.55, K ? K.hood.z : D.hl * 0.6);
         else {
           m.position.set(clamp(p.at[0], -D.hw * 0.6, D.hw * 0.6), K ? beltAt(K, 0.06) - 0.04 : D.h * 0.55, -D.hl * 0.82);
@@ -1519,6 +1543,32 @@ export class Fuse {
         R.models.push({ p, m, role: 'spike' });
       }
     }
+    // (ROADMAP 29.5) on a ride that is not a car each part goes where its place there is: a drawn one by the shift it was
+    // made with (p.off), the rest by its frame's - what was put by where it holds (p.at) is there already; a part up on a
+    // mast (p.post: a rotor over a jet ski's rider) has the mast under it
+    if (rides) {
+      const posted = new Set();
+      for (const o of R.models.slice()) {
+        const p = o.p;
+        const sh = p.shape ? p.off : p.par || p.hand || p.type === 'link' ? null : rideFrame(v, trayIdOf(p)).off;
+        if (sh) {
+          // (from where it was made each time - a drawn one's model is kept from one build to the next)
+          const ud = o.m.userData;
+          if (!ud.at0) ud.at0 = o.m.position.clone();
+          o.m.position.copy(ud.at0).add(_v.set(sh[0], sh[1], sh[2]));
+          if (ud.base && ud.base.isVector3) {
+            if (!ud.base0) ud.base0 = ud.base.clone();
+            ud.base.copy(ud.base0).add(_v);
+          }
+        }
+        if (p.post && !posted.has(p)) {
+          posted.add(p);
+          const m = postModel(p.post);
+          root.add(m);
+          R.models.push({ p, m, role: 'post' });
+        }
+      }
+    }
     // (ROADMAP 11.21: the part just put on grows into its place)
     if (this.justAdded) {
       for (const o of R.models) {
@@ -1535,10 +1585,11 @@ export class Fuse {
     }
     // (a car of the city's: its frame comes from the car batches each frame - place(); a drawn
     // one's group carries it)
+    // (ROADMAP 29.5: on a boat, a plane, a helicopter its body - they go with it as it pitches and banks)
     if (v.kind === 'car') {
       root.matrixAutoUpdate = false;
       this.game.scene.add(root);
-    } else v.group.add(root);
+    } else (rides && v.body ? v.body : v.group).add(root);
     R.root = root;
     R.turrets = R.models.filter((o) => o.role === 'barrel').map((o) => {
       const ud = o.m.userData;
@@ -1761,6 +1812,94 @@ export class Fuse {
       if (ahead > f && ahead - v.pos.y < step) f = Math.max(f, Math.min(ahead, v.pos.y + step * 0.5));
     }
     return Math.max(g, f);
+  }
+
+  // ------------------------------------------------------------------ on the other rides
+  // (ROADMAP 29.5, the owner's word in 29.3: the parts are mounted, and go on every ride as on a car) A boat, a jet ski,
+  // a tank off its own way of going on what is mounted on it - a hop on its hydraulics, off the water on its wings at
+  // speed, up on a rotor, a balloon, a jet underneath - and, off, flown as a car of yours is (preDrive, air: the same
+  // lift, the same wings, the same steering), till it comes down on what is under it (rideFloor). game/rides.js
+  // updateBoat, game/vehicles.js updateTank: true while it is off - they leave it be
+  rideAir(v, dt, input) {
+    const g = this.game;
+    if (v.held) return false;
+    if (v.vx === undefined || v.vz === undefined) {
+      v.vx = Math.sin(v.yaw) * (v.speed || 0);
+      v.vz = Math.cos(v.yaw) * (v.speed || 0);
+    }
+    if (v.vy === undefined) v.vy = 0;
+    if (v.fz && input) this.preDrive(v, dt, input);
+    if (!v.air) return false;
+    v.physT = g.time;
+    v.yawRate = (v.yawRate || 0) * Math.exp(-0.8 * dt);
+    v.yaw += v.yawRate * dt;
+    v.pos.x += v.vx * dt;
+    v.pos.z += v.vz * dt;
+    // (with none left on it - torn off, taken off - it falls)
+    const pull = v.fz ? this.air(v, dt, input) : 1;
+    v.vy -= 20 * dt * pull * (v.glide ? 1 - v.glide * (v.vy < 0 ? 1 : 0.4) : 1);
+    if (v.glide && !v.fzWinged && v.vy < -6 * (1 - v.glide)) v.vy = damp(v.vy, -6 * (1 - v.glide), 3, dt);
+    v.pos.y += v.vy * dt;
+    const F = this.rideFloor(v);
+    if (v.pos.y <= F.y) {
+      const hit = -v.vy;
+      v.pos.y = F.y;
+      v.air = false;
+      v.vy = 0;
+      v.fzWinged = false;
+      if (F.wet) {
+        g.fx.splash(v.pos.x, -0.75, v.pos.z, Math.round(8 + Math.min(20, hit * 2)), 2 + Math.min(4, hit * 0.4), [0.88, 0.95, 1]);
+        g.audio.play('splat', Math.min(0.8, 0.3 + hit * 0.05));
+      } else if (hit > 3) {
+        g.audio.play('crash', Math.min(0.6, hit / 20));
+        if (v.driver === g.player) g.camRig.addShake(Math.min(0.5, hit * 0.035));
+      }
+      // (the water is softer than a street)
+      const hard = F.wet ? 14 : 10;
+      if (hit > hard && !v.safeFall) v.hurt((hit - hard) * 2);
+      if (v.stomp && hit > 6 && !F.wet && v.stompAt) v.stompAt(hit);
+    }
+    const hx = Math.sin(v.yaw);
+    const hz = Math.cos(v.yaw);
+    v.speed = v.vx * hx + v.vz * hz;
+    v.speedAbs = Math.abs(v.speed);
+    v.turn = v.yawRate;
+    const s0 = v.speed;
+    const side = -v.vx * hz + v.vz * hx;
+    if (v.collideWorld) v.collideWorld(dt);
+    // (a wall stopped it, or threw it back)
+    if (v.speed !== s0) {
+      v.vx = hx * v.speed - hz * side * 0.3;
+      v.vz = hz * v.speed + hx * side * 0.3;
+    }
+    return true;
+  }
+
+  // (ROADMAP 29.5) what a ride that is not a car comes down on, and stands on: a boat on the water, at its line; else the
+  // ground (a tank's half sunk into the sand and the kerbs, as it always drives), a roof, a bridge it laid - { y, wet }
+  rideFloor(v) {
+    const g = this.game;
+    const x = v.pos.x;
+    const z = v.pos.z;
+    if (v.kind === 'boat' && isWater(x, z)) return { y: -0.8 - (v.draft || 0), wet: true };
+    const gh = groundHeight(x, z);
+    const y1 = v.kind === 'tank' ? gh * 0.5 : Math.max(gh, -0.8);
+    // (a roof, a deck: a floor well over the ground there - not a kerb, a bench, a low wall it drives past as it always did)
+    const y0 = (v.pos.y || 0) + 0.3;
+    let y = y1;
+    for (const f of [g.gadgets && g.gadgets.floorAt(x, z, y0), g.gear && g.gear.floorAt(x, z, y0), g.mission && g.mission.floorAt(x, z, y0)]) if (f > y1 + 0.6) y = Math.max(y, f);
+    return { y, wet: false };
+  }
+
+  // (ROADMAP 29.5) a ride that is not a car (game/rides.js, game/vehicles.js): its turbo, its jet engine burning - Shift, a
+  // phone's turbo button, as on a car (boostHeld) - 1 while it does. A drawn jet's fuel on the plane and the helicopter,
+  // which never stand on a road for it to fill: it fills while it does not burn (game/inkparts.js parFuel)
+  rideBoost(v, dt, input) {
+    const fz = v.fz;
+    const held = boostHeld(input);
+    if (fz && fz.jetFuelMax && (v.kind === 'plane' || v.kind === 'copter')) parFuel(this, v, dt, held, !held);
+    v.boosting = fz && v.jets && held ? 1 : 0;
+    return v.boosting;
   }
 
   // (game/vehicles.js hurt) a hard knock can tear a part off - not through armour
@@ -3265,7 +3404,7 @@ export class Fuse {
   saveVeh(v) {
     const R = v.fuse;
     if (!R || !(R.parts.length || (R.decor && R.decor.length))) return undefined;
-    const parts = R.parts.filter((p) => !p.until).map((p) => ({ type: p.type, v: p.v, n: p.n, at: p.at, dir: p.dir, ink: p.ink, cost: p.cost, ...(p.shape ? { shape: p.shape } : {}), ...(p.item ? { item: p.item } : {}), ...(p.hand ? { hand: { id: p.hand.id, grade: p.hand.grade, score: p.hand.score, mods: p.hand.mods || null, ammo: p.hand.ammo === undefined ? -1 : p.hand.ammo } } : {}), ...(p.par ? { par: true } : {}), ...(p.lv ? { lv: p.lv } : {}), ...(p.tray ? { tray: p.tray, traySize: p.traySize, trayMount: p.trayMount } : {}) }));
+    const parts = R.parts.filter((p) => !p.until).map((p) => ({ type: p.type, v: p.v, n: p.n, at: p.at, dir: p.dir, ink: p.ink, cost: p.cost, ...(p.shape ? { shape: p.shape } : {}), ...(p.item ? { item: p.item } : {}), ...(p.hand ? { hand: { id: p.hand.id, grade: p.hand.grade, score: p.hand.score, mods: p.hand.mods || null, ammo: p.hand.ammo === undefined ? -1 : p.hand.ammo } } : {}), ...(p.par ? { par: true } : {}), ...(p.lv ? { lv: p.lv } : {}), ...(p.tray ? { tray: p.tray, traySize: p.traySize, trayMount: p.trayMount } : {}), ...(p.off ? { off: p.off } : {}), ...(p.post ? { post: p.post } : {}) }));
     return R.decor && R.decor.length ? { parts, decor: R.decor } : parts;
   }
 
@@ -3412,6 +3551,149 @@ function guessParts(S, m, F) {
     add('wing', 'blade', 'magnet', 'jet');
   }
   return out;
+}
+
+// (ROADMAP 29.5) where parts go on a ride that is not a car - through drawCtx, what game/partpen.js mountOf and the
+// designs of game/itemdesign.js, game/gearlook.js read, game/buildtray.js make, buildVeh: each ride's own body, measured
+// off its model (game/ridemodels.js) - hl, hw: half its length and breadth; roof: its deck, its roof; clear: its keel,
+// its belly; hood: [y, z] where a gun out front sits; belt: its waist (where a car's boot lid is); z0: how far along it
+// its middle is. And by where a part goes on it (game/itemcat.js at, or the part itself), what is in the way there sends
+// it where it does its job and looks it (the same names, and z, y: a shift along it, up it; post: a mast up from that
+// height to its foot) - the rider astride a jet ski, a speedboat's windscreen, a helicopter's own rotor, a tank's turret
+// turning under what is on top of it. Each part keeps where it went (p.off, p.post)
+const RIDE_FRAME = {
+  jetski: {
+    hl: 1.82, hw: 0.64, roof: 1.0, clear: 0.3, hood: [0.88, 1.05], belt: 0.78, z0: 0.15,
+    at: {
+      // (on the stern, behind the saddle)
+      roof: { roof: 0.66, z: -1.2 },
+      above: { roof: 1.95, z: -0.4 },
+      // (up on a mast from the stern, its blades over the rider's head)
+      rotor: { roof: 2.05, z: -1.2, post: 0.64, hl: 0.9 },
+    },
+  },
+  boat: {
+    hl: 3.2, hw: 1.2, roof: 1.6, clear: 0.32, hood: [1.18, 2.35], belt: 1.0, z0: 0.2,
+    at: {
+      // (on the foredeck, before the windscreen)
+      roof: { roof: 1.16, z: 2.45 },
+      dash: { hood: [1.15, 0.7] },
+      above: { roof: 2.1 },
+      rotor: { roof: 1.98, z: 2.45, post: 1.14, hl: 0.8 },
+      body: { hl: 2.4 },
+      // (at its transom, beside the outboard)
+      tail: { hl: 2.85, clear: 0.4, belt: 1.02, tailX: 0.62 },
+    },
+  },
+  copter: {
+    hl: 1.6, hw: 0.98, roof: 2.45, clear: 0.75, hood: [0.8, 1.2], belt: 1.95, z0: 0.05,
+    at: {
+      // (on the cabin's roof before the mast, under the blades)
+      roof: { roof: 2.3, z: 0.85 },
+      dash: { hood: [1.45, 1.05] },
+      above: { roof: 3.3 },
+      // (over its own rotor, on the same mast: two of them)
+      rotor: { roof: 3.08, z: 0.2, hl: 0.7 },
+      body: { hl: 1.3 },
+      // (under where the boom leaves the cabin)
+      tail: { hl: 1.55, clear: 0.9, belt: 1.8 },
+    },
+  },
+  plane: {
+    hl: 3.6, hw: 0.66, roof: 2.2, clear: 0.9, hood: [1.75, 2.8], belt: 1.75, z0: -0.7,
+    at: {
+      // (on top of its high wing)
+      roof: { roof: 2.28, z: 1.45 },
+      dash: { hood: [1.45, 1.95] },
+      above: { roof: 2.3, z: 1.45 },
+      rotor: { roof: 2.28, z: 1.55, hl: 1.5 },
+      // (a second wing low under its own: a biplane - its little tail lost in the real one)
+      sides: { roof: 1.9, z: 1.25, clear: 0.85, hl: 4.8 },
+      body: { hl: 2.0 },
+      tail: { clear: 1.25 },
+    },
+  },
+  tank: {
+    hl: 3.3, hw: 1.95, roof: 1.62, clear: 0.2, hood: [1.62, 2.45], belt: 1.58, z0: 0,
+    at: {
+      // (on the turret, over where it turns)
+      roof: { roof: 2.86 },
+      above: { roof: 4.3 },
+      rotor: { roof: 4.3, post: 2.85, hl: 1.2 },
+      // (out of the hull's sides over the tracks)
+      sides: { roof: 2.8 },
+    },
+  },
+};
+// (the tray's own that are not things of the pen: the gun mount on the roof, a jet and a propeller at the tail)
+const RIDE_AT = { handgun: 'roof', jet: 'tail', prop: 'tail' };
+export function rideFrame(v, id = null) {
+  if (!v || v.drawn || v.hybrid) return null;
+  const R = RIDE_FRAME[v.model || v.kind];
+  if (!R) return null;
+  const it = id && ITEMS[id];
+  let at = (id && RIDE_AT[id]) || (it ? it.at : null);
+  if (at === 'rack') at = 'roof';
+  const F = { ...R, ...((at && R.at[at]) || {}), ...((id && R.at[id]) || {}) };
+  const K = { roofY: F.roof, clear: F.clear, hood: { y: F.hood[0], z: F.hood[1] }, belt: [[0, F.belt], [1, F.belt]] };
+  return { D: { hl: F.hl, hw: F.hw, h: F.roof }, K, off: [0, F.y || 0, R.z0 + (F.z || 0)], post: F.post, tailX: F.tailX || 0 };
+}
+
+// (ROADMAP 29.5) a part's mast (post: [x, its foot, z, its top] on the ride)
+function postModel(post) {
+  const M = itemMats();
+  const Kt = new Kit();
+  const [x, y0, z, y1] = post;
+  const h = Math.max(0.1, y1 - y0);
+  Kt.add(M.metal, new THREE.CylinderGeometry(0.06, 0.085, h, 10).translate(x, y0 + h / 2, z), linC(0.52, 0.54, 0.58));
+  Kt.add(M.metal, new THREE.CylinderGeometry(0.16, 0.18, 0.05, 12).translate(x, y0 + 0.025, z), linC(0.3, 0.31, 0.34));
+  const m = Kt.build();
+  m.matrixAutoUpdate = true;
+  return m;
+}
+
+// (ROADMAP 29.5) what a part makes of a ride that is not a car is reckoned by the ride's own weight and speed (how big a
+// rotor lifts it, how fast its wings take it off): a jet ski light and quick off the mark, the speedboat, the
+// helicopter, the light plane, the tank - heavy and slow. Its top speed as its drawing makes it (v.q)
+const RIDE_H = {
+  jetski: { mass: 0.9, power: 12, top: 19 },
+  boat: { mass: 1.5, power: 10, top: 22 },
+  copter: { mass: 1.5, power: 10, top: 24 },
+  plane: { mass: 1.1, power: 8, top: 48 },
+  tank: { mass: 2, power: 8, top: 11 },
+};
+function rideH(v) {
+  const r = !v.drawn && !v.hybrid && RIDE_H[v.model || v.kind];
+  if (!r) return null;
+  return { ...HANDLING.sedan, ...r, top: r.top * ((v.q && v.q.speed) || 1) };
+}
+
+// (ROADMAP 29.5) what its parts make of a plane, a helicopter, a tank in their own ways of going (game/rides.js
+// updatePlane, game/vehicles.js updateCopter, updateTank read fz.ride): wings, by their level - a plane off the ground
+// sooner, slower before it stalls and round tighter; a helicopter faster on. A rotor, a balloon that lifts it on its own -
+// a plane hangs in the air however slow, a helicopter climbs faster and higher. A propeller - a gentle push on, all the
+// while (prop: how hard it pushes)
+function rideApply(parts, fz) {
+  let wing = 0;
+  for (const p of parts) if (!p.folded && p.type === 'wing' && p.v !== 'spoiler') wing = Math.max(wing, clamp(p.lv || 2, 1, 3));
+  const rotor = fz.rotor || 0;
+  fz.ride = {
+    wing,
+    stallK: wing ? [0.85, 0.72, 0.62][wing - 1] : 1,
+    turnK: wing ? [1.15, 1.35, 1.55][wing - 1] : 1,
+    speedK: wing ? [1.15, 1.35, 1.6][wing - 1] : 1,
+    hover: Math.max(rotor, fz.balloon || 0) >= 1,
+    climbK: 1 + Math.min(2, rotor) * 0.35,
+    ceil: rotor >= 1 ? 40 : 0,
+    prop: fz.prop ? Math.hypot(fz.prop[0], fz.prop[2]) : 0,
+  };
+}
+
+// (ROADMAP 29.5) a turbo's button, on any ride, as game/vehicles.js drive reads it for a car: Shift, a phone's turbo
+// button (or its stick all the way, with the stick in the settings), a pad's sprint
+export function boostHeld(input) {
+  if (!input || !input.keys) return false;
+  return input.keys.has('ShiftLeft') || input.keys.has('ShiftRight') || !!(input.touch && (input.driveButtons ? input.boost : (input.stickMag || 0) > 0.92)) || !!(input.pad && input.pad.sprint);
 }
 
 function vehDims(v) {
