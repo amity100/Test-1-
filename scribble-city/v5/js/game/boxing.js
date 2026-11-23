@@ -143,6 +143,28 @@ export class Boxing {
     return true;
   }
 
+  // (ROADMAP 29.5) the gym's ladder: the next man you have not beaten (game/boxsim.js LADDER), in this ring. o: anything
+  // startBout takes (onEnd...). The champion beaten, the champion again (a rematch).
+  startLadderBout(ring, o = {}) {
+    const id = this.nextOpponent();
+    const P = PROFILES[id];
+    return this.startBout({ ...o, ring, opponent: { name: P.name, profile: id, look: o.look || null } });
+  }
+
+  // for the gym's board: who is next, your record, whether the champion has been beaten; the ladder in order (who is beaten)
+  ladderInfo() {
+    const s = this.stats;
+    const id = this.nextOpponent();
+    return {
+      next: id,
+      nextName: PROFILES[id].name,
+      record: { ...s.record },
+      championBeaten: s.beaten.includes('champion'),
+      ladder: LADDER.map((k) => ({ id: k, name: PROFILES[k].name, beaten: s.beaten.includes(k) })),
+      stats: { power: s.power, speed: s.speed, stamina: s.stamina, defence: s.defence },
+    };
+  }
+
   // the gym's work: kind 'mitts' (a coach calls the combos: o.coach { look, name }), 'heavybag' or 'speedbag' (o.bag { x, z, y }:
   // the bag; o.onHit(move, power) for the gym to swing it); o.at { x, z, y, yaw }: where you stand; o.onEnd(result)
   startTraining(kind, o = {}) {
@@ -150,7 +172,8 @@ export class Boxing {
     const P = g.player;
     if (this.active) this.stop('replaced');
     if (!P || P.mode !== 'foot' || P.inVehicle) return false;
-    const at = o.at || { x: P.pos.x, z: P.pos.z, y: P.pos.y, yaw: P.yaw };
+    const at0 = o.at || { x: P.pos.x, z: P.pos.z, y: P.pos.y, yaw: P.yaw };
+    const at = { x: at0.x, z: at0.z, y: at0.y !== undefined ? at0.y : groundHeight(at0.x, at0.z), yaw: at0.yaw || 0 };
     const fx = Math.sin(at.yaw || 0);
     const fz = Math.cos(at.yaw || 0);
     const dist = kind === 'mitts' ? 0.98 : kind === 'speedbag' ? 0.52 : 0.82;
@@ -930,7 +953,7 @@ export class Boxing {
     const wide = b.phase === 'rest' || b.phase === 'intro' || (b.phase === 'over' && this.overT > 1.5) ? 1 : 0;
     this.wide = (this.wide || 0) + (wide - (this.wide || 0)) * (1 - Math.exp(-rdt * 1.5));
     const co = this.co;
-    co.dist = (2.25 + Math.min(1.6, d) * 0.8) * (1 - 0.33 * this.punchIn) + 1.6 * this.wide + (counting ? 0.3 : 0);
+    co.dist = (2.25 + Math.min(1.6, d) * 0.8) * (1 - 0.33 * this.punchIn) + 1.0 * this.wide + (counting ? 0.3 : 0);
     co.height = 1.22 - 0.12 * this.punchIn + 0.35 * this.wide - (counting ? 0.25 : 0);
     co.fovMul = 1 - 0.1 * this.punchIn;
     co.minY = this.ringY + 0.35;
