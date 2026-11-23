@@ -1247,7 +1247,7 @@ export class Gym {
       center: { x: cx, z: cz },
       inside: (x, z, pad = 0, y = null) => x > xi0 - pad && x < xi1 + pad && z > zi0 - pad && z < zi1 + pad && (y === null || (y > Y0 - 1.2 && y < Y0 + G.h - 0.4)),
     };
-    // the lights: over the ring, by the door, over the bags, in the office; the neon over the door, the lamps over the sign
+    // the lights: over the ring, by the door, over the bags; the neon over the door, the lamps over the sign (two, its width)
     const L = (x, y, z, r, c, i) => {
       const id = addLight(x, y, z, r, c, i);
       P.lights.push(id);
@@ -1256,9 +1256,9 @@ export class Gym {
     L(R.x, Y0 + 5.0, R.z, 10, [1.0, 0.92, 0.78], 1.6);
     L(-184.5, Y0 + 5.6, 44.6, 9, [1.0, 0.95, 0.86], 1.0);
     L(-186.0, Y0 + 5.6, 70.0, 10, [0.95, 0.97, 1.0], 1.1);
-    L(-177.0, Y0 + 2.7, 74.0, 5, [1.0, 0.88, 0.7], 0.9);
     L(G.x0 - 1.4, Y0 + 3.4, 44.4, 8, [1.0, 0.35, 0.35], 1.0);
-    L(-182.1, Y0 + 6.6, G.z0 - 1.6, 10, [1.0, 0.88, 0.66], 0.9);
+    L(-186.6, Y0 + 6.3, G.z0 - 1.0, 8, [1.0, 0.88, 0.66], 1.5);
+    L(-177.6, Y0 + 6.3, G.z0 - 1.0, 8, [1.0, 0.88, 0.66], 1.5);
     if (w.nav && w.nav.queueRefresh) w.nav.queueRefresh(LOT.x0 - 3, LOT.z0 - 3, LOT.x1 + 3, LOT.z1 + 3);
     // the find's spot: the office's wall, its bare middle
     const B = G.board;
