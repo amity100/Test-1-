@@ -257,6 +257,7 @@ function pageModel(W, H, strokes, seed) {
   const root = K.build({ seed: 0.41 });
   root.matrixAutoUpdate = false;
   root.userData.tex = tex;
+  root.userData.paper = paper;
   return root;
 }
 
@@ -512,6 +513,15 @@ export class Finds {
       // (seen from behind its surface: nothing)
       if ((cam.x - s.x) * s.nx + (cam.y - s.y) * s.ny + (cam.z - s.z) * s.nz < 0) continue;
       const out = fade ? 1 - clamp(fade.t / 0.5, 0, 1) : 1;
+      // (the high sun burns a glowing page white over its own lines: from late morning to mid afternoon the paper
+      // takes less light and glows less of its own - at dusk and at night as it is)
+      if (s.page && s.page.userData.paper) {
+        const u = s.page.userData.paper.uniforms;
+        const h = g.daynight ? g.daynight.hour : 17.6;
+        const dayK = clamp((h - 8) / 3, 0, 1) * clamp((17 - h) / 2.5, 0, 1);
+        u.uAlbedo.value.setScalar(1 - 0.32 * dayK);
+        u.uEmissive.value.setRGB(0.36, 0.36, 0.34).multiplyScalar(1 - 0.85 * dayK);
+      }
       const sheen = clamp((SHEEN_FAR - d) / (SHEEN_FAR - NEAR), 0, 1);
       const near = d < NEAR ? clamp((NEAR - d) / (NEAR - REACH), 0, 1) : 0;
       const lit = Math.max(sheen * 0.55, d < NEAR ? 0.6 + 0.4 * near : 0);
