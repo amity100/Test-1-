@@ -253,7 +253,7 @@ export class BuildTray {
     if (ITEMS[id] && play && !play.isOpen(id)) return tr('עוד נעול', 'Still locked');
     // (a part of the tray's own, opened by a find in the city - the hover pads, with the hover bike's drawing)
     const F = !ITEMS[id] && play && play.finding ? play.finding() : null;
-    if (F && !F.partOpen(id)) return tr('עוד נעול — הציור שלו מחכה בעיר', 'Still locked — its drawing waits in the city');
+    if (F && !F.partOpen(id)) return F.findOf(id) && F.where(id) ? tr('עוד נעול — הציור שלו מחכה בעיר', 'Still locked — its drawing waits in the city') : tr('עוד נעול', 'Still locked');
     // (the gun mount: a gun in the hand to put on it - or one on it already)
     if (id === 'handgun' && !g.weapons.mountable(g.weapons.current) && !(v && v.fuse && v.fuse.parts.some((p) => p.hand))) return tr('צריך נשק ביד', 'Needs a gun in your hand');
     return null;

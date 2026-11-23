@@ -28,7 +28,8 @@ const KEY = 'scribble-city-v5-finds';
 // open from the end of the prologue (the plan's "55%")
 export const START_BP = new Set(['paint', 'rifle', 'mp5', 'shotgun', 'inkbomb', 'car', 'muscle', 'hyper', 'nightshift', 'streetline', 'bike', 'ramp', 'barrier', 'bridge']);
 // the car's parts at the start, and their level (the wings strong from the start: real flight - the owner's word)
-export const START_PARTS = { turbo: 1, wing: 2, jump: 1, mg: 1, armor: 1 };
+// (the owner, 23.11: the helicopter's rotor too - drawn in the story's jump off the roof, his from then on)
+export const START_PARTS = { turbo: 1, wing: 2, jump: 1, mg: 1, armor: 1, rotor: 1 };
 // the parts whose level is found, not bought
 const FOUND_LEVELS = new Set(['wing', 'turbo']);
 // what a part's copy is read against: the other parts, and everything on the pen's shelves
@@ -63,12 +64,12 @@ export const FINDS = [
   },
   {
     id: 'wings2',
-    title: 'WINGS — LEVEL 2',
+    title: 'STORM WINGS',
     part: 'wing',
     lv: 3,
     draw: 'p_wing',
     stage: 1,
-    line: tr('הכנפיים שלכם, חזקות יותר: ממריאות מוקדם, מטפסות כמו מטוס קרב, טסות מהר יותר — עד גובה המגדלים.', 'Your wings, stronger: they lift off sooner, climb like a fighter, cruise faster — up to the towers.'),
+    line: tr('הכנפיים שלכם ברמה מטורפת: ממריאות מוקדם, מטפסות כמו מטוס קרב, טסות מהר יותר — עד גובה המגדלים.', 'Your wings gone wild: they lift off sooner, climb like a fighter, cruise faster — up to the towers.'),
     how: { touch: tr('על כל כלי עם כנפיים — מעכשיו בדרגה הזו', 'On every ride with wings — at this level from now on'), keys: tr('על כל כלי עם כנפיים — מעכשיו בדרגה הזו', 'On every ride with wings — at this level from now on') },
     tryText: tr('נסו אותן עכשיו: קפצו מהגג ועופו מעל המגדלים', 'Try them now: jump off the roof and fly over the towers'),
     where: tr('על גג חניון הקומות ברחוב 5, ליד הקצה', 'On the roof of the parking garage on 5th Street, by the edge'),
@@ -318,6 +319,7 @@ export class Finds {
     try {
       const o = JSON.parse(localStorage.getItem(KEY) || 'null');
       if (o && Array.isArray(o.found)) out.found = o.found.filter((id) => BY_ID[id]);
+      if (o && o.told) out.told = true;
     } catch (e) {
       // (no storage here: nothing found yet)
     }
@@ -435,15 +437,17 @@ export class Finds {
     return null;
   }
 
+  // (the owner, 23.11: only the start kit is open; everything else is locked till it is found - the sandbox's switch opens
+  // all of it)
   bpOpen(id) {
     if (!BLUEPRINTS[id]) return false;
     if (START_BP.has(id)) return true;
-    return !this.lockedBy('bp', id);
+    return FINDS.some((f) => f.bp === id && this.has(f.id));
   }
 
   partOpen(id) {
     if (id in START_PARTS) return true;
-    return !this.lockedBy('part', id);
+    return FINDS.some((f) => (f.part === id || f.alsoPart === id) && !f.lv && this.has(f.id));
   }
 
   partLevel(id) {
@@ -476,6 +480,15 @@ export class Finds {
     if (!this.boardsDone && spots.length) {
       this.boardsDone = true;
       for (const s of spots) if (s.f.board && !this.has(s.f.id)) repaintBoard(s.f.board, 'erased');
+    }
+    // (once, the first time they are there: where to look for them - the map has each one, and the gym)
+    if (!this.state.told && spots.length && g.hud) {
+      this.toldT = (this.toldT || 0) + dt;
+      if (this.toldT > 6) {
+        this.state.told = true;
+        this.save();
+        g.hud.toast(g.touch ? tr('ציורים מחכים לכם בעיר — כל אחד מסומן במפה (ציורים למצוא). גם מכון האיגרוף במפה', 'Drawings are waiting for you in the city — each one is on the map (Drawings to find). The boxing gym is on it too') : tr('ציורים מחכים לכם בעיר — כל אחד מסומן במפה (M, ציורים למצוא). גם מכון האיגרוף במפה', 'Drawings are waiting for you in the city — each one is on the map (M, Drawings to find). The boxing gym is on it too'), 'info', 7);
+      }
     }
     const p = g.player;
     const at = p.inVehicle ? p.inVehicle.pos : p.pos;

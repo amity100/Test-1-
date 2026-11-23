@@ -1158,8 +1158,8 @@ Object.assign(BLUEPRINTS, {
   },
   p_wing: {
     id: 'p_wing',
-    name: tr('כנפיים — דרגה 2', 'Wings — level 2'),
-    nameEn: 'WINGS LEVEL 2',
+    name: tr('כנפי סערה', 'Storm Wings'),
+    nameEn: 'STORM WINGS',
     kind: 'part',
     hidden: true,
     difficulty: 2,
