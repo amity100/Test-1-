@@ -254,6 +254,7 @@ export function clearSite(game) {
     l.on = false;
     done.lights.push(l);
   }
+  // (the boxes that hide what is behind them are the walls' own solids, out already with them: any other one on the lot too)
   for (const q of w.occluders || []) {
     if (q.alive === false || !inCut((q.x0 + q.x1) / 2, 1, (q.z0 + q.z1) / 2)) continue;
     q.alive = false;
@@ -777,8 +778,8 @@ export function buildGym(K, KI, KM, M, Y0, wall, KN = null) {
     wall(bx - 0.22, bz - 0.22, bx + 0.22, bz + 0.22, 0, Y0 + 0.34, 'prop');
   }
   {
-    const tx0 = -189.5;
-    const tx1 = -188.3;
+    const tx0 = -189.9;
+    const tx1 = -188.7;
     KI.box(MI.matte, tx0, Y0 + 0.72, 53.9, tx1, Y0 + 0.77, 56.1, WOOD);
     for (const [x, z] of [[tx0 + 0.05, 54.0], [tx1 - 0.05, 54.0], [tx0 + 0.05, 56.0], [tx1 - 0.05, 56.0]]) KI.box(MI.metal, x - 0.02, Y0, z - 0.02, x + 0.02, Y0 + 0.72, z + 0.02, STEEL_D);
     wall(tx0, 53.9, tx1, 56.1, 0, Y0 + 0.77, 'prop');
@@ -1328,7 +1329,7 @@ export class Gym {
       if (near) this.refreshBoard(false);
     }
     this.life(dt);
-    if (near) this.lightFigs();
+    this.lightFigs(near);
   }
 
   // the bags swinging on their chains (each a pendulum: its angles towards +x and +z), their corners moved while they do
@@ -1614,7 +1615,8 @@ export class Gym {
   }
 
   // the people in here lit by its lamps, as the room is (render/people.js fig.indoor); out of it, the street's light again
-  lightFigs() {
+  // (you, every frame - out of it by any way, a respawn too; the people round it, while the camera is near)
+  lightFigs(near) {
     const g = this.game;
     const R = this.room;
     const one = (f, pos) => {
@@ -1625,7 +1627,7 @@ export class Gym {
     };
     one(g.player.fig, g.player.pos);
     const C = g.civilians;
-    if (!C) return;
+    if (!C || !near) return;
     for (const c of C.list) {
       const p = c.pos;
       if (Math.abs(p.x - this.cx) > 14 || Math.abs(p.z - this.cz) > 24) {

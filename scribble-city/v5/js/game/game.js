@@ -1483,6 +1483,8 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
         }
       }
     }
+    // (the boxing gym's hall: the camera kept under its trusses - game/placegym.js)
+    if (!player.indoor && this.places && player.mode === 'foot' && !player.inVehicle) player.indoor = this.places.roomAt(player.pos.x, player.pos.z, player.pos.y);
     // camera
     // (the look as quick as ever - but through a drawn sight, aimed: below)
     this.camRig.lookK = 1;
@@ -1764,7 +1766,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     if ((!this.freedraw && input.wasPressed('KeyQ')) || input.wasPressed('KeyT')) this.openDraw();
     if (input.wasPressed('KeyE')) {
       if (p.inVehicle) this.exitVehicle();
-      else if (p.mode === 'foot' && !(this.facelab && this.facelab.interact()) && !(this.finds && this.finds.interact()) && !this.events.interact() && !(this.festival && this.festival.interact()) && !(this.artnight && this.artnight.interact()) && !(this.arcade && this.arcade.interact()) && !(this.casino && this.casino.interact()) && !(this.parties && this.parties.interact()) && !(this.fair && this.fair.interact()) && !(this.arenaGame && this.arenaGame.interact()) && !(this.friend && this.friend.interact()) && !(this.crowds && this.crowds.social && this.crowds.social.interact && this.crowds.social.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
+      else if (p.mode === 'foot' && !(this.facelab && this.facelab.interact()) && !(this.finds && this.finds.interact()) && !(this.places && this.places.interact()) && !this.events.interact() && !(this.festival && this.festival.interact()) && !(this.artnight && this.artnight.interact()) && !(this.arcade && this.arcade.interact()) && !(this.casino && this.casino.interact()) && !(this.parties && this.parties.interact()) && !(this.fair && this.fair.interact()) && !(this.arenaGame && this.arenaGame.interact()) && !(this.friend && this.friend.interact()) && !(this.crowds && this.crowds.social && this.crowds.social.interact && this.crowds.social.interact()) && !this.streetlife.interact() && !(this.climb && this.climb.interact()) && !(this.gadgets && this.gadgets.interact())) this.tryEnter();
       else if (p.mode === 'swim' && this.swim) this.swim.interact();
     }
     if (input.wasPressed('KeyM')) this.openMap();
@@ -2688,6 +2690,11 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       enter = true;
       const ft = this.finds.target();
       prompt = touch ? ft.label.replace('E — ', '') : ft.label;
+    } else if (p.mode === 'foot' && this.places && this.places.target()) {
+      // (ROADMAP 29.5: the boxing gym's ring, the coach's mitts, the bags - game/placegym.js)
+      enter = true;
+      const gt = this.places.target();
+      prompt = touch ? gt.label.replace('E — ', '') : gt.label;
     } else if (p.mode === 'foot' && this.events.prompt()) {
       // somebody near you needs a hand (game/events.js)
       enter = true;
