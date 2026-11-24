@@ -819,7 +819,8 @@ export class FreeDraw {
     // (below the picture at the top and its line, whatever the screen: nothing over it - and clear of the pen's rows)
     const ref = this.refEl && this.refEl.classList.contains('on') ? this.refEl.getBoundingClientRect() : null;
     const ly = Math.max(ref && ref.height ? ref.bottom + 26 : 64, H * 0.45 - bh / 2 - 22);
-    const y0 = ly + 30;
+    // (room above the lines for the pencil's own length as it starts, clear of the words)
+    const y0 = ly + 64;
     const room = H - (this.game.touch ? 140 : 205) - y0;
     if (bh > room && room > 40) {
       bw *= room / bh;
