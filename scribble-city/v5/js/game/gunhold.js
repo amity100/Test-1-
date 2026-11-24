@@ -365,11 +365,13 @@ export class GunHold {
       // (carried by its grip; raised, by its butt)
       _p.copy(_B).addScaledVector(_x, -_C.x).addScaledVector(_g, -_C.y).addScaledVector(_z, -_C.z);
       // (coming up, it goes out ahead of him and in - not through his chest)
-      if (st === 'long') _p.lerpVectors(_A, _p, kk).addScaledVector(f, 0.09 * S * Math.sin(Math.PI * kk));
+      if (st === 'long') _p.lerpVectors(_A, _p, kk).addScaledVector(f, 0.15 * S * Math.sin(Math.PI * kk));
       else _p.copy(_A);
     } else {
       _p.copy(_A).lerp(_B, kk);
       _p.addScaledVector(_x, -_C.x).addScaledVector(_g, -_C.y).addScaledVector(_z, -_C.z);
+      // (a pistol comes up out ahead of him, not up his front)
+      if (st === 'pistol') _p.addScaledVector(f, 0.1 * S * Math.sin(Math.PI * kk)).addScaledVector(r, 0.05 * S * Math.sin(Math.PI * kk));
     }
     if (st === 'heavy' && G.sh > 0.001) {
       // (aimed in: up from his hip into his shoulder)
