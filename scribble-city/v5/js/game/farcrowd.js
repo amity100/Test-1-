@@ -32,6 +32,37 @@ export class FarCrowd {
     return Math.round((this.game.touch ? 44 : 130) * (R ? R.people : 1));
   }
 
+  // (game/wounds.js) gunfire, a blast at (x, z); (sx, sz) who did it: the walkers out there within r of it turn their back on it
+  // along their walk and run, a while; further off, as far as it is heard (hear), they turn their back on it and hurry off -
+  // then walk on as before
+  scare(x, z, r, sx, sz, hear = r) {
+    const now = this.game.time;
+    const R = Math.max(r, hear);
+    for (const w of this.list) {
+      if (Math.abs(w.x - x) > R || Math.abs(w.z - z) > R) continue;
+      const d = Math.hypot(w.x - x, w.z - z);
+      if (d > R) continue;
+      const run = d <= r;
+      // (running already, or hurrying and this is no nearer: as they are)
+      if (w.scaredT > now && (w.running || !run)) continue;
+      w.walkSp = w.walkSp || w.speed;
+      // (the way along the walk that takes them away from him)
+      const L = w.loop;
+      const n = L.length;
+      const a = L[w.leg];
+      const b = L[(w.leg + 1) % n];
+      const ux = b[0] - a[0];
+      const uz = b[1] - a[1];
+      const away = (w.x - sx) * ux + (w.z - sz) * uz;
+      if (Math.abs(away) > 1e-3) w.dir = away > 0 ? 1 : -1;
+      w.running = run;
+      w.speed = run ? 4.3 + Math.random() * 1.3 : Math.max(w.walkSp, 2.5 + Math.random() * 0.6);
+      w.scaredT = now + (run ? 7 + Math.random() * 5 * (1 - d / R) : 5 + Math.random() * 3);
+      w.fearX = sx;
+      w.fearZ = sz;
+    }
+  }
+
   // ------------------------------------------------------------------ every frame
   update(dt) {
     const game = this.game;
@@ -40,7 +71,15 @@ export class FarCrowd {
       if (this.list.length) this.list = [];
       return;
     }
-    for (const w of this.list) this.walk(w, dt);
+    for (const w of this.list) {
+      // (over the fright: their own walk again)
+      if (w.walkSp && !(w.scaredT > game.time)) {
+        w.speed = w.walkSp;
+        w.walkSp = 0;
+        w.running = false;
+      }
+      this.walk(w, dt);
+    }
     this.t -= dt;
     if (this.t > 0) return;
     this.t = 0.4;

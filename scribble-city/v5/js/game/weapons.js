@@ -7,6 +7,7 @@ import { blendMatrix } from './materialize.js';
 import { Fists, FISTS } from './fists.js';
 import { ArmFx, drawSlug, slugWall, slugBody, slugCar } from './armfx.js';
 import { clamp } from '../core/util.js';
+import { bodyHit, loudOf } from './wounds.js';
 
 import { tr } from '../core/lang.js';
 // kind: melee (swung), gun (fires projectiles), throw (the thing itself flies), beam (a ray while
@@ -422,7 +423,9 @@ export class Weapons {
     this.hold.plan(slot, player.fig, player.fig.aim > 0 && !this.shootOut, onFoot && player.mode === 'foot', dt);
     // (ROADMAP 28.28: something in his right hand - a blade, a bottle, a shield - and that hand stays out of his pocket:
     // in it, the thing was in his belly. The pencil is his own: as it was)
-    player.fig.rightFull = slot.model && def.id !== 'pencil' && def.kind !== 'fists' && onFoot && player.mode === 'foot' ? (def.block && !def.knack ? 'shield' : true) : false;
+    // (ROADMAP 29.6: a sword in both hands at the guard - 'blade'; a thing to throw, thrown over the top - 'throw': game/doodle.js)
+    player.fig.rightFull = slot.model && def.id !== 'pencil' && def.kind !== 'fists' && onFoot && player.mode === 'foot' ? (def.block && !def.knack ? 'shield' : def.id === 'katana' ? 'blade' : def.kind === 'throw' ? 'throw' : true) : false;
+    if (player.fig.rightFull !== 'blade' && player.fig.rightFull !== 'shield') this.hold.bladeOff(player.fig);
     this.updateProjectiles(dt);
   }
 
@@ -543,7 +546,9 @@ export class Weapons {
     if (def.quiet) game.enemies.noise(car.pos, 5);
     else {
       game.enemies.noise(car.pos, 32);
-      game.civilians.panic(car.pos, 40, 'shot', { by: 'player', armed: true });
+      // (game/wounds.js: as far round as the gun is loud, from where he is)
+      const loud = loudOf(def);
+      game.civilians.panic(car.pos, loud, 'shot', { by: 'player', armed: true, src: car.pos, loud });
       game.onCrime('shoot', car.pos.x, car.pos.z);
     }
   }
@@ -635,7 +640,9 @@ export class Weapons {
     if (def.quiet) game.enemies.noise(at, 5);
     else {
       game.enemies.noise(at, 32);
-      game.civilians.panic(at, 40, 'shot', { by: 'player', armed: true });
+      // (game/wounds.js: as far round as the gun is loud, from where he is)
+      const loud = loudOf(def);
+      game.civilians.panic(at, loud, 'shot', { by: 'player', armed: true, src: at, loud });
       game.onCrime('shoot', at.x, at.z);
     }
     if (slot.ammo <= 0) this.drop(slot, tr(`ה${def.name} נגמר — אפשר לצייר אותו שוב`, `The ${def.name} ran out — you can draw it again`));
@@ -816,9 +823,9 @@ export class Weapons {
       slot.beamAcc = 0;
       const dmg = def.damage * g.dmg * k;
       if (hitEnemy) {
-        game.enemies.damage(hitEnemy.enemy, hitEnemy.part, dmg, b.clone(), d.clone().normalize(), 'beam');
+        game.enemies.damage(hitEnemy.enemy, hitEnemy.part, dmg, b.clone(), d.clone().normalize(), 'beam', bodyHit(def, 'beam', dmg));
       } else if (hitCiv) {
-        game.civilians.damage(hitCiv.civ, b.clone(), 'beam', dmg);
+        game.civilians.damage(hitCiv.civ, b.clone(), 'beam', dmg, { ...bodyHit(def, 'beam', dmg), dir: d.clone().normalize() });
       } else if (L < def.range - 0.5) {
         // a wall or the street: the light rubs a hole into it, bit by bit
         const w = this.aimWorld;
@@ -826,7 +833,7 @@ export class Weapons {
         game.fx.sparks(b.x, b.y, b.z, 2, [0.95, 1, 0.3]);
       }
       game.enemies.noise(player.pos, 20);
-      game.civilians.panic(player.pos, 25, 'shot', { by: 'player', armed: true });
+      game.civilians.panic(player.pos, loudOf(def), 'shot', { by: 'player', armed: true, src: player.pos, loud: loudOf(def) });
       game.onCrime('shoot', player.pos.x, player.pos.z);
       game.audio.play('laser', 0.6);
     }
@@ -857,15 +864,18 @@ export class Weapons {
     const kind = def.slash ? 'slash' : 'melee';
     // (ROADMAP 11.11, parts 2) what its ink does (a blade drawn in red sets them alight...)
     const el = def.element || null;
+    // (game/wounds.js: what a blow of it does to a person)
+    const B = bodyHit(over ? null : def, kind, def.damage);
+    const B2 = { wound: B.wound * 0.6, knock: B.knock * 0.5 };
     for (const e of hits) {
       if (e.isMonster) game.enemies.damage(e, 'body', def.damage, e.fig.center.clone(), f, kind);
       else {
-        game.enemies.damage(e, null, def.damage, e.fig.closestSurfacePoint(tip, new THREE.Vector3()), f, kind);
+        game.enemies.damage(e, null, def.damage, e.fig.closestSurfacePoint(tip, new THREE.Vector3()), f, kind, B);
         if (def.slash && e.alive) {
           // the edge goes on through: a second cut a little lower
           const c = e.fig.center.clone().addScaledVector(f, -0.1);
           c.y -= 0.25;
-          game.enemies.damage(e, null, def.damage * 0.6, e.fig.closestSurfacePoint(c, new THREE.Vector3()), f, kind);
+          game.enemies.damage(e, null, def.damage * 0.6, e.fig.closestSurfacePoint(c, new THREE.Vector3()), f, kind, B2);
         }
       }
       // (a heavy head drawn on a hammer sends them further: game/freeform.js)
@@ -881,7 +891,13 @@ export class Weapons {
       any = true;
     }
     for (const c of game.civilians.inArc(p.pos, f, reach, half)) {
-      game.civilians.damage(c, c.fig.closestSurfacePoint(tip, new THREE.Vector3()), kind, def.damage);
+      game.civilians.damage(c, c.fig.closestSurfacePoint(tip, new THREE.Vector3()), kind, def.damage, { ...B, dir: f });
+      // (the edge goes on through a passer-by too: game/wounds.js)
+      if (def.slash && c.alive && !game.classic && !game.civilians.storyCast(c)) {
+        const q = c.fig.center.clone().addScaledVector(f, -0.1);
+        q.y -= 0.25;
+        game.civilians.damage(c, c.fig.closestSurfacePoint(q, new THREE.Vector3()), kind, def.damage * 0.6, { ...B2, dir: f });
+      }
       if (el && c.alive) this.inkOn(el, c, true, c.fig.center, f, def.damage);
       any = true;
     }
@@ -1111,16 +1127,13 @@ export class Weapons {
         if (!this.game.canErase) return;
         const want = this.swingT >= 0 ? _w.copy(dir).add(_UP) : _w.copy(dir);
         m = pencilGrip(p, want, 0.02, true);
-      } else m = p.holdMatrix(dir);
+      } else if (fig.rightFull === 'blade') m = this.hold.bladeMatrix(slot, fig, this.swingT, _gm);
+      else m = p.holdMatrix(dir);
+      // (a thing to throw: in his fist, not on his wrist - game/gunhold.js)
+      if (def.kind === 'throw' && def.id !== 'pencil') m = this.hold.inFist(fig, m, def.id);
       if (def.block && !def.knack) {
-        // the shield: held up in front of the chest, its face to the front (pushed out for a bash)
-        const f = _u.copy(fig.forward).setY(0).normalize();
-        const up = _w.set(0, 1, 0);
-        const side = new THREE.Vector3().crossVectors(f, up);
-        const bash = this.swingT >= 0 ? Math.sin(Math.min(1, this.swingT) * Math.PI) * 0.45 : 0;
-        const h = j.handR;
-        m.makeBasis(f, up, side);
-        m.setPosition(h.x + f.x * (0.22 + bash) - fig.right.x * 0.12, h.y + 0.18, h.z + f.z * (0.22 + bash) - fig.right.z * 0.12);
+        // the shield: on his left forearm, its face to the front (pushed out for a bash) - game/gunhold.js
+        m = this.hold.shieldMatrix(fig, _gm);
       }
     } else {
       const dir = fig.aim ? _v.copy(this.aimPoint).sub(j.handR) : _v.copy(fig.forward).multiplyScalar(0.6).add(_w.set(0, -0.8, 0));
@@ -1193,6 +1206,24 @@ export class Weapons {
           best = e;
         }
       }
+      // (game/wounds.js) none of them ahead: the one it was fired at - somebody right in its way, not one off to the side
+      if (!best && !game.classic) {
+        for (const c of game.civilians.list) {
+          if (!c.alive || c.inside || c.brave) continue;
+          const dx = c.pos.x - pr.x;
+          const dy = c.pos.y + 1.1 - pr.y;
+          const dz = c.pos.z - pr.z;
+          const d = Math.hypot(dx, dy, dz);
+          if (d > 45 || d < 0.5) continue;
+          const cos = (dx * pr.vx + dy * pr.vy + dz * pr.vz) / (d * sp);
+          if (cos < 0.9) continue;
+          const sc = cos * 2 - d / 30;
+          if (sc > bs) {
+            bs = sc;
+            best = c;
+          }
+        }
+      }
       pr.target = best;
     }
     const cruise = pr.cruise || 20;
@@ -1258,8 +1289,20 @@ export class Weapons {
         this.inkBurst(pr, pr.x, pr.y, pr.z);
         continue;
       }
-      if (pr.kind === 'plane') this.steerPlane(pr, dt);
-      else if (pr.curve && pr.target) this.steerCurve(pr, dt);
+      if (pr.kind === 'plane') {
+        this.steerPlane(pr, dt);
+        // (game/wounds.js) within a stride of the one it hunts, it goes off there: from close by it flew on over their head,
+        // and the one it hunted was behind it - and it left them be
+        const e = pr.target;
+        if (e && e.alive && pr.t > 0.12 && e.fig) {
+          const c = e.fig.center;
+          if (Math.abs(c.x - pr.x) < 1.2 && Math.abs(c.z - pr.z) < 1.2 && Math.hypot(c.x - pr.x, (c.y - pr.y) * 0.7, c.z - pr.z) < 1.05) {
+            this.planeBurst(pr, pr.x, pr.y, pr.z);
+            if (pr.el) this.inkRound(pr.el, pr.x, pr.y, pr.z, pr.radius || 3, pr.damage);
+            continue;
+          }
+        }
+      } else if (pr.curve && pr.target) this.steerCurve(pr, dt);
       if (pr.wobble) {
         const w = pr.wobble * 6;
         pr.vx += Math.sin(pr.t * 13 + pr.seed) * w * dt * 3;
@@ -1439,8 +1482,12 @@ export class Weapons {
         this.onHit(pr, hit, dx / len, dy / len, dz / len);
         continue;
       }
-      // a near miss makes them duck
-      if (pr.owner === 'player') game.enemies.whiz(ox, oy, oz, dx, dy, dz);
+      // a near miss makes them duck (and a passer-by run, or drop: game/wounds.js)
+      if (pr.owner === 'player') {
+        game.enemies.whiz(ox, oy, oz, dx, dy, dz);
+        const sp = game.player.inVehicle ? game.player.inVehicle.pos : game.player.pos;
+        if (game.civilians.whiz) game.civilians.whiz(ox, oy, oz, dx, dy, dz, sp.x, sp.z);
+      }
       pr.x = nx;
       pr.y = ny;
       pr.z = nz;
@@ -1694,6 +1741,20 @@ export class Weapons {
     }
   }
 
+  // (game/wounds.js) a shot of his landing r from somebody: they take it as a shot at them (game/civilians.js impact)
+  nearShot(hit, r) {
+    const P = this.game.player;
+    const sp = P.inVehicle ? P.inVehicle.pos : P.pos;
+    this.game.civilians.impact(hit.x, hit.z, sp.x, sp.z, r);
+  }
+
+  // (game/wounds.js) the wound of a shot to the person it lands on, how hard it shoves them, the way it went
+  bodyOf(pr, ux, uz, kind) {
+    const B = bodyHit(pr.slot ? pr.slot.def : null, kind, pr.damage);
+    B.dir = { x: ux, z: uz };
+    return B;
+  }
+
   onHit(pr, hit, ux, uy, uz) {
     const game = this.game;
     const fx = game.fx;
@@ -1723,7 +1784,7 @@ export class Weapons {
     const kind = pr.kind;
     const hurtKind = hurtOf(kind);
     if (hit.type === 'civ') {
-      game.civilians.damage(hit.civ, new THREE.Vector3(hit.x, hit.y, hit.z), hurtKind, pr.damage);
+      game.civilians.damage(hit.civ, new THREE.Vector3(hit.x, hit.y, hit.z), hurtKind, pr.damage, this.bodyOf(pr, ux, uz, hurtKind));
       if (kind === 'paint' || kind === 'crayon' || kind === 'paintmg' || kind === 'tippex' || (kind === 'marker' && pr.color)) hit.civ.fig.paint(pr.color);
       if (kind === 'glue') hit.civ.glueT = pr.stick;
       fx.impact(hit.x, hit.y, hit.z, 0.6);
@@ -1735,7 +1796,7 @@ export class Weapons {
       const e = hit.enemy;
       // (a hit of yours: the shooting skill, ROADMAP 5.6)
       if (game.skills && pr.owner === 'player' && e.alive) game.skills.add('shoot', Math.min(1.5, pr.damage / 25));
-      game.enemies.damage(e, hit.part, pr.damage, new THREE.Vector3(hit.x, hit.y, hit.z), new THREE.Vector3(ux, uy, uz), hurtKind);
+      game.enemies.damage(e, hit.part, pr.damage, new THREE.Vector3(hit.x, hit.y, hit.z), new THREE.Vector3(ux, uy, uz), hurtKind, this.bodyOf(pr, ux, uz, hurtKind));
       if (kind === 'paint' || kind === 'ink' || kind === 'crayon' || kind === 'paintmg' || kind === 'tippex' || (kind === 'marker' && pr.color)) e.paint(kind === 'ink' ? PEN_BLUE : pr.color);
       if (kind === 'staple') e.pinT = Math.max(e.pinT || 0, pr.pin || 0.4);
       if (kind === 'glue') {
@@ -1756,6 +1817,7 @@ export class Weapons {
       // a car hit: dented, its glass, a tyre... (game/damage.js); yours keep their own count
       const c = hit.car;
       game.impactfx.car(pr, hit, ux, uy, uz, c);
+      if (pr.owner === 'player' && game.civilians.impact) this.nearShot(hit, 2.6);
       // (ROADMAP 23.19: one of the story's cars after him - a car somebody drives, as his own is: what his gun does to it is
       // the fight's own count, game/prologue/paintfight.js shot)
       const F = game.prologue && game.prologue.fight;
@@ -1794,6 +1856,8 @@ export class Weapons {
       if (pr.color && !p.inVehicle && hp0 - p.hp > pr.damage * 0.5) game.hud.splat(pr.color);
       return;
     }
+    // (game/wounds.js: a shot of yours landing by somebody - a fright as if it were at them)
+    if (pr.owner === 'player' && game.civilians.impact) this.nearShot(hit, 3.2);
     // world (a parked car's box: dented, its glass, its tyres... game/damage.js)
     if (hit.box && hit.box.tag === 'car' && game.damage && !game.classic) game.damage.shot(hit.box, hit, pr.damage);
     // (a shop window: a hard shot breaks it, ROADMAP 8.3, game/knock.js)
@@ -1868,10 +1932,10 @@ export class Weapons {
       const civ = hit.type === 'civ';
       const who = civ ? hit.civ : hit.enemy;
       const at = new THREE.Vector3(hit.x, hit.y, hit.z);
-      if (civ) game.civilians.damage(who, at, hurtOf(pr.kind), pr.damage);
+      if (civ) game.civilians.damage(who, at, hurtOf(pr.kind), pr.damage, this.bodyOf(pr, ux, uz, hurtOf(pr.kind)));
       else {
         if (game.skills && pr.owner === 'player' && who.alive) game.skills.add('shoot', Math.min(1.5, pr.damage / 25));
-        game.enemies.damage(who, hit.part, pr.damage, at, new THREE.Vector3(ux, uy, uz), hurtOf(pr.kind));
+        game.enemies.damage(who, hit.part, pr.damage, at, new THREE.Vector3(ux, uy, uz), hurtOf(pr.kind), this.bodyOf(pr, ux, uz, hurtOf(pr.kind)));
       }
       if (who.alive) this.inkOn(el, who, civ, at, dir, pr.damage);
       game.fx.impact(hit.x, hit.y, hit.z, 0.6);

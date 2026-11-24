@@ -80,15 +80,19 @@ export class Brain {
     if (!E) return null;
     const game = this.game;
     const now = game.time;
+    // (game/wounds.js: your gunfire - how far round you it sets the street running, by how loud the gun is)
+    // (a blast of yours - game.js explosion - as far round as the loudest gun)
+    const alarm = o.loud || (kind === 'blast' && o.by === 'player' ? 60 : 0);
     // (the same thing again at the same place: the event goes on)
     let ev = this.events.find((e) => e.kind === kind && Math.abs(e.x - x) + Math.abs(e.z - z) < 8 && now < e.until);
     if (ev) {
       ev.until = now + E.life;
       ev.last = now;
       ev.n++;
+      if (alarm > (ev.alarm || 0)) ev.alarm = alarm;
     } else {
       // (sx, sz: what to keep away from - whoever did it, else the place itself)
-      ev = { id: nextId++, kind, x, z, sx: o.src ? o.src.x : x, sz: o.src ? o.src.z : z, t: now, last: now, until: now + E.life, n: 1, by: o.by || null, victim: o.victim || null, armed: !!o.armed, danger: E.danger, E };
+      ev = { id: nextId++, kind, x, z, sx: o.src ? o.src.x : x, sz: o.src ? o.src.z : z, t: now, last: now, until: now + E.life, n: 1, by: o.by || null, victim: o.victim || null, armed: !!o.armed, danger: E.danger, E, alarm };
       this.events.push(ev);
       this.stats.events++;
     }
@@ -128,8 +132,10 @@ export class Brain {
       // (a moment before it sinks in: the louder, the sooner; busy with a phone, a word, later)
       const busy = (c.fig && c.fig.carry === 'phone' ? 0.45 : 0) + (c.convo ? 0.25 : 0);
       const loud = kind === 'shot' || kind === 'blast';
-      const delay = victim ? 0.05 : loud ? 0.15 + Math.random() * 0.35 + d * 0.004 + busy : 0.4 + Math.random() * 0.9 + d * 0.01 + busy;
-      a.stim = { ev, at: now + delay, d, seen, heard, victim, again: n0 !== undefined };
+      // (game/wounds.js: inside the alarm of your gunfire - a gun going off near you is not missed, phone or no phone)
+      const gun = !victim && ev.alarm > 0 && d < ev.alarm;
+      const delay = victim ? 0.05 : gun ? 0.04 + Math.random() * 0.16 + d * 0.003 + busy * 0.4 : loud ? 0.15 + Math.random() * 0.35 + d * 0.004 + busy : 0.4 + Math.random() * 0.9 + d * 0.01 + busy;
+      a.stim = { ev, at: now + delay, d, seen, heard, victim, again: n0 !== undefined, gun };
       this.stats.perceived++;
     }
     return ev;
@@ -195,13 +201,19 @@ export class Brain {
     const near = clamp(1 - s.d / range, 0, 1);
     let threat = ev.danger * Math.pow(near, 0.7) * (s.seen ? 1 : 0.8) * (ev.armed ? 1.35 : 1) * Math.min(1.6, 1 + (ev.n - 1) * 0.12);
     if (s.victim) threat = Math.max(threat, 0.75);
+    // (game/wounds.js) inside the alarm of your gunfire, or a shot of yours past their head, at their feet: a fright whoever
+    // they are - nobody strolls on while the bullets fly
+    else if (s.near) threat = Math.max(threat, 0.9);
+    else if (s.gun) threat = Math.max(threat, 0.7 + 0.25 * (1 - s.d / Math.max(1, ev.alarm)));
     // (right by it - a fist fight an arm's length off, a car crashing in front of them: a fright
     // whatever it is; further off, something to look at)
     else if ((ev.kind === 'assault' || ev.kind === 'hurt') && s.d < 4.5) threat = Math.max(threat, 0.62);
     else if (ev.kind === 'crash' && s.d < 7) threat = Math.max(threat, 0.72);
     if (ev.by === 'player' && game.minds) threat *= 1 + 0.2 * game.minds.dread;
     // their fear of it: the timid more, the bold less - and what they already are (running, afraid)
-    const fear = threat * (1.35 - m.bold * 0.8) + (a.state === 'flee' ? 0.2 : 0) + (Math.random() - 0.5) * 0.12;
+    let fear = threat * (1.35 - m.bold * 0.8) + (a.state === 'flee' ? 0.2 : 0) + (Math.random() - 0.5) * 0.12;
+    if (s.near) fear = Math.max(fear, 0.95);
+    else if (s.gun) fear = Math.max(fear, 0.78 + 0.2 * (1 - s.d / Math.max(1, ev.alarm)));
     const curiosity = m.curious * E.interest * (1 - Math.min(1, threat * 1.4));
     const dx = ev.x - c.pos.x;
     const dz = ev.z - c.pos.z;
@@ -233,6 +245,8 @@ export class Brain {
       // goes quiet - or run. (Somebody a scene holds in its place - at a table, in a group - is not
       // taken off behind a car by it: they run, or get down)
       if (ev.kind === 'shot' && s.d < 14 && m.bold < 0.3 && Math.random() < 0.55) act = 'cower';
+      // (a shot right by them: some drop where they are, hands over their head)
+      else if (s.near && !room && Math.random() < 0.3 - m.bold * 0.15) act = 'cower';
       else if (ev.kind === 'shot' && !room && (!c.ctrl || c.buddyOf) && s.d < 32 && Math.random() < 0.72 - m.bold * 0.3 && this.cover(c, a, ev)) act = 'cover';
       else act = 'flee';
     } else if (fear > 0.4) act = 'avoid';
@@ -278,7 +292,8 @@ export class Brain {
     if (!s.follow && mate && JOIN.has(jact) && mate.alive && !mate.gone && !mate.headless) this.join(mate, c, jact, ev);
     // a word, now and then (one at a time round there)
     if (!s.follow && now > this.sayT && Math.random() < (loud ? 0.4 : 0.25) * (0.5 + m.chatty)) {
-      this.sayT = now + 1.4;
+      // (your gunfire: a scream here, a shout there - more than one voice at a time; game/wounds.js)
+      this.sayT = now + (ev.alarm && s.gun ? 0.6 : 1.4);
       const line = act === 'confront' ? null : pick(STARTLE[ev.kind] || STARTLE.crash);
       if (line && game.voices) game.voices.say(c, `[${fear > 0.5 ? 'scared' : 'surprised'}] ${line}`, fear > 0.5 ? 'alarm' : 'plain');
     }
@@ -308,6 +323,16 @@ export class Brain {
         a.fleeT = 0;
         a.startle = ev.victim === c ? 0.15 : 0.25 + Math.random() * 0.45;
         a.lookBackT = 1.5 + Math.random() * 2;
+        // (game/wounds.js) from your gunfire: a flinch and off - each their own way, so that a crowd scatters, not runs as one;
+        // some of them in through the nearest shop's door, out of the line of fire
+        a.bias = 0;
+        a.door = null;
+        if (ev.alarm) {
+          a.startle = Math.min(a.startle, 0.08 + Math.random() * 0.18);
+          a.pace = 0.95 + Math.random() * 0.25;
+          a.bias = (Math.random() - 0.5) * 1.4;
+          if (!c.ctrl && !c.scripted && !c.buddyOf && Math.random() < 0.45) a.door = this.shopDoor(c, ev);
+        }
         break;
       }
       case 'cower':
@@ -595,6 +620,17 @@ export class Brain {
     const a = this.ai(c);
     a.fleeT = (a.fleeT || 0) + dt;
     a.planT -= dt;
+    // (game/wounds.js) in through a shop's door, out of it all - the one with them after them (after the first start)
+    if (!walk && a.door && a.fleeT >= (a.startle || 0)) {
+      const D = a.door;
+      const dd = Math.hypot(D.x - c.pos.x, D.z - c.pos.z);
+      if (dd < 0.75) {
+        this.hide(c, a);
+        return { x: c.pos.x, z: c.pos.z, speed: 0 };
+      }
+      if (a.fleeT < 7 && D.a.alive) return { x: D.x, z: D.z, speed: 5.6 * (a.pace || 1) * (c.role === 'elder' ? 0.65 : 1) };
+      a.door = null;
+    }
     // (running with the one they are with: at their side, not off on their own)
     const w = a.with;
     if (w && w !== c && w.alive && !w.gone && !w.headless && w.ai && w.ai.with !== c && (walk ? w.avoidT > 0 : w.panicT > 0)) {
@@ -638,6 +674,14 @@ export class Brain {
 
   plan(c, a, ux, uz) {
     this.stats.planned++;
+    // (game/wounds.js: each their own way off from it - a crowd scatters)
+    if (a.bias) {
+      const cb = Math.cos(a.bias);
+      const sb = Math.sin(a.bias);
+      const rx = ux * cb - uz * sb;
+      uz = ux * sb + uz * cb;
+      ux = rx;
+    }
     a.planT = 0.55 + Math.random() * 0.25;
     const px = c.pos.x;
     const pz = c.pos.z;
@@ -693,6 +737,95 @@ export class Brain {
     a.goal = best;
     a.pdx = best.dx;
     a.pdz = best.dz;
+  }
+
+  // ------------------------------------------------------------------ (game/wounds.js) a shot by them
+  // a shot of yours past c's head, or landing at their feet (game/civilians.js whiz, impact): taken in at once, as a fright -
+  // the gunfire of where you are (sx, sz) the thing to get away from
+  near(c, sx, sz) {
+    if (!c.alive || c.inside || c.brave || c.headless || this.game.classic) return;
+    if (c.scripted && !c.mgr) return;
+    const a = this.ai(c);
+    const now = this.game.time;
+    if (a.stim && a.stim.near) return;
+    // (already running, down, behind something: the fright goes on longer)
+    if (a.state === 'flee' || a.state === 'cower' || a.state === 'cover') {
+      if (a.state === 'flee' && c.panicT > 0) c.panicT = Math.max(c.panicT, 6);
+      return;
+    }
+    if (now - (a.nearT || -9) < 0.6) return;
+    a.nearT = now;
+    let ev = null;
+    for (const e of this.events) {
+      if (e.kind === 'shot' && e.by === 'player' && now < e.until && Math.abs(e.sx - sx) + Math.abs(e.sz - sz) < 10) {
+        ev = e;
+        break;
+      }
+    }
+    // (no gunfire heard round there - a gun with a silencer on it: only the one it went by takes it in, nobody else is told)
+    if (!ev) {
+      ev = { id: nextId++, kind: 'shot', x: sx, z: sz, sx, sz, t: now, last: now, until: now + EVENTS.shot.life, n: 1, by: 'player', victim: null, armed: true, danger: EVENTS.shot.danger, E: EVENTS.shot, alarm: 0 };
+      this.events.push(ev);
+    }
+    a.seen.set(ev.id, ev.n);
+    a.stim = { ev, at: now + 0.04, d: Math.hypot(c.pos.x - ev.x, c.pos.z - ev.z), seen: true, heard: true, victim: false, near: true, gun: true };
+    this.stats.near = (this.stats.near || 0) + 1;
+  }
+
+  // the door of an open shop near c, not towards whoever is shooting, with nothing in the way to it (or null)
+  shopDoor(c, ev) {
+    const SL = this.game.streetlife;
+    if (!SL || !SL.active || !SL.active.size) return null;
+    const sx = ev.sx !== undefined ? ev.sx : ev.x;
+    const sz = ev.sz !== undefined ? ev.sz : ev.z;
+    const dS = Math.hypot(c.pos.x - sx, c.pos.z - sz);
+    const col = this.game.world && this.game.world.collision;
+    let best = null;
+    let bd = 13;
+    for (const A of SL.active.values()) {
+      const s = A.shop;
+      if (!s || !s.door || s.cart || s.stand || !A.alive || A.lift) continue;
+      const dx = s.door[0] - c.pos.x;
+      const dz = s.door[2] - c.pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d > bd || d < 0.8) continue;
+      const ds = Math.hypot(s.door[0] - sx, s.door[2] - sz);
+      if (ds < 7 || ds < dS - 2.5) continue;
+      if (col && d > 1.2 && col.raycast(c.pos.x, 1.0, c.pos.z, dx / d, 0, dz / d, d - 0.9)) continue;
+      bd = d;
+      best = { x: s.door[0], z: s.door[2], nx: s.nx || 0, nz: s.nz || 0, a: A };
+    }
+    return best;
+  }
+
+  // in through the door: out of sight inside until it has gone quiet a while, then out of the door again and on with their day
+  hide(c, a) {
+    const D = a.door;
+    a.door = null;
+    c.inside = true;
+    if (c.fig) c.fig.setVisible(false);
+    c.vel.set(0, 0, 0);
+    c.hideT = 6 + Math.random() * 8;
+    this.stats.hid = (this.stats.hid || 0) + 1;
+    // (the one running with them: in after them)
+    const mate = c.buddy || c.buddyOf;
+    if (mate && mate.ai && mate.ai.with === c && mate.alive && !mate.inside && mate.panicT > 0) mate.ai.door = D;
+    const B = this;
+    // (inside, the city leaves them be - game/civilians.js update runs only this)
+    c.ctrl = (civ, dt) => {
+      civ.hideT -= dt;
+      if (civ.hideT > 0 || !B.quiet(civ)) return null;
+      civ.inside = false;
+      civ.ctrl = null;
+      if (civ.fig) civ.fig.setVisible(true);
+      civ.pos.x = D.x + D.nx * 0.4;
+      civ.pos.z = D.z + D.nz * 0.4;
+      civ.vel.set(0, 0, 0);
+      civ.yaw = Math.atan2(D.nx, D.nz);
+      // (out: the fright over - Brain.tend has them get their breath and go on, away from it)
+      civ.panicT = 0;
+      return null;
+    };
   }
 
   // ------------------------------------------------------------------ the one they are with
