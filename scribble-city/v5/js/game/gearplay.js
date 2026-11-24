@@ -44,9 +44,10 @@ export class GearPlay {
 
   // (ROADMAP 29.5, game/finds.js) the regular game after the prologue: what is open is the start kit and what was found,
   // the rest as the sandbox has it - no ink per use, a full car of parts, no blueprint pages
+  // (R26: from the story's first minute - game/finds.js rules)
   finding() {
     const F = this.game.finds;
-    return !this.lab && F && F.on ? F : null;
+    return !this.lab && F && F.rules ? F : null;
   }
 
   free() {

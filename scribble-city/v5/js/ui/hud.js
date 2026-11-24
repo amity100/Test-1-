@@ -555,7 +555,7 @@ export class HUD {
     // (the farthest a marker of up to 8 pixels can be and still touch the canvas)
     const reach = (Math.hypot(W, H) / 2 + 8) / s;
     // (ROADMAP 29.5: while drawings are found in the city, the boards are no longer what is looked for)
-    const boards = game.finds && game.finds.on ? [] : game.world.billboards;
+    const boards = game.finds && game.finds.rules ? [] : game.world.billboards;
     for (const b of boards) {
       if (Math.abs(b.x - p.x) > reach || Math.abs(b.z - p.z) > reach) continue;
       const got = game.album.has(b.id);

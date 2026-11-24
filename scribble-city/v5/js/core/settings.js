@@ -47,6 +47,8 @@ export const DEFAULTS = {
   // learned and opened up along the way). (v5, ROADMAP 18.9: on for a new player - the trial is to
   // have all of it to play with: every drawing, every part on the car)
   allOpen: false,
+  // (R26, the owner's own checks) every blueprint on the city map - the hidden ones too (off: a few, the rest found)
+  allPins: false,
   // (ROADMAP 11.24, the lab) drawing on your car: 'parts' - a category said (a weapon, movement,
   // protection), then drawn, and which of its things it is read (game/partpen.js, ROADMAP 11.25);
   // 'old', as in 11.22 - what is drawn is read as what it looks like, where it is

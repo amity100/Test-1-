@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { tr } from '../core/lang.js';
 import { Kit, itemMats, linC } from './items.js';
 import { clamp } from '../core/util.js';
-import { BLUEPRINTS, blueprintBounds } from './blueprints.js';
+import { BLUEPRINTS, blueprintBounds, BLUEPRINT_ORDER, BLUEPRINT_ROOFS } from './blueprints.js';
 import { flashLight, makeSurface, canvasTexture } from '../render/materials.js';
 import { canvas } from '../world/kit.js';
 import { repaintBoard } from '../world/boards.js';
@@ -18,6 +18,12 @@ import { repaintBoard } from '../world/boards.js';
 // copy it. The player draws it himself, by finger, and the game reads the drawing against that one drawing alone
 // (never "it looks like something else" - ui/freedraw.js copy); alike enough, it is real in front of him, with a card
 // that says what it is and how it is used, and the first try of it there and then.
+//
+// (R26, the owner's word: "go to the blueprint and photograph it") A find is photographed, not copied at the wall: in
+// reach, F or the camera button - the polaroid flies to the pencil, and it is his, still to be drawn once (ui/album.js
+// known) before it is in the library for good. Big, valuable things are never out on the street: every page is small
+// and off to the side - in an alley, up on a roof. A few are on the map (pin); most are not - from 30 m the game says
+// one is near, and the pencil is heard scratching from 10 m.
 //
 // A thing on the list is locked only once its place is in the world (a stage built): till then it stays open as it
 // was. What is not on the plan's lists at all stays open, as it was. The sandbox (the settings' "every drawing and
@@ -49,6 +55,7 @@ export const FINDS = [
     where: tr('בסמטת המוחקים — מרידיאן–וושינגטון, בין רחוב 9 לרחוב 7. מקום מסוכן', "In the Erasers' alley — Meridian–Washington, between 9th and 7th. A dangerous place"),
     at: (world) => alleyWall(world, 0, 3, 118, -1),
     board: 'bazooka',
+    w: 1.6,
   },
   {
     id: 'booster',
@@ -61,6 +68,8 @@ export const FINDS = [
     tryText: tr('נסו אותו עכשיו: הרכיבו על רכב והדליקו', 'Try it now: put it on a ride and light it'),
     where: tr('במוסך המרוצים, מעבר לרחוב 5 מול חניון הקומות', 'In the racing garage, across 5th Street from the parking garage'),
     at: (world, game) => placeSpot(game, 'rocket'),
+    w: 1.5,
+    pin: true,
   },
   {
     id: 'wings2',
@@ -74,6 +83,7 @@ export const FINDS = [
     tryText: tr('נסו אותן עכשיו: קפצו מהגג ועופו מעל המגדלים', 'Try them now: jump off the roof and fly over the towers'),
     where: tr('על גג חניון הקומות ברחוב 5, ליד הקצה', 'On the roof of the parking garage on 5th Street, by the edge'),
     at: (world, game) => placeSpot(game, 'wings'),
+    w: 1.6,
   },
   {
     id: 'inkhawk',
@@ -85,6 +95,8 @@ export const FINDS = [
     tryText: tr('נסו אותו עכשיו: המריאו מהמנחת', 'Try it now: take off from the pad'),
     where: tr('על מנחת המסוקים בגג במרכז העיר — וושינגטון–קולינס, רחובות 15–13', 'On the helipad on a downtown roof — Washington–Collins, 15th to 13th'),
     at: (world, game) => placeSpot(game, 'inkhawk'),
+    w: 1.6,
+    pin: true,
   },
   {
     id: 'dualrotor',
@@ -97,6 +109,7 @@ export const FINDS = [
     tryText: tr('נסו אותו עכשיו: הרכיבו על רכב והמריאו', 'Try it now: put it on a ride and lift off'),
     where: tr('על גג חנות הגלישה ליד הטיילת', 'On the roof of the surf shop by the boardwalk'),
     at: (world, game) => placeSpot(game, 'dualrotor'),
+    w: 1.6,
   },
   {
     id: 'hoverbike',
@@ -104,8 +117,9 @@ export const FINDS = [
     bp: 'hoverbike',
     // (and its pods for any ride: in the parts tray from the day it is found)
     alsoPart: 'hover',
-    // (its board in the van is 3.68 m wide: the page a little narrower than the spot's own)
-    w: 2.8,
+    // (R26, the owner's word: small, like the rest)
+    w: 1.5,
+    pin: true,
     stage: 1,
     line: tr('אופנוע בלי גלגלים, על שני תרמילי ריחוף: מעל הכביש, החול והים. ואת התרמילים שלו אפשר לשים על כל כלי.', 'A motorbike with no wheels, on two hover pods: over the road, the sand and the sea. And its pods go on any ride.'),
     how: { touch: tr('מציירים אותו מהעיפרון, ברכבים · ▲ קפיצה · על כלי אחר: "חלקים" ← משטחי ריחוף', 'Draw it from the pencil, under rides · ▲ hops · on another ride: "Parts" → Hover Pads'), keys: tr('מציירים אותו מהעיפרון, ברכבים · רווח קפיצה · על כלי אחר: Q ← חלקים ← משטחי ריחוף', 'Draw it from the pencil, under rides · Space hops · on another ride: Q → Parts → Hover Pads') },
@@ -115,7 +129,89 @@ export const FINDS = [
   },
 ];
 
+// (R26, the owner's word: "a weapon, a tank, a luxury car - anything big and valuable is never out on the open street; always
+// in some alley, somewhere less seen, and small like the rest") the old blueprint boards - the tank over a cross street,
+// the copters, the laser, the machine guns - are rubbed out (world/boards.js 'erased'), and what was on each is a small
+// page hidden nearby: in the alley nearest its board, or on the roof by a roof board. Never on the map - found by
+// walking the alleys and the roofs, the game saying when one is near.
+export const HIDDEN_WHERE = tr('מוסתר איפשהו בעיר — בסמטאות, על הגגות. כשמתקרבים, המשחק אומר', 'Hidden somewhere in the city — in the alleys, up on the roofs. When you are close, the game tells you');
+const HOW = {
+  weapon: { touch: tr('מציירים אותו מהעיפרון · מחזיקים כוונת, ונגיעה בירי', 'Draw it from the pencil · hold aim, tap fire'), keys: tr('מציירים אותו מהעיפרון (Q) · קליק ימני לכוון, קליק לירות', 'Draw it from the pencil (Q) · right-click to aim, click to fire') },
+  vehicle: { touch: tr('מציירים אותו מהעיפרון, ברכבים · ועולים עליו', 'Draw it from the pencil, under rides · and get on it'), keys: tr('מציירים אותו מהעיפרון (Q), ברכבים · E לעלות', 'Draw it from the pencil (Q), under rides · E to get on') },
+  other: { touch: tr('מציירים אותו מהעיפרון', 'Draw it from the pencil'), keys: tr('מציירים אותו מהעיפרון (Q)', 'Draw it from the pencil (Q)') },
+};
+for (const id of [...BLUEPRINT_ORDER, ...BLUEPRINT_ROOFS]) {
+  const bp = BLUEPRINTS[id];
+  if (!bp || bp.hidden || START_BP.has(id) || FINDS.some((f) => f.bp === id)) continue;
+  const kind = bp.kind === 'weapon' ? 'weapon' : bp.kind === 'vehicle' ? 'vehicle' : 'other';
+  FINDS.push({
+    id: `h_${id}`,
+    title: bp.name,
+    bp: id,
+    hidden: true,
+    w: 1.3,
+    stage: 1,
+    line: bp.desc || '',
+    how: HOW[kind],
+    tryText: kind === 'weapon' ? tr(`נסו אותו עכשיו: ירו ב${bp.name}`, `Try it now: fire the ${bp.name}`) : kind === 'vehicle' ? tr(`נסו אותו עכשיו: עלו על ${bp.name} וסעו`, `Try it now: get on the ${bp.name} and go`) : '',
+    where: HIDDEN_WHERE,
+    at: (world) => hiddenSpot(world, id),
+  });
+}
+
 const BY_ID = Object.fromEntries(FINDS.map((f) => [f.id, f]));
+
+// (R26) where a hidden page is: worked out once per world - by its old board (the nearest alley's wall; a roof board's own
+// roof), or, with no board, an alley of its own
+const HIDE = new WeakMap();
+const SLOT_FR = [0.3, 0.7, 0.5, 0.18, 0.84, 0.4, 0.6, 0.26];
+function hiddenSpot(world, id) {
+  let memo = HIDE.get(world);
+  if (!memo) HIDE.set(world, (memo = { at: new Map(), used: new Map() }));
+  if (memo.at.has(id)) return memo.at.get(id);
+  const col = world.collision;
+  const boards = (world.billboards || []).filter((b) => b.id === id);
+  let spot = null;
+  const roof = boards.find((b) => b.roof);
+  if (roof && col && col.pointInside) {
+    // (on the roof by its board: the side of it the roof is on, read with its top toward the board)
+    for (const k of [-2.4, 2.4, -3.6, 3.6]) {
+      const x = roof.x + roof.nx * k;
+      const z = roof.z + roof.nz * k;
+      const y = roof.top;
+      if (y === undefined || !col.pointInside(x, y - 0.4, z) || col.pointInside(x, y + 0.6, z)) continue;
+      const s = Math.sign(k);
+      spot = { x, y: y + 0.03, z, nx: 0, ny: 1, nz: 0, ux: s * roof.nx, uy: 0, uz: s * roof.nz };
+      break;
+    }
+  }
+  const alleys = world.alleys || [];
+  if (!spot && alleys.length) {
+    const b = boards.find((q) => !q.roof);
+    let a = null;
+    if (b) {
+      let bd = Infinity;
+      for (const q of alleys) {
+        const d = Math.hypot((q.x0 + q.x1) / 2 - b.x, (q.z0 + q.z1) / 2 - b.z) + (memo.used.get(q) || 0) * 40;
+        if (d < bd) {
+          bd = d;
+          a = q;
+        }
+      }
+    } else {
+      let h = 0;
+      for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+      a = alleys[h % alleys.length];
+    }
+    const n = memo.used.get(a) || 0;
+    memo.used.set(a, n + 1);
+    const z = a.z0 + (a.z1 - a.z0) * SLOT_FR[n % SLOT_FR.length];
+    const w = alleyWall(world, a.col, a.row, z, n % 2 ? 1 : -1);
+    if (w) spot = { ...w, y: 1.85 };
+  }
+  memo.at.set(id, spot);
+  return spot;
+}
 
 // a place built for a find (game/places.js): its spot, or null while it is not there
 function placeSpot(game, id) {
@@ -172,8 +268,9 @@ function mergeGeos(list) {
 const pageSize = (W, H) => [W * 1.16 + 0.24, H * 1.2 + 0.34];
 // (its picture: the paper, a faint grain, the drawing in soft graphite - gone over twice, as a hand does)
 function pageTexture(PW, PH, strokes, seed) {
-  const cw = 1024;
-  const chh = Math.max(256, Math.min(1024, Math.round((cw * PH) / PW)));
+  // (R26: the pages are small now - half the texture, and a phone's memory spared)
+  const cw = PW < 2.2 ? 512 : 1024;
+  const chh = Math.max(128, Math.min(1024, Math.round((cw * PH) / PW)));
   const c = canvas(cw, chh);
   const g = c.getContext('2d');
   const sx = cw / PW;
@@ -307,19 +404,32 @@ export class Finds {
     this.boardsDone = false;
   }
 
-  // on: the regular game after the prologue, not the sandbox (nor ?classic, nor the lab)
+  // (R26, the owner's word: "from the very start of the game") the rules - the start kit open, the rest found, each thing
+  // drawn once before it is in the library - from the first minute of the story on; not in the sandbox, ?classic or the lab
+  get rules() {
+    const g = this.game;
+    return !(g.classic || g.lab || !g.album || g.album.allOpen);
+  }
+
+  // on: the pages in the city - the regular game after the prologue
   get on() {
     const g = this.game;
-    if (g.classic || g.lab || !g.album || g.album.allOpen) return false;
-    return !(g.prologue && g.prologue.active);
+    return this.rules && !(g.prologue && g.prologue.active);
+  }
+
+  // (R26) on the map: a few (pin) - or every one, with the settings' switch for the owner's own checks
+  pinned(f) {
+    const st = this.game.settings;
+    return !!f.pin || !!(st && st.v && st.v.allPins);
   }
 
   load() {
-    const out = { found: [] };
+    const out = { found: [], tried: [], coached: {} };
     try {
       const o = JSON.parse(localStorage.getItem(KEY) || 'null');
       if (o && Array.isArray(o.found)) out.found = o.found.filter((id) => BY_ID[id]);
-      if (o && o.told) out.told = true;
+      if (o && Array.isArray(o.tried)) out.tried = o.tried.filter((id) => BY_ID[id]);
+      if (o && o.coached && typeof o.coached === 'object') out.coached = o.coached;
     } catch (e) {
       // (no storage here: nothing found yet)
     }
@@ -367,12 +477,7 @@ export class Finds {
       });
       const total = strokes.reduce((a, q) => a + q.len, 0) || 1;
       const s = { f, live, W, H, strokes, total, seed: 4100 + FINDS.indexOf(f) * 97, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 1, page: null };
-      // (its page, on its surface - not once it is taken)
-      if (!this.has(f.id) && this.game.scene) {
-        s.page = pageModel(W, H, strokes, s.seed);
-        this.game.scene.add(s.page);
-        s.page.visible = this.on;
-      }
+      // (its page: made when he comes near it - draw(), one a frame - and kept)
       this.place(s);
       this.spots.push(s);
     }
@@ -446,6 +551,9 @@ export class Finds {
   }
 
   partOpen(id) {
+    // (the owner, 23.11: the helicopter's rotor is his from the story's jump off the roof - not before it)
+    const P = this.game.prologue;
+    if (id === 'rotor' && P && P.active && !(P.sceneN >= 8)) return false;
     if (id in START_PARTS) return true;
     return FINDS.some((f) => (f.part === id || f.alsoPart === id) && !f.lv && this.has(f.id));
   }
@@ -468,36 +576,100 @@ export class Finds {
   where(id) {
     const f = this.findOf(id);
     if (!f || !this.ensureSpots().some((s) => s.f === f) || this.has(f.id)) return null;
-    return f.where;
+    return this.pinned(f) ? f.where : HIDDEN_WHERE;
+  }
+
+  // ------------------------------------------------------------------ (R26) the game's own words, one at a time
+  // a short line on a card at the top of the screen - what to do now, said once (key) - queued, never two at once
+  coach(key, text, o = {}) {
+    if (key && this.state.coached[key]) return;
+    if (key) {
+      this.state.coached[key] = 1;
+      this.save();
+    }
+    this.coachQ = this.coachQ || [];
+    this.coachQ.push({ text, t: o.t || 6.5, icon: o.icon || '✎', then: o.then || null });
+    if (!this.coachEl) this.nextCoach();
+  }
+
+  nextCoach() {
+    const q = this.coachQ && this.coachQ.shift();
+    if (!q) return;
+    css();
+    const el = document.createElement('div');
+    el.className = 'find-coach';
+    el.innerHTML = `<i>${q.icon}</i><span>${q.text}</span>`;
+    document.body.appendChild(el);
+    this.coachEl = el;
+    requestAnimationFrame(() => el.classList.add('on'));
+    if (this.game.audio) this.game.audio.play('pageflip', 0.35);
+    setTimeout(() => {
+      el.classList.remove('on');
+      setTimeout(() => {
+        el.remove();
+        if (this.coachEl === el) this.coachEl = null;
+        if (q.then) q.then();
+        this.nextCoach();
+      }, 450);
+    }, q.t * 1000);
   }
 
   // ------------------------------------------------------------------ in the world
+  // (R26) the old blueprint boards: what is not his yet rubbed out (the Erasers' work - its page is hidden nearby); all of
+  // them printed again in the sandbox. Under the rules from the story's first minute: no tank over a cross street
+  syncBoards(dt) {
+    this.boardT = (this.boardT || 0) - dt;
+    if (this.boardT > 0) return;
+    this.boardT = 1;
+    const w = this.game.world;
+    if (!w || !w.billboards) return;
+    this.boardMode = this.boardMode || {};
+    const rules = this.rules;
+    for (const b of w.billboards) {
+      // (the start kit's own boards stay printed: those are no secret)
+      const want = rules && !START_BP.has(b.id) ? 'erased' : 'print';
+      if ((this.boardMode[b.id] || 'print') === want) continue;
+      this.boardMode[b.id] = want;
+      try {
+        repaintBoard(b.id, want);
+      } catch (e) {
+        // (a board not in the atlas: as it is)
+      }
+    }
+  }
+
   update(dt) {
+    this.syncBoards(dt);
     if (!this.on) return;
     const g = this.game;
     const spots = this.ensureSpots();
-    // (the printed board of a thing to be found: rubbed out by the Erasers - the drawing is on the wall nearby)
-    if (!this.boardsDone && spots.length) {
-      this.boardsDone = true;
-      for (const s of spots) if (s.f.board && !this.has(s.f.id)) repaintBoard(s.f.board, 'erased');
-    }
-    // (once, the first time they are there: where to look for them - the map has each one, and the gym)
-    if (!this.state.told && spots.length && g.hud) {
+    // (R26, the owner's word: "the game explains from the start that blueprints are scattered in the city") once, a little
+    // after the story hands over: what they are, how they are had, that a few are on the map - and the way to the nearest
+    if (!this.state.coached.handover && spots.length && g.hud && !g.paused) {
       this.toldT = (this.toldT || 0) + dt;
-      if (this.toldT > 6) {
-        this.state.told = true;
-        this.save();
-        g.hud.toast(g.touch ? tr('ציורים מחכים לכם בעיר — כל אחד מסומן במפה (ציורים למצוא). גם מכון האיגרוף במפה', 'Drawings are waiting for you in the city — each one is on the map (Drawings to find). The boxing gym is on it too') : tr('ציורים מחכים לכם בעיר — כל אחד מסומן במפה (M, ציורים למצוא). גם מכון האיגרוף במפה', 'Drawings are waiting for you in the city — each one is on the map (M, Drawings to find). The boxing gym is on it too'), 'info', 7);
+      if (this.toldT > 5) {
+        const map = g.touch ? tr('המפה', 'the map') : tr('המפה (M)', 'the map (M)');
+        this.coach('handover', tr(`שרטוטים מוסתרים בכל העיר — כלי נשק, רכבים, חלקים. מצלמים שרטוט, והוא שלכם לצייר. כמה מהם מסומנים ב${map} בזהב; רוב השרטוטים לא — אותם מחפשים בסמטאות ועל הגגות`, `Blueprints are hidden all over the city — weapons, rides, parts. Photograph one and it's yours to draw. A few are marked in gold on ${map}; most are not — those you hunt for in the alleys and up on the roofs`), { t: 9, icon: '📷' });
+        this.guideTo();
       }
     }
     const p = g.player;
     const at = p.inVehicle ? p.inVehicle.pos : p.pos;
     this.scratchT -= dt;
+    this.nearSet = this.nearSet || new Set();
     for (const s of spots) {
       if (this.has(s.f.id)) continue;
       // (a place that moves: its drawing with it)
       if (s.live.moves || s.live.parked !== undefined) this.place(s);
       const d = Math.hypot(s.x - at.x, (s.y - at.y) * 0.8, s.z - at.z);
+      // (R26, the owner's word: "when the player comes to a blueprint's area, a message pops up that one is near") from 30 m,
+      // once - again only after he has been 60 m off (a van: once a game)
+      if (d < 30 && !this.nearSet.has(s.f.id)) {
+        this.nearSet.add(s.f.id);
+        if (!this.state.coached.near) this.coach('near', tr('שרטוט מוסתר קרוב! חפשו דף לבן עם קווים בזהב — כשמתקרבים שומעים עיפרון משרבט', 'A hidden blueprint is close! Look for a white page with gold lines — up close you can hear a pencil scratching'), { t: 6, icon: '✦' });
+        else if (g.hud) g.hud.toast(tr('✦ שרטוט מוסתר קרוב — הסתכלו מסביב', '✦ A hidden blueprint is close — look around'), 'info', 3.2);
+        if (g.audio) g.audio.play('pageflip', 0.45);
+      } else if (d > 60 && !(s.live.moves || s.live.parked !== undefined)) this.nearSet.delete(s.f.id);
       if (d > SHEEN_FAR + 5) {
         this.vibed.delete(s.f.id);
         continue;
@@ -523,6 +695,29 @@ export class Finds {
     this.tickTry(dt);
   }
 
+  // (R26) the GPS to the nearest find on the map not taken yet - the first thing to go for after the story
+  guideTo() {
+    const g = this.game;
+    if (!g.gps || !g.gps.set) return;
+    const at = g.player.pos;
+    let best = null;
+    let bd = Infinity;
+    for (const s of this.spots) {
+      if (this.has(s.f.id) || !s.f.pin) continue;
+      const d = Math.hypot(s.x - at.x, s.z - at.z);
+      if (d < bd) {
+        bd = d;
+        best = s;
+      }
+    }
+    if (!best) return;
+    try {
+      g.gps.set(best.x, best.z, best.f.title);
+    } catch (e) {
+      // (no route there: the map has it)
+    }
+  }
+
   // the lines on the surface: a pencil's; from 25 m a sheen along them; from 10 m the light and the inking again
   draw(fr) {
     if (!this.on) {
@@ -533,6 +728,17 @@ export class Finds {
     const cam = g.camera.position;
     const t = g.time;
     const night = g.daynight ? g.daynight.night : 0;
+    // (R26) a page made as he comes within 90 m of it, one a frame - and kept
+    if (g.scene) {
+      for (const s of this.spots) {
+        if (s.page || s.gone) continue;
+        if (Math.hypot(s.x - cam.x, s.y - cam.y, s.z - cam.z) > 90) continue;
+        s.page = pageModel(s.W, s.H, s.strokes, s.seed);
+        g.scene.add(s.page);
+        this.place(s);
+        break;
+      }
+    }
     for (const s of this.spots) {
       const fade = this.fading.find((q) => q.s === s);
       if (this.has(s.f.id) && !fade) continue;
@@ -654,7 +860,8 @@ export class Finds {
       } else if ((p.pos.x - s.x) * s.nx + (p.pos.z - s.z) * s.nz < 0.2) continue;
       // (on a van: while it stands)
       if (s.live.parked === false) return { s, wait: true, label: tr(`${s.f.title} — על הוואן; חכו שיעצור`, `${s.f.title} — on the van; wait for it to stop`) };
-      return { s, label: tr(`E — להעתיק את הציור (${s.f.title})`, `E — copy the drawing (${s.f.title})`) };
+      // (R26, the owner's word: "go to the blueprint and photograph it to get it")
+      return { s, photo: true, label: g.touch ? tr('📷 לצלם את השרטוט', '📷 Photograph the blueprint') : tr(`F — לצלם את השרטוט (${s.f.title})`, `F — photograph the blueprint (${s.f.title})`) };
     }
     return null;
   }
@@ -662,7 +869,19 @@ export class Finds {
   interact() {
     const T = this.target();
     if (!T || T.wait) return !!(T && T.wait);
-    return this.beginCopy(T.s);
+    return this.snap(T.s);
+  }
+
+  // (R26) the photo: the flash, the shutter, the polaroid to the pencil (game/game.js snapFx) - his, still to be drawn once
+  snap(s) {
+    const g = this.game;
+    const f = s.f;
+    const bp = BLUEPRINTS[f.draw || f.bp];
+    const p = g.player;
+    if (p.fig && s.ny < 0.7) p.faceYaw = Math.atan2(-s.nx, -s.nz);
+    if (g.snapFx && bp) g.snapFx(bp, f.title);
+    this.found(s);
+    return true;
   }
 
   // the pen opened on that one drawing: read against it alone (ui/freedraw.js copy)
@@ -689,7 +908,7 @@ export class Finds {
     return ok;
   }
 
-  // copied, and real: kept, its drawing gone from the surface, its card, its try
+  // photographed: kept - his to draw once (R26: no tracing at the wall, nothing learned or put on a ride by itself); its card
   found(s, res) {
     const g = this.game;
     const f = s.f;
@@ -698,30 +917,36 @@ export class Finds {
       this.state.found.push(f.id);
       this.save();
     }
-    this.fading.push({ s, t: 0 });
-    if (g.fx) {
-      for (let i = 0; i < 6; i++) {
-        const u = (Math.random() - 0.5) * s.W;
-        g.fx.crumbs(s.x + s.nz * u + s.nx * 0.2, s.y + s.ny * 0.2 + (s.ny > 0.7 ? 0 : (Math.random() - 0.5) * s.H), s.z - s.nx * u + s.nz * 0.2, 4, 1.2);
-      }
-    }
-    // (a part: learned for the tray - no tracing over its guide first - and on the ride you came in, if it is near)
+    // (a level of a part he has: the wings already on every ride take it at once)
     if (f.part) this.partFound(f);
-    // (a ride found with a part of its own for other rides: that part learned for the tray too, not put on anything)
-    if (f.alsoPart && g.tray && g.tray.store && g.tray.store.learned && !g.tray.store.learned[f.alsoPart] && g.tray.learnAll) g.tray.learnAll([f.alsoPart]);
     const F = g.freedraw;
     if (F) {
       F.legSig = '';
       if (F.showLegend) F.showLegend();
     }
-    // (the card once it is in the hand)
-    setTimeout(() => this.showCard(f, res), f.part ? 900 : 1700);
+    // (the pen opened next on foot: this one picked, its picture, the pencil showing how - ui/freedraw.js learn)
+    this.pendingLearn = f;
+    // (the card once the polaroid is in the pencil)
+    setTimeout(() => this.showCard(f, res), 1300);
+  }
+
+  // what it gives, to be drawn: a blueprint's id or a part's
+  drawId(f) {
+    return f.bp || (f.lv ? null : f.part) || null;
+  }
+
+  // (R26) drawn once - his for good (game/game.js onDrawingDone, game/buildtray.js learn): its first try, then and there
+  onLearned(id) {
+    const f = FINDS.find((q) => this.has(q.id) && (q.bp === id || (q.part === id && !q.lv) || q.alsoPart === id));
+    if (this.pendingLearn && (this.pendingLearn.bp === id || this.pendingLearn.part === id)) this.pendingLearn = null;
+    if (!f || this.state.tried.includes(f.id)) return;
+    this.state.tried.push(f.id);
+    this.save();
+    if (f.tryText) setTimeout(() => this.startTry(f), 2200);
   }
 
   partFound(f) {
     const g = this.game;
-    const T = g.tray;
-    if (T && T.store && T.store.learned && !T.store.learned[f.part] && T.learnAll) T.learnAll([f.part]);
     // (a level found: the wings already on every ride take it at once)
     if (f.lv && g.fuse && g.vehicles) {
       for (const v of g.vehicles.list || []) {
@@ -736,19 +961,6 @@ export class Finds {
         }
       }
     }
-    // (on the ride he came in, near: on it now)
-    const p = g.player;
-    const v = p.lastVehicle && p.lastVehicle.pos && Math.hypot(p.lastVehicle.pos.x - p.pos.x, p.lastVehicle.pos.z - p.pos.z) < 40 ? p.lastVehicle : null;
-    if (!f.lv && v && T && T.attach) {
-      const was = T.v;
-      try {
-        T.v = v;
-        T.attach(f.part, { force: true, quiet: true });
-      } catch (e) {
-        // (not on this one: the tray has it)
-      }
-      T.v = was;
-    }
   }
 
   // ------------------------------------------------------------------ the card and the first try
@@ -759,8 +971,15 @@ export class Finds {
     const el = document.createElement('div');
     el.className = 'find-card';
     const how = g.touch ? f.how.touch : f.how.keys;
-    const grade = res && res.grade && !f.part ? { perfect: tr('העתקה מושלמת', 'A perfect copy'), good: tr('העתקה טובה', 'A good copy'), wonky: tr('העתקה עקומה — עובד, פחות חזק', 'A wonky copy — it works, weaker'), fail: tr('העתקה גרועה', 'A poor copy') }[res.grade] : '';
-    el.innerHTML = `<div class="fc-k">${tr('נמצא', 'FOUND')}</div><div class="fc-t">${f.title}</div><div class="fc-l">${f.line}</div><div class="fc-h">${how}</div>${grade ? `<div class="fc-g">${grade}</div>` : ''}`;
+    const bp = BLUEPRINTS[f.draw || f.bp];
+    const pen = g.touch ? tr('העיפרון ✏', 'the pencil ✏') : tr('העיפרון (Q)', 'the pencil (Q)');
+    // (R26) what is next, said plainly: drawn once, and it is in the library for good
+    const next = f.lv
+      ? tr('הכנפיים שלכם עכשיו ברמה הזו — על כל כלי עם כנפיים', 'Your wings are at this level now — on every ride with wings')
+      : f.part
+      ? tr(`ברכב: ${pen} ← חלקים ← ${bp ? bp.name : f.title} — ציירו אותו פעם אחת, והוא שלכם`, `In a ride: ${pen} → Parts → ${bp ? bp.name : f.title} — draw it once and it's yours`)
+      : tr(`עכשיו ציירו אותו פעם אחת: ${pen} ← ${bp ? bp.name : f.title}. מאז הוא בספרייה, מוכן בנגיעה`, `Now draw it once: ${pen} → ${bp ? bp.name : f.title}. From then on it's in your library, ready at a tap`);
+    el.innerHTML = `<div class="fc-k">${tr('צולם', 'PHOTOGRAPHED')}</div><div class="fc-t">${f.title}</div><div class="fc-l">${f.line}</div><div class="fc-n">${next}</div><div class="fc-h">${how}</div>`;
     document.body.appendChild(el);
     this.card = el;
     requestAnimationFrame(() => el.classList.add('on'));
@@ -769,8 +988,9 @@ export class Finds {
       el.classList.remove('on');
       setTimeout(() => el.remove(), 700);
       if (this.card === el) this.card = null;
-      this.startTry(f);
-    }, 5600);
+      // (the first photo: the next step said once more, short, where the eye is)
+      if (!f.lv) this.coach('firstphoto', f.part ? tr('השרטוט אצלכם — עכשיו ציירו אותו פעם אחת על רכב, והוא שלכם לתמיד', "The blueprint is yours — now draw it once on a ride, and it's yours for good") : tr(`השרטוט אצלכם — פתחו את העיפרון ${g.touch ? '✏' : '(Q)'} וציירו אותו פעם אחת. המשחק יראה לכם איך`, `The blueprint is yours — open the pencil ${g.touch ? '✏' : '(Q)'} and draw it once. The game will show you how`), { t: 6.5, icon: '✏' });
+    }, 6200);
   }
 
   startTry(f) {
@@ -848,9 +1068,18 @@ function css() {
 .find-card .fc-k{font:600 11px/1 "Rubik",sans-serif;letter-spacing:.32em;color:#d8a94e;margin-bottom:6px}
 .find-card .fc-t{font:400 34px/1 "Anton","Rubik","Arial Narrow",sans-serif;letter-spacing:.04em;color:#fff4dc}
 .find-card .fc-l{font:400 14px/1.35 "Rubik",sans-serif;margin-top:8px;color:#e8dcc4}
-.find-card .fc-h{font:500 13px/1.3 "Rubik",sans-serif;margin-top:8px;color:#d8a94e}
+.find-card .fc-h{font:500 13px/1.3 "Rubik",sans-serif;margin-top:6px;color:#bfb29a}
+.find-card .fc-n{font:600 14px/1.35 "Rubik",sans-serif;margin-top:9px;color:#ffd27a}
+.find-coach{position:fixed;left:50%;top:max(58px,calc(env(safe-area-inset-top) + 48px));z-index:41;pointer-events:none;display:flex;gap:10px;align-items:center;
+ max-width:min(560px,86vw);padding:10px 16px;background:rgba(14,12,10,.84);border:1px solid rgba(216,169,78,.55);border-radius:10px;color:#f3ead8;
+ font:500 15px/1.4 "Rubik",sans-serif;opacity:0;transform:translate(-50%,-8px);transition:opacity .4s,transform .5s cubic-bezier(.2,.8,.2,1);box-shadow:0 6px 24px rgba(0,0,0,.35)}
+.find-coach.on{opacity:1;transform:translate(-50%,0)}
+body.fd-open .find-coach{opacity:0!important}
+.find-coach i{font-style:normal;font-size:20px;color:#ffd27a;flex:none}
+html[dir=rtl] .find-coach{direction:rtl;text-align:right}
+body.touch .find-coach{font-size:13px;padding:8px 12px}
 .find-card .fc-g{font:400 12px/1.3 "Rubik",sans-serif;margin-top:6px;color:#bfb29a;font-style:italic}
-html[dir=rtl] .find-card .fc-l,html[dir=rtl] .find-card .fc-h,html[dir=rtl] .find-card .fc-g{direction:rtl;text-align:right}
+html[dir=rtl] .find-card .fc-l,html[dir=rtl] .find-card .fc-h,html[dir=rtl] .find-card .fc-g,html[dir=rtl] .find-card .fc-n{direction:rtl;text-align:right}
 .find-try{position:fixed;left:50%;top:max(14px,env(safe-area-inset-top));z-index:40;pointer-events:none;transform:translate(-50%,-10px);opacity:0;
  padding:7px 16px;background:rgba(14,12,10,.7);border-bottom:1px solid #d8a94e;color:#f3ead8;font:500 14px/1.3 "Rubik",sans-serif;transition:opacity .4s,transform .5s}
 .find-try.on{opacity:1;transform:translate(-50%,0)}

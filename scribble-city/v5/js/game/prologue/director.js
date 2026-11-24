@@ -219,9 +219,8 @@ export class Prologue {
     const g = this.game;
     this.active = true;
     document.body.classList.add('prologue');
-    // (ROADMAP 18.9: everything the pen can make open while it is told - a helicopter, wings, a turbo
-    // on the car, every weapon - whatever the settings say: the game's own again after, finish)
-    if (g.setAllOpen) g.setAllOpen(true);
+    // (R26, the owner's word: "from the start of the game, what the player has is his still to be drawn") the story is
+    // under the start kit's rules too (game/finds.js rules): the sandbox only if the settings say so - not opened here
     // (ROADMAP 25, the owner's word: every option of what to draw open from the start of the game - round 15's short list, a
     // few weapons and rides each drawn once before it was the player's, the rest opened only by the jump off the roof, is no
     // more. What flies waits in the car park alone: game/drawlock.js carParkHold)
