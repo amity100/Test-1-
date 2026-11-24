@@ -766,6 +766,108 @@ export class FreeDraw {
     this.render();
     if (game.pad) game.pad.startFree({ left: 0, top: 0, width: window.innerWidth, height: window.innerHeight });
     game.audio.play('pageflip', 0.4);
+    // (R26) a blueprint just photographed, not drawn yet: picked as the pen opens - its picture, the pencil showing how
+    const pf = !inCar && game.finds && game.finds.pendingLearn;
+    const pid = pf && game.finds.drawId(pf);
+    if (pid && BLUEPRINTS[pid] && BLUEPRINTS[pid].kind !== 'part' && game.album && game.album.toLearn(pid)) {
+      game.finds.pendingLearn = null;
+      setTimeout(() => {
+        if (this.isOpen && !this.strokes.length) this.learn(pid, true);
+      }, 60);
+    }
+  }
+
+  // (R26, the owner's word: "show the player exactly how it is drawn and made real") one being learned: its lines in the
+  // middle of the page and a pencil going over them, stroke by stroke, again and again - till the player's own first line;
+  // then the lines stay, faint, to be drawn over
+  teachOn(bp) {
+    this.teachOff();
+    if (!bp || !bp.strokes || !bp.strokes.length) return;
+    const b = blueprintBounds(bp);
+    const bw = Math.max(1, b.w);
+    const bh = Math.max(1, b.h);
+    const strokes = bp.strokes.map((st) => st.pts.map(([x, y]) => [(x - b.x0) / bw, (y - b.y0) / bh])).filter((L) => L.length > 1);
+    if (!document.getElementById('fd-teach-css')) {
+      const st = document.createElement('style');
+      st.id = 'fd-teach-css';
+      st.textContent = '.fd-teach{position:fixed;inset:0;z-index:57;pointer-events:none;transition:opacity .3s}.fd-teach svg{width:100%;height:100%;overflow:visible}.fd-teach .tb{fill:rgba(16,12,26,.42);stroke:rgba(255,210,122,.5);stroke-width:1.5;transition:opacity .3s}.fd-teach.drawing .tb{opacity:.35}.fd-teach .tg{fill:none;stroke:#fff8ec;stroke-width:4;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:8 8;opacity:.9;filter:drop-shadow(0 0 3px #1b1430)}.fd-teach .ti{fill:none;stroke:#ffd23f;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 4px #1b1430)}.fd-teach.drawing .ti,.fd-teach.drawing .tp,.fd-teach.drawing .tw{display:none}.fd-teach.drawing .tg{opacity:.45}.fd-teach .tw{font:600 15px Rubik,sans-serif;fill:#fff8ec;paint-order:stroke;stroke:#1b1430;stroke-width:4px;text-anchor:middle}';
+      document.head.appendChild(st);
+    }
+    const el = document.createElement('div');
+    el.className = 'fd-teach';
+    el.innerHTML = '<svg><rect class="tb" rx="18"/><path class="tg"/><path class="ti"/><text class="tw"></text><g class="tp"><path d="M12 2h38v12H12z" fill="#ffd23f" stroke="#1b1430" stroke-width="2"/><path d="M50 2h8v12h-8z" fill="#ff7ab8" stroke="#1b1430" stroke-width="2"/><path d="M12 2L1.5 8 12 14z" fill="#f3d7a8" stroke="#1b1430" stroke-width="2" stroke-linejoin="round"/><path d="M1.5 8l4.5-2.6v5.2z" fill="#1b1430"/></g></svg>';
+    el.querySelector('.tw').textContent = this.game.touch ? tr('ככה מציירים אותו — עכשיו אתם, באצבע', "This is how it's drawn — now you, with your finger") : tr('ככה מציירים אותו — עכשיו אתם, בעכבר', "This is how it's drawn — now you, with the mouse");
+    document.body.appendChild(el);
+    this.teach = { el, id: bp.id, strokes, aspect: bw / bh, t0: performance.now() };
+  }
+
+  teachOff() {
+    if (this.teach) {
+      this.teach.el.remove();
+      this.teach = null;
+    }
+  }
+
+  teachTick() {
+    const T = this.teach;
+    if (!T) return;
+    if (!this.isOpen || (this.force && this.force !== T.id)) return this.teachOff();
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    let bw = Math.min(W * 0.46, H * 0.4 * T.aspect);
+    let bh = bw / T.aspect;
+    // (below the picture at the top and its line, whatever the screen: nothing over it - and clear of the pen's rows)
+    const ref = this.refEl && this.refEl.classList.contains('on') ? this.refEl.getBoundingClientRect() : null;
+    const ly = Math.max(ref && ref.height ? ref.bottom + 26 : 64, H * 0.45 - bh / 2 - 22);
+    // (room above the lines for the pencil's own length as it starts, clear of the words)
+    const y0 = ly + 64;
+    const room = H - (this.game.touch ? 140 : 205) - y0;
+    if (bh > room && room > 40) {
+      bw *= room / bh;
+      bh = room;
+    }
+    const x0 = W / 2 - bw / 2;
+    const P = T.strokes.map((L) => L.map(([u, v]) => [x0 + u * bw, y0 + v * bh]));
+    const drawing = !!(this.cur || this.strokes.length);
+    T.el.classList.toggle('drawing', drawing);
+    const sig = `${W}x${H}x${Math.round(ly)}`;
+    if (T.sig !== sig) {
+      T.sig = sig;
+      T.el.querySelector('.tg').setAttribute('d', P.map((L) => 'M' + L.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L')).join(''));
+      const tw = T.el.querySelector('.tw');
+      tw.setAttribute('x', (W / 2).toFixed(0));
+      tw.setAttribute('y', ly.toFixed(0));
+      const tb = T.el.querySelector('.tb');
+      tb.setAttribute('x', (x0 - 22).toFixed(0));
+      tb.setAttribute('y', (y0 - 22).toFixed(0));
+      tb.setAttribute('width', (bw + 44).toFixed(0));
+      tb.setAttribute('height', (bh + 44).toFixed(0));
+      let len = 0;
+      for (const L of P) for (let i = 1; i < L.length; i++) len += Math.hypot(L[i][0] - L[i - 1][0], L[i][1] - L[i - 1][1]);
+      T.len = len;
+    }
+    if (drawing) return;
+    // (the pencil at a hand's pace; a breath at the end, and again)
+    const dur = clamp(T.len / 420, 1.4, 4.2);
+    const tt = ((performance.now() - T.t0) / 1000) % (dur + 0.9);
+    let left = Math.min(1, tt / dur) * T.len;
+    let d = '';
+    let at = P[0][0];
+    for (const L of P) {
+      if (left <= 0) break;
+      d += `M${L[0][0].toFixed(1)} ${L[0][1].toFixed(1)}`;
+      at = L[0];
+      for (let i = 1; i < L.length && left > 0; i++) {
+        const seg = Math.hypot(L[i][0] - L[i - 1][0], L[i][1] - L[i - 1][1]);
+        const k = Math.min(1, left / Math.max(1e-3, seg));
+        at = [L[i - 1][0] + (L[i][0] - L[i - 1][0]) * k, L[i - 1][1] + (L[i][1] - L[i - 1][1]) * k];
+        d += `L${at[0].toFixed(1)} ${at[1].toFixed(1)}`;
+        left -= seg;
+      }
+    }
+    T.el.querySelector('.ti').setAttribute('d', d);
+    const sc = this.game.touch ? 1.4 : 1.6;
+    T.el.querySelector('.tp').setAttribute('transform', `translate(${at[0].toFixed(1)} ${at[1].toFixed(1)}) rotate(-38) scale(${sc}) translate(-1.5 -8)`);
   }
 
   close() {
@@ -790,6 +892,7 @@ export class FreeDraw {
     }
     if (fz && fz.pen && fz.pen.isOpen) fz.pen.close();
     this.isOpen = false;
+    this.teachOff();
     this.world = null;
     this.shutAt = performance.now();
     this.menu(false);
@@ -1878,10 +1981,11 @@ export class FreeDraw {
       const lock = s === 'x' || s === 'h';
       const num = s === 'k' && n < 9 ? ++n : 0;
       const cls = ['fd-it', lit === id ? 'on' : '', this.force === id || this.world === id ? 'pick' : '', lock ? 'lock' : '', s === 'l' ? 'learn' : '', s === 'k' ? 'known' : ''].filter(Boolean).join(' ');
-      const tag = s === 'l' ? tr('✎ ללמוד', '✎ Learn') : s === 'h' ? tr('🔒 אחרי הקפיצה', '🔒 After the jump') : lock ? tr('🔒 לא נמצא', '🔒 Not found') : tr(`${costOfBp(bp)} דיו`, `${costOfBp(bp)} ink`);
+      const tag = s === 'l' ? tr('✎ לצייר פעם אחת', '✎ Draw once') : s === 'h' ? tr('🔒 אחרי הקפיצה', '🔒 After the jump') : lock ? tr('🔒 לא נמצא', '🔒 Not found') : tr(`${costOfBp(bp)} דיו`, `${costOfBp(bp)} ink`);
       return `<div class="${cls}" data-i="${id}"${num ? ` data-n="${num}"` : ''}>${num ? `<em class="fd-n">${num}</em>` : ''}${bpSvg(bp)}<b>${bp.name}</b><i>${tag}</i></div>`;
     }).join('');
-    const say = this.game.touch ? tr('נגיעה בדבר שאתם מכירים — והוא כאן. או ציירו אותו', 'Tap something you know — and it\'s here. Or draw it') : tr('נגיעה או 1–9: והוא כאן · ←→ מדפים · אפשר גם לצייר', 'Tap or 1–9: and it\'s here · ←→ shelves · you can draw too');
+    // (R26) the two kinds of thing on the shelf, said plainly: drawn already - a touch; new - drawn once first
+    const say = this.game.touch ? tr('מה שכבר ציירתם: נגיעה והוא כאן · ✎ חדש: מציירים פעם אחת, ומאז הוא שלכם', "Drawn before: tap and it's here · ✎ New: draw it once, then it's yours") : tr('מה שכבר ציירתם: נגיעה או 1–9 · ✎ חדש: מציירים פעם אחת, ומאז הוא שלכם · ←→ מדפים', "Drawn before: tap or 1–9 · ✎ New: draw it once, then it's yours · ←→ shelves");
     el.innerHTML = `<div class="fd-shelves">${tabs}<span class="fd-leg-say">${say}</span></div><div class="fd-its">${items}</div>`;
   }
 
@@ -2071,7 +2175,8 @@ export class FreeDraw {
     this.choose(id);
     this.legSig = '';
     this.showLegend();
-    game.hud.toast(tr(`${bp.name}: ציירו אותו באוויר, כמו בציור — וכשהוא מוכן, ${game.touch ? '✓' : 'Q'}. מאז הוא בספרייה, מוכן בנגיעה`, `${bp.name}: draw it in the air, like in the picture — and when it's ready, ${game.touch ? '✓' : 'Q'}. From then on it's in the library, ready at a tap`), 'info', 3.6);
+    this.teachOn(bp);
+    game.hud.toast(tr(`${bp.name}: ראו איך העיפרון מצייר אותו, וציירו אותו כמוהו — וכשהוא מוכן, ${game.touch ? '✓' : 'Q'}. מאז הוא בספרייה, מוכן בנגיעה`, `${bp.name}: watch the pencil draw it, then draw it the same way — and when it's ready, ${game.touch ? '✓' : 'Q'}. From then on it's in your library, ready at a tap`), 'info', 4.2);
     game.audio.play('pageflip', 0.35);
     return true;
   }
@@ -3023,6 +3128,7 @@ export class FreeDraw {
     // (the jets' flames on a drawn one you ride)
     const v = p.inVehicle;
     if (v && v.drawn) jetFlames(game, v, dt);
+    this.teachTick();
     if (!this.isOpen) return;
     // (ROADMAP 11.26: the part pen, not sure which of two - it asks, and the drawing waits)
     if (this.group.length && !this.cur && performance.now() > this.groupAt && !(this.group[0].pen && this.game.fuse.pen.holds())) this.finishGroup();

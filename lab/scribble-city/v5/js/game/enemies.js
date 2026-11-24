@@ -8,6 +8,7 @@ import { clamp, damp, dampAngle, angleDiff, RNG } from '../core/util.js';
 import { CoverMap, PathFinder, PERSONAS, LINES, pick, pickPersona } from './tactics.js';
 import { downStep, drawStars, KO_T } from './fists.js';
 import { tr } from '../core/lang.js';
+import { bodyHit, toughness, partK, knockSum, throwDown, inkPool, rayThroughHoles } from './wounds.js';
 // (ROADMAP 5.5) thrown and fallen: how long the living lie before getting up, and the getting up
 const LIE = 0.6;
 const RISE = 0.8;
@@ -491,6 +492,9 @@ class Enemy {
     } else if (!this.isMonster) fig.air = false;
     if (this.legless) speed = Math.min(speed, 0.9);
     else if (this.limping) speed = Math.min(speed * 0.45, 1.8);
+    // (a leg shot: dragged after them - game/wounds.js)
+    else if (this.limpT > 0) speed = Math.min(speed * 0.65, 3.4);
+    if (this.limpT > 0) this.limpT -= dt;
     if (this.flinch > 0) {
       this.flinch -= dt;
       speed *= 0.3;
@@ -550,7 +554,7 @@ class Enemy {
         const ady = aimY - (this.pos.y + (fig.crouch > 0.5 ? 1.0 : 1.4));
         fig.aimPitch = Math.atan2(ady, Math.max(1, Math.hypot(ax - this.pos.x, az - this.pos.z)));
         fig.armsUp = 0;
-        fig.stagger = this.reelT > 0 ? 0.8 : this.limping ? 0.6 : 0;
+        fig.stagger = this.reelT > 0 ? 0.8 : this.limping || this.limpT > 0 ? 0.6 : 0;
         if (!this.armless) fig.flail = 0;
         if (this.guardT > 0) fig.guard = 1;
         else if (fig.guard > 0) fig.guard = Math.max(0, fig.guard - dt * 5);
@@ -584,7 +588,8 @@ class Enemy {
         // (out cold from a fist fight: a while seeing stars before the drawing fades; the blow
         // slides the body back along the ground)
         // (thrown and dead: the flight first, ROADMAP 5.5)
-        fig.dissolve = this.ko ? clamp((this.dying - KO_T) / 1.4, 0, 1) : this.ragKill ? clamp((this.dying - 3.5) / 1.2, 0, 1) : clamp((this.dying - 0.9) / 0.9, 0, 1);
+        // (put down by a wound - game/wounds.js: lying a while in the ink before the drawing goes)
+        fig.dissolve = this.ko ? clamp((this.dying - KO_T) / 1.4, 0, 1) : this.linger ? clamp((this.dying - this.linger) / 1.2, 0, 1) : this.ragKill ? clamp((this.dying - 3.5) / 1.2, 0, 1) : clamp((this.dying - 0.9) / 0.9, 0, 1);
         if (this.ko) this.slide(dt);
       }
     }
@@ -2110,8 +2115,9 @@ export class Enemies {
         continue;
       }
       if (Math.hypot(px - ex, pz - ez) > e.radius + 0.9) continue;
-      // exact hit on the drawn body (shots pass through erased holes)
-      const h = e.fig.raycast(ro, rd, maxT * len);
+      // exact hit on the drawn body (shots pass through erased holes - and a ray that crosses the body only through holes is
+      // a hit all the same, game/wounds.js: the rifle's second shot through the hole of its first)
+      const h = e.fig.raycast(ro, rd, maxT * len) || (this.game.classic ? null : rayThroughHoles(e.fig, ro, rd, maxT * len));
       if (h && (!best || h.t / len < best.t)) best = { t: h.t / len, enemy: e, part: h.part, point: h.point };
     }
     return best;
@@ -2138,7 +2144,9 @@ export class Enemies {
   }
 
   // ------------------------------------------------------------------ damage
-  damage(e, part, amount, point, dir, kind) {
+  // o (game/weapons.js, game/wounds.js): { wound, knock } - the hit as a wound, and how hard it shoves; without it, by its kind
+  // and its damage
+  damage(e, part, amount, point, dir, kind, o = null) {
     if (!e.alive) return;
     const game = this.game;
     const fx = game.fx;
@@ -2155,7 +2163,8 @@ export class Enemies {
       e.enterCombat(false);
     }
     e.flinch = 0.25;
-    if (dir) e.knock(dir.x * (kind === 'melee' ? 4 : 1.2), dir.z * (kind === 'melee' ? 4 : 1.2));
+    const wounds = !game.classic && !e.isMonster;
+    if (dir && !wounds) e.knock(dir.x * (kind === 'melee' ? 4 : 1.2), dir.z * (kind === 'melee' ? 4 : 1.2));
     fx.crumbs(point.x, point.y, point.z, kind === 'paint' ? 4 : 9, 2.5);
     if (e.isMonster) {
       e.hp -= amount;
@@ -2176,7 +2185,57 @@ export class Enemies {
     const res = fig.erase(at, r);
     game.audio.play('erase', 0.55);
     const lost = res ? this.checkParts(e, res.part, at) : null;
+    if (wounds) this.wounded(e, (res && res.part) || part, kind, amount, at, dir, o);
     if (e.alive) e.onHurt(lost);
+  }
+
+  // (game/wounds.js) the hit as a wound: enough of it puts them down (tougher than a passer-by: game/wounds.js toughness) - a
+  // shove the way it went, harder the heavier the gun, the dead thrown down by it; a leg shot dragged after them. Not a
+  // stagger at every hit: they still make for cover and fire back (Enemy.onHurt)
+  wounded(e, part, kind, amount, at, dir, o) {
+    const game = this.game;
+    const B = o && o.wound !== undefined ? o : bodyHit(null, kind, amount);
+    const knock = B.knock || 0;
+    const kAll = knockSum(e, knock, game.time);
+    if (!e.alive) {
+      // (rubbed out by it - the waist gone, or too much of them: game/doodle.js - the body still comes down its way)
+      this.fell(e, dir, kAll, kind);
+      return;
+    }
+    const melee = kind === 'melee' || kind === 'slash' || kind === 'scissors' || kind === 'punch';
+    const whole = kind === 'blast' || kind === 'fire' || kind === 'beam';
+    e.wound = (e.wound || 0) + B.wound * (whole ? 1 : partK(part, melee));
+    if (e.wound >= toughness(e, false)) {
+      this.kill(e, 'wound');
+      this.fell(e, dir, kAll, kind);
+      return;
+    }
+    if (dir && knock > 0) {
+      const l = Math.hypot(dir.x, dir.z) || 1;
+      const K = e.knockV;
+      K.x += (dir.x / l) * knock * 1.1;
+      K.z += (dir.z / l) * knock * 1.1;
+      const kl = Math.hypot(K.x, K.z);
+      if (kl > 7) K.multiplyScalar(7 / kl);
+    }
+    e.fig.recoil = Math.max(e.fig.recoil, Math.min(1, 0.45 + knock * 0.15));
+    // (a heavy hit - the MAG, a blade, the shotgun's pellets together: a stagger a moment)
+    if (kAll > 2.4) e.reelT = Math.max(e.reelT, Math.min(0.4, 0.1 + kAll * 0.04));
+    if (part === 'legL' || part === 'legR') e.limpT = Math.max(e.limpT || 0, 40);
+  }
+
+  // the body comes down the way the hit went (game/ragdoll.js) - a blast throws its own way (Enemies.explosion) - into a pool
+  // of ink; k: how hard
+  fell(e, dir, k, kind) {
+    const game = this.game;
+    if (e.isMonster || !e.fig) return;
+    const dx = dir ? dir.x : 0;
+    const dz = dir ? dir.z : 0;
+    const l = Math.hypot(dx, dz) || 1;
+    const kk = typeof k === 'number' ? k : 1.5;
+    if (kind !== 'blast' && !e.fig.rag && e.fig.split < 0 && !e.ko && game.ragdolls) throwDown(game, e, { x: dx / l, z: dz / l }, kk);
+    if (!e.ko) e.linger = 6;
+    inkPool(game, e.pos.x + (dx / l) * Math.min(1.4, 0.3 + kk * 0.15), e.pos.z + (dz / l) * Math.min(1.4, 0.3 + kk * 0.15), 1.1 + Math.random() * 0.4, e.pos.y);
   }
 
   // (ROADMAP 5.5, not with ?classic: game/ragdoll.js) run into by the hero's car: thrown over the
@@ -2362,6 +2421,14 @@ export class Enemies {
           fig.closestSurfacePoint(_sp, _sp);
           const res = fig.erase(_sp, 0.12 + 0.2 * f + Math.random() * 0.08);
           if (res) lost = this.checkParts(e, res.part, _sp) || lost;
+          // (game/wounds.js: a blast is a wound too - only the very edge of it is lived through)
+          if (e.alive && !this.game.classic) {
+            e.wound = (e.wound || 0) + (60 + 140 * f) * 0.9;
+            if (e.wound >= toughness(e, false)) {
+              this.kill(e, 'wound');
+              inkPool(this.game, e.pos.x, e.pos.z, 1.3, e.pos.y);
+            }
+          }
         }
         if (e.alive) {
           this.game.hud.hitMarker();
@@ -2376,9 +2443,9 @@ export class Enemies {
           e.morale -= 0.15;
         }
       }
-      // (not with ?classic: thrown by it, ROADMAP 5.5)
-      if (this.game.ragdolls && !e.isMonster && f > 0.3) {
-        this.game.ragdolls.blast(e, x, z, f);
+      // (not with ?classic: thrown by it, ROADMAP 5.5 - and the dead by it, however far off: game/wounds.js)
+      if (this.game.ragdolls && !e.isMonster && (f > 0.3 || (!e.alive && !this.game.classic && e.fig.split < 0 && !e.fig.rag))) {
+        this.game.ragdolls.blast(e, x, z, Math.max(f, 0.15));
         if (!e.alive) e.ragKill = true;
         continue;
       }

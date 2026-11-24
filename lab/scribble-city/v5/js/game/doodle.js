@@ -138,61 +138,68 @@ function makeShape() {
 }
 
 
-// (ROADMAP 28.25) where a hand goes for the gun he holds (G: game/gunhold.js - its kind, how far aimed 0..1, how long its
-// butt): the right one's wrist; the left one's here only roughly - it is put on the gun itself once the gun is placed
-// (gunhold hands). Carried: a long one low across him in both hands; a pistol in the hand that hangs. Aimed: a long one's
-// butt in his shoulder (under his arm, on his shoulder), a pistol out at his eye's line, a minigun at his hip.
-const _ga = new THREE.Vector3();
+// (ROADMAP 28.25, 29.6) a gun in his hands (G: game/gunhold.js): where his hands are before the gun is placed - roughly, by his
+// hip and ahead of him. The gun is put by his body and his aim once he is posed, and both hands are then put on it itself
+// (gunhold hands, game/doodle.js placeHand): what is here only starts them near. A pistol's left hand is his own till the gun
+// is up.
 function gunArm(fig, G, side, hipY, tgt) {
-  const S = fig.scale;
-  const j = fig.j;
-  const k = G.k * G.k * (3 - 2 * G.k);
-  const d = fig.aimDir;
-  // (ROADMAP 28.28: and out of him by what the gun needs to be clear - game/gunhold.js solve: fx to his right, fy up, fz
-  // ahead)
-  const clear = () => {
-    if (!G.fx && !G.fy && !G.fz) return true;
-    tgt.addScaledVector(fig.right, G.fx).addScaledVector(fig.forward, G.fz);
-    tgt.y += G.fy;
-    return true;
-  };
-  if (G.style === 'hip') {
-    if (side === 1) fig.toWorld(0.27, hipY + 0.15, 0.06, tgt);
-    else fig.toWorld(0.02, hipY + 0.2, 0.42, tgt);
-    return clear();
-  }
   if (G.style === 'pistol') {
-    if (side === -1 && G.k < 0.45) return false;
-    // (ROADMAP 28.28: carried, it hangs in his right hand at his side, a little out from his leg - his own hand, not
-    // whatever his arms do when they are empty: on his hips, the gun was in his belly. It swings a little as he walks)
-    fig.toWorld(side * 0.27, hipY - 0.13, 0.03 + Math.sin(fig.phase || 0) * 0.07 * Math.min(1, fig.walkAmp || 0), tgt);
-    _ga.copy(j.neck).addScaledVector(d, 0.47 * S).addScaledVector(fig.right, (side === 1 ? 0.035 : -0.04) * S);
-    _ga.y += 0.085 * S;
-    tgt.lerp(_ga, k);
-    return clear();
+    if (side === -1) return false;
+    fig.toWorld(0.27, hipY - 0.13, 0.03, tgt);
+    return true;
   }
-  if (G.style === 'heavy') {
-    // carried, and fired from the hip: beside his right hip, all of it clear of him, his left hand under it ahead;
-    // aimed in: in his shoulder
-    if (side === 1) fig.toWorld(0.31, hipY + 0.13, 0.1, tgt);
-    else fig.toWorld(0.08, hipY + 0.12, 0.52, tgt);
-    const s = k * G.sh;
-    if (s > 0.001) {
-      _ga.copy(j.shoulderR).addScaledVector(d, (side === 1 ? G.butt : G.butt + 0.3) * S).addScaledVector(fig.right, (side === 1 ? G.out : G.out - 0.05) * S);
-      _ga.y += G.up * S;
-      tgt.lerp(_ga, s);
-    }
-    return clear();
-  }
-  // (carried: his hand out by his right hip, the butt outside his elbow - not into his ribs)
-  if (side === 1) fig.toWorld(0.25, hipY + 0.15, 0.2, tgt);
-  else fig.toWorld(0.05, hipY + 0.06, 0.5, tgt);
-  if (k > 0.001) {
-    _ga.copy(j.shoulderR).addScaledVector(d, (side === 1 ? G.butt : G.butt + 0.3) * S).addScaledVector(fig.right, (side === 1 ? G.out : G.out - 0.05) * S);
-    _ga.y += G.up * S;
-    tgt.lerp(_ga, k);
-  }
-  return clear();
+  if (side === 1) fig.toWorld(0.26, hipY + 0.16, 0.14, tgt);
+  else fig.toWorld(0.04, hipY + 0.14, 0.46, tgt);
+  return true;
+}
+
+// A leg of the hero with a gun raised (GP: fig.gun, game/gunhold.js; gs how much, 0..1): his feet apart, the left ahead and the
+// right back and turned out, his knees bent over them; walking, the feet step the way he goes - ahead, back, to a side (GP.mx,
+// GP.mz: that way in his own frame, game/player.js) - not a walk ahead slid sideways. The foot is put where it goes and the
+// knee found from it; blended over what the leg did.
+const _gk = new THREE.Vector3();
+const _gf = new THREE.Vector3();
+const _gt = new THREE.Vector3();
+const _gh = new THREE.Vector3();
+const _gp = new THREE.Vector3();
+function gunLeg(fig, GP, gs, side, th, hw, hipY, legL, sp, cyc, knee, foot, toe) {
+  const S = fig.scale;
+  const wide = GP.wide || 0;
+  const mv = Math.min(1, sp / 1.2) * Math.min(1, fig.walkAmp || 0);
+  let mx = GP.mx || 0;
+  let mz = GP.mz || 0;
+  if (!mx && !mz) mz = 1;
+  // (as far as a step of that pace reaches, no further than a leg steps - shorter back and to a side)
+  const fwdness = Math.max(0, mz);
+  const amp = Math.min(sp / (4 * cyc), 0.26 + 0.14 * fwdness) * mv;
+  const s = Math.sin(th);
+  const c = Math.cos(th);
+  // (standing: the left foot ahead, the right back; on the move they come under him)
+  const still = 1 - mv * 0.7;
+  const bx = side * (hw + 0.075 + 0.07 * wide) ;
+  const bz = (side === 1 ? -0.15 - 0.03 * wide : 0.14 + 0.03 * wide) * still;
+  // (and a step round as he turns on the spot)
+  const lift = Math.max(0, c) * (0.05 + 0.07 * Math.min(1, sp / 4)) * mv + (1 - mv) * (GP.tw || 0) * Math.max(0, Math.sin((GP.tp || 0) + (side === 1 ? 0 : Math.PI))) * 0.055;
+  // (a step to the side never crosses the other foot)
+  let fx = bx + mx * amp * s;
+  if (side * fx < 0.05) fx = side * 0.05;
+  fig.toWorld(fx, 0.04 + lift, bz + mz * amp * s, _gf);
+  fig.toWorld(side * hw, hipY, 0, _gh);
+  const L = legL * S;
+  _gp.set(fig.forward.x + fig.right.x * side * 0.35, 0.15, fig.forward.z + fig.right.z * side * 0.35);
+  ik(_gh, _gf, L, L, _gp, _gk);
+  // (no further than the leg is long)
+  const d = _gf.distanceTo(_gh);
+  if (d > 2 * L * 0.999) _gf.sub(_gh).setLength(2 * L * 0.999).add(_gh);
+  // (the right foot turned out, the left to where he faces)
+  const out = side === 1 ? 0.55 * still : -0.08;
+  const co = Math.cos(out);
+  const so = Math.sin(out);
+  _gt.copy(_gf).addScaledVector(fig.forward, 0.13 * co * S).addScaledVector(fig.right, 0.13 * so * S);
+  _gt.y = Math.max(0.03 * S + fig.pos.y, _gf.y - 0.01 * S - lift * 0.4 * S);
+  knee.lerp(_gk, gs);
+  foot.lerp(_gf, gs);
+  toe.lerp(_gt, gs);
 }
 
 export class Doodle {
@@ -477,7 +484,7 @@ export class Doodle {
     const wSide = Math.sin((this.wS * Math.PI) / 2);
     // (his sheet: Danny stands with his hands in his pockets - a second after he has stopped, and out of them the moment he moves;
     // not in the film, whose shots are their own)
-    const pkOn = this.look.hero && !tw.on && !this.noPocket && stand > 0.97 && !this.aim && !(this.surrender > 0) && !(this.armsUp > 0) && !(this.guard > 0.01);
+    const pkOn = this.look.hero && !tw.on && !this.noPocket && stand > 0.97 && !this.aim && !this.stanceP && !(this.surrender > 0) && !(this.armsUp > 0) && !(this.guard > 0.01);
     this.pkT = pkOn ? (this.pkT || 0) + dt : 0;
     const pkGoal = this.pkT > 1.0 ? 1 : 0;
     this.pk = (this.pk || 0) + (pkGoal - (this.pk || 0)) * Math.min(1, dt * (pkGoal ? 4.5 : 12));
@@ -490,6 +497,17 @@ export class Doodle {
     hipY -= this.hunch * 0.05;
     hipY += this.fHipY;
     let lean = A * 0.12 + (this.aim ? 0.04 : 0) + crawl * 1.2 + sit * 0.05 + crouch * 0.22 + this.hunch * 0.42 + this.fLean;
+    // (a gun in his hands, raised - game/gunhold.js: his knees bent, his feet apart, his weight forward into it; its kick
+    // rocks him back a little. gs: how much, 0..1; only the hero with a gun out has any - or a sword at the guard, a shield
+    // up: stanceP)
+    const GP = this.gun || this.stanceP;
+    let gs = GP && GP.stance ? GP.stance * (1 - sit) * (1 - crawl) * (1 - crouch) * (1 - this.sneak) * (1 - Math.min(1, this.ride)) * (this.air || this.dead > 0 ? 0 : 1) : 0;
+    // (a sword, a shield: the guard is for standing and stepping - running, he runs)
+    if (gs > 0 && !this.gun) gs *= 1 - clamp((sp - 1.5) / 2, 0, 1);
+    if (gs > 0) {
+      hipY -= gs * (0.04 + 0.035 * (GP.wide || 0));
+      lean += gs * ((GP.lean || 0) - clamp(this.aimPitch, -0.6, 0.6) * 0.22) - (GP.kick || 0) * 0.035;
+    }
     if (this.sneak > 0) {
       hipY = lerp(hipY, 0.66, this.sneak);
       lean += this.sneak * 0.38;
@@ -538,6 +556,7 @@ export class Doodle {
     const chs = Math.sin(this.chestYaw);
     this.toWorld(nx + sw * chc, ny - shY - wSide * 0.009 * stand, nz + twist + sw * chs, j.shoulderR);
     this.toWorld(nx - sw * chc, ny - shY + wSide * 0.009 * stand, nz - twist - sw * chs, j.shoulderL);
+    if (GP && GP.kick > 0.001) j.shoulderR.addScaledVector(f, -0.022 * GP.kick * this.scale);
     j.shoulder.copy(j.shoulderR);
     // (the hip of the leg the weight is on a little higher than the other)
     this.toWorld(hw + hipX, hipY + wSide * 0.006 * stand, 0, j.hipR);
@@ -619,6 +638,7 @@ export class Doodle {
       const fxS = sx + side * 0.036 * stand - hipX;
       this.toWorld(fxS, fy, fz, foot);
       this.toWorld(fxS + side * 0.04 * stand, Math.max(0.03, fy - 0.01), fz + 0.13, toe);
+      if (gs > 0.001) gunLeg(this, GP, gs, side, ph + off, hw, hipY, legL, sp, cyc, knee, foot, toe);
     }
     if (this.ride > 0) this.pedal(hw, legL);
 
@@ -678,7 +698,32 @@ export class Doodle {
         const g = this.punch >= 0 || this.kick >= 0 ? 1 : this.guard;
         this.toWorld(nx + side * lerp(sw + 0.03, 0.13, g), lerp(ny - 0.62, ny - 0.03, g), lerp(nz + 0.08, nz + 0.25, g), tgt);
         useIK = true;
-      } else if (this.melee >= 0 && side === 1) {
+      } else if (this.melee >= 0 && side === 1 && this.rightFull === 'throw') {
+        // (a thing thrown: his arm over the top from behind his ear, out at where he throws, and down across him)
+        const t = Math.min(1, this.melee);
+        const u = t < 0.3 ? t / 0.3 : 1;
+        const v = t < 0.3 ? 0 : (t - 0.3) / 0.7;
+        this.toWorld(nx + lerp(0.26, 0.1, u) - 0.22 * v * v, ny + lerp(0.3, 0.16, u) - 0.5 * v, nz + lerp(-0.1, 0.52, u * (2 - u)) - 0.2 * v, tgt);
+        useIK = true;
+      } else if (this.rightFull === 'blade' && side === 1 && sit <= 0.5 && crawl <= 0.5) {
+        // (a sword: both hands on its hilt before his belt, its point up at the other's throat; a cut - up over his right
+        // shoulder and down across to his left hip. His left hand goes onto the hilt once the sword is placed - game/gunhold.js)
+        if (this.melee >= 0) {
+          const t = Math.min(1, this.melee);
+          const up = t < 0.3 ? t / 0.3 : 1;
+          const dn = t < 0.3 ? 0 : Math.min(1, (t - 0.3) / 0.45);
+          const e = dn * dn * (3 - 2 * dn);
+          this.toWorld(nx + lerp(0.06, 0.2, up) - 0.34 * e, lerp(hipY + 0.16, ny + 0.2, up) - (ny + 0.2 - hipY - 0.04) * e, nz + lerp(0.34, 0.12, up) + 0.36 * Math.sin(e * Math.PI) + 0.1 * e, tgt);
+        } else this.toWorld(nx + 0.06, hipY + 0.16 + Math.sin(ph * 2) * 0.012 * Math.min(1, this.walkAmp || 0), nz + 0.34, tgt);
+        useIK = true;
+      } else if (this.rightFull === 'shield' && side === -1 && sit <= 0.5 && crawl <= 0.5) {
+        // (a shield: strapped on his left forearm, the forearm level across his front, his fist at its grip - its face before
+        // his chest (game/gunhold.js shieldMatrix); a bash: shoved out ahead)
+        const bash = this.melee >= 0 ? Math.sin(Math.min(1, this.melee) * Math.PI) : 0;
+        this.toWorld(nx - 0.01, ny - 0.19 + bash * 0.04, nz + 0.21 + bash * 0.3, tgt);
+        this.shieldArm = true;
+        useIK = true;
+      } else if (this.melee >= 0 && side === 1 && this.rightFull !== 'shield') {
         const t = this.melee;
         const a = lerp(-2.2, 1.0, Math.min(1, t * 1.6));
         this.toWorld(nx + 0.08 + Math.sin(a) * 0.2, ny + 0.05 - Math.min(1, t) * 0.25, nz + Math.cos(a) * 0.62, tgt);
@@ -689,12 +734,11 @@ export class Doodle {
         useIK = true;
       } else if (held && carryPose(this, held, side, hipY, ny, nz, tgt)) {
         useIK = true;
-      } else if (side === 1 && this.rightFull && sit <= 0.5 && crawl <= 0.5) {
+      } else if (side === 1 && this.rightFull && this.rightFull !== 'shield' && sit <= 0.5 && crawl <= 0.5) {
         // (ROADMAP 28.28) something in his right hand - a blade, a bottle, the scissors: carried at his side, a hand's
         // width out from his leg, swinging a little as he goes - not swung free through his thigh; a shield: his
         // forearm across his front, the shield before his chest (game/weapons.js), running too
-        if (this.rightFull === 'shield') this.toWorld(0.16, hipY + 0.34, 0.3, tgt);
-        else this.toWorld(0.31, hipY - 0.1, 0.05 - Math.sin(ph + off) * 0.11 * Math.min(1, this.walkAmp || 0), tgt);
+        this.toWorld(0.31, hipY - 0.1, 0.05 - Math.sin(ph + off) * 0.11 * Math.min(1, this.walkAmp || 0), tgt);
         useIK = true;
       } else if (sit > 0.5) {
         this.toWorld(side * 0.16, hipY + 0.32, 0.36, tgt);
@@ -709,6 +753,10 @@ export class Doodle {
       }
       if (useIK) {
         const pole = (reach && (side === 1 ? this.poleR : this.poleL)) || _d.set(this.right.x * side * 0.6, -1, this.right.z * side * 0.6);
+        if (this.shieldArm && side === -1) {
+          pole.set(-this.right.x, -0.45, -this.right.z);
+          this.shieldArm = false;
+        }
         ik(shoulder, tgt, armU * this.scale, armF * this.scale, pole, elbow);
         hand.copy(tgt);
         const reachMax = (armU + armF) * this.scale * 0.999;
@@ -889,7 +937,13 @@ export class Doodle {
     let tP = 0;
     let rawA = 0;
     let has = false;
-    if (this.lookAt && this.dead < 0.2) {
+    const gunLook = this.gun && this.gun.headOn && this.gun.k > 0.25 && this.dead < 0.2;
+    if (gunLook) {
+      // (a gun raised: his eyes on what it is aimed at - game/gunhold.js)
+      tY = this.yaw + this.aimYaw;
+      tP = clamp(this.aimPitch, -0.7, 0.6);
+      has = true;
+    } else if (this.lookAt && this.dead < 0.2) {
       const dx = this.lookAt.x - h.x;
       const dz = this.lookAt.z - h.z;
       const dy = this.lookAt.y - h.y;
@@ -955,12 +1009,16 @@ export class Doodle {
     if (has) {
       const a = wrapA(tY - this.yaw);
       const sa = Math.sign(a);
-      wy = clamp(sa * Math.max(0, Math.abs(a) - 0.17) * 0.9, -1.25, 1.25);
+      wy = gunLook ? clamp(a, -1.25, 1.25) : clamp(sa * Math.max(0, Math.abs(a) - 0.17) * 0.9, -1.25, 1.25);
       // (the chest for a look past about forty degrees: a little, slowly)
       wc = sa * clamp((Math.abs(a) - 0.7) * 0.5, 0, 0.4);
       // (round 17: up as far as a head goes up - the eyes turn only a little way up with the iris
       // still seen, render/people.js gaze)
       wp = clamp(Math.sign(tP) * Math.max(0, Math.abs(tP) - 0.08) * 0.9, -0.5, 0.55);
+      if (gunLook) {
+        wc = 0;
+        wp -= 0.16 * (this.gun.dip || 0);
+      }
     }
     // (the head sets off a moment after the eyes - they lead, it follows)
     const lag = Math.min(1, dt / 0.06);

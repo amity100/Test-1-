@@ -337,10 +337,11 @@ export class CityMap {
     // (the old blueprint signs to photograph: not a way to get a drawing while they are found in the city - off the map then)
     if (!this.bpSigns) this.bpSigns = this.items.filter((it) => it.cat === 'blueprint');
     this.items = this.items.filter((it) => it.cat !== 'blueprint');
-    if (!(F && F.on)) this.items.push(...this.bpSigns);
+    if (!(F && F.rules)) this.items.push(...this.bpSigns);
     if (F && F.on) {
       for (const sp of F.ensureSpots()) {
-        if (F.has(sp.f.id)) continue;
+        // (R26, the owner's word: "a few on the map - most not, that's the mystery")
+        if (F.has(sp.f.id) || !F.pinned(sp.f)) continue;
         add({ cat: 'find', glyph: 'spray', x: sp.x, z: sp.z, name: sp.f.title, note: sp.f.where, big: true });
       }
     }

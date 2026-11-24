@@ -605,6 +605,8 @@ export class Game {
     box('opt-smart', 'smart');
     box('opt-perf', 'perf');
     box('opt-allbp', 'allOpen');
+    // (R26, the owner's own checks: every blueprint on the map, hidden ones too)
+    if ($('opt-allpins')) box('opt-allpins', 'allPins');
     $('opt-pace').addEventListener('change', (e) => {
       S.set('pace', e.target.value);
       apply();
@@ -674,6 +676,8 @@ export class Game {
     }
     const welcome = () => {
       this.hud.toast(tr('ברוכים הבאים ל־Beyond the Outline', 'Welcome to Beyond the Outline'), 'info', 2.4);
+      // (R26: under the start kit's rules the game's own words say what to do - game/finds.js coach)
+      if (this.finds && this.finds.rules) return;
       setTimeout(() => {
         // (ROADMAP 11.6) the free drawing first: anything at all, on the run
         if (this.freedraw) {
@@ -1878,9 +1882,48 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     return false;
   }
 
+  // (R26) the camera's moment: the flash, the shutter, the polaroid flying into the pencil - for a blueprint found in the
+  // city (game/finds.js snap)
+  snapFx(bp, name) {
+    const flash = $('flash');
+    flash.classList.remove('on');
+    void flash.offsetWidth;
+    flash.classList.add('on');
+    this.audio.play('shutter');
+    const pop = $('photo-pop');
+    const c = pop.querySelector('canvas');
+    const g = c.getContext('2d');
+    g.fillStyle = '#f7f4ec';
+    g.fillRect(0, 0, c.width, c.height);
+    import('./blueprints.js').then(({ drawBlueprint }) => drawBlueprint(g, bp, 0, 0, c.width, c.height, { pad: 0.1, width: 3 }));
+    pop.querySelector('.caption').textContent = name || bp.name;
+    pop.classList.remove('hidden');
+    const pol = pop.querySelector('.polaroid');
+    pol.style.animation = 'none';
+    void pol.offsetWidth;
+    pol.style.animation = '';
+    clearTimeout(this.popT);
+    this.popT = setTimeout(() => pop.classList.add('hidden'), 2300);
+    const btn = $('btn-draw');
+    if (this.touch && btn.offsetParent) {
+      const r = btn.getBoundingClientRect();
+      pol.style.setProperty('--fly-x', `${r.left + r.width / 2 - window.innerWidth / 2}px`);
+      pol.style.setProperty('--fly-y', `${r.top + r.height / 2 - window.innerHeight / 2}px`);
+    }
+    this.nudgeDraw = true;
+    this.goalFlags.photo = true;
+    this.updateGoals();
+  }
+
   takePhoto() {
     if (this.player.mode !== 'foot' && !this.player.inVehicle) return;
-    if (this.finds && this.finds.on) return;
+    // (R26) the blueprints are in the city now, not on the old boards: one in reach is photographed; none - where they are
+    if (this.finds && this.finds.rules) {
+      const T = this.finds.on && this.player.mode === 'foot' ? this.finds.target() : null;
+      if (T && !T.wait) this.finds.snap(T.s);
+      else if (!T) this.hud.toast(tr('אין פה שרטוט לצלם — השרטוטים מוסתרים בעיר: בסמטאות ועל הגגות', 'No blueprint to photograph here — they are hidden in the city: in the alleys and up on the roofs'), 'info', 2.8);
+      return;
+    }
     const flash = $('flash');
     flash.classList.remove('on');
     void flash.offsetWidth;
@@ -2022,8 +2065,17 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     const p = this.player;
     if (p.mode === 'draw') p.mode = 'foot';
     // (ROADMAP 15.2) the first time one found is drawn: learned - from now on made with a touch
-    const learned = !this.classic && this.album.toLearn(bp.id);
-    this.album.recordGrade(bp.id, res.score);
+    // (R26, the owner's word: "drawn once - if the drawing is right - and it is in the library") a poor drawing teaches nothing
+    const ok = res.grade !== 'fail';
+    const learned = !this.classic && this.album.toLearn(bp.id) && ok;
+    this.album.recordGrade(bp.id, res.score, ok);
+    if (learned) {
+      if (this.tray && this.tray.store && this.tray.store.learned) {
+        this.tray.store.learned[`bp:${bp.id}`] = this.tray.store.learned[`bp:${bp.id}`] || { copied: true };
+        if (this.tray.save) this.tray.save();
+      }
+      if (this.finds && this.finds.onLearned) this.finds.onLearned(bp.id);
+    }
     if (learned && plan) plan.speed = 0.72;
     const speed = plan && plan.speed ? plan.speed : 1;
     const grade = res.grade;
@@ -2686,10 +2738,10 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       const label = ft ? ft.label : tr('E — חזרה למשחק', 'E — back to the game');
       prompt = touch ? label.replace('E — ', '') : label;
     } else if (p.mode === 'foot' && this.finds && this.finds.target()) {
-      // (ROADMAP 29.5: a drawing found on a wall - E to copy it, game/finds.js)
-      enter = true;
+      // (R26, the owner's word: a blueprint found in the city is photographed - F or the camera button, game/finds.js)
       const ft = this.finds.target();
-      prompt = touch ? ft.label.replace('E — ', '') : ft.label;
+      if (ft.photo) photo = true;
+      prompt = ft.label;
     } else if (p.mode === 'foot' && this.places && this.places.target()) {
       // (ROADMAP 29.5: the boxing gym's ring, the coach's mitts, the bags - game/placegym.js)
       enter = true;
@@ -2873,14 +2925,13 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     // (ROADMAP 11.6: with the free drawing, drawing comes first; ROADMAP 11.40: from the catalog by
     // the pen - and one drawn just as it is there)
     const all = this.freedraw ? [
-      { text: this.touch ? tr('לצייר נשק מהמקרא שליד העט — אקדח צבע, בזוקה... (עיפרון), גם בריצה', 'Draw a weapon from the guide next to the pen — paint gun, bazooka... (pencil), even on the run') : tr('לצייר נשק מהמקרא שליד העט — אקדח צבע, בזוקה... (Q), גם בריצה', 'Draw a weapon from the guide next to the pen — paint gun, bazooka... (Q), even on the run'), done: f.drew },
+      { text: this.touch ? tr('לצייר נשק מהספרייה שבעט — אקדח הצבע, רובה העפרונות... (עיפרון), גם בריצה', 'Draw a weapon from the library in the pen — the paint gun, the pencil rifle... (pencil), even on the run') : tr('לצייר נשק מהספרייה שבעט — אקדח הצבע, רובה העפרונות... (Q), גם בריצה', 'Draw a weapon from the library in the pen — the paint gun, the pencil rifle... (Q), even on the run'), done: f.drew },
       { text: tr('לצייר נשק "מושלם" — בדיוק כמו במקרא, עם כל החלקים', 'Draw a "perfect" weapon — exactly like the guide, with every part'), done: f.perfect },
       { text: tr('להתחבא ליד תא טלפון, פח אשפה או שיח', 'Hide next to a phone booth, a trash can or a bush'), done: f.hidden },
       { text: tr('לקפוץ ל-Neon Bar (בשדרה הראשונה, כמה דלתות צפונה)', 'Drop in at the Neon Bar (on the first avenue, a few doors north)'), done: f.bar },
       { text: tr(`למחוק 5 עבריינים — הם מסתובבים בסמטה מאחורי החנויות (${Math.min(5, f.kills)}/5)`, `Erase 5 crooks — they hang around the alley behind the shops (${Math.min(5, f.kills)}/5)`), done: f.kills >= 5 },
       { text: this.touch ? tr('לצייר רכב מהמקרא (לשונית רכבים) ולנהוג בו', 'Draw a ride from the guide (the rides tab) and drive it') : tr('לצייר רכב מהמקרא (לשונית רכבים, 2) ולנהוג בו (E)', 'Draw a ride from the guide (the rides tab, 2) and drive it (E)'), done: f.drove },
-      { text: tr('לצייר טנק או מסוק מהמקרא', 'Draw a tank or a helicopter from the guide'), done: f.heavyDrawn },
-      { text: this.touch ? tr('לצלם שרטוט על שלט ולצייר אותו באוויר', 'Photograph a blueprint on a sign and draw it in the air') : tr('לצלם שרטוט על שלט (F) ולצייר אותו באוויר (T)', 'Photograph a blueprint on a sign (F) and draw it in the air (T)'), done: f.photo },
+      { text: this.touch ? tr('למצוא שרטוט מוסתר בעיר ולצלם אותו (מצלמה)', 'Find a hidden blueprint in the city and photograph it (camera)') : tr('למצוא שרטוט מוסתר בעיר ולצלם אותו (F)', 'Find a hidden blueprint in the city and photograph it (F)'), done: f.photo },
     ] : [
       { text: this.touch ? tr('לצלם את השרטוט של אקדח הצבע בטיילת, ממול (מצלמה)', 'Photograph the paint gun blueprint on the boardwalk, across the way (camera)') : tr('לצלם את השרטוט של אקדח הצבע בטיילת, ממול (F)', 'Photograph the paint gun blueprint on the boardwalk, across the way (F)'), done: f.photo },
       { text: tr('להתחבא ליד תא טלפון, פח אשפה או שיח', 'Hide next to a phone booth, a trash can or a bush'), done: f.hidden },

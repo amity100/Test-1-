@@ -127,7 +127,7 @@ export class Ink {
   update(dt) {
     // (ROADMAP 15.5) the sandbox: the ink never runs out
     const al = this.game.album;
-    if (al && (al.allOpen || (this.game.finds && this.game.finds.on)) && !this.game.classic && !this.game.lab) this.level = this.cap;
+    if (al && (al.allOpen || (this.game.finds && this.game.finds.rules)) && !this.game.classic && !this.game.lab) this.level = this.cap;
     if (this.level < this.cap) {
       this.level = Math.min(this.cap, this.level + (this.game.freedraw ? FREE_TRICKLE : TRICKLE) * dt);
       this.render();

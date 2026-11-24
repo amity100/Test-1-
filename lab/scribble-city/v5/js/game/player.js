@@ -522,6 +522,24 @@ export class Player {
     }
     // (ROADMAP 28.25: a gun aimed - his body turned a little off its line, the shoulder its butt is in back)
     fig.yaw = this.yaw + (fig.gun ? fig.gun.blade * fig.gun.k : 0);
+    // (and which way he goes, in his own frame: his feet step that way - to a side, back - game/doodle.js gunLeg)
+    if (fig.gun || fig.stanceP) {
+      const G = fig.gun || fig.stanceP;
+      const vx = this.vel.x + lx;
+      const vz = this.vel.z + lz;
+      const sp = Math.hypot(vx, vz);
+      if (sp > 0.3) {
+        const sy = Math.sin(fig.yaw);
+        const cyw = Math.cos(fig.yaw);
+        G.mx = (-vx * cyw + vz * sy) / sp;
+        G.mz = (vx * sy + vz * cyw) / sp;
+      }
+      // (turning where he stands: his feet step round with him, one and then the other)
+      const dyw = G.py === undefined ? 0 : Math.abs(Math.atan2(Math.sin(fig.yaw - G.py), Math.cos(fig.yaw - G.py)));
+      G.py = fig.yaw;
+      G.tp = (G.tp || 0) + dyw * 4.5;
+      G.tw = Math.min(1, (G.tw || 0) * Math.exp(-dt * 7) + dyw * 2.4);
+    }
     fig.speed = Math.hypot(this.vel.x + lx, this.vel.z + lz);
     fig.air = !this.onGround;
     fig.sit = damp(fig.sit, 0, 8, dt);

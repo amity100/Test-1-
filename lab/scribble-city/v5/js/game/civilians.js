@@ -11,6 +11,7 @@ import { WORK_CLOTHES, NIGHT_CLOTHES } from './rhythm.js';
 import { downStep, drawStars, CIV_KO } from './fists.js';
 import { shared } from '../render/materials.js';
 import { waitBeat, stopWait } from './waiting.js';
+import { bodyHit, toughness, partK, knockSum, throwDown, inkPool, inkDrip, rayThroughHoles } from './wounds.js';
 
 const REMOVE_AT = { head: 0.45, armL: 0.45, armR: 0.45, legL: 0.42, legR: 0.42, torso: 0.36 };
 // what somebody punched in the street says (ROADMAP 5.4)
@@ -22,6 +23,8 @@ const RISE = 0.85;
 const UMBRELLAS = [[0.82, 0.22, 0.24], [0.2, 0.3, 0.6], [0.95, 0.75, 0.2], [0.15, 0.15, 0.18], [0.3, 0.6, 0.45], [0.55, 0.3, 0.6], [0.92, 0.45, 0.6]];
 const _ro = new THREE.Vector3();
 const _rd = new THREE.Vector3();
+// (the way a hit went: Civilians.hitDir)
+const _hd = { x: 0, z: 0 };
 // (ROADMAP 11.47: who is in the picture - draw)
 const _pv = new THREE.Matrix4();
 const _fr = new THREE.Frustum();
@@ -975,7 +978,8 @@ class Civilian {
         fig.dead = Math.min(1, this.dying * 2.2);
         fig.speed = 0;
         // (thrown and dead: the flight first, ROADMAP 5.5)
-        fig.dissolve = this.ragKill ? clamp((this.dying - 3.5) / 1.2, 0, 1) : clamp((this.dying - 1.2) / 0.9, 0, 1);
+        // (put down by a wound - game/wounds.js: lying a while in the ink before the drawing goes)
+        fig.dissolve = this.linger ? clamp((this.dying - this.linger) / 1.2, 0, 1) : this.ragKill ? clamp((this.dying - 3.5) / 1.2, 0, 1) : clamp((this.dying - 1.2) / 0.9, 0, 1);
       }
       fig.update(dt);
       return;
@@ -1319,8 +1323,22 @@ class Civilian {
         } else if (this.youWaitT) this.youWaitT = Math.max(0, this.youWaitT - dt);
       }
     }
-    if (legless) speed = Math.min(speed, 0.8);
+    // (wounded - game/wounds.js: down on the ground pulling themselves away a while, or the hit leg dragged; a hand on the
+    // wound; ink dripping where they go)
+    const crawling = legless || this.crawlT > 0;
+    if (this.crawlT > 0) this.crawlT -= dt;
+    if (this.limpT > 0) this.limpT -= dt;
+    if (this.clutchT > 0) this.clutchOn(dt);
+    if (this.wound > 35 && !this.inside) {
+      this.dripT = (this.dripT || 0) - dt;
+      if (this.dripT <= 0) {
+        this.dripT = 0.45 + Math.random() * 0.6;
+        inkDrip(game, this.pos.x, this.pos.z, this.pos.y);
+      }
+    }
+    if (crawling) speed = Math.min(speed, 0.8);
     else if (limping) speed = Math.min(speed * 0.45, 1.8);
+    else if (this.limpT > 0) speed = Math.min(speed * 0.62, 3.2);
     // (rocked by a punch: a stagger before the run, ROADMAP 5.4)
     if (this.reelT > 0) {
       this.reelT -= dt;
@@ -1331,8 +1349,8 @@ class Civilian {
       this.glueT -= dt;
       speed = 0;
     }
-    fig.crawl = damp(fig.crawl, legless ? 1 : 0, 6, dt);
-    if (!this.headless) fig.stagger = this.reelT > 0 ? 0.8 : limping ? 0.6 : 0;
+    fig.crawl = damp(fig.crawl, crawling ? 1 : 0, 6, dt);
+    if (!this.headless) fig.stagger = this.reelT > 0 ? 0.8 : limping || this.limpT > 0 ? 0.6 : 0;
     // (intelligence round) round whatever stands in the way, not into it (avoid)
     const way = this.avoid(tx, tz, speed, dt);
     if (way) {
@@ -1496,6 +1514,18 @@ class Civilian {
       if (fig.lookAt === this._look) fig.lookAt = null;
       this._look = null;
     }
+  }
+
+  // (game/wounds.js) a hand pressed to the wound while it lasts: the hole rubbed by the hit, which goes with its bone - the
+  // other hand than the arm it is in; not a hand something else has (the phone at the ear, a friend's hand)
+  clutchOn(dt) {
+    const fig = this.fig;
+    const k = this.clutchSide > 0 ? 'reachR' : 'reachL';
+    this.clutchT -= dt;
+    const mine = fig[k] === this.clutch;
+    if (this.clutchT > 0 && this.clutch && (fig[k] === null || fig[k] === undefined || mine)) fig[k] = this.clutch;
+    else if (mine) fig[k] = null;
+    if (this.clutchT <= 0) this.clutch = null;
   }
 
   // on the ground after a punch or a kick (game/fists.js), and back up; then off, away from you
@@ -2424,8 +2454,10 @@ export class Civilians {
     // (critic round: nor somebody on their way to meet a friend - a phone call, a chat, the musician
     // took them, and the friend waited for nobody: game/streetsocial.js date)
     if (c.scripted || c.ctrl || c.owner || !c.alive || c.headless || c.panicT > 0 || c.inside || c.dog || c.buddy || c.buddyOf || c.crossing || c.photo || c.exitRoom || c.huddle || c.onCall || c.goingHome || c.meet || c.pose || c.dateOf) return false;
-    // (ROADMAP 13.12: nor somebody in the middle of a reaction, or just over a fright - game/brain.js)
+    // (ROADMAP 13.12: nor somebody in the middle of a reaction, or just over a fright - game/brain.js; nor one about to take
+    // in gunfire heard a moment ago: game/wounds.js)
     if (this.game.brain && this.game.brain.busy(c)) return false;
+    if (c.ai && c.ai.stim && c.ai.stim.gun) return false;
     const P = c.fig.parts;
     return P.legL > 0.5 && P.legR > 0.5 && P.armL > 0.5 && P.armR > 0.5 && P.torso > 0.5;
   }
@@ -2448,7 +2480,14 @@ export class Civilians {
     c.yaw = w.yaw;
     c.fig.yaw = w.yaw;
     c.fig.phase = w.phase;
-    c.speed = w.speed;
+    // (one running from gunfire out there - game/farcrowd.js scare: their own walk's pace, and still running from it)
+    c.speed = w.walkSp || w.speed;
+    if (w.scaredT > this.game.time) {
+      if (w.running) c.panicT = w.scaredT - this.game.time;
+      else c.avoidT = w.scaredT - this.game.time;
+      c.fearX = w.fearX;
+      c.fearZ = w.fearZ;
+    }
     // (dressed for who they are; no friend popping up beside them out of thin air)
     if (this.game.crowds && w.look.role) this.game.crowds.dress(c, false);
     this.list.push(c);
@@ -2477,7 +2516,9 @@ export class Civilians {
       let t = len2 > 1e-8 ? ((c.pos.x - ox) * dx + (c.pos.z - oz) * dz) / len2 : 0;
       t = Math.max(0, Math.min(maxT, t));
       if (Math.hypot(ox + dx * t - c.pos.x, oz + dz * t - c.pos.z) > 1.2) continue;
-      const h = c.fig.raycast(ro, rd, maxT * len);
+      // (game/wounds.js: through the holes of the hits before it - the rifle's second shot in the hole of its first - it is a
+      // hit all the same: the body is round the hole. The story's own people as they were)
+      const h = c.fig.raycast(ro, rd, maxT * len) || (this.storyCast(c) || this.game.classic ? null : rayThroughHoles(c.fig, ro, rd, maxT * len));
       if (h && (!best || h.t / len < best.t)) best = { t: h.t / len, civ: c, part: h.part, point: h.point };
     }
     return best;
@@ -2497,32 +2538,138 @@ export class Civilians {
     return out;
   }
 
-  damage(c, point, kind, amount) {
+  // o (game/weapons.js, game/wounds.js): { wound, knock, dir } - what the hit does to them as a wound, how hard it shoves them,
+  // the way it went; without it, by its kind and its damage
+  damage(c, point, kind, amount, o = null) {
     if (!c.alive) return;
     const game = this.game;
     const fig = c.fig;
     const res = fig.erase(point, holeRadius(kind, amount));
     game.fx.crumbs(point.x, point.y, point.z, 8, 2.5);
     game.audio.play('erase', 0.5);
-    if (!this.panic(c.pos, 30, 'hurt', { victim: c, by: 'player', src: game.player.pos, armed: true })) c.panicT = c.brave ? 0 : 8;
+    // (the story's own people, and ?classic: the rubbing-out alone, as it was)
+    const wounds = !game.classic && !this.storyCast(c);
+    // (game/wounds.js: somebody cut, shot, hit in front of them - those round them run, not only look: loud)
+    if (!this.panic(c.pos, 30, 'hurt', { victim: c, by: 'player', src: game.player.pos, armed: true, loud: wounds ? 16 : 0 })) c.panicT = c.brave ? 0 : 8;
     if (game.onCivilianHurt) game.onCivilianHurt(c);
-    if (!res) return;
-    const part = res.part;
-    if (fig.parts[part] > 0.5 && fig.erased[part] >= REMOVE_AT[part]) {
-      fig.removePart(part);
-      const j = fig.j;
-      const at = part === 'head' ? j.headC : fig.center;
-      game.fx.crumbs(at.x, at.y, at.z, 22, 3.2);
-      game.fx.smoke(at.x, at.y, at.z, 0.6);
-      game.audio.play('erase', 1);
-      if (part === 'torso') {
-        this.kill(c, 'split');
+    if (res) {
+      const part = res.part;
+      if (fig.parts[part] > 0.5 && fig.erased[part] >= REMOVE_AT[part]) {
+        fig.removePart(part);
+        const j = fig.j;
+        const at = part === 'head' ? j.headC : fig.center;
+        game.fx.crumbs(at.x, at.y, at.z, 22, 3.2);
+        game.fx.smoke(at.x, at.y, at.z, 0.6);
+        game.audio.play('erase', 1);
+        if (part === 'torso') {
+          this.kill(c, 'split');
+          if (wounds) inkPool(game, c.pos.x, c.pos.z, 1.3, c.pos.y);
+          return;
+        }
+        // (game/wounds.js: the head gone is the end of a passer-by - they drop, not run about blind for ten seconds)
+        if (part === 'head' && wounds) {
+          this.kill(c);
+          this.fell(c, point, kind, amount, o);
+          return;
+        }
+      }
+      let lost = 0;
+      for (const k of ['head', 'torso', 'armL', 'armR', 'legL', 'legR']) lost += fig.parts[k] < 0.5 ? 0.5 : fig.erased[k] * 0.5;
+      if (lost >= 1.4 || (c.headless && fig.erased.torso > 0.25)) {
+        this.kill(c);
+        if (wounds) this.fell(c, point, kind, amount, o);
         return;
       }
     }
-    let lost = 0;
-    for (const k of ['head', 'torso', 'armL', 'armR', 'legL', 'legR']) lost += fig.parts[k] < 0.5 ? 0.5 : fig.erased[k] * 0.5;
-    if (lost >= 1.4 || (c.headless && fig.erased.torso > 0.25)) this.kill(c);
+    if (wounds) this.wounded(c, point, kind, amount, o, res);
+  }
+
+  // (game/wounds.js) the story's own people - Lily, the men in the car park, the film's crowds: what the film has them do
+  storyCast(c) {
+    return !!(c.scripted && c.owner && c.owner === this.game.prologue);
+  }
+
+  // the way a hit went (level): its own, or from you to them
+  hitDir(c, o, out) {
+    let dx = o && o.dir ? o.dir.x : c.pos.x - this.game.player.pos.x;
+    let dz = o && o.dir ? o.dir.z : c.pos.z - this.game.player.pos.z;
+    const l = Math.hypot(dx, dz);
+    if (l < 1e-4) {
+      dx = -Math.sin(c.yaw);
+      dz = -Math.cos(c.yaw);
+    } else {
+      dx /= l;
+      dz /= l;
+    }
+    out.x = dx;
+    out.z = dz;
+    return out;
+  }
+
+  // (game/wounds.js) a hit that does not rub them out: a wound. Enough of it puts them down; short of that, a flinch, a shove
+  // the way it went, a stagger - and the wounded show it: a hand to it, the leg dragged, down on the ground crawling away
+  wounded(c, point, kind, amount, o, res) {
+    const game = this.game;
+    const fig = c.fig;
+    const part = (res && res.part) || 'torso';
+    const melee = kind === 'melee' || kind === 'slash' || kind === 'scissors' || kind === 'punch';
+    const B = o && o.wound !== undefined ? o : bodyHit(null, kind, amount);
+    const whole = kind === 'blast' || kind === 'fire' || kind === 'beam';
+    c.wound = (c.wound || 0) + B.wound * (whole ? 1 : partK(part, melee));
+    const d = this.hitDir(c, o, _hd);
+    const knock = B.knock || 0;
+    const kAll = knockSum(c, knock, game.time);
+    const T = toughness(c, true);
+    if (c.wound >= T) {
+      this.kill(c, 'wound');
+      this.fell(c, point, kind, amount, o, kAll);
+      return;
+    }
+    // a flinch, the hit's way; a shove; a stagger (not somebody sitting, riding along, or held where they are by a scene)
+    const free = !c.riding && !c.noCollide && fig.sit < 0.3 && !c.inside;
+    fig.recoil = Math.max(fig.recoil, Math.min(1, 0.5 + knock * 0.16));
+    const side = d.x * fig.right.x + d.z * fig.right.z;
+    fig.recoilSide = side > 0.35 ? 1 : side < -0.35 ? -1 : 0;
+    if (free && knock > 0) {
+      const v = c.dodgeV;
+      v.x += d.x * knock;
+      v.z += d.z * knock;
+      const vl = Math.hypot(v.x, v.z);
+      if (vl > 7) v.multiplyScalar(7 / vl);
+      c.reelT = Math.max(c.reelT, Math.min(0.55, 0.12 + knock * 0.09));
+    }
+    const k = c.wound / T;
+    if (part === 'legL' || part === 'legR') c.limpT = Math.max(c.limpT || 0, 45);
+    // (a hand to it, the other hand than the arm it is in)
+    if (!whole && k > 0.2 && point) {
+      let hole = null;
+      for (const h of fig.holes) if (h && h.w && h.w.distanceToSquared(point) < 1e-6) hole = h;
+      if (hole) {
+        if (c.clutch && fig[c.clutchSide > 0 ? 'reachR' : 'reachL'] === c.clutch) fig[c.clutchSide > 0 ? 'reachR' : 'reachL'] = null;
+        c.clutch = hole.w;
+        c.clutchSide = part === 'armL' ? 1 : part === 'armR' ? -1 : (point.x - c.pos.x) * fig.right.x + (point.z - c.pos.z) * fig.right.z > 0 ? -1 : 1;
+        c.clutchT = 4 + Math.random() * 4;
+      }
+    }
+    // (badly hurt: down, dragging themselves away a while before they are up again - limping)
+    if (k >= 0.62 && free && !(c.crawlT > 0)) {
+      c.crawlT = 5 + Math.random() * 4;
+      c.limpT = Math.max(c.limpT || 0, 40);
+    }
+  }
+
+  // (game/wounds.js) the body comes down: thrown the way the hit went - a pistol's last shot folds them where they stand, the
+  // shotgun's throws them back - into a pool of ink
+  fell(c, point, kind, amount, o, kAll = null) {
+    const game = this.game;
+    const d = this.hitDir(c, o, _hd);
+    // (somebody killed in front of them: the street round it runs)
+    if (kind !== 'blast') this.panic(c.pos, 24, 'hurt', { by: 'player', src: game.player.pos, armed: true, loud: 24 });
+    const k = kAll !== null ? kAll : (o && o.knock) || 1.5;
+    // (a blast throws them its own way: Civilians.explosion)
+    if (kind !== 'blast' && this.throwable(c) && !c.fig.rag && c.fig.split < 0) throwDown(game, c, d, k);
+    c.linger = 6;
+    inkPool(game, c.pos.x + d.x * Math.min(1.4, 0.3 + k * 0.15), c.pos.z + d.z * Math.min(1.4, 0.3 + k * 0.15), 1.1 + Math.random() * 0.4, c.pos.y);
   }
 
   // (ROADMAP 5.4, not with ?classic: game/fists.js) a punch or a kick: no ink rubbed out - they
@@ -2584,9 +2731,9 @@ export class Civilians {
         c.fig.closestSurfacePoint(at, at);
         this.damage(c, at, 'blast', 60 + 140 * f);
       }
-      // (not with ?classic: thrown by it, ROADMAP 5.5)
-      if (R && f > 0.3 && this.throwable(c)) {
-        R.blast(c, x, z, f);
+      // (not with ?classic: thrown by it, ROADMAP 5.5 - and the dead by it, however far off: game/wounds.js)
+      if (R && (f > 0.3 || (!c.alive && !this.storyCast(c) && c.fig.split < 0 && !c.fig.rag)) && this.throwable(c)) {
+        R.blast(c, x, z, Math.max(f, 0.15));
         if (!c.alive) c.ragKill = true;
       }
     }
@@ -2648,7 +2795,13 @@ export class Civilians {
   panic(pos, radius, kind = null, o = {}) {
     // (the cats and the birds round there are off too; the drivers react: ROADMAP 4.4)
     if (!this.game.classic && this.game.animals) this.game.animals.scare(pos, radius);
-    if (!this.game.classic && this.game.traffic) this.game.traffic.scare(pos, radius);
+    // (game/wounds.js: your gunfire, a blast of yours - the drivers within its alarm floor it or get out; anybody else's, a car
+    // going up on its own: as before)
+    if (!this.game.classic && this.game.traffic) this.game.traffic.scare(pos, radius, o.by === 'player' ? kind : null, o.src || null);
+    // (game/wounds.js: gunfire, a blast - the cheap crowd further down the street runs too, game/farcrowd.js)
+    if (!this.game.classic && this.game.farCrowd && this.game.farCrowd.scare && (kind === 'shot' || kind === 'blast') && o.by === 'player') {
+      this.game.farCrowd.scare(pos.x, pos.z, Math.max(radius, o.loud || 0) * 1.25, o.src ? o.src.x : pos.x, o.src ? o.src.z : pos.z, kind === 'blast' ? 130 : 90);
+    }
     // (ROADMAP 13.10) not everybody near running at once, as ants do: each who sees or hears it, in
     // their own time and way - game/brain.js
     const B = this.game.brain;
@@ -2668,6 +2821,40 @@ export class Civilians {
       }
     }
     return false;
+  }
+
+  // (game/wounds.js) a shot of yours that went past somebody's head (o + d, this frame of its flight), or landed by their feet
+  // (impact): a fright as if it were at them - down, or away, now (game/brain.js near); sx, sz: who fired it
+  whiz(ox, oy, oz, dx, dy, dz, sx, sz) {
+    const B = this.game.brain;
+    if (!B || this.game.classic || !B.near) return;
+    const len2 = dx * dx + dy * dy + dz * dz;
+    if (len2 < 1e-6) return;
+    const x0 = Math.min(ox, ox + dx) - 2.4;
+    const x1 = Math.max(ox, ox + dx) + 2.4;
+    const z0 = Math.min(oz, oz + dz) - 2.4;
+    const z1 = Math.max(oz, oz + dz) + 2.4;
+    for (const c of this.list) {
+      const p = c.pos;
+      if (p.x < x0 || p.x > x1 || p.z < z0 || p.z > z1 || !c.alive || c.inside || c.brave || c.headless) continue;
+      const cy = p.y + 1.2;
+      const t = Math.max(0, Math.min(1, ((p.x - ox) * dx + (cy - oy) * dy + (p.z - oz) * dz) / len2));
+      const px = ox + dx * t - p.x;
+      const py = oy + dy * t - cy;
+      const pz = oz + dz * t - p.z;
+      if (px * px + py * py * 0.5 + pz * pz > 2.4 * 2.4) continue;
+      B.near(c, sx, sz);
+    }
+  }
+
+  impact(x, z, sx, sz, r = 3.2) {
+    const B = this.game.brain;
+    if (!B || this.game.classic || !B.near) return;
+    for (const c of this.list) {
+      const p = c.pos;
+      if (Math.abs(p.x - x) > r || Math.abs(p.z - z) > r || !c.alive || c.inside || c.brave || c.headless) continue;
+      if (Math.hypot(p.x - x, p.z - z) < r) B.near(c, sx, sz);
+    }
   }
 
   dodge(pos, f, halfLen, halfWid, speed) {

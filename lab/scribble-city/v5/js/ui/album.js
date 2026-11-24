@@ -86,9 +86,19 @@ export class Album {
   }
 
   // (ROADMAP 29.5, game/finds.js) found in the city: the start's kit, what was found, and what is not to be found
+  // (R26: from the story's first minute - finds.rules, not only once the pages are in the city)
   get finding() {
     const F = this.game.finds;
-    return F && F.on ? F : null;
+    return F && F.rules ? F : null;
+  }
+
+  // (R26, the owner's word: "what you have is yours still to be drawn - drawn once, it is in the library") drawn by hand
+  // at least once, and the drawing was right: here (recordGrade), or over its lines in the parts tray (game/buildtray.js)
+  drawn(id) {
+    const it = this.items.get(id);
+    if (it && (it.drawn || (it.best !== null && it.best !== undefined && !it.kit))) return true;
+    const T = this.game.tray;
+    return !!(T && T.store && T.store.learned && T.store.learned[`bp:${id}`]);
   }
 
   has(id) {
@@ -104,9 +114,17 @@ export class Album {
   known(id) {
     if (!BLUEPRINTS[id]) return false;
     if (this.early) return this.early.has(id);
-    // (ROADMAP 29.5: found is known - it was drawn by hand when it was copied)
+    // (R26: had - the start kit or photographed - is not known till it has been drawn once; a test that does not ask for
+    // the learning (?learn=1) knows what it has, as the parts tray's own tests do)
     const F = this.finding;
-    if (F) return F.bpOpen(id);
+    if (F) {
+      if (!F.bpOpen(id)) return false;
+      // (a ramp, a bridge, a barrier is drawn on the world each time - game/gadgets.js DRAWN_ON: nothing to learn first)
+      if (id === 'ramp' || id === 'bridge' || id === 'barrier') return true;
+      const P = this.game.params;
+      if (P && P.get('test') === '1' && P.get('learn') !== '1') return true;
+      return this.drawn(id);
+    }
     // (the owner's word, again: every weapon and ride open from the start - ready at a touch, not first drawn over its lines
     // to be learned; drawn by hand it is still read and made, as ever)
     if (this.allOpen && !this.game.classic) return true;
@@ -192,20 +210,28 @@ export class Album {
       const area = districtName(best.x, best.z);
       out.push(tr(`${best.roof ? 'על גג' : 'על שלט'} ליד ${road}${area && area !== road ? `, ${area}` : ''}`, `${best.roof ? tr('על גג', 'on a roof') : tr('על שלט', 'on a sign')} by ${road}${area && area !== road ? `, ${area}` : ''}`));
     }
+    // (R26: the boards are rubbed out under the rules - none of them is where a thing is had)
+    if (F) return tr('עוד לא נמצא בעיר', 'Not found in the city yet');
     if (FOUND_IN[id]) out.push(FOUND_IN[id]);
     if (!out.length) out.push(tr('אולי במכונה בארקייד, עם קצת מזל', 'Maybe in a machine at the arcade, with a little luck'));
     return out.join(' · ');
   }
 
-  recordGrade(id, score) {
+  // ok: the drawing was right (not a poor one) - then it is drawn, learned (R26)
+  recordGrade(id, score, ok = true) {
     if (this.early && EARLY_IDS.includes(id)) this.early.add(id);
     let it = this.items.get(id);
     if (!it) {
-      if (!this.allOpen) return;
+      const F = this.finding;
+      if (!this.allOpen && !(F && F.bpOpen(id))) return;
       it = { best: null };
       this.items.set(id, it);
     }
     if (it.best === null || score > it.best) it.best = score;
+    if (ok) {
+      it.drawn = true;
+      delete it.kit;
+    }
     this.save();
   }
 
@@ -270,7 +296,7 @@ export class Album {
     pol.appendChild(c);
     const cap = document.createElement('div');
     cap.className = 'caption';
-    cap.textContent = got ? bp.name : tr('עוד לא צולם', 'Not photographed yet');
+    cap.textContent = got ? bp.name : tr('עוד לא נמצא', 'Not found yet');
     pol.appendChild(cap);
     item.appendChild(pol);
     // (not found yet: where it is - ROADMAP 9.1)
@@ -292,7 +318,7 @@ export class Album {
       const known = this.game.classic || this.known(id);
       const go = document.createElement('div');
       go.className = `go${known ? ' now' : ' learn'}`;
-      go.textContent = this.game.classic ? tr('✏ לצייר באוויר', '✏ Draw in the air') : known ? tr('⚡ לזמן עכשיו', '⚡ Summon now') : tr('✎ ללמוד: לצייר פעם אחת על הקווים', '✎ Learn: draw it once over the lines');
+      go.textContent = this.game.classic ? tr('✏ לצייר באוויר', '✏ Draw in the air') : known ? tr('⚡ לזמן עכשיו', '⚡ Summon now') : tr('✎ לצייר פעם אחת — ומאז הוא בספרייה', '✎ Draw it once — then it\'s in your library');
       item.appendChild(go);
       if (known && !this.game.classic) {
         const dr = document.createElement('div');

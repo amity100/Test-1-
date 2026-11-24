@@ -866,6 +866,9 @@ export class BuildTray {
     });
     this.store.learned[id] = { M };
     this.save();
+    // (R26: a part - or a blueprint drawn over its lines here - drawn once: his for good; a find's first try, game/finds.js)
+    const F = this.game.finds;
+    if (F && F.onLearned) F.onLearned(String(id).replace(/^bp:/, ''));
   }
 
   // (ROADMAP 28.8, the owner's word: "to get a thing at first you have to draw it") a thing of the pen's shelf - a gun, a

@@ -926,26 +926,39 @@ export class Traffic {
 
   // shots, a bang near the street (Civilians.panic): some put their foot down, some get out
   // and run, some freeze
-  scare(pos, radius) {
+  // kind: what it was (game/brain.js EVENTS); src: who did it (game/wounds.js: gunfire, a blast - the drivers within the
+  // gun's alarm floor it away, or leave the car and run from him)
+  scare(pos, radius, kind = null, src = null) {
     const game = this.game;
     if (game.classic) return;
-    const r = Math.min(radius, 35);
+    const gun = kind === 'shot' || kind === 'blast';
+    const r = Math.min(radius, gun ? 60 : 35);
     for (const c of this.list) {
       if (!c.driver || c.police || c.emergency || c.mode !== 'drive' || c.wrecked || c.stopped || (c.scaredT || 0) > game.time) continue;
       if (Math.hypot(c.pos.x - pos.x, c.pos.z - pos.z) > r) continue;
       c.scaredT = game.time + 12;
       const k = Math.random();
-      if (k < 0.45) {
-        c.fleeT = 8;
+      if (gun ? k < 0.62 || c.speed >= 7 : k < 0.45) {
+        c.fleeT = gun ? 10 : 8;
         c.maxSpeed0 = c.maxSpeed0 || c.maxSpeed;
-        c.maxSpeed = c.maxSpeed0 * 1.45;
+        c.maxSpeed = c.maxSpeed0 * (gun ? 1.6 : 1.45);
         if (this.near(c, 40)) game.audio.play('honk', 0.4);
-      } else if (k < 0.75 && c.speed < 7) {
+      } else if ((gun || k < 0.75) && c.speed < 7) {
         c.stopped = true;
         c.driverOut = true;
+        const civs = game.civilians;
+        const n0 = civs ? civs.list.length : 0;
         game.ejectDriver(c.driver, c.pos, c.yaw, false);
         c.driver = null;
         this.stats.bailed++;
+        // (out of the car and away from the one shooting, not from the car)
+        if (gun && civs && civs.list.length > n0) {
+          const o = civs.list[civs.list.length - 1];
+          const f = src || pos;
+          o.fearX = f.x;
+          o.fearZ = f.z;
+          o.panicT = Math.max(o.panicT || 0, 10);
+        }
       } else c.brakeT = 3 + Math.random() * 3;
     }
   }
