@@ -2795,7 +2795,9 @@ export class Civilians {
   panic(pos, radius, kind = null, o = {}) {
     // (the cats and the birds round there are off too; the drivers react: ROADMAP 4.4)
     if (!this.game.classic && this.game.animals) this.game.animals.scare(pos, radius);
-    if (!this.game.classic && this.game.traffic) this.game.traffic.scare(pos, radius, kind, o.src || null);
+    // (game/wounds.js: your gunfire, a blast of yours - the drivers within its alarm floor it or get out; anybody else's, a car
+    // going up on its own: as before)
+    if (!this.game.classic && this.game.traffic) this.game.traffic.scare(pos, radius, o.by === 'player' ? kind : null, o.src || null);
     // (game/wounds.js: gunfire, a blast - the cheap crowd further down the street runs too, game/farcrowd.js)
     if (!this.game.classic && this.game.farCrowd && this.game.farCrowd.scare && (kind === 'shot' || kind === 'blast') && o.by === 'player') {
       this.game.farCrowd.scare(pos.x, pos.z, Math.max(radius, o.loud || 0) * 1.25, o.src ? o.src.x : pos.x, o.src ? o.src.z : pos.z, kind === 'blast' ? 130 : 90);
