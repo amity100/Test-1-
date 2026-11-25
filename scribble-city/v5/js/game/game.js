@@ -551,6 +551,7 @@ export class Game {
     const show = () => {
       const v = S.v;
       $('opt-allbp').checked = v.allOpen;
+      if ($('opt-allpins')) $('opt-allpins').checked = !!v.allPins;
       $('opt-sound').checked = v.sound;
       $('opt-vol-fx').value = v.fx;
       $('opt-vol-music').value = v.music;
@@ -606,6 +607,13 @@ export class Game {
     box('opt-perf', 'perf');
     box('opt-allbp', 'allOpen');
     // (R26, the owner's own checks: every blueprint on the map, hidden ones too)
+    // (?pins=all - a link that turns it on for the owner's checks; ?pins=off - off again)
+    const pinsQ = this.params && this.params.get('pins');
+    if (pinsQ === 'all' || pinsQ === 'off') {
+      S.v.allPins = pinsQ === 'all';
+      S.save();
+      if ($('opt-allpins')) $('opt-allpins').checked = S.v.allPins;
+    }
     if ($('opt-allpins')) box('opt-allpins', 'allPins');
     $('opt-pace').addEventListener('change', (e) => {
       S.set('pace', e.target.value);

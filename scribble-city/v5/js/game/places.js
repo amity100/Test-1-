@@ -119,11 +119,14 @@ export class Places {
     } else if (k === 5 || k === 6) {
       // ---- 9TH STREET GYM: the corner's lot cleared (a frame), the gym put up on it (the next). Whatever goes wrong in it, the
       // rest of the places are built all the same
+      // (the owner's word: open from the start of the game - put up already in the story's first frames, earlyGym)
       try {
         if (k === 5) {
-          this.gym = new Gym(this);
-          this.gym.clear();
-        } else if (this.gym) this.gym.build();
+          if (!this.gym) {
+            this.gym = new Gym(this);
+            this.gym.clear();
+          }
+        } else if (this.gym && !this.gym.built) this.gym.build();
       } catch (e) {
         console.error('[places] the gym', e);
       }
@@ -224,11 +227,27 @@ export class Places {
     if (w.parked) for (let i = w.parked.length - 1; i >= 0; i--) if (gone(w.parked[i])) w.parked.splice(i, 1);
   }
 
+  earlyGym() {
+    const g = this.game;
+    if (this.gymFailed || (this.gym && this.gym.built) || !g.world || !g.scene || g.classic || g.lab) return;
+    try {
+      if (!this.gym) {
+        this.gym = new Gym(this);
+        this.gym.clear();
+      } else this.gym.build();
+    } catch (e) {
+      this.gymFailed = true;
+      console.error('[places] the gym, early', e);
+    }
+  }
+
   // ------------------------------------------------------------------ each frame
   update(dt) {
     if (!this.built) {
-      if (!this.ready()) return;
-      this.step();
+      if (this.ready()) this.step();
+      // (the owner's word: "let me go into the boxing gym before the mission" - the gym alone is there from the story's
+      // first frames, behind its black: its lot cleared in one, put up in the next; the other places still wait for the end)
+      else this.earlyGym();
     }
     if (this.van) this.van.update(dt);
     if (this.gym && this.gym.built) this.gym.update(dt);
