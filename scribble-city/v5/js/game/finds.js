@@ -167,7 +167,7 @@ const HIDE = new WeakMap();
 const SLOT_FR = [0.3, 0.7, 0.5, 0.18, 0.84, 0.4, 0.6, 0.26];
 // (not alleys: open places) and what a page's wall is seen through when it is looked for (a fence or a board in front hides it)
 const ALLEY_NOT = new Set(['park', 'plaza', 'motel', 'towers', 'market']);
-const ALLEY_SEE = new Set(['pole', 'prop', 'tree', 'cover', 'car', 'furniture', 'rail']);
+const ALLEY_SEE = new Set(['prop', 'cover', 'car', 'furniture', 'rail']);
 function hiddenSpot(world, id) {
   let memo = HIDE.get(world);
   if (!memo) HIDE.set(world, (memo = { at: new Map(), used: new Map(), pts: [] }));
@@ -216,6 +216,8 @@ function hiddenSpot(world, id) {
         const e2 = col.raycast(cx, 1.85, z - 0.8, side, 0, 0, 14, ALLEY_SEE);
         if (!e1 || !e2 || Math.abs(e1.x - hit.x) > 0.3 || Math.abs(e2.x - hit.x) > 0.3) continue;
         if (memo.pts.some(([px, pz]) => Math.hypot(px - x, pz - z) < 10)) continue;
+        // (not over the meters or an air conditioner on that wall)
+        if ((world.wallProps || []).some((q) => Math.abs(q.x - x) < 0.7 && Math.abs(q.z - z) < q.half + 0.9)) continue;
         spot = { x, y: 1.85, z, nx: -side, ny: 0, nz: 0, ux: 0, uy: 1, uz: 0 };
         memo.used.set(a, n + 1);
         memo.pts.push([x, z]);
