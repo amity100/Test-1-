@@ -34,7 +34,8 @@ function penOf(lines, cat) {
   if (PN.penSay) {
     const R = PN.penSay(lines, cat);
     const it = R.item || (R.ask ? R.ask[0] : null);
-    return { rest: R.tier === 'sure' ? R.item : null, long: R.tier !== 'wait' ? it : null, tick: it, named: R.tier !== 'wait' ? it : null, r: R };
+    // (✓ takes what it is read as, sure or not - but never a line or two of nothing)
+    return { rest: R.tier === 'sure' ? R.item : null, long: R.tier === 'sure' || R.tier === 'likely' ? it : null, tick: R.plain ? null : it, named: R.tier !== 'wait' ? it : null, r: R };
   }
   const r = PN.readItem(lines, cat);
   let ask = null;

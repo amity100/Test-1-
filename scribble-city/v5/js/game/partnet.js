@@ -1,6 +1,8 @@
 import { picture, ready, chances } from './sketchnet.js';
 import { PNET } from './partnet_w.js';
 import { ITEMS, CATS as ITEM_CATS, CAT_ORDER as ITEM_ORDER } from './itemcat.js';
+import { coverOf } from './catmatch.js';
+import { svgLines } from './svglines.js';
 
 // (ROADMAP 11.25) What is drawn for the car, of one category's things. The player says the
 // category - a weapon, something it can do, protection - and draws; this tells which of that
@@ -83,17 +85,20 @@ export function askOf(r) {
 }
 
 // (R27, the owner's word: "the game recognises what I draw far too fast, before I have finished drawing it"; "two random
-// lines must never be accepted") What the pen does with a drawing on the car when it rests (game/partpen.js). It took
-// whatever the network thought likeliest of the category's things, a second after any line - a line alone, in the
-// weapons, was a harpoon nine times in twenty; an unfinished drawing went on as something three times in four
-// (tools/test-partpen.mjs). Now, by how sure the reading is:
+// lines must never be accepted"; "sometimes I draw the thing exactly and it is not recognised") What the pen does with a
+// drawing on the car when it rests (game/partpen.js). It took whatever the network thought likeliest of the category's
+// things, a second after any line - a line alone, in the weapons, was a harpoon nine times in twenty; an unfinished
+// drawing went on as something three times in four (tools/test-partpen.mjs). Now by how sure the reading is, and by
+// whether the thing's picture - the one in the legend, the one a hand copies - is all there (allThere):
 //   sure    the network all but certain of it (SURE_P), nearly nothing for "none of them", no other thing near it, and
-//           more to the drawing than a line or two: it is named, and goes on once the pen has rested;
-//   likely  less certain - or certain, but a thing whose picture is a closed shape and the drawing's shape still open,
-//           an end of a line with no other end by it (a gun's outline half drawn is already a gun to the network),
-//           or not sure which of two: named with a question, and it waits longer for the rest of it before it goes on;
+//           its picture all there: it is named, and goes on once the pen has rested;
+//   likely  less certain (or not sure which of two), its picture all there: named with a question, and it waits
+//           longer before it goes on;
+//   more    read as a thing, but not all of its picture is there yet - a plate's square without its cross, a
+//           parachute's canopy without its ropes, a gun's outline half drawn (its shape still open): named with a
+//           question, and nothing goes on by itself - the rest of it is drawn, or ✓ says "this is it";
 //   wait    not sure at all, or a line or two of nothing (straight, a bow, one bend - unless they are an X, which is
-//           the rotor): no name, and nothing goes on by itself - more is drawn, or ✓ says "this is it".
+//           the rotor, or close a shape with corners between them): no name, and nothing goes on by itself.
 export const SURE_P = 0.9;
 export const SURE_NONE = 0.1;
 export const LIKELY_P = 0.6;
@@ -202,8 +207,30 @@ function openShape(lines) {
 // a thing whose picture in the legend is one closed shape (a gun's outline, a flame, a triangle)
 const CLOSED = Object.fromEntries(Object.keys(ITEMS).map((id) => [id, /^<path d="M[^M"]*Z"\/>$/.test(ITEMS[id].icon)]));
 
+// (R27) all of a thing's picture there: its biggest line - the outline, the body - most of it, and the lines not there
+// no more than a sixth of its ink in all (a plate's bolts, a balloon's ropes; not its cross, not its basket); the drawing
+// over most of the picture, and half of the drawing at least the picture. Each of the picture's lines by its own ink
+// (game/catmatch.js coverOf, as the things drawn on foot are read): a line that only passes by another is not that one
+// drawn. A hand is not a ruler - the numbers are loose (tools/test-partpen.mjs: whole drawings by a finger all there
+// nineteen times in twenty, unfinished ones nearly never)
+export const PIC = { main: 0.55, part: 0.4, left: 0.16, cov: 0.58, prec: 0.5 };
+const pictureOf = (id) => () => svgLines(ITEMS[id].icon);
+export function allThere(lines, id, cat) {
+  // (the rotor is its X: the hub in the middle is the picture's, not the drawing's to make)
+  if (id === 'rotor' && cat === 'func' && rotorOrBridge(lines) === 'rotor') return true;
+  const C = coverOf(lines, id, pictureOf(id));
+  if (!C || !C.parts.length) return false;
+  let big = 0;
+  for (let i = 1; i < C.parts.length; i++) if (C.parts[i].w > C.parts[big].w) big = i;
+  if (C.parts[big].c < PIC.main) return false;
+  let left = 0;
+  for (const q of C.parts) if (q.c < PIC.part) left += q.w;
+  return left <= PIC.left && C.cov >= PIC.cov && C.prec >= PIC.prec;
+}
+
 // the drawing as one of a category's things, and what the pen at rest does with it: readItem's, and { ask (the two it
-// could be, not sure which), plain (a line or two of nothing), tier: 'sure' | 'likely' | 'wait' }
+// could be, not sure which), plain (a line or two of nothing), half (a closed shape's outline still open), whole (its
+// picture all there), tier: 'sure' | 'likely' | 'more' | 'wait' }
 export function penSay(strokes, cat) {
   const lines = strokes.filter((s) => s && s.length >= 2);
   const r = readItem(lines, cat);
@@ -212,13 +239,16 @@ export function penSay(strokes, cat) {
   const round = roundOf(lines);
   const plain = lines.length <= 2 && lines.every(plainLine) && !(cat === 'func' && rotorOrBridge(lines) === 'rotor') && !(round && cornersRound(round) >= 3);
   const certain = !!r.item && !ask && r.p >= SURE_P && r.none <= SURE_NONE;
-  const half = !!r.item && CLOSED[r.item] && openShape(lines);
+  const likely = !!ask || (!!r.item && r.p >= LIKELY_P && r.none <= LIKELY_NONE);
+  const it = r.item || (ask ? ask[0] : null);
+  const half = !!it && CLOSED[it] && openShape(lines);
   let tier = 'wait';
-  if (!plain) {
-    if (certain && !half) tier = 'sure';
-    else if (ask || (r.item && r.p >= LIKELY_P && r.none <= LIKELY_NONE)) tier = 'likely';
+  let whole = false;
+  if (!plain && (certain || likely)) {
+    whole = !half && allThere(lines, it, cat);
+    tier = !whole ? 'more' : certain ? 'sure' : 'likely';
   }
-  return { ...r, ask, plain, half, tier };
+  return { ...r, ask, plain, half, whole, tier };
 }
 
 // the likeliest one of rivals ({ id: how likely the network must think it at least }), and id the

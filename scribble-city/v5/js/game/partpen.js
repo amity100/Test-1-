@@ -54,12 +54,15 @@ export const TIP_MS = 1500;
 // and it already recognises"; "two random lines must never be accepted") The pen named the drawing by the finger as
 // it was drawn, and a second after any line lifted whatever the network thought likeliest went on the car - a line
 // alone was a harpoon, a rotor, a ram (tools/test-partpen.mjs: an unfinished drawing went on three times in four, a
-// random line or two nearly half the time). Now by how sure the reading is (game/partnet.js penSay):
+// random line or two nearly half the time). Now by how sure the reading is, and by whether the thing's picture is all
+// there (game/partnet.js penSay):
 //   nothing is named while a line is being drawn, nor till the pen has rested a moment (NAME_REST);
-//   sure of it - it is named, and goes on once the pen has rested (PEN_REST), as it did;
-//   likely - named with a question, and the pen waits longer (LONG_REST) for the rest of it before it goes on;
-//   not sure at all, or a line or two of nothing - no name, and nothing goes on by itself: more is drawn, or ✓ says
-//   "this is it" (a line or two of nothing goes on not even then).
+//   sure of it, its picture all there - it is named, and goes on once the pen has rested (PEN_REST), as it did;
+//   likely, all there - named with a question, and the pen waits longer (LONG_REST) before it goes on;
+//   read as a thing, but not all of its picture there yet - named with a question, and nothing goes on by itself: the
+//   rest of it is drawn, or ✓ says "this is it";
+//   not sure at all, or a line or two of nothing - no name, and nothing goes on by itself (a line or two of nothing
+//   goes on not even with ✓).
 // The story's own drawings (force: the turbo, the rotor in the air) and a part chosen and then drawn (the drawn parts)
 // are as they were.
 export const NAME_REST = 450;
@@ -481,7 +484,7 @@ export class PartPen {
   read(strokes, o, cat = this.cat) {
     const lines = strokes.filter((L) => L && L.length >= 2);
     if (!lines.length) return null;
-    // (R27: and how sure it is - tier: 'sure', 'likely', 'wait'; plain: a line or two of nothing)
+    // (R27: and how sure it is - tier: 'sure', 'likely', 'more', 'wait'; plain: a line or two of nothing)
     const r = penSay(lines, cat);
     const z = sizeOf(lines, o.F);
     const R = { ...r, cat, z };
@@ -522,8 +525,9 @@ export class PartPen {
 
   // (game/freedraw.js, the pen rested) not sure which of two: the tip by the drawing, and a little longer
   // to draw in what tells them apart - true; else (or the tip out that long already) it is done now
-  // (R27) and by how sure the reading is: sure of it, it is done now; likely (or not sure which of two) - the pen
-  // waits the longer rest, once, and then it goes on; not sure at all - it waits, and nothing goes on by itself
+  // (R27) and by how sure the reading is (game/partnet.js penSay): sure of it, its picture all there - it is done now;
+  // likely (or not sure which of two), all there - the pen waits the longer rest, once, and then it goes on; not all
+  // of its picture there yet, or not sure at all - it waits, and nothing goes on by itself
   holds() {
     const fd = this.game.freedraw;
     const L = this.live;
@@ -548,8 +552,11 @@ export class PartPen {
       this.showTip();
       return true;
     }
+    // (not all of its picture there yet, or not sure at all: it waits - for more of it, or for ✓)
     if (!this.waiting) {
       this.waiting = true;
+      // (not sure which of two: what tells them apart, by the drawing, while it waits)
+      if (L.tier === 'more' && L.ask) this.tipping = true;
       this.showLive(fd.group.map((s) => s.P));
     }
     return true;
@@ -1308,6 +1315,11 @@ export class PartPen {
     } else if (L.ask) {
       this.liveName.textContent = `${ITEMS[L.ask[0]].name}?`;
       this.liveText.textContent = tr('עוד פרט אחד יכריע', 'One more detail will decide it');
+      this.liveText.classList.add('bad');
+    } else if (unsure && L.tier === 'more' && L.item) {
+      // (R27: read as it, but not all of its picture is there yet - named with a question; the rest of it, or ✓)
+      this.liveName.textContent = `${L.vname || ITEMS[L.item].name}?`;
+      this.liveText.textContent = tr('ממשיכים לצייר — או ✓ אם זה זה', 'Keep drawing — or ✓ if that is it');
       this.liveText.classList.add('bad');
     } else if (unsure && L.tier === 'likely' && L.item) {
       // (R27: likely - named with a question; the pen waits a little longer for the rest of it)
