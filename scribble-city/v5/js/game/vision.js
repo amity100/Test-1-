@@ -42,6 +42,7 @@ export class Vision {
     this.t = 0;
     this.cool = 0;
     this.filterSet = '';
+    this.filterWant = '';
     this.uses = 0;
     if (typeof document === 'undefined') return;
     const st = document.createElement('style');
@@ -70,9 +71,13 @@ export class Vision {
     b.innerHTML = '<span class="ico"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3.2"/></svg></span>';
     b.addEventListener('touchstart', (e) => {
       e.preventDefault();
+      this.touchT = performance.now();
       this.toggle();
     }, { passive: false });
-    b.addEventListener('click', () => this.toggle());
+    // (a mouse; not the click a touch makes after it)
+    b.addEventListener('click', () => {
+      if (performance.now() - (this.touchT || -1e9) > 600) this.toggle();
+    });
     document.body.appendChild(b);
     this.btn = b;
   }
@@ -181,9 +186,11 @@ export class Vision {
         f = `saturate(${(1 + 1.9 * k).toFixed(2)}) contrast(${(1 + 0.5 * k).toFixed(2)}) brightness(${(1 + 0.08 * k).toFixed(2)}) hue-rotate(${hue.toFixed(1)}deg) blur(${(0.9 * k).toFixed(2)}px)`;
       }
       // (only its own: what another look put on the picture is not taken off)
-      if (f !== this.filterSet && (cv.style.filter === this.filterSet || cv.style.filter === '')) {
+      // (the browser writes it back in its own words - "saturate(2.2)" for "saturate(2.20)": what it reads back is kept)
+      if (f !== this.filterWant && (cv.style.filter === this.filterSet || cv.style.filter === '')) {
         cv.style.filter = f;
-        this.filterSet = f;
+        this.filterWant = f;
+        this.filterSet = cv.style.filter;
       }
     }
     const fxOn = this.k > 0.02;

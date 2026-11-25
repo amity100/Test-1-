@@ -984,6 +984,39 @@ export function copyRead(strokes, id, shelf) {
 // another thing does not become the one tapped
 export const PICK_SLACK = 0.05;
 
+// a drawing's lines (S) in the square, the ways it is laid over a thing (framesOf), and what it reaches
+function framed(d, S) {
+  d.frames = framesOf(S);
+  for (const fr of d.frames) {
+    fr.reach = reach(fr.lines);
+    fr.reachOut = reach(fr.lines, CR + OFF_OUT);
+    fr.reachFar = reach(fr.lines, REACH_FAR);
+    // (a line left out of the frame lies off the square: no picture of its reach)
+    fr.out = fr.lines.some((pts) => pts.some((v) => v < 0 || v > 1));
+  }
+  d.len = d.frames[0].lines.reduce((q, pts) => q + pts.length / 2, 0);
+  return d;
+}
+
+// (R27, the car's pen - game/partnet.js penSay) a drawing (lines of points) against a picture's own lines - a part's
+// picture in the legend, the lines a hand copies: what of the picture is there, each of its lines by its own ink (own),
+// as a thing's parts are. key: the picture's name (its lines are kept by it). { parts: [{ c, w }], cov, prec, precT,
+// miss, extra, own } - wholeOf says of it whether it is all there; null with nothing drawn
+const pictures = new Map();
+export function coverOf(lines, key, picture) {
+  const S = lines.filter((p) => p && p.length > 1);
+  if (!S.length) return null;
+  let t = pictures.get(key);
+  if (!t) {
+    t = { S: picture() };
+    pictures.set(key, t);
+  }
+  if (!t.S.length) return null;
+  const d = framed({}, S);
+  const c = covered(t, laid(d, t), true);
+  return { parts: c.pc.map((v, i) => ({ c: v, w: t.frames[0].share[i] })), cov: c.cov, prec: c.prec, precT: c.precT, miss: c.miss, extra: c.extra, own: c.own };
+}
+
 // the drawing (strokes: [{ p, raw? }]) against the things ids: { best, list (likeliest first), have
 // (its lines) } - each { id, score, need, n }; null with nothing drawn.
 // (ROADMAP 25, the owner's word: "things keep popping up as if we tried to draw them, while drawing something else
@@ -995,16 +1028,7 @@ export const PICK_SLACK = 0.05;
 export function matchCatalog(strokes, ids, must = null) {
   const S = strokes.map((s) => s.raw || s.p).filter((p) => p && p.length > 1);
   if (!S.length || !ids.length) return null;
-  const d = sigOf(S);
-  d.frames = framesOf(S);
-  for (const fr of d.frames) {
-    fr.reach = reach(fr.lines);
-    fr.reachOut = reach(fr.lines, CR + OFF_OUT);
-    fr.reachFar = reach(fr.lines, REACH_FAR);
-    // (a line left out of the frame lies off the square: no picture of its reach)
-    fr.out = fr.lines.some((pts) => pts.some((v) => v < 0 || v > 1));
-  }
-  d.len = d.frames[0].lines.reduce((q, pts) => q + pts.length / 2, 0);
+  const d = framed(sigOf(S), S);
   // which is likeliest, and how alike (how well it comes out), by what the drawing has of the thing (c: covered's)
   const say = (o, c) => {
     // (how alike: the picture - and, drawn longer or taller than the thing is, line on line all the same, by how well
