@@ -31,11 +31,43 @@ import { repaintBoard } from '../world/boards.js';
 
 const KEY = 'scribble-city-v5-finds';
 
+// (R27, the owner's word: "everything the player has from the first second is to be drawn first - here it is all at a tap") a
+// game played before this rule kept what was drawn then: the drawn things, the parts learned and the drawings found are let go
+// once, so the start is as a new player has it
+(() => {
+  try {
+    if (localStorage.getItem('scribble-city-v5-epoch') === '27') return;
+    const A = JSON.parse(localStorage.getItem('scribble-city-v5-album') || 'null');
+    if (A && typeof A === 'object') {
+      for (const k of Object.keys(A)) if (A[k] && typeof A[k] === 'object') A[k] = { best: null };
+      localStorage.setItem('scribble-city-v5-album', JSON.stringify(A));
+    }
+    const T = JSON.parse(localStorage.getItem('scribble-city-v5-tray') || 'null');
+    if (T && typeof T === 'object') {
+      T.learned = {};
+      localStorage.setItem('scribble-city-v5-tray', JSON.stringify(T));
+    }
+    localStorage.removeItem(KEY);
+    // (and the settings' sandbox switch - every drawing and part open at a tap - off again, once)
+    const S = JSON.parse(localStorage.getItem('scribble-city-v5-settings') || 'null');
+    if (S && S.v && S.v.allOpen) {
+      S.v.allOpen = false;
+      localStorage.setItem('scribble-city-v5-settings', JSON.stringify(S));
+    }
+    localStorage.setItem('scribble-city-v5-epoch', '27');
+  } catch (e) {
+    // (no storage: a new start anyway)
+  }
+})();
+
 // open from the end of the prologue (the plan's "55%")
 export const START_BP = new Set(['paint', 'rifle', 'mp5', 'shotgun', 'inkbomb', 'car', 'muscle', 'hyper', 'nightshift', 'streetline', 'bike', 'ramp', 'barrier', 'bridge']);
 // the car's parts at the start, and their level (the wings strong from the start: real flight - the owner's word)
 // (the owner, 23.11: the helicopter's rotor too - drawn in the story's jump off the roof, his from then on)
-export const START_PARTS = { turbo: 1, wing: 2, jump: 1, mg: 1, armor: 1, rotor: 1 };
+// (R27, the owner's word: the turbo is the first drawing found in the city, in the opening's lesson - not in the start kit)
+// (on with the opening's new lesson, game/prologue/director.js tutorial: till then the turbo stays in the start kit)
+export const TURBO_FOUND = false;
+export const START_PARTS = TURBO_FOUND ? { wing: 2, jump: 1, mg: 1, armor: 1, rotor: 1 } : { turbo: 1, wing: 2, jump: 1, mg: 1, armor: 1, rotor: 1 };
 // the parts whose level is found, not bought
 const FOUND_LEVELS = new Set(['wing', 'turbo']);
 // what a part's copy is read against: the other parts, and everything on the pen's shelves
@@ -44,6 +76,22 @@ const PART_IDS = () => Object.values(BLUEPRINTS).filter((b) => b.kind === 'part'
 // the finds. bp: a blueprint it opens (copied as that blueprint); part: a part of the car's it opens, or lv: the level of
 // it it brings (copied as the part's drawing, draw); at(world, game): its place - null while that place is not built
 export const FINDS = [
+  {
+    id: 'turbo1',
+    title: 'TURBO',
+    part: 'turbo',
+    draw: 'p_turbo',
+    lv0: 1,
+    pin: true,
+    tutorial: true,
+    w: 1.4,
+    stage: 1,
+    line: tr('טורבו ניטרו לכל כלי: לוחצים על הטורבו, והוא מזנק קדימה.', 'A nitro turbo for any ride: hit boost and it leaps forward.'),
+    how: { touch: tr('ברכב: העיפרון ✏ ← טורבו, ציור להבה מאחורי הרכב · כפתור הטורבו', 'In a ride: the pencil ✏ → Turbo, a flame drawn behind it · the turbo button'), keys: tr('ברכב: Q ← טורבו, ציור להבה מאחורי הרכב · Shift', 'In a ride: Q → Turbo, a flame drawn behind it · Shift') },
+    tryText: tr('נסו אותו עכשיו: ציירו אותו על מכונית ולחצו טורבו', 'Try it now: draw it on a car and hit boost'),
+    where: tr('בסמטה ליד תחילת הדרך — מסומן במפה', 'In an alley near where you start — marked on the map'),
+    at: (world) => hiddenSpot(world, 'turbo1', TURBO_AT),
+  },
   {
     id: 'rl7',
     title: 'RL-7 ERASER',
@@ -140,6 +188,7 @@ const HOW = {
   vehicle: { touch: tr('מציירים אותו מהעיפרון, ברכבים · ועולים עליו', 'Draw it from the pencil, under rides · and get on it'), keys: tr('מציירים אותו מהעיפרון (Q), ברכבים · E לעלות', 'Draw it from the pencil (Q), under rides · E to get on') },
   other: { touch: tr('מציירים אותו מהעיפרון', 'Draw it from the pencil'), keys: tr('מציירים אותו מהעיפרון (Q)', 'Draw it from the pencil (Q)') },
 };
+if (!TURBO_FOUND) FINDS.splice(FINDS.findIndex((f) => f.id === 'turbo1'), 1);
 for (const id of [...BLUEPRINT_ORDER, ...BLUEPRINT_ROOFS]) {
   const bp = BLUEPRINTS[id];
   if (!bp || bp.hidden || START_BP.has(id) || FINDS.some((f) => f.bp === id)) continue;
@@ -160,6 +209,8 @@ for (const id of [...BLUEPRINT_ORDER, ...BLUEPRINT_ROOFS]) {
 }
 
 const BY_ID = Object.fromEntries(FINDS.map((f) => [f.id, f]));
+// (the turbo's page: in the alley nearest where the story sets out)
+const TURBO_AT = { x: 12, z: 10 };
 
 // (R26) where a hidden page is: worked out once per world - by its old board (the nearest alley's wall; a roof board's own
 // roof), or, with no board, an alley of its own
@@ -168,12 +219,12 @@ const SLOT_FR = [0.3, 0.7, 0.5, 0.18, 0.84, 0.4, 0.6, 0.26];
 // (not alleys: open places) and what a page's wall is seen through when it is looked for (a fence or a board in front hides it)
 const ALLEY_NOT = new Set(['park', 'plaza', 'motel', 'towers', 'market']);
 const ALLEY_SEE = new Set(['prop', 'cover', 'car', 'furniture', 'rail']);
-function hiddenSpot(world, id) {
+function hiddenSpot(world, id, anchor = null) {
   let memo = HIDE.get(world);
   if (!memo) HIDE.set(world, (memo = { at: new Map(), used: new Map(), pts: [] }));
   if (memo.at.has(id)) return memo.at.get(id);
   const col = world.collision;
-  const boards = (world.billboards || []).filter((b) => b.id === id);
+  const boards = anchor ? [] : (world.billboards || []).filter((b) => b.id === id);
   let spot = null;
   const roof = boards.find((b) => b.roof);
   if (roof && col && col.pointInside) {
@@ -192,7 +243,7 @@ function hiddenSpot(world, id) {
   // nothing stands in front of, with room for him to stand before it, and no other page within 10 m)
   const alleys = (world.alleys || []).filter((q) => !ALLEY_NOT.has(q.type));
   if (!spot && alleys.length && col) {
-    const b = boards.find((q) => !q.roof);
+    const b = anchor || boards.find((q) => !q.roof);
     let h = 0;
     for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
     const ax = b ? b.x : 0;
@@ -437,10 +488,16 @@ export class Finds {
     return !(g.classic || g.lab || !g.album || g.album.allOpen);
   }
 
-  // on: the pages in the city - the regular game after the prologue
+  // on: the pages in the city. (R27: in the story too - its opening lesson leads to the first of them, and a page marked on the map
+  // is there to be found whenever he goes to it)
   get on() {
+    return this.rules;
+  }
+
+  // (the story's film playing: no words of the game's own over it)
+  get quiet() {
     const g = this.game;
-    return this.rules && !(g.prologue && g.prologue.active);
+    return typeof document !== 'undefined' && document.body.classList.contains('prologue-film');
   }
 
   // (R26) on the map: a few (pin) - or every one, with the settings' switch for the owner's own checks
@@ -585,7 +642,8 @@ export class Finds {
   }
 
   partLevel(id) {
-    let lv = START_PARTS[id] || 3;
+    const base = FINDS.find((f) => f.part === id && !f.lv && f.lv0 && this.has(f.id));
+    let lv = START_PARTS[id] || (base ? base.lv0 : 3);
     for (const f of FINDS) if (f.part === id && f.lv && this.has(f.id)) lv = Math.max(lv, f.lv);
     return lv;
   }
@@ -671,7 +729,7 @@ export class Finds {
     const spots = this.ensureSpots();
     // (R26, the owner's word: "the game explains from the start that blueprints are scattered in the city") once, a little
     // after the story hands over: what they are, how they are had, that a few are on the map - and the way to the nearest
-    if (!this.state.coached.handover && spots.length && g.hud && !g.paused) {
+    if (!this.state.coached.handover && spots.length && g.hud && !g.paused && !(g.prologue && g.prologue.active)) {
       this.toldT = (this.toldT || 0) + dt;
       if (this.toldT > 5) {
         const map = g.touch ? tr('המפה', 'the map') : tr('המפה (M)', 'the map (M)');
@@ -690,10 +748,10 @@ export class Finds {
       const d = Math.hypot(s.x - at.x, (s.y - at.y) * 0.8, s.z - at.z);
       // (R26, the owner's word: "when the player comes to a blueprint's area, a message pops up that one is near") from 30 m,
       // once - again only after he has been 60 m off (a van: once a game)
-      if (d < 30 && !this.nearSet.has(s.f.id)) {
+      if (d < 30 && !this.nearSet.has(s.f.id) && !this.quiet) {
         this.nearSet.add(s.f.id);
         if (!this.state.coached.near) this.coach('near', tr('שרטוט מוסתר קרוב! חפשו דף לבן עם קווים בזהב — כשמתקרבים שומעים עיפרון משרבט', 'A hidden blueprint is close! Look for a white page with gold lines — up close you can hear a pencil scratching'), { t: 6, icon: '✦' });
-        else if (g.hud) g.hud.toast(tr('✦ שרטוט מוסתר קרוב — הסתכלו מסביב', '✦ A hidden blueprint is close — look around'), 'info', 3.2);
+        else if (g.hud) g.hud.toast(s.ny > 0.7 ? tr('✦ שרטוט מוסתר קרוב — על גג, למעלה', '✦ A hidden blueprint is close — up on a roof') : tr('✦ שרטוט מוסתר קרוב — הסתכלו מסביב', '✦ A hidden blueprint is close — look around'), 'info', 3.2);
         if (g.audio) g.audio.play('pageflip', 0.45);
       } else if (d > 60 && !(s.live.moves || s.live.parked !== undefined)) this.nearSet.delete(s.f.id);
       if (d > SHEEN_FAR + 5) {
@@ -1048,6 +1106,11 @@ export class Finds {
     }
     const fz = v.fz;
     if (!fz) return false;
+    if (f.part === 'turbo') {
+      const on = !!(v.fuse && v.fuse.parts && v.fuse.parts.some((q) => q.item === 'turbo'));
+      if (on && (g.input.boost || g.input.keys.has('ShiftLeft') || g.input.keys.has('ShiftRight')) && Math.abs(v.speed || 0) > 12) T.air += dt;
+      return T.air > 0.6;
+    }
     if (f.part === 'jet') return !!(fz.par || fz.jet || fz.thrust) && (g.input.boost || g.input.keys.has('ShiftLeft') || g.input.keys.has('ShiftRight')) && (v.speed || 0) > 12;
     if (f.part === 'rotor') return !!fz.rotor && v.air && v.pos.y > 6;
     if (f.part === 'wing') {

@@ -347,7 +347,9 @@ export class CityMap {
       for (const sp of F.ensureSpots()) {
         // (R26, the owner's word: "a few on the map - most not, that's the mystery")
         if (F.has(sp.f.id) || !F.pinned(sp.f)) continue;
-        add({ cat: 'find', glyph: 'spray', x: sp.x, z: sp.z, name: sp.f.title, note: sp.f.where, big: true });
+        // (R27: a page on a roof - the pin is over the building: said so, not sought in the street under it)
+        const note = sp.ny > 0.7 ? tr('על הגג של הבניין — צריך לעלות למעלה', "On the building's roof — you have to get up there") : sp.f.where;
+        add({ cat: 'find', glyph: 'spray', x: sp.x, z: sp.z, name: sp.f.title, note, big: true });
       }
     }
     const rank = Object.fromEntries(ORDER.map((id, i) => [id, i]));

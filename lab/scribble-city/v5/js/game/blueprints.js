@@ -1140,6 +1140,22 @@ Object.assign(BLUEPRINTS, {
 // (ROADMAP 29.5) the car's parts found in the city, as their drawings on the walls - copied by finger to have them (game/finds.js).
 // Never on the pen's shelves (hidden): read only against one another when one is being copied
 Object.assign(BLUEPRINTS, {
+  // (R27: the first drawing found, in the opening's lesson - the pen's own picture of a turbo: a flame on its nozzle)
+  p_turbo: {
+    id: 'p_turbo',
+    name: tr('טורבו', 'Turbo'),
+    nameEn: 'TURBO',
+    kind: 'part',
+    hidden: true,
+    difficulty: 1,
+    desc: tr('טורבו ניטרו לכל כלי: לוחצים, והוא מזנק קדימה.', 'A nitro turbo for any ride: hit it and it leaps forward.'),
+    strokes: [
+      { label: tr('להבה', 'flame'), en: 'flame', pts: [[48, 88], [30, 84], [22, 68], [28, 52], [34, 58], [38, 56], [38, 40], [44, 24], [52, 8], [54, 24], [64, 34], [70, 48], [74, 42], [72, 34], [82, 48], [80, 74], [66, 86], [48, 88]] },
+      { label: tr('נחיר', 'nozzle'), en: 'nozzle', pts: close([[32, 92], [64, 92], [64, 104], [32, 104]]) },
+    ],
+    fills: [{ poly: [[48, 88], [30, 84], [22, 68], [28, 52], [38, 40], [52, 8], [64, 34], [82, 48], [80, 74], [66, 86]], color: '#f08a2a' }],
+    scale: 1,
+  },
   p_jet: {
     id: 'p_jet',
     name: tr('מאיץ רקטי', 'Rocket Booster'),
