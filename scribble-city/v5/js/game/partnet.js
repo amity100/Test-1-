@@ -207,13 +207,13 @@ function openShape(lines) {
 // a thing whose picture in the legend is one closed shape (a gun's outline, a flame, a triangle)
 const CLOSED = Object.fromEntries(Object.keys(ITEMS).map((id) => [id, /^<path d="M[^M"]*Z"\/>$/.test(ITEMS[id].icon)]));
 
-// (R27) all of a thing's picture there: its biggest line - the outline, the body - most of it, and the lines not there
-// no more than a sixth of its ink in all (a plate's bolts, a balloon's ropes; not its cross, not its basket); the drawing
-// over most of the picture, and half of the drawing at least the picture. Each of the picture's lines by its own ink
+// (R27) all of a thing's picture there: its biggest line - the outline, the body - half of it at the least, and the
+// lines not there no more than a sixth of its ink in all (a plate's bolts, a balloon's ropes; not its cross, not its
+// basket); the drawing over most of the picture, and half of the drawing at least the picture. Each of the picture's lines by its own ink
 // (game/catmatch.js coverOf, as the things drawn on foot are read): a line that only passes by another is not that one
 // drawn. A hand is not a ruler - the numbers are loose (tools/test-partpen.mjs: whole drawings by a finger all there
 // nineteen times in twenty, unfinished ones nearly never)
-export const PIC = { main: 0.55, part: 0.4, left: 0.16, cov: 0.58, prec: 0.5 };
+export const PIC = { main: 0.45, part: 0.4, left: 0.16, cov: 0.58, prec: 0.5 };
 const pictureOf = (id) => () => svgLines(ITEMS[id].icon);
 export function allThere(lines, id, cat) {
   // (the rotor is its X: the hub in the middle is the picture's, not the drawing's to make)
@@ -231,7 +231,9 @@ export function allThere(lines, id, cat) {
 // the drawing as one of a category's things, and what the pen at rest does with it: readItem's, and { ask (the two it
 // could be, not sure which), plain (a line or two of nothing), half (a closed shape's outline still open), whole (its
 // picture all there), tier: 'sure' | 'likely' | 'more' | 'wait' }
-export function penSay(strokes, cat) {
+// quick: while a line is being drawn - nothing is said of it then (game/partpen.js said), and whether its picture is
+// all there is not looked at (tier 'more' at the most): the pen up, it is read in full
+export function penSay(strokes, cat, quick = false) {
   const lines = strokes.filter((s) => s && s.length >= 2);
   const r = readItem(lines, cat);
   const ask = askOf(r);
@@ -245,7 +247,7 @@ export function penSay(strokes, cat) {
   let tier = 'wait';
   let whole = false;
   if (!plain && (certain || likely)) {
-    whole = !half && allThere(lines, it, cat);
+    whole = !quick && !half && allThere(lines, it, cat);
     tier = !whole ? 'more' : certain ? 'sure' : 'likely';
   }
   return { ...r, ask, plain, half, whole, tier };

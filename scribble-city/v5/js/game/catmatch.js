@@ -329,9 +329,7 @@ const INK_NEED = 0.7;
 // is half the thing's ink at the least (one rail of a ladder's two is no body to lay the rest by)
 const FIT = 1.3;
 const FIT_BY = 0.1;
-const FIT_MAIN = +(process.env.FITMAIN || 0.5);
-// (and it must not lose the thing: as much of it found as before, to this much of its ink)
-const FIT_GAIN = +(process.env.FITGAIN || 0);
+const FIT_MAIN = 0.5;
 // (the farthest the drawing's ink is looked for from a point of the thing, on the drawing as it was drawn)
 const REACH_FAR = 0.18;
 // the drawing passing by less than this much of a thing, it is nowhere near it; and the second-best way of laying it
@@ -699,7 +697,9 @@ function own(r, tn) {
   // (a finger draws a thing's proportions about right, not exactly) Those lines, all of them together, are the drawn
   // body: as long and as tall as the thing's body, and where it is - and the rest where that puts it. The drawing
   // laid again so, once, and its ink given out again
-  if (any && tf.mainBox && tf.share[main] >= FIT_MAIN) {
+  // (a part's picture for the car's pen - coverOf: whatever its biggest line, a net's ring as a plate's square; and
+  // only if no less of the picture is found so)
+  if (any && tf.mainBox && (tf.pic || tf.share[main] >= FIT_MAIN)) {
     let x0 = Infinity;
     let x1 = -Infinity;
     let y0 = Infinity;
@@ -734,9 +734,10 @@ function own(r, tn) {
       vy = -by / ay;
       place();
       give(null);
-      // (less of the thing found so - a canopy drawn flat, and its ropes no longer where they hang; a net's ring
-      // drawn small inside its mesh: as it was laid)
-      if (got < was[4] - FIT_GAIN * tn) {
+      // (a picture: less of it found so - a canopy drawn flat, and its ropes no longer where they hang - and it is as
+      // it was laid. Not a thing drawn on foot: a body alone laid over all of the thing passes by its other parts,
+      // and is not all of it for that - tools/test-catalog.mjs)
+      if (tf.pic && got < was[4]) {
         [ax, bx, ay, by] = was;
         ux = 1 / ax;
         vx = -bx / ax;
@@ -863,6 +864,7 @@ function laid(d, t) {
   if (!t.frames) {
     t.frames = framesOf(t.S);
     for (const fr of t.frames) {
+      fr.pic = !!t.pic;
       fr.reach = reach(fr.lines);
       // (and from close to - a little part drawn that the thing has not, a lamp on a roof, is ink off its lines only
       // when looked at closely)
@@ -1022,7 +1024,7 @@ export function coverOf(lines, key, picture) {
   if (!S.length) return null;
   let t = pictures.get(key);
   if (!t) {
-    t = { S: picture() };
+    t = { S: picture(), pic: true };
     pictures.set(key, t);
   }
   if (!t.S.length) return null;

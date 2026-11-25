@@ -2349,6 +2349,8 @@ export class Prologue {
     let asked = false;
     let tm = -1;
     let t = 0;
+    // (made: the rifle come into his hands - a catalog's thing is made by its own road, not counted where the free drawing's are)
+    const had = held();
     yield () => {
       t += this.dtR;
       // (the pencil opened: the rifle chosen, its lines shown and drawn by the pencil - each time it is opened)
@@ -2357,7 +2359,7 @@ export class Prologue {
         if (F.force !== ID) F.learn(ID, true);
       }
       if (!F.isOpen) asked = false;
-      if (tm < 0 && madeN() > m0 && held()) tm = t;
+      if (tm < 0 && held() && (!had || madeN() > m0)) tm = t;
       return (tm >= 0 && !F.isOpen && t > tm + 1) || (tm >= 0 && t > tm + 5) || t > 150;
     };
     if (tm < 0) return;

@@ -481,13 +481,14 @@ export class PartPen {
   // the drawing (lines of screen px) as one of the category's things: readItem's, and if it is one,
   // its numbers and what they do - or null (nothing drawn). ask: the two it could be, not sure which
   // (the likelier first)
-  read(strokes, o, cat = this.cat) {
+  read(strokes, o, cat = this.cat, quick = false) {
     const lines = strokes.filter((L) => L && L.length >= 2);
     if (!lines.length) return null;
-    // (R27: and how sure it is - tier: 'sure', 'likely', 'more', 'wait'; plain: a line or two of nothing)
-    const r = penSay(lines, cat);
+    // (R27: and how sure it is - tier: 'sure', 'likely', 'more', 'wait'; plain: a line or two of nothing. quick: a
+    // line being drawn - whether its picture is all there is looked at once the pen is up)
+    const r = penSay(lines, cat, quick);
     const z = sizeOf(lines, o.F);
-    const R = { ...r, cat, z };
+    const R = { ...r, cat, z, quick };
     if (!r.item) return R;
     const n = nOf(r.item, z);
     const st = statOf(r.item, n, o.mass, o.top);
@@ -518,7 +519,7 @@ export class PartPen {
     }
     this.liveAt = t;
     const o = this.own();
-    this.live = o && strokes.length ? (this.cat === 'par' ? { par: this.par, item: null, text: PAR[this.par] ? PAR[this.par].how : WORLD_SAY[this.par], ok: true } : this.read(strokes, o)) : null;
+    this.live = o && strokes.length ? (this.cat === 'par' ? { par: this.par, item: null, text: PAR[this.par] ? PAR[this.par].how : WORLD_SAY[this.par], ok: true } : this.read(strokes, o, this.cat, !!tip)) : null;
     this.showLive(strokes);
     this.showLegend();
   }
@@ -530,8 +531,14 @@ export class PartPen {
   // of its picture there yet, or not sure at all - it waits, and nothing goes on by itself
   holds() {
     const fd = this.game.freedraw;
-    const L = this.live;
+    let L = this.live;
     if (!L || !this.isOpen || !fd || fd.cur || !fd.group.length) return false;
+    // (read while a line was being drawn, and that line let go of: read in full now)
+    if (L.quick) {
+      this.feel(fd.group.map((s) => s.P), null, true);
+      L = this.live;
+      if (!L) return false;
+    }
     // (the story's own drawing, whatever it is read as: as ever - the tip a moment if it is not sure which of two, and
     // then it goes on as the thing the story says)
     if (this.force) {
