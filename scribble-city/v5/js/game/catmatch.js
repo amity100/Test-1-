@@ -329,7 +329,9 @@ const INK_NEED = 0.7;
 // is half the thing's ink at the least (one rail of a ladder's two is no body to lay the rest by)
 const FIT = 1.3;
 const FIT_BY = 0.1;
-const FIT_MAIN = 0.5;
+const FIT_MAIN = +(process.env.FITMAIN || 0.5);
+// (and it must not lose the thing: as much of it found as before, to this much of its ink)
+const FIT_GAIN = +(process.env.FITGAIN || 0);
 // (the farthest the drawing's ink is looked for from a point of the thing, on the drawing as it was drawn)
 const REACH_FAR = 0.18;
 // the drawing passing by less than this much of a thing, it is nowhere near it; and the second-best way of laying it
@@ -720,6 +722,7 @@ function own(r, tn) {
     const dx = clamp((a0 + a1) / 2 - cx, -FIT_BY, FIT_BY);
     const dy = clamp((b0 + b1) / 2 - cy, -FIT_BY, FIT_BY);
     if (Math.abs(Math.log(kx)) > 0.03 || Math.abs(Math.log(ky)) > 0.03 || Math.abs(dx) > 0.012 || Math.abs(dy) > 0.012) {
+      const was = [ax, bx, ay, by, got];
       // (about the drawn body's middle: longer or shorter, taller or lower, and moved onto the thing's body's)
       bx = (bx - cx) * kx + cx + dx;
       ax *= kx;
@@ -731,6 +734,17 @@ function own(r, tn) {
       vy = -by / ay;
       place();
       give(null);
+      // (less of the thing found so - a canopy drawn flat, and its ropes no longer where they hang; a net's ring
+      // drawn small inside its mesh: as it was laid)
+      if (got < was[4] - FIT_GAIN * tn) {
+        [ax, bx, ay, by] = was;
+        ux = 1 / ax;
+        vx = -bx / ax;
+        uy = 1 / ay;
+        vy = -by / ay;
+        place();
+        give(null);
+      }
       any = sort();
     }
   }
