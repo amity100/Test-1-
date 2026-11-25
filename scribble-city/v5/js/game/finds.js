@@ -277,6 +277,17 @@ function hiddenSpot(world, id, anchor = null) {
           return true;
         });
         if (blocked) continue;
+        // (R27: and room to walk up to it - nothing at a knee's height or more, a bin, a railing, in the 2.6 m before it: low
+        // things do not hide a page, but they keep him from it)
+        let low = false;
+        const lx0 = Math.min(x - side * 0.2, x - side * 2.6);
+        const lx1 = Math.max(x - side * 0.2, x - side * 2.6);
+        col.forEachIn(lx0, z - 0.9, lx1, z + 0.9, (q) => {
+          if (q.tag === 'wall' || q.y1 < 0.45 || q.y0 > 1.8) return false;
+          low = true;
+          return true;
+        });
+        if (low) continue;
         // (not over the meters or an air conditioner on that wall)
         if ((world.wallProps || []).some((q) => Math.abs(q.x - x) < 0.7 && Math.abs(q.z - z) < q.half + 0.9)) continue;
         spot = { x, y: 1.85, z, nx: -side, ny: 0, nz: 0, ux: 0, uy: 1, uz: 0 };
@@ -459,6 +470,8 @@ const SHEEN_FAR = 25;
 const VISION_GLOW = new THREE.Color(1.0, 0.62, 0.95);
 const NEAR = 10;
 const REACH = 4;
+// (R27) a page photographed from as far as this when the camera is pointed at it
+const FAR_SNAP = 6.5;
 // the lines: a pencil's on the wall, dark (the look pales what is light - a light line on a sunlit wall is lost); their
 // light: deep gold ink, the colour of all that can be taken
 const CHALK = [0.1, 0.08, 0.08];
@@ -974,6 +987,19 @@ export class Finds {
     for (const s of this.spots) if (s.page && !s.taking) s.page.visible = true;
   }
 
+  // (R27) the camera pointed at the page: it near the middle of the picture
+  aimedAt(s) {
+    const cam = this.game.camera;
+    if (!cam) return false;
+    const f = this.fwd || (this.fwd = new THREE.Vector3());
+    cam.getWorldDirection(f);
+    const dx = s.x - cam.position.x;
+    const dy = s.y - cam.position.y;
+    const dz = s.z - cam.position.z;
+    const L = Math.hypot(dx, dy, dz) || 1;
+    return (f.x * dx + f.y * dy + f.z * dz) / L > 0.87;
+  }
+
   // within reach and before it: E - copy it
   target() {
     if (!this.on || this.copying) return null;
@@ -982,11 +1008,13 @@ export class Finds {
     if (p.mode !== 'foot' || p.inVehicle) return null;
     for (const s of this.spots) {
       if (this.has(s.f.id)) continue;
-      if (Math.abs(s.x - p.pos.x) > REACH + 2 || Math.abs(s.z - p.pos.z) > REACH + 2) continue;
+      if (Math.abs(s.x - p.pos.x) > FAR_SNAP || Math.abs(s.z - p.pos.z) > FAR_SNAP) continue;
       const dy = s.ny > 0.7 ? 0 : Math.max(0, Math.abs(s.y - (p.pos.y + 1.2)) - 1.6);
       const d = Math.hypot(s.x - p.pos.x, dy, s.z - p.pos.z);
       // (a drawing on a floor is read from on it, a little further off)
-      if (d > (s.ny > 0.7 ? REACH + 1.8 : REACH)) continue;
+      // (R27: and like a real camera, from further off too when it is pointed at the page - a bin or a railing before it is
+      // no matter then)
+      if (d > (s.ny > 0.7 ? REACH + 1.8 : REACH) && !(d < FAR_SNAP && this.aimedAt(s))) continue;
       // (on its side, not round the corner of the wall; on the same floor as it)
       if (s.ny > 0.7) {
         if (Math.abs(p.pos.y - s.y) > 1.2) continue;

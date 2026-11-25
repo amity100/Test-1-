@@ -472,7 +472,13 @@ export class Autopilot {
       // (taken to the alley's mouth, then walked up to the page)
       this.once('fgo', () => pl.spawn(sp.x + sp.nx * 14, sp.z + sp.nz * 14, Math.atan2(-sp.nx, -sp.nz)));
       const d = this.walkTo(sp.x + sp.nx * 1.4, sp.z + sp.nz * 1.4, false, 0.5);
-      if (d < 0.8 && FI.target()) this.once('fsnap', () => FI.interact());
+      // (near it: turned to the page, photographed as soon as the camera can - from where he stands, if a bin is in the way)
+      const dp = Math.hypot(sp.x - pl.pos.x, sp.z - pl.pos.z);
+      if (dp < 7) {
+        g.camRig.yaw = Math.atan2(-sp.nx, -sp.nz);
+        g.camRig.pitch = 0.05;
+      }
+      if ((d < 0.8 || this.since('fgo') > 8) && FI.target()) this.once('fsnap', () => FI.interact());
       return;
     }
     if (/^Get in a <b>car<\/b>$/.test(o)) {

@@ -89,7 +89,7 @@ export function askOf(r) {
 // drawing on the car when it rests (game/partpen.js). It took whatever the network thought likeliest of the category's
 // things, a second after any line - a line alone, in the weapons, was a harpoon nine times in twenty; an unfinished
 // drawing went on as something three times in four (tools/test-partpen.mjs). Now by how sure the reading is, and by
-// what of the thing's picture - the one in the legend, the one a hand copies - is there (allThere, partCopy):
+// what of the thing's picture - the one in the legend, the one a hand copies - is there (thereOf, partCopy):
 //   sure    the network all but certain of it (SURE_P), nearly nothing for "none of them", no other thing near it, and
 //           its picture all there: it is named, and goes on once the pen has rested;
 //   likely  less certain (or not sure which of two), its picture all there - or certain of it, and the drawing not
@@ -251,11 +251,6 @@ function thereOf(d, id) {
   for (const q of C.parts) if (q.c < PIC.part) left += q.w;
   return { C, whole: C.parts[big].c >= PIC.main && left <= PIC.left && C.cov >= PIC.cov && C.prec >= PIC.prec };
 }
-export function allThere(d, lines, id, cat) {
-  // (the rotor is its X: the hub in the middle is the picture's, not the drawing's to make)
-  if (id === 'rotor' && cat === 'func' && rotorOrBridge(lines) === 'rotor') return true;
-  return thereOf(d, id).whole;
-}
 // some of the picture's lines drawn, and the others not: the drawing is one or two of its lines - all of each, and
 // little else - and they are not all of the picture
 export function partCopy(d, id) {
@@ -295,6 +290,7 @@ export function penSay(strokes, cat, quick = false) {
     tier = 'more';
     if (!quick) {
       const d = drawnOf(lines);
+      // (the rotor is its X: the hub in the middle is the picture's, not the drawing's to make)
       const X = it === 'rotor' && cat === 'func' && rotorOrBridge(lines) === 'rotor';
       const T = X ? { C: null, whole: true } : thereOf(d, it);
       // (the legend's picture copied - most of the drawing's ink on its lines - and its outline not closed yet)
