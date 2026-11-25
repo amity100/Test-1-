@@ -473,7 +473,14 @@ export class Autopilot {
       // mouth and walked up to the page)
       this.once('fseen', () => g.vision && g.vision.toggle());
       if (this.since('fseen') < 3) return this.set(0, 0);
-      this.once('fgo', () => pl.spawn(sp.x + sp.nx * 14, sp.z + sp.nz * 14, Math.atan2(-sp.nx, -sp.nz)));
+      // (out from the page as far as the alley lets him - not through the building across it)
+      this.once('fgo', () => {
+        const col = g.world && g.world.collision;
+        const hit = col ? col.raycast(sp.x + sp.nx * 0.3, 1.0, sp.z + sp.nz * 0.3, sp.nx, 0, sp.nz, 14) : null;
+        const free = hit ? Math.hypot(hit.x - sp.x, hit.z - sp.z) : 14;
+        const k = Math.max(3, Math.min(14, free - 1.5));
+        pl.spawn(sp.x + sp.nx * k, sp.z + sp.nz * k, Math.atan2(-sp.nx, -sp.nz));
+      });
       const d = this.walkTo(sp.x + sp.nx * 1.4, sp.z + sp.nz * 1.4, false, 0.5);
       // (near it: turned to the page, photographed as soon as the camera can - from where he stands, if a bin is in the way)
       const dp = Math.hypot(sp.x - pl.pos.x, sp.z - pl.pos.z);
@@ -506,7 +513,8 @@ export class Autopilot {
       return;
     }
     if (/Hit the <b>turbo<\/b>/.test(o) && c) {
-      this.set(0, 1);
+      // (along the streets toward where Lily waits, and the turbo once it is going)
+      this.driveTo(25, 214, 1);
       this.boosting = true;
       g.input.boost = c.speed > 10;
       return;

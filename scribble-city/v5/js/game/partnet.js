@@ -223,6 +223,9 @@ const COPY_MOST = 0.86;
 const COPY_FIT = 0.6;
 // (a drawing most of whose ink is on the picture's own lines is a copy of the picture, begun or done)
 const COPY_PREC = 0.7;
+// (and not one of a shape as long for its height as this many times over, or as tall: a hand stretches a thing by a
+// third, not by two)
+const COPY_SHAPE = Math.log(1.8);
 const pics = {};
 function picOf(id) {
   let q = pics[id];
@@ -232,9 +235,18 @@ function picOf(id) {
     const all = len.reduce((a, b) => a + b, 0) || 1;
     const big = P.map((_, i) => i).filter((i) => len[i] / all >= COPY_LINE);
     const subs = [];
+    // (lines of nothing much - a shaft, a mast, a cross's arms - are no picture to be a copy of: anything long and
+    // thin lies along them, a rifle of the hand's own as well as a harpoon begun)
+    const dull = P.map(plainLine);
+    // (each with how long it is for its height: a drawing of another shape altogether is not held against it)
+    const sub = (k) => {
+      const L = k.map((i) => P[i]);
+      const bx = boxOf(L.flat());
+      subs.push({ key: `${id}#${k.join('.')}`, lines: () => L, a: Math.log(Math.max(bx.w, 0.5) / Math.max(bx.h, 0.5)) });
+    };
     for (let a = 0; a < big.length; a++) {
-      if (len[big[a]] / all <= COPY_MOST) subs.push({ key: `${id}#${big[a]}`, lines: () => [P[big[a]]] });
-      for (let b = a + 1; b < big.length; b++) if (P.length > 2 && (len[big[a]] + len[big[b]]) / all <= COPY_MOST) subs.push({ key: `${id}#${big[a]}.${big[b]}`, lines: () => [P[big[a]], P[big[b]]] });
+      if (len[big[a]] / all <= COPY_MOST && !dull[big[a]]) sub([big[a]]);
+      for (let b = a + 1; b < big.length; b++) if (P.length > 2 && (len[big[a]] + len[big[b]]) / all <= COPY_MOST && !(dull[big[a]] && dull[big[b]])) sub([big[a], big[b]]);
     }
     q = pics[id] = { P, subs };
   }
@@ -251,18 +263,24 @@ function thereOf(d, id) {
   for (const q of C.parts) if (q.c < PIC.part) left += q.w;
   return { C, whole: C.parts[big].c >= PIC.main && left <= PIC.left && C.cov >= PIC.cov && C.prec >= PIC.prec };
 }
-// some of the picture's lines drawn, and the others not: the drawing is one or two of its lines - all of each, and
-// little else - and they are not all of the picture
-export function partCopy(d, id) {
-  for (const q of picOf(id).subs) {
-    // (at a glance first: most of them it is nowhere near)
-    const n = passOf(d, q.key, q.lines);
-    if (!n || Math.min(n.cov, n.prec) < COPY_FIT) continue;
-    const C = coverOf(d, q.key, q.lines);
-    if (!C) continue;
-    let least = 1;
-    for (const x of C.parts) least = Math.min(least, x.c);
-    if (Math.min(C.cov, C.prec, least) >= COPY_FIT) return true;
+// some of a picture's lines drawn, and the others not: the drawing is one or two of its lines - all of each, and
+// little else - and they are not all of the picture. The picture of the thing it is read as - or of any other thing
+// of the category (cat): a parachute's canopy alone is read as wings, and is no more done for that
+export function partCopy(d, id, cat = null) {
+  const ids = cat && CATS[cat] ? [id, ...CATS[cat].filter((x) => x !== id)] : [id];
+  const a = Math.log(d.frames[0].w / d.frames[0].h);
+  for (const it of ids) {
+    for (const q of picOf(it).subs) {
+      if (Math.abs(a - q.a) > COPY_SHAPE) continue;
+      // (at a glance first: most of them it is nowhere near)
+      const n = passOf(d, q.key, q.lines);
+      if (!n || Math.min(n.cov, n.prec) < COPY_FIT) continue;
+      const C = coverOf(d, q.key, q.lines);
+      if (!C) continue;
+      let least = 1;
+      for (const x of C.parts) least = Math.min(least, x.c);
+      if (Math.min(C.cov, C.prec, least) >= COPY_FIT) return true;
+    }
   }
   return false;
 }
@@ -298,7 +316,7 @@ export function penSay(strokes, cat, quick = false) {
       whole = T.whole && !open;
       if (whole) tier = certain ? 'sure' : 'likely';
       else {
-        unfinished = open || partCopy(d, it);
+        unfinished = open || partCopy(d, it, cat);
         // (not the legend's picture, begun or done - the hand's own drawing of the thing, a helicopter for the rotor:
         // by the network alone, sure of it, and after the longer rest. Less than sure, it waits for ✓: lines of
         // nothing are "likely" something one time in twenty - tools/test-partpen.mjs)
