@@ -108,17 +108,26 @@ const lenOf = (s) => {
 function turns(s) {
   const b = boxOf(s);
   const step = Math.max(b.w, b.h, 1e-6) * 0.12;
-  // (a point every eighth of its size along it)
+  // (a point every eighth of its size along it - between the points it was drawn with where they are far apart: a
+  // fast hand leaves few, a mouse fewer, and each of them a corner)
   const P = [s[0]];
-  let acc = 0;
+  let left = step;
   for (let i = 1; i < s.length; i++) {
-    acc += Math.hypot(s[i][0] - s[i - 1][0], s[i][1] - s[i - 1][1]);
-    if (acc >= step) {
-      P.push(s[i]);
-      acc = 0;
+    let x = s[i - 1][0];
+    let y = s[i - 1][1];
+    let d = Math.hypot(s[i][0] - x, s[i][1] - y);
+    while (d >= left) {
+      x += ((s[i][0] - x) * left) / d;
+      y += ((s[i][1] - y) * left) / d;
+      P.push([x, y]);
+      d -= left;
+      left = step;
     }
+    left -= d;
   }
-  if (P[P.length - 1] !== s[s.length - 1]) P.push(s[s.length - 1]);
+  const e = s[s.length - 1];
+  const q = P[P.length - 1];
+  if (Math.hypot(e[0] - q[0], e[1] - q[1]) > step * 0.5) P.push(e);
   let n = 0;
   let turned = 0;
   for (let i = 2; i < P.length; i++) {
@@ -127,11 +136,12 @@ function turns(s) {
     let d = c - a;
     while (d > Math.PI) d -= Math.PI * 2;
     while (d < -Math.PI) d += Math.PI * 2;
-    // (a bend gathered over the points it takes, then counted once)
-    if (Math.abs(d) > 0.25) turned += d;
+    // (a bend gathered over the points it takes, then counted once; a bend the other way is another)
+    const bent = Math.abs(d) > 0.25;
+    if (bent && turned * d >= 0) turned += d;
     else {
       if (Math.abs(turned) > 0.8) n++;
-      turned = 0;
+      turned = bent ? d : 0;
     }
   }
   if (Math.abs(turned) > 0.8) n++;
@@ -144,6 +154,31 @@ function plainLine(s) {
   const chord = Math.hypot(s[0][0] - s[s.length - 1][0], s[0][1] - s[s.length - 1][1]);
   if (chord < size * 0.5) return false;
   return lenOf(s) <= chord * 1.3 || turns(s) <= 1;
+}
+// two lines that close a shape between them, end to end, and the shape has corners (a triangle drawn as a roof and a
+// floor; two bows are a leaf, two lines side by side nothing): the shape as one line round - or null
+const ROUND_NEAR = 0.2;
+function roundOf(lines) {
+  if (lines.length !== 2) return null;
+  const [A, B] = lines;
+  const all = boxOf(lines.flat());
+  const near = Math.hypot(all.w, all.h) * ROUND_NEAR;
+  const d = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+  const a0 = A[0];
+  const a1 = A[A.length - 1];
+  const b0 = B[0];
+  const b1 = B[B.length - 1];
+  const fwd = Math.max(d(a1, b0), d(b1, a0));
+  const rev = Math.max(d(a1, b1), d(b0, a0));
+  if (Math.min(fwd, rev) > near) return null;
+  return A.concat(fwd <= rev ? B : B.slice().reverse());
+}
+// (the corners of a shape drawn round: a corner where the round begins is no corner to turns - so it is counted from
+// two places, half a round apart)
+function cornersRound(P) {
+  const h = P.length >> 1;
+  const R = P.slice(h).concat(P.slice(0, h));
+  return Math.max(turns(P.concat([P[0], P[1]])), turns(R.concat([R[0], R[1]])));
 }
 // a shape not closed yet: an end of one of its lines with no other end near it (its own other end, or another
 // line's - an outline drawn in two lines or three meets end to end). A line inside the shape, both its ends loose,
@@ -173,7 +208,9 @@ export function penSay(strokes, cat) {
   const lines = strokes.filter((s) => s && s.length >= 2);
   const r = readItem(lines, cat);
   const ask = askOf(r);
-  const plain = lines.length <= 2 && lines.every(plainLine) && !(cat === 'func' && rotorOrBridge(lines) === 'rotor');
+  // (a line or two of nothing: each of them plain - but not an X, the rotor, nor two that close a shape with corners)
+  const round = roundOf(lines);
+  const plain = lines.length <= 2 && lines.every(plainLine) && !(cat === 'func' && rotorOrBridge(lines) === 'rotor') && !(round && cornersRound(round) >= 3);
   const certain = !!r.item && !ask && r.p >= SURE_P && r.none <= SURE_NONE;
   const half = !!r.item && CLOSED[r.item] && openShape(lines);
   let tier = 'wait';
