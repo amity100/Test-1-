@@ -469,7 +469,10 @@ export class Autopilot {
         }
         return;
       }
-      // (taken to the alley's mouth, then walked up to the page)
+      // (a few seconds on the card that says where it is - the special vision on, as a player would - then taken to the alley's
+      // mouth and walked up to the page)
+      this.once('fseen', () => g.vision && g.vision.toggle());
+      if (this.since('fseen') < 3) return this.set(0, 0);
       this.once('fgo', () => pl.spawn(sp.x + sp.nx * 14, sp.z + sp.nz * 14, Math.atan2(-sp.nx, -sp.nz)));
       const d = this.walkTo(sp.x + sp.nx * 1.4, sp.z + sp.nz * 1.4, false, 0.5);
       // (near it: turned to the page, photographed as soon as the camera can - from where he stands, if a bin is in the way)
