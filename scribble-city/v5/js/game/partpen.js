@@ -54,13 +54,14 @@ export const TIP_MS = 1500;
 // and it already recognises"; "two random lines must never be accepted") The pen named the drawing by the finger as
 // it was drawn, and a second after any line lifted whatever the network thought likeliest went on the car - a line
 // alone was a harpoon, a rotor, a ram (tools/test-partpen.mjs: an unfinished drawing went on three times in four, a
-// random line or two nearly half the time). Now by how sure the reading is, and by whether the thing's picture is all
+// random line or two nearly half the time). Now by how sure the reading is, and by what of the thing's picture is
 // there (game/partnet.js penSay):
 //   nothing is named while a line is being drawn, nor till the pen has rested a moment (NAME_REST);
 //   sure of it, its picture all there - it is named, and goes on once the pen has rested (PEN_REST), as it did;
-//   likely, all there - named with a question, and the pen waits longer (LONG_REST) before it goes on;
-//   read as a thing, but not all of its picture there yet - named with a question, and nothing goes on by itself: the
-//   rest of it is drawn, or ✓ says "this is it";
+//   likely, all there - or sure of it, the drawing the hand's own and not the legend's picture - named with a
+//   question, and the pen waits longer (LONG_REST) before it goes on;
+//   read as a thing, but not all of its picture there yet (or neither sure nor all there) - named with a question,
+//   and nothing goes on by itself, not as the pen is put away either: the rest of it is drawn, or ✓ says "this is it";
 //   not sure at all, or a line or two of nothing - no name, and nothing goes on by itself (a line or two of nothing
 //   goes on not even with ✓).
 // The story's own drawings (force: the turbo, the rotor in the air) and a part chosen and then drawn (the drawn parts)

@@ -1329,12 +1329,13 @@ export class FreeDraw {
     this.R = null;
     this.R0 = null;
     this.readRide();
-    if (!this.PR) this.R = this.R0 || (this.strokes.length ? this.readNow() : null);
     // (R27, the owner's word: nothing named while it is being drawn) from the catalog, a line just lifted: what the
     // drawing is, is said once the pen has rested a moment (update) - the next line begun before that, and nothing was
-    // said of it half drawn. A thing picked first is named all along: it was said, not guessed. And ✓ makes it at
-    // once all the same (make reads it itself)
-    if (this.R && this.R.cat === 'bp' && !this.force && !this.target && performance.now() < (this.nameAt || 0)) this.R = { cat: null, why: tr('ממשיכים לצייר — נזהה כשהציור יהיה שלם', 'Keep drawing — we\'ll name it once it\'s all there'), alts: [], lit: null, resting: true };
+    // said of it half drawn; nor is it read till then (a line and the next follow one another with nothing to wait
+    // for). A thing picked first is named all along: it was said, not guessed. And ✓ makes it at once all the same
+    // (make reads it itself)
+    const resting = !this.force && !this.target && this.strokes.length > 0 && this.catalogOn() && performance.now() < (this.nameAt || 0);
+    if (!this.PR) this.R = this.R0 || (!this.strokes.length ? null : resting ? { cat: null, why: tr('ממשיכים לצייר — נזהה כשהציור יהיה שלם', 'Keep drawing — we\'ll name it once it\'s all there'), alts: [], lit: null, resting: true } : this.readNow());
     this.readHand();
     this.readGear();
     this.chipsDirty = true;
