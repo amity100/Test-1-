@@ -981,8 +981,10 @@ export function tooEarly(m) {
 export const COPY_MIN = 0.6;
 export const COPY_MISS = 0.34;
 export const COPY_EXTRA = 0.34;
+// (R27: the drawing to copy is said, as a thing picked first is - all of it there by the same looser numbers, PICKED:
+// the turbo's page of the opening's lesson, copied by a finger, refused one time in twenty by the stricter ones)
 export function copyReady(m) {
-  return m.score >= COPY_MIN && drawnWhole(m) && m.miss <= COPY_MISS && m.extra <= COPY_EXTRA;
+  return m.score >= COPY_MIN && wholeOf(m, PICKED).whole && m.miss <= COPY_MISS && m.extra <= COPY_EXTRA;
 }
 // (and a drawing plainly of another thing on its shelf - a rifle drawn where an eraser launcher is to be copied - is not
 // taken, though it is never named: the copy is read against the shelf, and refused when another thing ranks this far
@@ -995,7 +997,7 @@ export function copyRead(strokes, id, shelf) {
   if (!m) return null;
   const riv = all.list.find((x) => x.id !== id);
   const rival = !!(riv && riv.rank > m.rank + COPY_RIVAL);
-  const W = wholeOf(m);
+  const W = wholeOf(m, PICKED);
   return { m, have: all.have, rival, whole: W.whole, gone: W.gone, ready: copyReady(m) && !rival };
 }
 

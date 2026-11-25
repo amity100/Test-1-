@@ -2279,3 +2279,5 @@ body.fd-copy .fd-leg, body.fd-copy #fd-album { display: none !important; }
 body.fd-catalog.fd-free .fd-cats { display: flex; }
 body.touch.fd-free .fd-cats { top: max(8px, env(safe-area-inset-top)); bottom: auto; left: 50%; }
 .fd-shelf.free { background: #fff3d6; }
+/* (R27: by a blueprint with a gun in hand the camera's button is where the aim's is, on every screen - the aim's stands aside for it) */
+body.touch.photo-ready #btn-aim { display: none !important; }

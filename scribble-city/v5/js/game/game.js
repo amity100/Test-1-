@@ -2913,6 +2913,11 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     }
     if (this.touch) {
       $('btn-photo').classList.toggle('hidden', !photo);
+      // (R27: the camera's button over the aim's - by a page with a gun in hand the aim's stands aside, css/style.css)
+      if (!!photo !== this.photoCls) {
+        this.photoCls = !!photo;
+        document.body.classList.toggle('photo-ready', this.photoCls);
+      }
       $('btn-enter').classList.toggle('hidden', !enter);
       // the pencil: how many photos you carry, and a wiggle when one is waiting to be drawn
       const n = this.album.size;
