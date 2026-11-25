@@ -218,10 +218,10 @@ function hiddenSpot(world, id) {
         if (memo.pts.some(([px, pz]) => Math.hypot(px - x, pz - z) < 10)) continue;
         // (nothing standing before it - a palm, a pole, a lamp, crates - within a metre and a half out from the wall)
         let blocked = false;
-        const fx0 = Math.min(x, x - side * 1.6);
-        const fx1 = Math.max(x, x - side * 1.6);
-        col.forEachIn(fx0, z - 1.0, fx1, z + 1.0, (q) => {
-          if (q.tag === 'wall' || q.y1 < 1.2 || q.y0 > 2.6) return false;
+        const fx0 = Math.min(x, x - side * 3.4);
+        const fx1 = Math.max(x, x - side * 3.4);
+        col.forEachIn(fx0, z - 1.6, fx1, z + 1.6, (q) => {
+          if (q.tag === 'wall' || q.y1 < 1.3 || q.y0 > 3.2) return false;
           blocked = true;
           return true;
         });
