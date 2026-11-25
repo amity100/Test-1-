@@ -92,6 +92,7 @@ function backStair(ctx, r, x, face, z0, z1) {
   const zm = up > 0 ? zs : zl + 1.4;
   const zM = up > 0 ? zl + 1.4 : zs;
   if (ctx.col.pointInside(x + face * 0.6, 0.8, (zm + zM) / 2, 0.5)) return;
+  (ctx.wallProps || (ctx.wallProps = [])).push({ x, z: (zm + zM) / 2, half: (zM - zm) / 2 + 0.5 });
   const id = ctx.objects.begin(ctx, 'stair', x + face * 0.6, (zm + zM) / 2);
   // the landing and its rail, the door behind it
   wbox(ctx, M.frame, x, face, 0, 1.15, yL - 0.08, yL, zl, zl + 1.4, IRON);
