@@ -478,7 +478,13 @@ export class Autopilot {
         g.camRig.yaw = Math.atan2(-sp.nx, -sp.nz);
         g.camRig.pitch = 0.05;
       }
-      if ((d < 0.8 || this.since('fgo') > 8) && FI.target()) this.once('fsnap', () => FI.interact());
+      if ((d < 0.8 || this.since('fgo') > 8) && FI.target()) {
+        this.once('fsnap', () => {
+          // (for the tests: how near he could walk to it)
+          this.P.snapD = +d.toFixed(2);
+          FI.interact();
+        });
+      }
       return;
     }
     if (/^Get in a <b>car<\/b>$/.test(o)) {

@@ -277,11 +277,11 @@ function hiddenSpot(world, id, anchor = null) {
           return true;
         });
         if (blocked) continue;
-        // (R27: and room to walk up to it - nothing at a knee's height or more, a bin, a railing, in the 2.6 m before it: low
-        // things do not hide a page, but they keep him from it)
+        // (R27: and a way to walk up to it from the alley - nothing at a knee's height or more, a bin, a railing, a fence along
+        // the alley's side, between the page and the middle of the alley: low things do not hide a page, but they keep him from it)
         let low = false;
-        const lx0 = Math.min(x - side * 0.2, x - side * 2.6);
-        const lx1 = Math.max(x - side * 0.2, x - side * 2.6);
+        const lx0 = Math.min(x - side * 0.2, cx);
+        const lx1 = Math.max(x - side * 0.2, cx);
         col.forEachIn(lx0, z - 0.9, lx1, z + 0.9, (q) => {
           if (q.tag === 'wall' || q.y1 < 0.45 || q.y0 > 1.8) return false;
           low = true;

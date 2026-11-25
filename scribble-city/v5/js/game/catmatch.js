@@ -934,10 +934,9 @@ export function partsOf(bp) {
 // tools/test-catalog.mjs REPORT=1 measures it: whole drawings taken, unfinished ones and random lines not
 export const WHOLE = { main: 0.72, part: 0.55, detail: 0.1, left: 0.12, cov: 0.72, prec: 0.5, many: 5, weak: 0.25 };
 // (a thing picked first - tapped in the legend, a blueprint just photographed: it was said, not guessed, and a
-// reasonable drawing of it is it. Looser there - its parts by a rougher hand, and less alike; other things' drawings
-// and doodles are not taken for that: tools/test-catalog.mjs REPORT=1, the learn rows)
+// reasonable drawing of it is it. Looser there - its parts by a rougher hand; no less alike, though: taken at a
+// lower score, a car's drawing was a shotgun's one time in twelve - tools/test-catalog.mjs REPORT=1, the learn rows)
 export const PICKED = { ...WHOLE, main: 0.6, part: 0.45, cov: 0.62 };
-export const PICKED_MIN = 0.5;
 // { whole, gone: how many of its parts are not there yet }
 export function wholeOf(m, W = WHOLE) {
   const P = m.parts || [];
@@ -1129,7 +1128,7 @@ export function readShelf(strokes, ids, o = {}) {
   }
   const b = (pick && all.list.find((x) => x.id === pick)) || top;
   const W = wholeOf(b, force ? PICKED : WHOLE);
-  const like = b.score >= (force ? PICKED_MIN : MATCH_MIN);
+  const like = b.score >= MATCH_MIN;
   // (picked, but what is drawn is another thing, all of it there and plainly likelier: said, and not made)
   const other = pick && top.id !== b.id && top.score >= MATCH_MIN && wholeOf(top).whole && (top.rank > b.rank + OTHER_RANK || top.score > b.score + PICK_SLACK) ? top.id : null;
   const ready = like && W.whole && !other;

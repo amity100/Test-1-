@@ -2197,6 +2197,7 @@ export class Prologue {
     yield* this.lessonWeapon();
     yield* this.lessonFind();
     yield* this.lessonTurbo();
+    if (g.freedraw && g.freedraw.isOpen) g.freedraw.close();
     this.howto(null);
     this.objective(null);
     yield 0.4;
@@ -2323,6 +2324,8 @@ export class Prologue {
     if (teach) teach.remove();
     if (pen && pen.force === item) pen.force = null;
     if (g.gps && out) g.gps.clear();
+    // (the part on - or the lesson let go: the pen put away, so that the car drives on - the next step is at the wheel)
+    if (F && F.isOpen) F.close();
     return tm >= 0;
   }
 

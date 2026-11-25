@@ -316,7 +316,12 @@ export class PrologueUI {
     if (title && typeof title === 'object') {
       const o = title;
       // (R27: a key is a key - E, Q, WASD, Shift; the English words of a phone's line, 'Pencil button', are words)
-      const keys = (k) => String(k).split(' ').map((x) => (/^[A-Z0-9]{1,4}$|^(Shift|Space|Esc|Tab|Enter)$/.test(x) ? `<kbd>${x}</kbd>` : x)).join(' ');
+      const keys = (k) => {
+        const w = String(k).split(' ');
+        // (words - 'A flame behind the car': a line of prose, only a named key in it boxed)
+        const prose = w.some((x) => /[a-z]{2,}/.test(x) && !/^(Shift|Space|Esc|Tab|Enter)$/.test(x));
+        return w.map((x) => ((!prose && /^[A-Z0-9]{1,4}$/.test(x)) || /^(Shift|Space|Esc|Tab|Enter)$/.test(x) ? `<kbd>${x}</kbd>` : x)).join(' ');
+      };
       const en = lang() === 'en';
       const tag = o.step ? (en ? `HOW TO PLAY · STEP ${o.step} OF ${o.of}` : `איך משחקים · שלב ${o.step} מתוך ${o.of}`) : o.tag || (en ? 'WHAT NOW' : 'מה עושים עכשיו');
       // (round 16: an English card reads left to right)
