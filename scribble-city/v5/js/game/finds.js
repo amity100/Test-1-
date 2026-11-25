@@ -455,6 +455,8 @@ function pageModel(W, H, strokes, seed) {
 const SEE_THROUGH = new Set(['pole', 'prop', 'tree', 'cover', 'car', 'board', 'fence', 'rail', 'furniture']);
 
 const SHEEN_FAR = 25;
+// (R27) the page lit by the special vision (game/vision.js)
+const VISION_GLOW = new THREE.Color(1.0, 0.62, 0.95);
 const NEAR = 10;
 const REACH = 4;
 // the lines: a pencil's on the wall, dark (the look pales what is light - a light line on a sunlit wall is lost); their
@@ -871,7 +873,9 @@ export class Finds {
       const fade = this.fading.find((q) => q.s === s);
       if (this.has(s.f.id) && !fade) continue;
       const d = Math.hypot(s.x - cam.x, s.y - cam.y, s.z - cam.z);
-      if (d > 75) continue;
+      // (R27: the special vision on - the blueprint it is after lit up from far off, game/vision.js)
+      const vk = g.vision && g.vision.target === s ? g.vision.k : 0;
+      if (d > 75 && vk < 0.05) continue;
       // (seen from behind its surface: nothing)
       if ((cam.x - s.x) * s.nx + (cam.y - s.y) * s.ny + (cam.z - s.z) * s.nz < 0) continue;
       const out = fade ? 1 - clamp(fade.t / 0.5, 0, 1) : 1;
@@ -883,10 +887,11 @@ export class Finds {
         const dayK = clamp((h - 7) / 2, 0, 1) * clamp((17.6 - h) / 1.2, 0, 1);
         u.uAlbedo.value.setScalar(1 - 0.32 * dayK);
         u.uEmissive.value.setRGB(0.36, 0.36, 0.34).multiplyScalar(1 - 0.85 * dayK);
+        if (vk > 0) u.uEmissive.value.lerp(VISION_GLOW, vk * (0.55 + 0.25 * Math.sin(t * 7)));
       }
-      const sheen = clamp((SHEEN_FAR - d) / (SHEEN_FAR - NEAR), 0, 1);
+      const sheen = Math.max(vk, clamp((SHEEN_FAR - d) / (SHEEN_FAR - NEAR), 0, 1));
       const near = d < NEAR ? clamp((NEAR - d) / (NEAR - REACH), 0, 1) : 0;
-      const lit = Math.max(sheen * 0.55, d < NEAR ? 0.6 + 0.4 * near : 0);
+      const lit = Math.max(sheen * 0.55, d < NEAR ? 0.6 + 0.4 * near : 0, vk);
       // (a slow run of light along all the lines, every 3.6 s; near, one stroke at a time is gone over)
       const run = ((t % 3.6) / 2.6) * s.total;
       const ink = d < NEAR ? (t * 0.9) % (s.strokes.length + 0.6) : -1;
@@ -910,7 +915,7 @@ export class Finds {
           } else if (!printed) fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], lit > 0.5 ? mix(CHALK, GOLD_DEEP, (lit - 0.5) * 0.5) : CHALK, w0, s.seed + k * 31 + i, alpha, 0.003, 0);
           // (near: a soft warm halo round the lines on the page)
           // (on a printed page by day it would only soften the ink: there it is a night thing)
-          if (lit > 0.4) fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], GOLD_HOT, 9 + 6 * near, s.seed + 500 + k * 31 + i, (0.06 + 0.1 * near + 0.06 * night) * (printed ? night : 1) * out, 0.004, 0);
+          if (lit > 0.4) fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], GOLD_HOT, 9 + 6 * near + 10 * vk, s.seed + 500 + k * 31 + i, ((0.06 + 0.1 * near + 0.06 * night) * (printed ? night : 1) + 0.45 * vk) * out, 0.004, 0);
           // (the stroke gone over now: the pencil's line drawn fresh, up to where the hand is)
           if (redo >= 0 && st.at[i - 1] < redo) {
             const f2 = Math.min(1, (redo - st.at[i - 1]) / Math.max(1e-3, st.at[i] - st.at[i - 1]));

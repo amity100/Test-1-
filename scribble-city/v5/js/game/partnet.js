@@ -68,6 +68,122 @@ export function readItem(strokes, cat) {
   return { item: pb > none || best === shape ? best : null, p: pb, none, ranked };
 }
 
+// (ROADMAP 11.26) the two likeliest this near, the second at least this likely: not sure which
+export const ASK_GAP = 0.3;
+export const ASK_MIN = 0.2;
+// none of them, but the likeliest this likely and none of them not much more: not sure either
+const ASK_NONE = 0.3;
+// a reading (readItem's): the two it could be, not sure which (the likelier first) - or null
+export function askOf(r) {
+  const [a, b] = r.ranked;
+  if (!a || !b) return null;
+  if (r.item && b[1] >= ASK_MIN && a[1] - b[1] < ASK_GAP) return [a[0], b[0]];
+  if (!r.item && a[1] >= ASK_NONE && r.none - a[1] < ASK_GAP) return [a[0], b[0]];
+  return null;
+}
+
+// (R27, the owner's word: "the game recognises what I draw far too fast, before I have finished drawing it"; "two random
+// lines must never be accepted") What the pen does with a drawing on the car when it rests (game/partpen.js). It took
+// whatever the network thought likeliest of the category's things, a second after any line - a line alone, in the
+// weapons, was a harpoon nine times in twenty; an unfinished drawing went on as something three times in four
+// (tools/test-partpen.mjs). Now, by how sure the reading is:
+//   sure    the network all but certain of it (SURE_P), nearly nothing for "none of them", no other thing near it, and
+//           more to the drawing than a line or two: it is named, and goes on once the pen has rested;
+//   likely  less certain - or certain, but a thing whose picture is a closed shape and the drawing's shape still open,
+//           an end of a line with no other end by it (a gun's outline half drawn is already a gun to the network),
+//           or not sure which of two: named with a question, and it waits longer for the rest of it before it goes on;
+//   wait    not sure at all, or a line or two of nothing (straight, a bow, one bend - unless they are an X, which is
+//           the rotor): no name, and nothing goes on by itself - more is drawn, or ✓ says "this is it".
+export const SURE_P = 0.9;
+export const SURE_NONE = 0.1;
+export const LIKELY_P = 0.6;
+export const LIKELY_NONE = 0.25;
+
+const lenOf = (s) => {
+  let L = 0;
+  for (let i = 1; i < s.length; i++) L += Math.hypot(s[i][0] - s[i - 1][0], s[i][1] - s[i - 1][1]);
+  return L;
+};
+// the corners of a line: how many turns of more than half a right angle it makes, seen coarsely (a hand's shake is none)
+function turns(s) {
+  const b = boxOf(s);
+  const step = Math.max(b.w, b.h, 1e-6) * 0.12;
+  // (a point every eighth of its size along it)
+  const P = [s[0]];
+  let acc = 0;
+  for (let i = 1; i < s.length; i++) {
+    acc += Math.hypot(s[i][0] - s[i - 1][0], s[i][1] - s[i - 1][1]);
+    if (acc >= step) {
+      P.push(s[i]);
+      acc = 0;
+    }
+  }
+  if (P[P.length - 1] !== s[s.length - 1]) P.push(s[s.length - 1]);
+  let n = 0;
+  let turned = 0;
+  for (let i = 2; i < P.length; i++) {
+    const a = Math.atan2(P[i - 1][1] - P[i - 2][1], P[i - 1][0] - P[i - 2][0]);
+    const c = Math.atan2(P[i][1] - P[i - 1][1], P[i][0] - P[i - 1][0]);
+    let d = c - a;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    // (a bend gathered over the points it takes, then counted once)
+    if (Math.abs(d) > 0.25) turned += d;
+    else {
+      if (Math.abs(turned) > 0.8) n++;
+      turned = 0;
+    }
+  }
+  if (Math.abs(turned) > 0.8) n++;
+  return n;
+}
+// a line of nothing much: straight, a bow, one bend - its ends well apart
+function plainLine(s) {
+  const b = boxOf(s);
+  const size = Math.max(b.w, b.h, 1e-6);
+  const chord = Math.hypot(s[0][0] - s[s.length - 1][0], s[0][1] - s[s.length - 1][1]);
+  if (chord < size * 0.5) return false;
+  return lenOf(s) <= chord * 1.3 || turns(s) <= 1;
+}
+// a shape not closed yet: an end of one of its lines with no other end near it (its own other end, or another
+// line's - an outline drawn in two lines or three meets end to end). A line inside the shape, both its ends loose,
+// leaves it as it is: an outline with something drawn in it
+function openShape(lines) {
+  const all = boxOf(lines.flat());
+  const near = Math.hypot(all.w, all.h) * 0.2;
+  const ends = [];
+  lines.forEach((s, i) => ends.push([s[0], i], [s[s.length - 1], i]));
+  let loose = 0;
+  const lone = new Array(lines.length).fill(0);
+  ends.forEach(([q, i], k) => {
+    if (ends.some(([o], j) => j !== k && Math.hypot(o[0] - q[0], o[1] - q[1]) <= near)) return;
+    loose++;
+    lone[i]++;
+  });
+  // (lines with both ends loose are things drawn in it or by it - unless that is all there is)
+  const inner = lone.filter((v) => v === 2).length;
+  return lines.length === 1 ? loose > 0 : loose - inner * 2 > 0;
+}
+// a thing whose picture in the legend is one closed shape (a gun's outline, a flame, a triangle)
+const CLOSED = Object.fromEntries(Object.keys(ITEMS).map((id) => [id, /^<path d="M[^M"]*Z"\/>$/.test(ITEMS[id].icon)]));
+
+// the drawing as one of a category's things, and what the pen at rest does with it: readItem's, and { ask (the two it
+// could be, not sure which), plain (a line or two of nothing), tier: 'sure' | 'likely' | 'wait' }
+export function penSay(strokes, cat) {
+  const lines = strokes.filter((s) => s && s.length >= 2);
+  const r = readItem(lines, cat);
+  const ask = askOf(r);
+  const plain = lines.length <= 2 && lines.every(plainLine) && !(cat === 'func' && rotorOrBridge(lines) === 'rotor');
+  const certain = !!r.item && !ask && r.p >= SURE_P && r.none <= SURE_NONE;
+  const half = !!r.item && CLOSED[r.item] && openShape(lines);
+  let tier = 'wait';
+  if (!plain) {
+    if (certain && !half) tier = 'sure';
+    else if (ask || (r.item && r.p >= LIKELY_P && r.none <= LIKELY_NONE)) tier = 'likely';
+  }
+  return { ...r, ask, plain, half, tier };
+}
+
 // the likeliest one of rivals ({ id: how likely the network must think it at least }), and id the
 // drawing's shape says it is: their chances changed round
 function favour(ranked, id, rivals) {

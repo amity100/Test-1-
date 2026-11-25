@@ -97,7 +97,7 @@ function howtoHe(key, touch) {
       return {
         step: 7, of: OF, title: 'שרטוט מוסתר בעיר',
         say: 'בכל העיר מוסתרים שרטוטים - נשקים, רכבים, חלקים. אחד מהם קרוב, והמפה מסמנת אותו.',
-        lines: [['המפה', 'הנקודה היא השרטוט, והחץ מראה את הדרך'], ['דף לבן עם קווים בזהב', 'על קיר בסמטה'], ['מתקרבים', 'ושומעים עיפרון משרבט']],
+        lines: [['המפה', 'הנקודה היא השרטוט, והחץ מראה את הדרך'], [T ? 'העין 👁 למעלה' : 'O', 'ראייה מיוחדת: הזמן מאט והשרטוט זוהר'], ['דף לבן עם קווים בזהב', 'על קיר בסמטה']],
         tip: 'רוב השרטוטים לא מסומנים במפה - אותם מחפשים בסמטאות ועל הגגות.',
       };
     case 'photo':
@@ -317,7 +317,7 @@ function howtoEn(key, touch) {
       return {
         step: 7, of: OF, title: 'A blueprint hidden in the city',
         say: 'Blueprints are hidden all over the city - weapons, rides, parts. One is close, and the map marks it.',
-        lines: [['Map', 'the dot is the blueprint, the arrow shows the way'], ['A white page, gold lines', 'on a wall in an alley'], ['Come close', 'and you hear a pencil scratching']],
+        lines: [['Map', 'the dot is the blueprint, the arrow shows the way'], [T ? 'The eye 👁 up top' : 'O', 'special vision: time slows, the blueprint glows'], ['A white page, gold lines', 'on a wall in an alley']],
         tip: 'Most blueprints are not on the map - those you hunt for in alleys and up on roofs.',
       };
     case 'photo':
