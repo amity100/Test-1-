@@ -341,7 +341,9 @@ export class CityMap {
     // (R26: no old blueprint signs to photograph under the start kit's rules - not in the legend either)
     const lgBp = document.querySelector('.lg-row[data-cat="blueprint"]');
     if (lgBp) lgBp.style.display = F && F.rules ? 'none' : '';
-    if (F && F.on) {
+    // (the owner's checks: every blueprint on the map - in the story too, not only after it)
+    const allPins = !!(F && F.rules && g.settings && g.settings.v.allPins);
+    if (F && (F.on || allPins)) {
       for (const sp of F.ensureSpots()) {
         // (R26, the owner's word: "a few on the map - most not, that's the mystery")
         if (F.has(sp.f.id) || !F.pinned(sp.f)) continue;
