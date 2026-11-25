@@ -933,8 +933,13 @@ export function partsOf(bp) {
 //   the drawing over most of the thing, and most of the drawing the thing (not as much again elsewhere).
 // tools/test-catalog.mjs REPORT=1 measures it: whole drawings taken, unfinished ones and random lines not
 export const WHOLE = { main: 0.72, part: 0.55, detail: 0.1, left: 0.12, cov: 0.72, prec: 0.5, many: 5, weak: 0.25 };
+// (a thing picked first - tapped in the legend, a blueprint just photographed: it was said, not guessed, and a
+// reasonable drawing of it is it. Looser there - its parts by a rougher hand, and less alike; other things' drawings
+// and doodles are not taken for that: tools/test-catalog.mjs REPORT=1, the learn rows)
+export const PICKED = { ...WHOLE, main: 0.6, part: 0.45, cov: 0.62 };
+export const PICKED_MIN = 0.5;
 // { whole, gone: how many of its parts are not there yet }
-export function wholeOf(m) {
+export function wholeOf(m, W = WHOLE) {
   const P = m.parts || [];
   let big = 0;
   for (let i = 1; i < P.length; i++) if (P[i].w > P[big].w) big = i;
@@ -943,20 +948,20 @@ export function wholeOf(m) {
   let gone = 0;
   // (a thing of many parts - a parachute's ropes and harness, a ladder's rungs: one of them, not the biggest, only
   // partly there is still there - where its lines meet the others' the ink is one or the other's)
-  let weak = P.length >= WHOLE.many ? 1 : 0;
+  let weak = P.length >= W.many ? 1 : 0;
   P.forEach((q, i) => {
-    if (q.c >= (i === big ? WHOLE.main : WHOLE.part)) return;
-    if (i !== big && weak && q.c >= WHOLE.weak) {
+    if (q.c >= (i === big ? W.main : W.part)) return;
+    if (i !== big && weak && q.c >= W.weak) {
       weak--;
       return;
     }
     gone++;
     left += q.w;
-    if (i === big || q.w >= WHOLE.detail) ok = false;
+    if (i === big || q.w >= W.detail) ok = false;
   });
   // (a thing of two parts is told by its second, however small - a glue gun's trigger: two of its parts there at the least)
   if (P.length - gone < Math.min(2, P.length)) ok = false;
-  return { whole: ok && left <= WHOLE.left && m.cov >= WHOLE.cov && m.prec >= WHOLE.prec, gone };
+  return { whole: ok && left <= W.left && m.cov >= W.cov && m.prec >= W.prec, gone };
 }
 
 // (ROADMAP 11.43, 11.44; R27: by its parts, wholeOf - have, the lines the hand took, is no measure of it)
@@ -1017,20 +1022,36 @@ function framed(d, S) {
 // (R27, the car's pen - game/partnet.js penSay) a drawing (lines of points) against a picture's own lines - a part's
 // picture in the legend, the lines a hand copies: what of the picture is there, each of its lines by its own ink (own),
 // as a thing's parts are. key: the picture's name (its lines are kept by it). { parts: [{ c, w }], cov, prec, precT,
-// miss, extra, own } - wholeOf says of it whether it is all there; null with nothing drawn
+// miss, extra, own } - null with nothing drawn. A drawing held against several pictures is made ready once (drawnOf)
+// and given in place of its lines
 const pictures = new Map();
-export function coverOf(lines, key, picture) {
+export function drawnOf(lines) {
   const S = lines.filter((p) => p && p.length > 1);
-  if (!S.length) return null;
+  return S.length ? framed({}, S) : null;
+}
+function pictureOf(key, picture) {
   let t = pictures.get(key);
   if (!t) {
     t = { S: picture(), pic: true };
     pictures.set(key, t);
   }
-  if (!t.S.length) return null;
-  const d = framed({}, S);
+  return t.S.length ? t : null;
+}
+export function coverOf(lines, key, picture) {
+  const d = lines && lines.frames ? lines : drawnOf(lines);
+  const t = d && pictureOf(key, picture);
+  if (!t) return null;
   const c = covered(t, laid(d, t), true);
   return { parts: c.pc.map((v, i) => ({ c: v, w: t.frames[0].share[i] })), cov: c.cov, prec: c.prec, precT: c.precT, miss: c.miss, extra: c.extra, own: c.own };
+}
+// (and at a glance - as the drawing passes by the picture's lines, no ink given out: what is not near it so is not it
+// looked at closely either) { cov, prec }
+export function passOf(lines, key, picture) {
+  const d = lines && lines.frames ? lines : drawnOf(lines);
+  const t = d && pictureOf(key, picture);
+  if (!t) return null;
+  const { a } = laid(d, t);
+  return { cov: a.cov, prec: a.prec };
 }
 
 // the drawing (strokes: [{ p, raw? }]) against the things ids: { best, list (likeliest first), have
@@ -1107,8 +1128,8 @@ export function readShelf(strokes, ids, o = {}) {
     if (!m || top.score > m.score + PICK_SLACK || top.rank > m.rank + 2 * PICK_SLACK) pick = null;
   }
   const b = (pick && all.list.find((x) => x.id === pick)) || top;
-  const W = wholeOf(b);
-  const like = b.score >= MATCH_MIN;
+  const W = wholeOf(b, force ? PICKED : WHOLE);
+  const like = b.score >= (force ? PICKED_MIN : MATCH_MIN);
   // (picked, but what is drawn is another thing, all of it there and plainly likelier: said, and not made)
   const other = pick && top.id !== b.id && top.score >= MATCH_MIN && wholeOf(top).whole && (top.rank > b.rank + OTHER_RANK || top.score > b.score + PICK_SLACK) ? top.id : null;
   const ready = like && W.whole && !other;

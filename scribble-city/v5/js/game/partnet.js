@@ -1,7 +1,7 @@
 import { picture, ready, chances } from './sketchnet.js';
 import { PNET } from './partnet_w.js';
 import { ITEMS, CATS as ITEM_CATS, CAT_ORDER as ITEM_ORDER } from './itemcat.js';
-import { coverOf } from './catmatch.js';
+import { coverOf, passOf, drawnOf } from './catmatch.js';
 import { svgLines } from './svglines.js';
 
 // (ROADMAP 11.25) What is drawn for the car, of one category's things. The player says the
@@ -89,14 +89,16 @@ export function askOf(r) {
 // drawing on the car when it rests (game/partpen.js). It took whatever the network thought likeliest of the category's
 // things, a second after any line - a line alone, in the weapons, was a harpoon nine times in twenty; an unfinished
 // drawing went on as something three times in four (tools/test-partpen.mjs). Now by how sure the reading is, and by
-// whether the thing's picture - the one in the legend, the one a hand copies - is all there (allThere):
+// what of the thing's picture - the one in the legend, the one a hand copies - is there (allThere, partCopy):
 //   sure    the network all but certain of it (SURE_P), nearly nothing for "none of them", no other thing near it, and
 //           its picture all there: it is named, and goes on once the pen has rested;
-//   likely  less certain (or not sure which of two), its picture all there: named with a question, and it waits
-//           longer before it goes on;
-//   more    read as a thing, but not all of its picture is there yet - a plate's square without its cross, a
-//           parachute's canopy without its ropes, a gun's outline half drawn (its shape still open): named with a
-//           question, and nothing goes on by itself - the rest of it is drawn, or ✓ says "this is it";
+//   likely  less certain (or not sure which of two), its picture all there - or certain of it, and the drawing not
+//           the legend's picture at all (a helicopter for the rotor, a rifle of the hand's own): named with a
+//           question, and it waits longer before it goes on;
+//   more    read as a thing, and not all of it there yet - some of its picture's lines drawn and the others not (a
+//           plate's square without its cross, a parachute's canopy without its ropes), a gun's outline half drawn
+//           (its shape still open) - or neither sure of it nor all of its picture there: named with a question, and
+//           nothing goes on by itself - the rest of it is drawn, or ✓ says "this is it";
 //   wait    not sure at all, or a line or two of nothing (straight, a bow, one bend - unless they are an X, which is
 //           the rotor, or close a shape with corners between them): no name, and nothing goes on by itself.
 export const SURE_P = 0.9;
@@ -209,30 +211,72 @@ const CLOSED = Object.fromEntries(Object.keys(ITEMS).map((id) => [id, /^<path d=
 
 // (R27) all of a thing's picture there: its biggest line - the outline, the body - half of it at the least, and the
 // lines not there no more than a sixth of its ink in all (a plate's bolts, a balloon's ropes; not its cross, not its
-// basket); the drawing over most of the picture, and half of the drawing at least the picture. Each of the picture's lines by its own ink
-// (game/catmatch.js coverOf, as the things drawn on foot are read): a line that only passes by another is not that one
-// drawn. A hand is not a ruler - the numbers are loose (tools/test-partpen.mjs: whole drawings by a finger all there
-// nineteen times in twenty, unfinished ones nearly never)
+// basket); the drawing over most of the picture, and half of the drawing at least the picture. Each of the picture's
+// lines by its own ink (game/catmatch.js coverOf, as the things drawn on foot are read): a line that only passes by
+// another is not that one drawn. A hand is not a ruler - the numbers are loose (tools/test-partpen.mjs: whole drawings
+// by a finger all there nineteen times in twenty, unfinished ones nearly never)
 export const PIC = { main: 0.45, part: 0.4, left: 0.16, cov: 0.58, prec: 0.5 };
-const pictureOf = (id) => () => svgLines(ITEMS[id].icon);
-export function allThere(lines, id, cat) {
-  // (the rotor is its X: the hub in the middle is the picture's, not the drawing's to make)
-  if (id === 'rotor' && cat === 'func' && rotorOrBridge(lines) === 'rotor') return true;
-  const C = coverOf(lines, id, pictureOf(id));
-  if (!C || !C.parts.length) return false;
+// a thing's picture: its lines, and what an unfinished drawing of it is a drawing of (partCopy) - the ones and twos of
+// its lines that are not all of it (a line under a twelfth of its ink is no part to begin a drawing with)
+const COPY_LINE = 0.08;
+const COPY_MOST = 0.86;
+const COPY_FIT = 0.6;
+// (a drawing most of whose ink is on the picture's own lines is a copy of the picture, begun or done)
+const COPY_PREC = 0.7;
+const pics = {};
+function picOf(id) {
+  let q = pics[id];
+  if (!q) {
+    const P = svgLines(ITEMS[id].icon);
+    const len = P.map(lenOf);
+    const all = len.reduce((a, b) => a + b, 0) || 1;
+    const big = P.map((_, i) => i).filter((i) => len[i] / all >= COPY_LINE);
+    const subs = [];
+    for (let a = 0; a < big.length; a++) {
+      if (len[big[a]] / all <= COPY_MOST) subs.push({ key: `${id}#${big[a]}`, lines: () => [P[big[a]]] });
+      for (let b = a + 1; b < big.length; b++) if (P.length > 2 && (len[big[a]] + len[big[b]]) / all <= COPY_MOST) subs.push({ key: `${id}#${big[a]}.${big[b]}`, lines: () => [P[big[a]], P[big[b]]] });
+    }
+    q = pics[id] = { P, subs };
+  }
+  return q;
+}
+// d: the drawing made ready (game/catmatch.js drawnOf). what of the picture is there (coverOf's), and whether that is
+// all of it
+function thereOf(d, id) {
+  const C = coverOf(d, id, () => picOf(id).P);
+  if (!C || !C.parts.length) return { C: null, whole: false };
   let big = 0;
   for (let i = 1; i < C.parts.length; i++) if (C.parts[i].w > C.parts[big].w) big = i;
-  if (C.parts[big].c < PIC.main) return false;
   let left = 0;
   for (const q of C.parts) if (q.c < PIC.part) left += q.w;
-  return left <= PIC.left && C.cov >= PIC.cov && C.prec >= PIC.prec;
+  return { C, whole: C.parts[big].c >= PIC.main && left <= PIC.left && C.cov >= PIC.cov && C.prec >= PIC.prec };
+}
+export function allThere(d, lines, id, cat) {
+  // (the rotor is its X: the hub in the middle is the picture's, not the drawing's to make)
+  if (id === 'rotor' && cat === 'func' && rotorOrBridge(lines) === 'rotor') return true;
+  return thereOf(d, id).whole;
+}
+// some of the picture's lines drawn, and the others not: the drawing is one or two of its lines - all of each, and
+// little else - and they are not all of the picture
+export function partCopy(d, id) {
+  for (const q of picOf(id).subs) {
+    // (at a glance first: most of them it is nowhere near)
+    const n = passOf(d, q.key, q.lines);
+    if (!n || Math.min(n.cov, n.prec) < COPY_FIT) continue;
+    const C = coverOf(d, q.key, q.lines);
+    if (!C) continue;
+    let least = 1;
+    for (const x of C.parts) least = Math.min(least, x.c);
+    if (Math.min(C.cov, C.prec, least) >= COPY_FIT) return true;
+  }
+  return false;
 }
 
 // the drawing as one of a category's things, and what the pen at rest does with it: readItem's, and { ask (the two it
 // could be, not sure which), plain (a line or two of nothing), half (a closed shape's outline still open), whole (its
-// picture all there), tier: 'sure' | 'likely' | 'more' | 'wait' }
-// quick: while a line is being drawn - nothing is said of it then (game/partpen.js said), and whether its picture is
-// all there is not looked at (tier 'more' at the most): the pen up, it is read in full
+// picture all there), unfinished (some of its picture drawn, the rest not), tier: 'sure' | 'likely' | 'more' | 'wait' }
+// quick: while a line is being drawn - nothing is said of it then (game/partpen.js said), and what of its picture is
+// there is not looked at (tier 'more' at the most): the pen up, it is read in full
 export function penSay(strokes, cat, quick = false) {
   const lines = strokes.filter((s) => s && s.length >= 2);
   const r = readItem(lines, cat);
@@ -246,11 +290,27 @@ export function penSay(strokes, cat, quick = false) {
   const half = !!it && CLOSED[it] && openShape(lines);
   let tier = 'wait';
   let whole = false;
+  let unfinished = false;
   if (!plain && (certain || likely)) {
-    whole = !quick && !half && allThere(lines, it, cat);
-    tier = !whole ? 'more' : certain ? 'sure' : 'likely';
+    tier = 'more';
+    if (!quick) {
+      const d = drawnOf(lines);
+      const X = it === 'rotor' && cat === 'func' && rotorOrBridge(lines) === 'rotor';
+      const T = X ? { C: null, whole: true } : thereOf(d, it);
+      // (the legend's picture copied - most of the drawing's ink on its lines - and its outline not closed yet)
+      const open = half && !!T.C && T.C.prec >= COPY_PREC;
+      whole = T.whole && !open;
+      if (whole) tier = certain ? 'sure' : 'likely';
+      else {
+        unfinished = open || partCopy(d, it);
+        // (not the legend's picture, begun or done - the hand's own drawing of the thing, a helicopter for the rotor:
+        // by the network alone, sure of it, and after the longer rest. Less than sure, it waits for ✓: lines of
+        // nothing are "likely" something one time in twenty - tools/test-partpen.mjs)
+        if (!unfinished && certain) tier = 'likely';
+      }
+    }
   }
-  return { ...r, ask, plain, half, whole, tier };
+  return { ...r, ask, plain, half, whole, unfinished, tier };
 }
 
 // the likeliest one of rivals ({ id: how likely the network must think it at least }), and id the

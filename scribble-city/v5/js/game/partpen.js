@@ -533,12 +533,6 @@ export class PartPen {
     const fd = this.game.freedraw;
     let L = this.live;
     if (!L || !this.isOpen || !fd || fd.cur || !fd.group.length) return false;
-    // (read while a line was being drawn, and that line let go of: read in full now)
-    if (L.quick) {
-      this.feel(fd.group.map((s) => s.P), null, true);
-      L = this.live;
-      if (!L) return false;
-    }
     // (the story's own drawing, whatever it is read as: as ever - the tip a moment if it is not sure which of two, and
     // then it goes on as the thing the story says)
     if (this.force) {
@@ -548,6 +542,12 @@ export class PartPen {
       fd.groupAt = performance.now() + TIP_MS;
       this.showTip();
       return true;
+    }
+    // (read while a line was being drawn, and that line let go of: read in full now)
+    if (L.quick) {
+      this.feel(fd.group.map((s) => s.P), null, true);
+      L = this.live;
+      if (!L) return false;
     }
     // (a part chosen and then drawn; and one it is sure of: done now)
     if (L.par || L.tier === 'sure') return false;
@@ -608,12 +608,16 @@ export class PartPen {
     let item = this.force || R.item || (R.ask ? R.ask[0] : null);
     // (R27: a line or two of nothing is none of them, whoever asks; and what the pen is not sure of at all goes on
     // when it is asked for - not by itself as the pen is put away)
-    if (!this.force && (R.plain || (R.tier === 'wait' && by !== 'ask'))) item = null;
+    // (and what the pen asked about - named with a question, not all of it there or not sure of it - goes on with ✓
+    // alone: not as the pen is put away)
+    const asked = !this.force && !R.plain && R.tier === 'more' && by !== 'ask' ? item : null;
+    if (!this.force && (R.plain || ((R.tier === 'wait' || R.tier === 'more') && by !== 'ask'))) item = null;
     this.force = null;
     if (!item) {
       this.flights.push({ v: null, from: lines.map((L) => L.map((q) => q.slice())), c: inkI, t0: performance.now() });
       g.audio.play('rubber', 0.5);
-      g.hud.toast(tr(`${NONE_SAY[R.cat]} — נסו כמו בציורים שמעל הכפתורים`, `${NONE_SAY[R.cat]} — try it like in the drawings above the buttons`), 'bad', 2.6);
+      if (asked) g.hud.toast(tr(`${ITEMS[asked].name}? הציור לא הושלם — לא הורכב. ציירו את כולו, או ✓`, `${ITEMS[asked].name}? The drawing was not finished — nothing put on. Draw all of it, or ✓`), 'bad', 3);
+      else g.hud.toast(tr(`${NONE_SAY[R.cat]} — נסו כמו בציורים שמעל הכפתורים`, `${NONE_SAY[R.cat]} — try it like in the drawings above the buttons`), 'bad', 2.6);
       return false;
     }
     // (ROADMAP 11.28: not open yet - blueprint pages to find first, game/gearplay.js: the ink goes)

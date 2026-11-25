@@ -1886,7 +1886,7 @@ export class FreeDraw {
     const bp = BLUEPRINTS[b.id];
     const alts = S.alts.map((id) => ({ key: id, name: BLUEPRINTS[id].name }));
     // (picked, but what is drawn is another thing: said, and not made)
-    return { cat: 'bp', bp, kind: bp.id, name: bp.name, choice: b.id, lit: b.id, score: b.score, like: S.like, whole: S.whole, other: S.other ? BLUEPRINTS[S.other].name : null, ready: S.ready, grade: gradeOf(b.score), need: b.need, parts: b.n, have: S.have, missing: S.gone, cost: costOfBp(bp), alts, remembered: S.fromMemory };
+    return { cat: 'bp', bp, kind: bp.id, name: bp.name, choice: b.id, lit: b.id, score: b.score, like: S.like, whole: S.whole, other: S.other ? BLUEPRINTS[S.other].name : null, ready: S.ready, grade: gradeOf(S.ready ? Math.max(b.score, MATCH_MIN) : b.score), need: b.need, parts: b.n, have: S.have, missing: S.gone, cost: costOfBp(bp), alts, remembered: S.fromMemory };
   }
 
   // (ROADMAP 29.5, the owner's word: the game must not squint at a drawing of something else) copying a drawing found
