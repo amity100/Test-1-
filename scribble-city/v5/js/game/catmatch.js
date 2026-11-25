@@ -265,14 +265,205 @@ function lay(df, tf, flip, dn, tn, byMain) {
     b += k;
     bt += near(pts, tf.reachT, ax, bx, ay, by);
   }
-  return { hit, miss: Math.min(1, miss), extra: Math.min(1, extra), cov: tn ? a / tn : 0, prec: dn ? b / dn : 0, precT: dn ? bt / dn : 0 };
+  return { hit, miss: Math.min(1, miss), extra: Math.min(1, extra), cov: tn ? a / tn : 0, prec: dn ? b / dn : 0, precT: dn ? bt / dn : 0, df, tf, ax, bx, ay, by };
 }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-// the thing's parts the drawing has (most of the part's line passed by), how much of the thing it
-// covers, and how much of the drawing is the thing (not more lines elsewhere) - the drawing's way
-// round or mirrored, laid over it whichever way is the best (framesOf)
+// (R27, the owner's word: "I draw two lines and it already recognises a car") Each part by its own ink. A part of the
+// thing was "there" when the drawing passed by its line - and a body's line passes by the wheels that sit on it, by the
+// rail drawn inside it, by the pump under its barrel: a body alone, in one line or in two, was a whole car, a whole
+// stapler - and a rifle's body a whole shotgun. Now the ink is given out. The thing's parts, the biggest first: each
+// point of a part's line looks for the nearest ink no bigger part has taken (within a hand's reach of it - a small
+// part within less, and a little off its place if that is where its ink is: a wheel drawn to one side is still the
+// wheel); the ink found is that part's from then on, with the bit of its line either side. A part is there by how
+// much of its line found ink of its own - and by how much ink that was: a dash through a wheel's place is no wheel.
+// What is left of the drawing when every part has had its own is not the thing's (a line gone over twice apart: it
+// lies right on the thing's lines).
+// (the page the ink is sorted on: the square and a quarter of it all round - a line left out of the frame lies there)
+const PAD = 16;
+const GW = CN + 2 * PAD;
+// a small part: less than this much of the thing's ink
+const SMALL = 0.4;
+// how far from a small part's line its ink may be, for its size (the longer side of its box) - never under R0, never
+// over the hand's reach; and how far off its place it is looked for, each way
+const PART_R = 0.3;
+const PART_R0 = 0.028;
+const OFF_BY = 0.03;
+const OFF = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+// the ink a part must have of its own for all of it to be there: this much of its line's length
+const INK_NEED = 0.7;
+
+// a thing's frame, its parts: the order they take their ink in (the biggest first), how far each reaches, how much of
+// the thing each is
+function partsIn(fr) {
+  const n = fr.lines.length;
+  let total = 0;
+  for (const p of fr.lines) total += p.length / 2;
+  fr.order = fr.lines.map((_, i) => i).sort((a, b) => fr.lines[b].length - fr.lines[a].length);
+  fr.share = [];
+  fr.small = [];
+  fr.pr = [];
+  fr.lines.forEach((p, i) => {
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    for (let k = 0; k < p.length; k += 2) {
+      x0 = Math.min(x0, p[k]);
+      x1 = Math.max(x1, p[k]);
+      y0 = Math.min(y0, p[k + 1]);
+      y1 = Math.max(y1, p[k + 1]);
+    }
+    fr.share[i] = total ? p.length / 2 / total : 0;
+    fr.small[i] = n > 1 && fr.share[i] < SMALL;
+    fr.pr[i] = fr.small[i] ? clamp(Math.max(x1 - x0, y1 - y0) * PART_R, PART_R0, CR) : CR;
+  });
+}
+
+// (the drawing's points laid on the thing, sorted by where they are: kept between looks - a phone has no time to spare)
+let sx = new Float32Array(0);
+let sy = new Float32Array(0);
+let snext = new Int32Array(0);
+let sline = new Int16Array(0);
+let staken = new Uint8Array(0);
+const shead = new Int32Array(GW * GW);
+
+// the nearest ink to (x, y) within r that no part has taken yet (-1: none)
+function freeNear(x, y, r) {
+  const cx = Math.floor(x * CN) + PAD;
+  const cy = Math.floor(y * CN) + PAD;
+  const rc = Math.ceil(r * CN);
+  let best = -1;
+  let bd = r * r;
+  for (let j = Math.max(0, cy - rc); j <= cy + rc && j < GW; j++) {
+    for (let i = Math.max(0, cx - rc); i <= cx + rc && i < GW; i++) {
+      for (let q = shead[j * GW + i]; q >= 0; q = snext[q]) {
+        if (staken[q] === 1) continue;
+        const dx = sx[q] - x;
+        const dy = sy[q] - y;
+        const d = dx * dx + dy * dy;
+        if (d < bd) {
+          bd = d;
+          best = q;
+        }
+      }
+    }
+  }
+  return best;
+}
+
+// the drawing laid on the thing one way (r: lay's), its ink given out to the thing's parts: { pc: how much of each
+// part is there (the thing's own order), hit, miss, cov (as lay's, by that), extra (the drawing's lines that are not
+// the thing's), own (how much of the drawing is the thing's) }
+function own(r, tn) {
+  const { df, tf, ax, bx, ay, by } = r;
+  let N = 0;
+  for (const pts of df.lines) N += pts.length / 2;
+  if (sx.length < N) {
+    sx = new Float32Array(N * 2);
+    sy = new Float32Array(N * 2);
+    snext = new Int32Array(N * 2);
+    sline = new Int16Array(N * 2);
+    staken = new Uint8Array(N * 2);
+  }
+  shead.fill(-1);
+  let q = 0;
+  for (let li = 0; li < df.lines.length; li++) {
+    const pts = df.lines[li];
+    for (let i = 0; i < pts.length; i += 2, q++) {
+      const x = ax * pts[i] + bx;
+      const y = ay * pts[i + 1] + by;
+      sx[q] = x;
+      sy[q] = y;
+      sline[q] = li;
+      staken[q] = 0;
+      snext[q] = -1;
+      const cx = Math.floor(x * CN) + PAD;
+      const cy = Math.floor(y * CN) + PAD;
+      if (cx < 0 || cx >= GW || cy < 0 || cy >= GW) continue;
+      snext[q] = shead[cy * GW + cx];
+      shead[cy * GW + cx] = q;
+    }
+  }
+  // (how far apart the drawing's points are, laid so: what a point of ink is worth of a line)
+  const step = Math.sqrt(Math.abs(ax * ay));
+  const n = tf.lines.length;
+  const pc = new Array(n).fill(0);
+  const mine = [];
+  let got = 0;
+  let hit = 0;
+  let miss = 0;
+  for (const pi of tf.order) {
+    const pts = tf.lines[pi];
+    const m = pts.length / 2;
+    if (!m) continue;
+    const rr = tf.pr[pi];
+    let ox = 0;
+    let oy = 0;
+    if (tf.small[pi]) {
+      let bk = -1;
+      for (const [u, v] of OFF) {
+        let k = 0;
+        for (let i = 0; i < pts.length; i += 2) if (freeNear(pts[i] + u * OFF_BY, pts[i + 1] + v * OFF_BY, rr) >= 0) k++;
+        if (k > bk) {
+          bk = k;
+          ox = u * OFF_BY;
+          oy = v * OFF_BY;
+        }
+      }
+    }
+    let k = 0;
+    mine.length = 0;
+    for (let i = 0; i < pts.length; i += 2) {
+      const j = freeNear(pts[i] + ox, pts[i + 1] + oy, rr);
+      if (j < 0) continue;
+      k++;
+      if (!staken[j]) {
+        staken[j] = 2;
+        mine.push(j);
+      }
+    }
+    const ink = (mine.length * step) / m;
+    for (const j of mine) {
+      staken[j] = 1;
+      for (let e = 1; e <= 2; e++) {
+        if (j - e >= 0 && sline[j - e] === sline[j]) staken[j - e] = 1;
+        if (j + e < N && sline[j + e] === sline[j]) staken[j + e] = 1;
+      }
+    }
+    const c = Math.min(k / m, ink / INK_NEED);
+    pc[pi] = c;
+    got += c * m;
+    if (c >= 0.7) hit++;
+    else if (c < 0.5) miss += Math.max(m / tn, PART_MIN);
+  }
+  let extra = 0;
+  let mineAll = 0;
+  let j0 = 0;
+  for (const pts of df.lines) {
+    const m = pts.length / 2;
+    let k = 0;
+    for (let j = j0; j < j0 + m; j++) {
+      if (staken[j]) {
+        k++;
+        continue;
+      }
+      const cx = Math.floor(sx[j] * CN);
+      const cy = Math.floor(sy[j] * CN);
+      if (cx >= 0 && cx < CN && cy >= 0 && cy < CN && tf.reachT[cy * CN + cx]) k++;
+    }
+    j0 += m;
+    mineAll += k;
+    if (m && k / m < 0.5) extra += Math.max(m / N, PART_MIN);
+  }
+  return { pc, hit, miss: Math.min(1, miss), extra: Math.min(1, extra), cov: tn ? got / tn : 0, own: N ? mineAll / N : 0 };
+}
+
+// the thing's parts the drawing has, how much of the thing it covers, and how much of the drawing is the thing (not
+// more lines elsewhere) - the drawing's way round or mirrored, laid over it whichever way is the best (framesOf): the
+// two best ways by what the drawing passes by (lay), and of those the better once the ink is given out to the parts
+// (own)
 function covered(d, t) {
   if (!t.frames) {
     t.frames = framesOf(t.S);
@@ -281,25 +472,33 @@ function covered(d, t) {
       // (and from close to - a little part drawn that the thing has not, a lamp on a roof, is ink off its lines only
       // when looked at closely)
       fr.reachT = reach(fr.lines, CR * 0.55);
+      partsIn(fr);
     }
     t.len = t.frames[0].lines.reduce((q, pts) => q + pts.length / 2, 0);
   }
-  let best = null;
-  let bq = -Infinity;
+  let a = null;
+  let b = null;
   const tryIt = (df, tf, byMain) => {
     for (const flip of [false, true]) {
       const r = lay(df, tf, flip, d.len, t.len, byMain);
-      const q = r.cov + r.prec + r.precT - r.miss - r.extra;
-      if (q > bq) {
-        bq = q;
-        best = r;
-      }
+      r.q = r.cov + r.prec + r.precT - r.miss - r.extra;
+      if (!a || r.q > a.q) {
+        b = a;
+        a = r;
+      } else if (!b || r.q > b.q) b = r;
     }
   };
   if (d.frames[0].ms >= MAIN && t.frames[0].ms >= MAIN) tryIt(d.frames[0], t.frames[0], true);
   tryIt(d.frames[0], t.frames[0], false);
   for (let i = 1; i < t.frames.length; i++) tryIt(d.frames[0], t.frames[i], false);
   for (let j = 1; j < d.frames.length; j++) tryIt(d.frames[j], t.frames[0], false);
+  let best = null;
+  for (const r of [a, b]) {
+    if (!r) continue;
+    const o = own(r, t.len);
+    const q = o.cov + r.prec + r.precT - o.miss - o.extra;
+    if (!best || q > best.q) best = { prec: r.prec, precT: r.precT, pc: o.pc, hit: o.hit, miss: o.miss, extra: o.extra, cov: o.cov, own: o.own, q };
+  }
   return best;
 }
 
@@ -312,19 +511,43 @@ export function partsOf(bp) {
   return { n, need: Math.max(1, Math.ceil(n * 0.5)) };
 }
 
-// (ROADMAP 11.43, 11.44) drawn enough of it: its lines there (six in ten), the drawing over a good
-// part of it, and not as much again elsewhere - its parts in their proportions or not
-export function drawnWhole(m, have) {
-  return (have >= m.need || m.cov >= 0.65) && m.cov >= 0.45 && m.prec >= 0.35;
+// (R27, the owner's word: "it recognises far too fast, before I have finished drawing - two lines and it is a car";
+// "you don't have to draw every detail... but two random lines must never be accepted") All of it there: what a thing
+// is named by, and made by. By its parts, each by its own ink (own) - not by how many lines the hand took:
+//   its biggest part - the body, the blade - nearly all there;
+//   every other part of any size there, most of it (a car's wheels, a paint gun's tank, a rifle's scope);
+//   only details may be left out - parts under a tenth of its ink each, a little over a tenth of it together (a
+//   barrier's stripe, a bottle's fuse, two of a bridge's four pillars) - and a thing without the detail that tells it
+//   from the one like it is that one: a hyper without its wing is the car, by which is likeliest;
+//   the drawing over most of the thing, and most of the drawing the thing (not as much again elsewhere).
+// tools/test-catalog.mjs REPORT=1 measures it: whole drawings taken, unfinished ones and random lines not
+export const WHOLE = { main: 0.72, part: 0.55, detail: 0.1, left: 0.12, cov: 0.72, prec: 0.5 };
+// { whole, gone: how many of its parts are not there yet }
+export function wholeOf(m) {
+  const P = m.parts || [];
+  let big = 0;
+  for (let i = 1; i < P.length; i++) if (P[i].w > P[big].w) big = i;
+  let ok = P.length > 0;
+  let left = 0;
+  let gone = 0;
+  P.forEach((q, i) => {
+    if (q.c >= (i === big ? WHOLE.main : WHOLE.part)) return;
+    gone++;
+    left += q.w;
+    if (i === big || q.w >= WHOLE.detail) ok = false;
+  });
+  return { whole: ok && left <= WHOLE.left && m.cov >= WHOLE.cov && m.prec >= WHOLE.prec, gone };
 }
 
-// (ROADMAP 11.43) a guess is said only with something to guess from: six in ten of its lines (ROADMAP 25: it was half - a
-// thing of four lines was named after two, whatever they were the start of), a part in three of it traced, and like it
-export function tooEarly(m, have) {
-  // (ROADMAP 28.26: and most of its parts there, each one, unless it is much like it all the same - two lines are a
-  // long thing's top and bottom, and none of its parts; a thing of two parts is named by either)
-  const parts = m.n >= 3 ? Math.floor(m.n / 2) + 1 : 1;
-  return have < Math.min(2, m.n) || (m.hit < parts && m.score < 0.75) || m.cov < 0.62 || m.prec < 0.5 || m.score < MATCH_MIN;
+// (ROADMAP 11.43, 11.44; R27: by its parts, wholeOf - have, the lines the hand took, is no measure of it)
+export function drawnWhole(m) {
+  return wholeOf(m).whole;
+}
+
+// (ROADMAP 11.43) a guess is said only with something to guess from - (R27) and that is all of it: nothing is named
+// while it is being drawn
+export function tooEarly(m) {
+  return !wholeOf(m).whole || m.score < MATCH_MIN;
 }
 
 // (ROADMAP 29.5, the owner's word: a drawing found in the city, copied by finger - read against that drawing alone, never
@@ -334,8 +557,8 @@ export function tooEarly(m, have) {
 export const COPY_MIN = 0.6;
 export const COPY_MISS = 0.34;
 export const COPY_EXTRA = 0.34;
-export function copyReady(m, have) {
-  return m.score >= COPY_MIN && drawnWhole(m, have) && m.miss <= COPY_MISS && m.extra <= COPY_EXTRA && !tooEarly(m, have);
+export function copyReady(m) {
+  return m.score >= COPY_MIN && drawnWhole(m) && m.miss <= COPY_MISS && m.extra <= COPY_EXTRA;
 }
 // (and a drawing plainly of another thing on its shelf - a rifle drawn where an eraser launcher is to be copied - is not
 // taken, though it is never named: the copy is read against the shelf, and refused when another thing ranks this far
@@ -383,15 +606,50 @@ export function matchCatalog(strokes, ids) {
     // (ROADMAP 28.26: not by how many lines it is drawn in; which is likeliest also by how many of the thing's own
     // parts are there, each as much as another - the part that tells it from the one like it is a small one - and by
     // how much of the drawing is on its lines from close to)
-    const { hit, cov, prec, precT, miss, extra } = covered(d, t);
+    const { hit, cov, prec, precT, miss, extra, pc, own: mine } = covered(d, t);
     // (how alike: the picture - and, drawn longer or taller than the thing is, line on line all the same, by how well
     // the lines lie on the thing's: the small picture of a square thing drawn a little long is another picture)
     const shape = Math.max(ci, 0.5 * ci + 0.5 * Math.min(cov, precT));
     const score = 0.6 * shape + 0.22 * cp + 0.18 * as;
-    list.push({ id, score, rank: score + 0.6 * prec + 0.6 * precT + 0.3 * cov + 0.3 * (hit / n) - W_MISS * miss - W_EXTRA * extra, ci, cp, as, need, n, hit, cov, prec, precT, miss, extra });
+    // (its parts, each: how much of it is there, how much of the thing's ink it is)
+    const parts = pc.map((c, i) => ({ c, w: t.frames[0].share[i] }));
+    list.push({ id, score, rank: score + 0.6 * prec + 0.6 * precT + 0.3 * cov + 0.3 * (hit / n) - W_MISS * miss - W_EXTRA * extra, ci, cp, as, need, n, hit, cov, prec, precT, miss, extra, parts, own: mine });
   }
   list.sort((a, b) => b.rank - a.rank);
   return { best: list[0], list, have: d.n };
+}
+
+// (R27) What the pen says of a drawing, read against a shelf's things (ids) - the one say of it, for the pen
+// (ui/freedraw.js readCatalog) and for the measuring of it (tools/test-catalog.mjs). o.force: the thing picked first -
+// tapped in the legend, a blueprint just photographed (ui/freedraw.js learn): read as that; o.mem: the thing the pen
+// remembers a drawing like this as (game/drawmemory.js) - that, while the catalog says it may be. Null with nothing
+// drawn; else { all (matchCatalog's), top (the likeliest), b (the one it is read as), pick, fromMemory, whole, gone (how
+// many of b's parts are not there yet), like, other (picked, but what is drawn is plainly this other thing), ready (it
+// is made), lit (the one named - b once it is all there; a thing picked first is named from the start: it was said, not
+// guessed), alts (the ones it could as well be) }
+export const OTHER_RANK = 0.08;
+export function readShelf(strokes, ids, o = {}) {
+  const all = matchCatalog(strokes, ids);
+  if (!all) return null;
+  const top = all.best;
+  const has = (k) => !!k && all.list.some((x) => x.id === k);
+  const force = has(o.force) ? o.force : null;
+  let pick = force || (has(o.mem) ? o.mem : null);
+  // (ROADMAP 25, the owner's word: things popping up as if he had tried to draw them) a drawing the pen remembers as another
+  // thing is that thing only while the catalog says it may be - not when the likeliest is plainly something else: a rifle
+  // picked once was what every long drawing lit up as from then on (tools/test-catalog.mjs MEMORY=1)
+  if (pick && !force && pick !== top.id) {
+    const m = all.list.find((x) => x.id === pick);
+    if (!m || top.score > m.score + PICK_SLACK || top.rank > m.rank + 2 * PICK_SLACK) pick = null;
+  }
+  const b = (pick && all.list.find((x) => x.id === pick)) || top;
+  const W = wholeOf(b);
+  const like = b.score >= MATCH_MIN;
+  // (picked, but what is drawn is another thing, all of it there and plainly likelier: said, and not made)
+  const other = pick && top.id !== b.id && top.score >= MATCH_MIN && wholeOf(top).whole && (top.rank > b.rank + OTHER_RANK || top.score > b.score + PICK_SLACK) ? top.id : null;
+  const ready = like && W.whole && !other;
+  const alts = ready || force ? all.list.filter((x) => x.id !== b.id && x.score >= Math.max(MATCH_MIN, top.score - 0.08) && wholeOf(x).whole).slice(0, 2).map((x) => x.id) : [];
+  return { all, top, b, pick, fromMemory: !!pick && !force, whole: W.whole, gone: W.gone, like, other, ready, lit: force || ready ? b.id : null, alts, have: all.have };
 }
 
 // what a whole part missing, and a whole line too many, take off (in which is likeliest)

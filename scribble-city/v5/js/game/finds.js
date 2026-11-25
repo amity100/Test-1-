@@ -66,7 +66,7 @@ export const START_BP = new Set(['paint', 'rifle', 'mp5', 'shotgun', 'inkbomb', 
 // (the owner, 23.11: the helicopter's rotor too - drawn in the story's jump off the roof, his from then on)
 // (R27, the owner's word: the turbo is the first drawing found in the city, in the opening's lesson - not in the start kit)
 // (on with the opening's new lesson, game/prologue/director.js tutorial: till then the turbo stays in the start kit)
-export const TURBO_FOUND = false;
+export const TURBO_FOUND = true;
 export const START_PARTS = TURBO_FOUND ? { wing: 2, jump: 1, mg: 1, armor: 1, rotor: 1 } : { turbo: 1, wing: 2, jump: 1, mg: 1, armor: 1, rotor: 1 };
 // the parts whose level is found, not bought
 const FOUND_LEVELS = new Set(['wing', 'turbo']);
@@ -479,6 +479,10 @@ export class Finds {
     this.scratchT = 0;
     this.fading = [];
     this.boardsDone = false;
+    // (R27) the story's lesson on the find it leads to (game/prologue/director.js lessonFind): its id while it is on
+    this.lesson = null;
+    // (R27) the parts seen on a ride as he got into it - the ones put on after are his drawing
+    this.partsSeen = new WeakSet();
   }
 
   // (R26, the owner's word: "from the very start of the game") the rules - the start kit open, the rest found, each thing
@@ -638,6 +642,8 @@ export class Finds {
     const P = this.game.prologue;
     if (id === 'rotor' && P && P.active && !(P.sceneN >= 8)) return false;
     if (id in START_PARTS) return true;
+    // (R27: the turbo is the first page found - should this world have no place for it, it is open as it was)
+    if (id === 'turbo' && TURBO_FOUND && this.game.world && this.ensureSpots().length && !this.spots.some((s) => s.f.id === 'turbo1')) return true;
     return FINDS.some((f) => (f.part === id || f.alsoPart === id) && !f.lv && this.has(f.id));
   }
 
@@ -739,6 +745,11 @@ export class Finds {
     }
     const p = g.player;
     const at = p.inVehicle ? p.inVehicle.pos : p.pos;
+    this.learnT = (this.learnT || 0) - dt;
+    if (this.learnT <= 0) {
+      this.learnT = 0.4;
+      this.learnParts();
+    }
     this.scratchT -= dt;
     this.nearSet = this.nearSet || new Set();
     for (const s of spots) {
@@ -748,7 +759,7 @@ export class Finds {
       const d = Math.hypot(s.x - at.x, (s.y - at.y) * 0.8, s.z - at.z);
       // (R26, the owner's word: "when the player comes to a blueprint's area, a message pops up that one is near") from 30 m,
       // once - again only after he has been 60 m off (a van: once a game)
-      if (d < 30 && !this.nearSet.has(s.f.id) && !this.quiet) {
+      if (d < 30 && !this.nearSet.has(s.f.id) && !this.quiet && this.mayTell(s.f)) {
         this.nearSet.add(s.f.id);
         if (!this.state.coached.near) this.coach('near', tr('שרטוט מוסתר קרוב! חפשו דף לבן עם קווים בזהב — כשמתקרבים שומעים עיפרון משרבט', 'A hidden blueprint is close! Look for a white page with gold lines — up close you can hear a pencil scratching'), { t: 6, icon: '✦' });
         else if (g.hud) g.hud.toast(s.ny > 0.7 ? tr('✦ שרטוט מוסתר קרוב — על גג, למעלה', '✦ A hidden blueprint is close — up on a roof') : tr('✦ שרטוט מוסתר קרוב — הסתכלו מסביב', '✦ A hidden blueprint is close — look around'), 'info', 3.2);
@@ -779,6 +790,38 @@ export class Finds {
     this.tickTry(dt);
   }
 
+  // (R27) in the story, before its lesson has led him to the first page: no word of any other (the opening teaches one
+  // thing at a time) - after it, every page as in the game
+  mayTell(f) {
+    const P = this.game.prologue;
+    if (!(P && P.active) || !TURBO_FOUND || this.has('turbo1')) return true;
+    return f.id === this.lesson;
+  }
+
+  // (R27, the owner's word: "drawn once - from then on at a tap") a part put on his ride by his own drawing (the pen) is
+  // learned, as one traced over its lines in the parts tray: the parts on a ride as he got in are not his drawing
+  learnParts() {
+    const g = this.game;
+    const v = g.player.inVehicle;
+    const T = g.tray;
+    if (!v || !v.fuse || !v.fuse.parts || !T || !T.store || !T.learnAll) {
+      this.inRide = null;
+      return;
+    }
+    if (this.inRide !== v) {
+      this.inRide = v;
+      for (const q of v.fuse.parts) this.partsSeen.add(q);
+      return;
+    }
+    for (const q of v.fuse.parts) {
+      if (this.partsSeen.has(q)) continue;
+      this.partsSeen.add(q);
+      if (!q.item || T.store.learned[q.item]) continue;
+      T.learnAll([q.item]);
+      if (T.store.learned[q.item]) this.onLearned(q.item);
+    }
+  }
+
   // (R26) the GPS to the nearest find on the map not taken yet - the first thing to go for after the story
   guideTo() {
     const g = this.game;
@@ -788,7 +831,8 @@ export class Finds {
     let bd = Infinity;
     for (const s of this.spots) {
       if (this.has(s.f.id) || !s.f.pin) continue;
-      const d = Math.hypot(s.x - at.x, s.z - at.z);
+      // (R27: the turbo's page before any other - the first one, near the start)
+      const d = Math.hypot(s.x - at.x, s.z - at.z) - (s.f.tutorial ? 1e5 : 0);
       if (d < bd) {
         bd = d;
         best = s;
@@ -1026,6 +1070,9 @@ export class Finds {
     if (!f || this.state.tried.includes(f.id)) return;
     this.state.tried.push(f.id);
     this.save();
+    // (R27: in the story's lesson the try is the lesson's own next step)
+    const P = this.game.prologue;
+    if (f.tutorial && P && P.active) return;
     if (f.tryText) setTimeout(() => this.startTry(f), 2200);
   }
 

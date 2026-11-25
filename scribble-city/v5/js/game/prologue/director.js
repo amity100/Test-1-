@@ -2125,6 +2125,13 @@ export class Prologue {
     const g = this.game;
     const P = g.player;
     let t = 0;
+    // (R27: the story played again - its lesson's blueprint, the turbo, to be found again in it)
+    const FI = g.finds;
+    if (FI && FI.state && FI.state.found.includes('turbo1')) {
+      FI.state.found = FI.state.found.filter((id) => id !== 'turbo1');
+      FI.state.tried = FI.state.tried.filter((id) => id !== 'turbo1');
+      FI.save();
+    }
     // (round 15, the player's word: no how-to cards over the screen, no steps to follow - only: walk
     // round the city and look at it; and then: break into a car and take it)
     // 1. walk round, look at it
@@ -2182,66 +2189,266 @@ export class Prologue {
       this.howto(null);
       yield 0.5;
     }
-    // 5. the pen: open, everything in it open (begin: setAllOpen) - till it has been opened and put
-    // away again, or a while has gone by
-    // (round 15: a weapon or a ride from the short list, drawn for real - till one is made, or a while)
-    // (round 17, the player's word: in the car, no stepping out - the pen draws on the car, the turbo
-    // first of its things, and the game shows on the screen how a turbo is drawn: a flame out of its
-    // back. Whatever is drawn while the turbo is what is chosen is the turbo. On foot, the short list)
-    const DRAW_FOOT = 'Open the pen and <b>draw</b> a weapon or a ride';
-    const DRAW_CAR = 'Open the pen and draw a <b>turbo</b> on the car';
-    this.objective(P.inVehicle ? DRAW_CAR : DRAW_FOOT);
-    this.howto(P.inVehicle ? 'draw' : 'drawFoot');
-    {
-      const F = g.freedraw;
-      const pen = g.fuse && g.fuse.pen;
-      const made = () => (F && F.stats && F.stats.made ? Object.values(F.stats.made).reduce((a, b) => a + b, 0) : 0) + (P.inVehicle && P.inVehicle.fuse ? P.inVehicle.fuse.parts.length : 0);
-      let m0 = made();
-      let car = P.inVehicle;
-      let tm = -1;
-      let penWas = false;
-      let teach = null;
-      t = 0;
-      yield () => {
-        t += this.dtR;
-        // (in or out of a car: what is counted from changes with it)
-        if (P.inVehicle !== car) {
-          car = P.inVehicle;
-          if (tm < 0) m0 = made();
-          if (tm < 0) {
-            this.objective(car ? DRAW_CAR : DRAW_FOOT);
-            this.howto(car ? 'draw' : 'drawFoot');
-          }
-        }
-        // (the pen out on the car: its things, the turbo's first - chosen each time it comes out)
-        const onCar = !!(car && F && F.isOpen && pen && pen.isOpen);
-        if (onCar && !penWas && pen.cat !== 'func') {
-          pen.cat = 'func';
-          pen.uiSig = '';
-          pen.legSig = '';
-          pen.showRow();
-          pen.showLegend();
-          if (F.info) F.info();
-        }
-        penWas = onCar;
-        const teaching = onCar && pen.cat === 'func' && tm < 0;
-        if (pen) pen.force = teaching ? 'turbo' : pen.force === 'turbo' ? null : pen.force;
-        if (teaching && !teach) teach = this.teachTurbo(car);
-        else if (!teaching && teach) {
-          teach.remove();
-          teach = null;
-        }
-        if (teach) teach.update(!!(F.cur || (F.group && F.group.length)));
-        if (tm < 0 && made() > m0) tm = t;
-        // (made: a breath to see it come to life; left be, it goes on all the same after a while)
-        return (tm >= 0 && t > tm + 2.5 && !(F && F.isOpen)) || (tm >= 0 && t > tm + 6) || t > 90;
-      };
-      if (teach) teach.remove();
-      if (pen && pen.force === 'turbo') pen.force = null;
-    }
+    // 5-9. (R27, the owner's word: "a full guide to the start, like the big games - first what is in the library, wings on
+    // the car among them; then led to the city's places, each step said: where the blueprint is, how it is photographed,
+    // how it is drawn - the first one found a turbo; then to Lily") each lesson shown by the pencil on the screen, then
+    // done by the player; each let go after a while, so that nothing can hold the story
+    yield* this.lessonWings();
+    yield* this.lessonWeapon();
+    yield* this.lessonFind();
+    yield* this.lessonTurbo();
     this.howto(null);
     this.objective(null);
     yield 0.4;
+  }
+
+  // (R27) the car he is to draw on: in one, or back into the one he left (the nearest parked one if it is gone) - false if
+  // he never gets in (the lesson is let go)
+  *needCar(life = 150) {
+    const g = this.game;
+    const P = g.player;
+    if (P.inVehicle) {
+      this.tutCar = P.inVehicle;
+      return true;
+    }
+    const pick = () => {
+      const c = this.tutCar;
+      if (c && !c.gone && !c.wrecked && Math.hypot(c.pos.x - P.pos.x, c.pos.z - P.pos.z) < 160) return c;
+      let best = null;
+      let bd = 1e9;
+      for (const q of (g.traffic && g.traffic.parked) || []) {
+        if (!q.parkedCar || q.gone || q.wrecked) continue;
+        const d = Math.hypot(q.pos.x - P.pos.x, q.pos.z - P.pos.z);
+        if (d < bd) {
+          bd = d;
+          best = q;
+        }
+      }
+      return best || c;
+    };
+    let car = pick();
+    this.objective('Get in a <b>car</b>', car ? car.pos.x : null, car ? car.pos.z : null, 'Car');
+    this.howto('getin');
+    let t = 0;
+    let gpsT = 0;
+    yield () => {
+      t += this.dtR;
+      gpsT += this.dtR;
+      if (gpsT > 1.5) {
+        gpsT = 0;
+        const c2 = pick();
+        if (c2 && c2 !== car && g.gps) g.gps.set(c2.pos.x, c2.pos.z, markT('Car'));
+        car = c2 || car;
+      }
+      return !!P.inVehicle || t > life;
+    };
+    if (g.gps) g.gps.clear();
+    if (!P.inVehicle) return false;
+    this.tutCar = P.inVehicle;
+    yield 0.4;
+    return true;
+  }
+
+  // (R27) on foot for what is drawn from the library (the pencil's list is the one on foot)
+  *needFoot(life = 60) {
+    const g = this.game;
+    const P = g.player;
+    if (!P.inVehicle) return true;
+    this.tutCar = P.inVehicle;
+    this.objective('Get out of the car - <b>on foot</b> now');
+    this.howto('getout');
+    let t = 0;
+    yield () => {
+      t += this.dtR;
+      return !P.inVehicle || t > life;
+    };
+    if (P.inVehicle) return false;
+    yield 0.5;
+    return true;
+  }
+
+  // (R27) a part drawn on the car with the pen, the pencil on the screen showing how: the pen opened on the car's things
+  // (Movement), the one taught chosen while it is taught - whatever is drawn is it; done once it is on the car
+  *penLesson(item, obj, card, teachFn, life = 150) {
+    const g = this.game;
+    const P = g.player;
+    const F = g.freedraw;
+    const pen = g.fuse && g.fuse.pen;
+    const has = () => !!(P.inVehicle && P.inVehicle.fuse && P.inVehicle.fuse.parts && P.inVehicle.fuse.parts.some((q) => q.item === item));
+    let teach = null;
+    let penWas = false;
+    let tm = has() ? 0 : -1;
+    let out = false;
+    let t = 0;
+    this.objective(obj);
+    this.howto(card);
+    yield () => {
+      t += this.dtR;
+      const car = P.inVehicle;
+      // (out of the car on the way: back into it first)
+      if (!car && !out && tm < 0) {
+        out = true;
+        const c = this.tutCar;
+        this.objective('Get in a <b>car</b>', c ? c.pos.x : null, c ? c.pos.z : null, 'Car');
+        this.howto('getin');
+      } else if (car && out) {
+        out = false;
+        this.tutCar = car;
+        if (g.gps) g.gps.clear();
+        this.objective(obj);
+        this.howto(card);
+      }
+      const onCar = !!(car && F && F.isOpen && pen && pen.isOpen);
+      if (onCar && !penWas && pen.cat !== 'func') {
+        pen.cat = 'func';
+        pen.uiSig = '';
+        pen.legSig = '';
+        pen.showRow();
+        pen.showLegend();
+        if (F.info) F.info();
+      }
+      penWas = onCar;
+      const teaching = onCar && pen.cat === 'func' && tm < 0;
+      if (pen) pen.force = teaching ? item : pen.force === item ? null : pen.force;
+      if (teaching && !teach) teach = teachFn(car);
+      else if (!teaching && teach) {
+        teach.remove();
+        teach = null;
+      }
+      if (teach) teach.update(!!(F.cur || (F.group && F.group.length)));
+      if (tm < 0 && has()) tm = t;
+      // (made: a breath to see it come to life; left be, it goes on all the same after a while)
+      return (tm >= 0 && t > tm + 2.5 && !(F && F.isOpen)) || (tm >= 0 && t > tm + 6) || t > life;
+    };
+    if (teach) teach.remove();
+    if (pen && pen.force === item) pen.force = null;
+    if (g.gps && out) g.gps.clear();
+    return tm >= 0;
+  }
+
+  // 5. (R27) wings on the car - the car's own Movement wings, from the start kit: drawn once, the pencil showing how
+  *lessonWings() {
+    if (!(yield* this.needCar())) return;
+    yield* this.penLesson('wing', 'Open the pen and draw <b>wings</b> on the car', 'wings', (car) => this.teachWings(car));
+    yield 0.4;
+  }
+
+  // 6. (R27) a weapon from the library, on foot: the pencil rifle - the pencil draws it first, then the player over its
+  // lines (ui/freedraw.js learn); then fired once
+  *lessonWeapon() {
+    const g = this.game;
+    const F = g.freedraw;
+    const W = g.weapons;
+    if (!F || !(yield* this.needFoot())) return;
+    const ID = 'rifle';
+    this.objective('Open the pencil and draw the <b>pencil rifle</b>');
+    this.howto('weapon');
+    const madeN = () => (F.stats && F.stats.made ? F.stats.made.weapon || 0 : 0);
+    const m0 = madeN();
+    const held = () => !!(W && W.current && W.current.def && W.current.def.id === ID);
+    let asked = false;
+    let tm = -1;
+    let t = 0;
+    yield () => {
+      t += this.dtR;
+      // (the pencil opened: the rifle chosen, its lines shown and drawn by the pencil - each time it is opened)
+      if (F.isOpen && !asked && !F.carOpen && g.player.mode === 'foot') {
+        asked = true;
+        if (F.force !== ID) F.learn(ID, true);
+      }
+      if (!F.isOpen) asked = false;
+      if (tm < 0 && madeN() > m0 && held()) tm = t;
+      return (tm >= 0 && !F.isOpen && t > tm + 1) || (tm >= 0 && t > tm + 5) || t > 150;
+    };
+    if (tm < 0) return;
+    // (and used: aimed and fired once)
+    this.objective('Aim and <b>fire</b> the rifle');
+    this.howto('fire');
+    const f0 = W ? W.lastFire || 0 : 0;
+    t = 0;
+    yield () => {
+      t += this.dtR;
+      return (W && (W.lastFire || 0) > f0 + 1e-6 && t > 0.8) || t > 30;
+    };
+    yield 1.2;
+  }
+
+  // 7. (R27) the first blueprint hidden in the city - the turbo's page in an alley near the start (game/finds.js turbo1):
+  // the map and the arrow to it, the near notice, then photographed on foot
+  *lessonFind() {
+    const g = this.game;
+    const P = g.player;
+    const FI = g.finds;
+    if (!FI || !FI.on) return;
+    const s = FI.ensureSpots().find((q) => q.f.id === 'turbo1');
+    if (!s || FI.has('turbo1')) return;
+    FI.lesson = 'turbo1';
+    // (the game's own words about it are the lesson's here - the card says them)
+    FI.state.coached.near = 1;
+    FI.state.coached.firstphoto = 1;
+    const fx = s.x + s.nx * 1.8;
+    const fz = s.z + s.nz * 1.8;
+    this.objective('A blueprint is hidden nearby - <b>find it</b>', fx, fz, 'Blueprint');
+    this.howto('find');
+    let close = false;
+    let outTold = false;
+    let t = 0;
+    yield () => {
+      t += this.dtR;
+      const d = this.dist(s.x, s.z);
+      if (d < 26 && !close) {
+        close = true;
+        this.beacon(fx, fz, 1.3);
+        this.objective('<b>Photograph</b> the blueprint', fx, fz, 'Blueprint');
+        this.howto('photo');
+      }
+      // (in a car by it: photos are taken on foot)
+      if (close && P.inVehicle && d < 18 && !outTold) {
+        outTold = true;
+        this.ui.card(lang() === 'en'
+          ? { title: 'Out of the car', say: 'Blueprints are photographed on foot - get out by the page.', lines: [[g.touch ? 'Car button' : 'E', 'get out of the car']] }
+          : { title: 'יוצאים מהמכונית', say: 'את השרטוטים מצלמים ברגל - צאו ליד הדף.', lines: [[g.touch ? 'כפתור הרכב' : 'E', 'לצאת מהמכונית']] });
+      }
+      if (outTold && !P.inVehicle) {
+        outTold = false;
+        this.howto('photo');
+      }
+      // (whatever happens, the story goes on: a long while gone by, the page is his all the same)
+      if (t > 420 && !FI.has('turbo1')) FI.found(s);
+      return FI.has('turbo1');
+    };
+    this.unbeacon();
+    if (g.gps) g.gps.clear();
+    // (the polaroid flying to the pencil, the PHOTOGRAPHED card - game/finds.js showCard)
+    yield 5.5;
+  }
+
+  // 8. (R27) the turbo photographed - drawn on a car (the pencil showing how), and used
+  *lessonTurbo() {
+    const g = this.game;
+    const P = g.player;
+    const FI = g.finds;
+    if (FI && FI.on && !FI.partOpen('turbo')) return;
+    if (!(yield* this.needCar())) return;
+    const ok = yield* this.penLesson('turbo', 'Open the pen and draw a <b>turbo</b> on the car', 'draw', (car) => this.teachTurbo(car));
+    if (FI) FI.lesson = null;
+    if (!ok || !P.inVehicle) return;
+    this.objective('Hit the <b>turbo</b>!');
+    this.howto('boost');
+    let t = 0;
+    let on = 0;
+    yield () => {
+      t += this.dtR;
+      const v = P.inVehicle;
+      const boost = g.input.boost || g.input.keys.has('ShiftLeft') || g.input.keys.has('ShiftRight');
+      if (v && boost && Math.abs(v.speed || 0) > 12) on += this.dtR;
+      return on > 0.6 || t > 40;
+    };
+    if (on > 0.6) {
+      g.hud.toast(tr('זה הטורבו שמצאתם. שרטוטים כאלה מוסתרים בכל העיר — ואלה שבהמשך משוגעים יותר', 'That is the turbo you found. Blueprints like it are hidden all over the city — and the later ones are crazier'), 'good', 5);
+      if (g.audio) g.audio.play('cheer', 0.5);
+    }
+    yield 1.5;
   }
 
   // (ROADMAP 23) Gino behind his counter: one of the story's own people, drawn as they are - in place of the stand's plain figure
@@ -6582,6 +6789,80 @@ export class Prologue {
       remove: () => {
         el.remove();
         this.turboPts = null;
+      },
+    };
+  }
+
+  // (R27) the pencil that shows how wings are drawn on the car: the pen's own picture of them (game/itemcat.js wing - a
+  // plane seen from above, its wings out to the sides) drawn round, upright, over the middle of the car as the screen has
+  // it - clear of the pen's rows; its dashes left behind - a breath, and again; gone while the player draws
+  teachWings(car) {
+    const g = this.game;
+    const NS = 'http://www.w3.org/2000/svg';
+    const el = document.createElement('div');
+    el.className = 'pro-teach';
+    el.innerHTML = '<svg><path class="tl"/><g class="tp"><path d="M12 2h38v12H12z" fill="#ffd23f" stroke="#1b1430" stroke-width="2"/><path d="M50 2h8v12h-8z" fill="#ff7ab8" stroke="#1b1430" stroke-width="2"/><path d="M12 2L1.5 8 12 14z" fill="#f3d7a8" stroke="#1b1430" stroke-width="2" stroke-linejoin="round"/><path d="M1.5 8l4.5-2.6v5.2z" fill="#1b1430"/></g></svg>';
+    if (!document.getElementById('pro-teach-css')) {
+      const st = document.createElement('style');
+      st.id = 'pro-teach-css';
+      st.textContent = '.pro-teach{position:fixed;inset:0;z-index:60;pointer-events:none;transition:opacity .25s}.pro-teach.off{opacity:0}.pro-teach svg{width:100%;height:100%;overflow:visible}.pro-teach .tl{fill:none;stroke:#fff8ec;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:14 12;filter:drop-shadow(0 0 4px #1b1430)}';
+      document.head.appendChild(st);
+    }
+    document.body.appendChild(el);
+    const line = el.querySelector('.tl');
+    const pen = el.querySelector('.tp');
+    // (the wings' outline, from the nose round the right wing, the tail, the left wing and back - centred on the icon's middle)
+    const shape = document.createElementNS(NS, 'path');
+    shape.setAttribute('d', 'M12 2 C13 2 13 4 13 6 V9 L22 13 V15 L13 13 V18 L16 20 V21 L12 20 L8 21 V20 L11 18 V13 L2 15 V13 L11 9 V6 C11 4 11 2 12 2 Z');
+    const probe = document.createElementNS(NS, 'svg');
+    probe.style.cssText = 'position:fixed;width:0;height:0;visibility:hidden';
+    probe.appendChild(shape);
+    document.body.appendChild(probe);
+    const N = 72;
+    const P0 = [];
+    const len = shape.getTotalLength();
+    for (let i = 0; i <= N; i++) {
+      const q = shape.getPointAtLength((i / N) * len);
+      P0.push([q.x - 12, q.y - 11.5]);
+    }
+    probe.remove();
+    const t0 = performance.now();
+    const LOOP = 3.0;
+    this.wingPts = null;
+    return {
+      update: (drawing) => {
+        el.classList.toggle('off', drawing);
+        const cam = g.camera;
+        const W = window.innerWidth;
+        const Hh = window.innerHeight;
+        const C = g.fuse && g.fuse.drawCtx ? g.fuse.drawCtx(car) : null;
+        const roof = C && C.K ? Math.max(1.1, (C.K.clear || 0.25) + 1.2) : 1.4;
+        const q = v3(car.pos.x, car.pos.y + roof + 0.4, car.pos.z).project(cam);
+        const cx = ((q.x + 1) / 2) * W;
+        const cy = ((1 - q.y) / 2) * Hh;
+        // (as big as wings on the car look on this screen, and above the pen's list and its rows, whatever is under it)
+        let top = Hh - 190;
+        for (const r0 of document.querySelectorAll('.pp-legend, .pp-row, .pp-slots, .fd-tools')) {
+          const r = r0.getBoundingClientRect();
+          if (r.height > 0 && r.width > 0 && r.top > Hh * 0.35) top = Math.min(top, r.top - 14);
+        }
+        const k = Math.max(4.2, Math.min(7.5, Hh / 75));
+        const by = Math.max(10.5 * k + 8, Math.min(cy - 4 * k, top - 10.5 * k));
+        const bx = Math.max(11 * k, Math.min(W - 11 * k, cx));
+        const pts = P0.map(([x, y]) => [bx + x * k, by + y * k]);
+        this.wingPts = pts;
+        const tt = ((performance.now() - t0) / 1000) % LOOP;
+        const kk = Math.max(0, Math.min(1, tt / 2.0));
+        const n = Math.max(1, Math.round(kk * N));
+        let d = '';
+        for (let i = 0; i <= n; i++) d += `${i ? 'L' : 'M'}${pts[i][0].toFixed(1)} ${pts[i][1].toFixed(1)}`;
+        line.setAttribute('d', d);
+        const tip = pts[n];
+        pen.setAttribute('transform', `translate(${tip[0].toFixed(1)} ${tip[1].toFixed(1)}) rotate(-38) translate(-2 -8) scale(1.4)`);
+      },
+      remove: () => {
+        el.remove();
+        this.wingPts = null;
       },
     };
   }

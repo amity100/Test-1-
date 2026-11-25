@@ -6,9 +6,29 @@
 // usage: node tools/test-catalog.mjs [samples per level] (MEMORY=1: and with the pen's memory of a few picks - drawmemory.js;
 // VARIANT=1: lines broken in two and the drawing turned a little; TARGET=1: copying a drawing found in the city - each thing
 // read against itself alone, its own copies taken, other things' copies and doodles refused - ui/freedraw.js readTarget)
-import { BLUEPRINTS } from '../v5/js/game/blueprints.js';
-import { matchCatalog, shelfIds, SHELVES, tooEarly, drawnWhole, copyReady, MATCH_MIN, PICK_SLACK } from '../v5/js/game/catmatch.js';
-import { DrawMemory } from '../v5/js/game/drawmemory.js';
+//
+// REPORT=1 (the owner's word: "it recognises far too fast, before I have finished drawing - two lines and it is a car";
+// "sometimes I draw the thing exactly and it is not recognised"; "two random lines must never be accepted"): what is
+// taken and what is not, a thing at a time, on the pen's two ways of reading -
+//   free   nothing picked: the drawing read against its whole shelf (readCatalog);
+//   learn  the thing picked first (the legend's tap, a blueprint just photographed - ui/freedraw.js learn): read as that.
+// For each: its whole drawings taken (every part there - a careful hand, a fair one, a finger on a phone, a rough finger;
+// and, apart, the sloppy level that leaves parts out); its unfinished drawings taken (its first line, its first two, any
+// one or two of its lines, its biggest line broken in pieces - the first of them, the first two, all of them and nothing
+// else); other things' whole drawings taken for it; doodles and pairs of random lines taken for anything. "Named" is the
+// legend lighting and the tag saying a name; "made" is the ✓ making it.
+//   node tools/test-catalog.mjs [n] REPORT=1 [IDS=car,paint] [OUT=file.json]
+// JSROOT=<a js folder>: the game's code read from there (a copy of v5/js kept from before a change - the same drawings,
+// read by the old code and the new)
+import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const JSROOT = process.env.JSROOT ? path.resolve(process.env.JSROOT) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../v5/js');
+const { BLUEPRINTS } = await import(`${JSROOT}/game/blueprints.js`);
+const CM = await import(`${JSROOT}/game/catmatch.js`);
+const { matchCatalog, shelfIds, SHELVES, tooEarly, drawnWhole, copyReady, MATCH_MIN, PICK_SLACK } = CM;
+const { DrawMemory } = await import(`${JSROOT}/game/drawmemory.js`);
 
 const N = +(process.argv[2] || 16);
 
@@ -31,7 +51,7 @@ const LEVELS = {
 
 function humanCopy(bp, lv, rnd) {
   const r = (a, b) => a + (b - a) * rnd();
-  const P = LEVELS[lv];
+  const P = typeof lv === 'string' ? LEVELS[lv] : lv;
   const s = r(4.5, 7.5);
   const ax = 1 + r(-P.gsx, P.gsx);
   const ay = 1 + r(-P.gsx, P.gsx);
@@ -159,16 +179,27 @@ function hand(lines, rnd) {
   });
 }
 
-// what the game says of a drawing, as ui/freedraw.js readCatalog does (no pick in the legend): the thing lit (null: none
-// yet), and whether it would be made
-function readAs(lines, ids, memory = null) {
+// what the game says of a drawing, as ui/freedraw.js readCatalog does: the thing lit (null: none yet), and whether it
+// would be made. force: the thing picked first in the legend (ui/freedraw.js learn). The game's own say of it
+// (game/catmatch.js readShelf) where the code read has one; before it had, as ui/freedraw.js said it then
+function readAs(lines, ids, memory = null, force = null) {
   const strokes = lines.map((p) => ({ p }));
+  if (CM.readShelf) {
+    let mem = null;
+    if (memory && !force) {
+      const m = memory.match(memory.signature(strokes));
+      if (m && ids.includes(m.key)) mem = m.key;
+    }
+    const R = CM.readShelf(strokes, ids, { force: force && ids.includes(force) ? force : null, mem });
+    if (!R) return { lit: null };
+    return { lit: R.lit, ready: !!R.ready, score: R.b.score, top: R.top.id, fromMemory: !!R.fromMemory };
+  }
   const all = matchCatalog(strokes, ids);
   if (!all) return { lit: null };
   const top = all.best;
-  let pick = null;
+  let pick = force && ids.includes(force) ? force : null;
   let fromMemory = false;
-  if (memory) {
+  if (!pick && memory) {
     const m = memory.match(memory.signature(strokes));
     if (m && ids.includes(m.key)) {
       pick = m.key;
@@ -176,7 +207,7 @@ function readAs(lines, ids, memory = null) {
     }
   }
   // (as freedraw.js: the memory's pick only while the catalog says it may be it)
-  if (pick && pick !== top.id) {
+  if (pick && fromMemory && pick !== top.id) {
     const m = all.list.find((x) => x.id === pick);
     if (!m || top.score > m.score + PICK_SLACK || top.rank > m.rank + 2 * PICK_SLACK) pick = null;
   }
@@ -257,6 +288,451 @@ if (process.env.TARGET) {
   }
   console.table(rows.map((r) => ({ id: r.id, 'good %': r.own.good, 'okay %': r.own.okay, 'sloppy %': r.own.sloppy, 'others taken %': Math.round((100 * r.other) / Math.max(1, r.otherN)), 'taken from': r.by.slice(0, 5).join(' '), 'doodles taken': r.doodBy.join(' ') })));
   console.log(`own copies taken ${((100 * tot.own) / tot.ownN).toFixed(1)}% · other things' copies taken ${((100 * tot.oth) / tot.othN).toFixed(1)}% · doodles taken ${((100 * tot.doo) / tot.dooN).toFixed(1)}%`);
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// REPORT=1: what is taken and what is not (see the head)
+
+// a finger on a phone: the thing's own lines, every one of them, as a finger draws them - its proportions about right,
+// not exact (the whole longer or taller, leaning; each part a little bigger or smaller, longer or taller, off its
+// place, turned), corners cut, a slow wobble along the line and a fine shake on it, loops not quite closed or run over,
+// lines stopped short or run on, a long line now and then lifted half way. Nothing left out: a part missing is
+// another test (the unfinished drawings)
+const FINGER = {
+  finger: { jit: 1.3, wob: 1.8, sscale: 0.14, srot: 0.09, sshift: 4.0, gsx: 0.2, shear: 0.08, round: 5, ends: 0.07, split: 0.25 },
+  rough: { jit: 1.9, wob: 2.8, sscale: 0.22, srot: 0.14, sshift: 6.5, gsx: 0.28, shear: 0.14, round: 8, ends: 0.11, split: 0.35 },
+};
+const plen = (p) => {
+  let L = 0;
+  for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+  return L;
+};
+const densify = (pts, step) => {
+  const out = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step));
+    for (let k = 0; k < n; k++) out.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]);
+  }
+  out.push(pts[pts.length - 1].slice());
+  return out;
+};
+// (corners cut: each point the mean of those within w of it along the line; a closed line all the way round)
+function roundOff(pts, w, closed) {
+  const n = pts.length;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    let sx = 0;
+    let sy = 0;
+    let c = 0;
+    for (let d = -w; d <= w; d++) {
+      let j = i + d;
+      if (closed) j = ((j % (n - 1)) + (n - 1)) % (n - 1);
+      else if (j < 0 || j >= n) continue;
+      sx += pts[j][0];
+      sy += pts[j][1];
+      c++;
+    }
+    out.push([sx / c, sy / c]);
+  }
+  if (!closed) {
+    // (an open line keeps its ends where they were)
+    out[0] = pts[0].slice();
+    out[n - 1] = pts[n - 1].slice();
+  }
+  return out;
+}
+// the thing's lines as a finger draws them: { S: [[x, y], ...] a line (px), part: [which of the thing's lines each is] }
+function fingerCopy(bp, lv, rnd, o = {}) {
+  const r = (a, b) => a + (b - a) * rnd();
+  const P = FINGER[lv];
+  const STEP = 1.5;
+  const s = r(1.7, 3.4);
+  const ax = 1 + r(-P.gsx, P.gsx);
+  const ay = 1 + r(-P.gsx, P.gsx);
+  const shear = r(-P.shear, P.shear);
+  const ox = r(60, 400);
+  const oy = r(60, 200);
+  const flip = rnd() < 0.5;
+  const S = [];
+  const part = [];
+  bp.strokes.forEach((st, si) => {
+    let cx = 0;
+    let cy = 0;
+    for (const [x, y] of st.pts) {
+      cx += x;
+      cy += y;
+    }
+    cx /= st.pts.length;
+    cy /= st.pts.length;
+    const scx = 1 + r(-P.sscale, P.sscale);
+    const scy = 1 + r(-P.sscale, P.sscale);
+    const rot = r(-P.srot, P.srot);
+    const sh = [r(-P.sshift, P.sshift), r(-P.sshift, P.sshift)];
+    let pts = densify(st.pts, STEP);
+    const L = plen(pts);
+    const closed = pts.length > 3 && Math.hypot(pts[0][0] - pts[pts.length - 1][0], pts[0][1] - pts[pts.length - 1][1]) < Math.max(2, L * 0.03);
+    pts = roundOff(pts, Math.max(1, Math.round(Math.min(P.round, L * 0.06) / STEP / 2)), closed);
+    // (its ends: a loop left open or run over; a line stopped short or run on)
+    const e = Math.round((L * r(0, P.ends)) / STEP);
+    if (closed && e > 0) {
+      if (rnd() < 0.5) pts = pts.slice(0, pts.length - e);
+      else pts = pts.concat(pts.slice(1, e + 1).map(([x, y]) => [x + r(-1, 1), y + r(-1, 1)]));
+    } else if (e > 0 && pts.length > e + 4) {
+      if (rnd() < 0.5) pts = rnd() < 0.5 ? pts.slice(e) : pts.slice(0, pts.length - e);
+      else {
+        const a = pts[pts.length - 1];
+        const b = pts[Math.max(0, pts.length - 4)];
+        const d = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1;
+        for (let k = 1; k <= e; k++) pts.push([a[0] + ((a[0] - b[0]) / d) * STEP * k, a[1] + ((a[1] - b[1]) / d) * STEP * k]);
+      }
+    }
+    const ph1 = r(0, 7);
+    const ph2 = r(0, 7);
+    const ph3 = r(0, 7);
+    const w1 = r(0.035, 0.07);
+    const w2 = r(0.035, 0.07);
+    const line = pts.map(([x, y], i) => {
+      const dx = (x - cx) * scx;
+      const dy = (y - cy) * scy;
+      const rx = dx * Math.cos(rot) - dy * Math.sin(rot);
+      const ry = dx * Math.sin(rot) + dy * Math.cos(rot);
+      const u = i * STEP;
+      const nx = Math.sin(u * w1 + ph1) * P.wob + Math.sin(u * 0.45 + ph3) * P.jit * 0.35 + r(-0.3, 0.3) * P.jit;
+      const ny = Math.cos(u * w2 + ph2) * P.wob + Math.cos(u * 0.41 + ph3) * P.jit * 0.35 + r(-0.3, 0.3) * P.jit;
+      const X = cx + rx + sh[0] + nx;
+      const Y = cy + ry + sh[1] + ny;
+      const Xs = (X + shear * (Y - 50)) * (flip ? -1 : 1);
+      return [Math.round((ox + Xs * s * ax) * 2) / 2, Math.round((oy + Y * s * ay) * 2) / 2];
+    });
+    // (a long line lifted half way, the pen put down again by where it stopped)
+    if (!o.whole && L > 40 && rnd() < P.split) {
+      const k = Math.floor(line.length * r(0.3, 0.7));
+      const g = Math.round(r(-3, 4));
+      S.push(line.slice(0, k + 1));
+      part.push(si);
+      S.push(line.slice(Math.max(1, k + g)));
+      part.push(si);
+    } else {
+      S.push(line);
+      part.push(si);
+    }
+  });
+  return { S, part };
+}
+// a line in m pieces, one after another (a hand that lifts the pen as it goes round)
+function pieces(line, m) {
+  const out = [];
+  for (let i = 0; i < m; i++) out.push(line.slice(Math.floor((i * (line.length - 1)) / m), Math.floor(((i + 1) * (line.length - 1)) / m) + 1));
+  return out.filter((p) => p.length > 1);
+}
+// two or three lines of nothing: straight ones, bows, bends - anywhere, any size ("two random lines")
+function randomLines(rnd, n) {
+  const r = (a, b) => a + (b - a) * rnd();
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const x0 = r(20, 300);
+    const y0 = r(20, 200);
+    const a = r(0, Math.PI * 2);
+    const L = r(50, 260);
+    const kind = rnd();
+    const pts = [];
+    if (kind < 0.45) for (let k = 0; k <= 30; k++) pts.push([x0 + (Math.cos(a) * L * k) / 30, y0 + (Math.sin(a) * L * k) / 30]);
+    else if (kind < 0.8) {
+      const bow = r(-0.5, 0.5) * L;
+      for (let k = 0; k <= 30; k++) {
+        const t = k / 30;
+        const b = Math.sin(t * Math.PI) * bow;
+        pts.push([x0 + Math.cos(a) * L * t - Math.sin(a) * b, y0 + Math.sin(a) * L * t + Math.cos(a) * b]);
+      }
+    } else {
+      const a2 = a + r(0.6, 2.4) * (rnd() < 0.5 ? 1 : -1);
+      const L2 = r(40, 200);
+      for (let k = 0; k <= 15; k++) pts.push([x0 + (Math.cos(a) * L * k) / 15, y0 + (Math.sin(a) * L * k) / 15]);
+      const [mx, my] = pts[pts.length - 1];
+      for (let k = 1; k <= 15; k++) pts.push([mx + (Math.cos(a2) * L2 * k) / 15, my + (Math.sin(a2) * L2 * k) / 15]);
+    }
+    out.push(pts.map(([x, y]) => [x + (rnd() - 0.5) * 3, y + (rnd() - 0.5) * 3]));
+  }
+  return out;
+}
+
+if (process.env.REPORT) {
+  const NR = +(process.argv[2] || 30);
+  const only = process.env.IDS ? process.env.IDS.split(',') : null;
+  const START = ['paint', 'rifle', 'mp5', 'shotgun', 'inkbomb', 'car', 'muscle', 'hyper', 'nightshift', 'streetline', 'bike', 'ramp', 'barrier', 'bridge'];
+  const WHOLE = ['good', 'okay0', 'finger', 'rough'];
+  // (the old levels with nothing left out: a part missing is not a whole drawing)
+  const LV0 = { good: LEVELS.good, okay0: { ...LEVELS.okay, drop: 0 } };
+  const shelves = SHELVES.map((sh) => ({ sh, ids: shelfIds(sh) }));
+  const shelfOfId = (id) => shelves.find((q) => q.ids.includes(id));
+  const allIds = shelves.flatMap((q) => q.ids);
+  // the drawings: each thing's, made once from its own dice - the same whatever code reads them
+  const seedOf = (id, k) => {
+    let h = 2166136261 ^ k;
+    for (const ch of id) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+    return h >>> 0;
+  };
+  const D = {};
+  for (const id of allIds) {
+    const bp = BLUEPRINTS[id];
+    const rr = mulberry32(seedOf(id, 1));
+    const d = { whole: {}, sloppy: [], part: [] };
+    for (const lv of WHOLE) {
+      d.whole[lv] = [];
+      for (let k = 0; k < NR; k++) d.whole[lv].push(LV0[lv] ? humanCopy(bp, LV0[lv], rr) : fingerCopy(bp, lv, rr).S);
+    }
+    for (let k = 0; k < NR; k++) d.sloppy.push(humanCopy(bp, 'sloppy', rr));
+    // the unfinished ones: of a finger's drawing with each of the thing's lines one line (whole), what there is of it
+    // after a line, after two
+    const n = bp.strokes.length;
+    for (let k = 0; k < NR; k++) {
+      const F = fingerCopy(bp, 'finger', rr, { whole: true }).S;
+      const big = F.reduce((m, p, i) => (plen(p) > plen(F[m]) ? i : m), 0);
+      // (in the thing's own order - its biggest line first, as its drawing has it - and in any order)
+      const ord = F.map((_, i) => i).sort(() => rr() - 0.5);
+      for (const j of [1, 2]) {
+        if (j >= n) continue;
+        d.part.push({ kind: `first ${j} of ${n}`, lines: j, S: F.slice(0, j) });
+        d.part.push({ kind: `any ${j} of ${n}`, lines: j, S: ord.slice(0, j).map((i) => F[i]) });
+      }
+      // (its biggest line - a body, a blade - in pieces: the first of them, the first two; and all of it, in two
+      // pieces or three, with nothing else of the thing)
+      const m = 2 + Math.floor(rr() * 3);
+      const pc = pieces(F[big], m);
+      d.part.push({ kind: 'piece 1 of the big line', lines: 1, S: pc.slice(0, 1) });
+      if (pc.length > 2 || n > 1) d.part.push({ kind: 'pieces 1-2 of the big line', lines: 2, S: pc.slice(0, 2) });
+      if (n > 1) {
+        const m2 = 2 + Math.floor(rr() * 2);
+        d.part.push({ kind: `the big line alone, in ${m2}`, lines: m2, S: pieces(F[big], m2) });
+      }
+    }
+    D[id] = d;
+  }
+  // other drawings altogether
+  const rd = mulberry32(977);
+  const doodles = [];
+  for (const [name, f] of Object.entries(DOODLES)) for (let k = 0; k < 4; k++) doodles.push({ name, S: hand(f(), rd) });
+  for (let k = 0; k < 12; k++) doodles.push({ name: 'scribble', S: scribble(rd) });
+  const pairs = [];
+  for (let k = 0; k < 300; k++) pairs.push({ name: 'two lines', S: randomLines(rd, 2) });
+  for (let k = 0; k < 150; k++) pairs.push({ name: 'three lines', S: randomLines(rd, 3) });
+
+  const pct = (a, b) => (b ? Math.round((1000 * a) / b) / 10 : 0);
+  const out = { n: NR, root: JSROOT, free: {}, learn: {}, doodles: {} };
+  // FEATS=<file>: the numbers behind the say (game/catmatch.js wholeOf), for each drawing - how its thresholds are chosen:
+  // a line a drawing: kind (whole:<level> | part:<kind> | other | doodle), the thing drawn, the thing it is held against
+  // (itself; for an unfinished one and a doodle the likeliest), then its biggest part, the least of its other parts of
+  // size, the ink of its details left out, cov, prec, own, score
+  if (process.env.FEATS && CM.readShelf) {
+    const rows = [];
+    const feat = (kind, id, m) => {
+      const P = m.parts;
+      let big = 0;
+      for (let i = 1; i < P.length; i++) if (P[i].w > P[big].w) big = i;
+      let least = 1;
+      let left = 0;
+      P.forEach((q, i) => {
+        if (i === big) return;
+        if (q.w >= CM.WHOLE.detail) least = Math.min(least, q.c);
+        else if (q.c < CM.WHOLE.part) left += q.w;
+      });
+      rows.push([kind, id, m.id, P[big].c.toFixed(3), least.toFixed(3), left.toFixed(3), m.cov.toFixed(3), m.prec.toFixed(3), m.own.toFixed(3), m.score.toFixed(3), m.extra.toFixed(3), m.precT.toFixed(3)].join('\t'));
+    };
+    for (const id of only || allIds) {
+      const sh = shelfOfId(id);
+      for (const lv of WHOLE) for (const S of D[id].whole[lv]) feat(`whole:${lv}`, id, CM.readShelf(S.map((p) => ({ p })), sh.ids, { force: id }).b);
+      for (const q of D[id].part) feat(`part:${q.kind.replace(/ of \d+/, '').replace(/in \d+/, 'in pieces')}`, id, CM.readShelf(q.S.map((p) => ({ p })), sh.ids).top);
+      for (const q of D[id].part) feat(`partown:${q.kind.replace(/ of \d+/, '').replace(/in \d+/, 'in pieces')}`, id, CM.readShelf(q.S.map((p) => ({ p })), sh.ids, { force: id }).b);
+      for (const o of allIds) if (o !== id) for (const S of D[o].whole.finger.slice(0, 3)) feat('other', o, CM.readShelf(S.map((p) => ({ p })), sh.ids, { force: id }).b);
+    }
+    for (const { ids } of shelves) for (const q of [...doodles, ...pairs]) feat(`doodle:${q.name}`, q.name, CM.readShelf(q.S.map((p) => ({ p })), ids).top);
+    fs.writeFileSync(process.env.FEATS, rows.join('\n'));
+    console.log('features written', rows.length);
+    process.exit(0);
+  }
+  const todo = only || allIds;
+  for (const id of todo) {
+    const sh = shelfOfId(id);
+    if (!sh) continue;
+    const ids = sh.ids;
+    const d = D[id];
+    // ---- free: nothing picked
+    const F = { whole: {}, made: 0, n: 0, other: 0, namedOther: 0, took: {}, sloppy: { made: 0, other: 0, n: 0 }, part: { named: 0, made: 0, n: 0, by: {} }, p1: { named: 0, made: 0, n: 0 }, p2: { named: 0, made: 0, n: 0 } };
+    for (const lv of WHOLE) {
+      let ok = 0;
+      for (const S of d.whole[lv]) {
+        const R = readAs(S, ids);
+        F.n++;
+        if (R.lit === id && R.ready) {
+          ok++;
+          F.made++;
+        } else {
+          if (R.lit && R.lit !== id) {
+            F.namedOther++;
+            if (R.ready) {
+              F.other++;
+              F.took[R.lit] = (F.took[R.lit] || 0) + 1;
+            }
+          }
+        }
+      }
+      F.whole[lv] = pct(ok, d.whole[lv].length);
+    }
+    for (const S of d.sloppy) {
+      const R = readAs(S, ids);
+      F.sloppy.n++;
+      if (R.lit === id && R.ready) F.sloppy.made++;
+      else if (R.lit && R.ready) F.sloppy.other++;
+    }
+    for (const q of d.part) {
+      const R = readAs(q.S, ids);
+      const b = q.lines <= 1 ? F.p1 : q.lines === 2 ? F.p2 : null;
+      F.part.n++;
+      if (b) b.n++;
+      const by = (F.part.by[q.kind] = F.part.by[q.kind] || { named: 0, made: 0, n: 0 });
+      by.n++;
+      if (R.lit) {
+        F.part.named++;
+        by.named++;
+        if (b) b.named++;
+      }
+      if (R.lit && R.ready) {
+        F.part.made++;
+        by.made++;
+        if (b) b.made++;
+      }
+    }
+    out.free[id] = F;
+    // ---- learn: this thing picked
+    const L = { whole: {}, made: 0, n: 0, sloppy: { made: 0, n: 0 }, part: { made: 0, n: 0, by: {} }, p1: { made: 0, n: 0 }, p2: { made: 0, n: 0 }, other: 0, otherN: 0, by: {}, doodle: 0, doodleN: 0, doodBy: {} };
+    for (const lv of WHOLE) {
+      let ok = 0;
+      for (const S of d.whole[lv]) {
+        const R = readAs(S, ids, null, id);
+        L.n++;
+        if (R.lit === id && R.ready) {
+          ok++;
+          L.made++;
+        }
+      }
+      L.whole[lv] = pct(ok, d.whole[lv].length);
+    }
+    for (const S of d.sloppy) {
+      const R = readAs(S, ids, null, id);
+      L.sloppy.n++;
+      if (R.lit === id && R.ready) L.sloppy.made++;
+    }
+    for (const q of d.part) {
+      const R = readAs(q.S, ids, null, id);
+      const b = q.lines <= 1 ? L.p1 : q.lines === 2 ? L.p2 : null;
+      const by = (L.part.by[q.kind] = L.part.by[q.kind] || { made: 0, n: 0 });
+      L.part.n++;
+      by.n++;
+      if (b) b.n++;
+      if (R.lit === id && R.ready) {
+        L.part.made++;
+        by.made++;
+        if (b) b.made++;
+      }
+    }
+    // (other things' whole drawings, a finger's, three of each: every other thing of every shelf)
+    for (const o of allIds) {
+      if (o === id) continue;
+      for (const S of D[o].whole.finger.slice(0, 3)) {
+        const R = readAs(S, ids, null, id);
+        L.otherN++;
+        if (R.lit === id && R.ready) {
+          L.other++;
+          L.by[o] = (L.by[o] || 0) + 1;
+        }
+      }
+    }
+    for (const q of [...doodles, ...pairs]) {
+      const R = readAs(q.S, ids, null, id);
+      L.doodleN++;
+      if (R.lit === id && R.ready) {
+        L.doodle++;
+        L.doodBy[q.name] = (L.doodBy[q.name] || 0) + 1;
+      }
+    }
+    out.learn[id] = L;
+  }
+  // ---- doodles, nothing picked: by each shelf
+  for (const { sh, ids } of shelves) {
+    const Q = { named: 0, made: 0, n: 0, by: {}, pairsNamed: 0, pairsMade: 0, pairsN: 0, pairsBy: {} };
+    for (const q of doodles) {
+      const R = readAs(q.S, ids);
+      Q.n++;
+      if (R.lit) {
+        Q.named++;
+        if (R.ready) {
+          Q.made++;
+          Q.by[`${q.name}>${R.lit}`] = (Q.by[`${q.name}>${R.lit}`] || 0) + 1;
+        }
+      }
+    }
+    for (const q of pairs) {
+      const R = readAs(q.S, ids);
+      Q.pairsN++;
+      if (R.lit) {
+        Q.pairsNamed++;
+        if (R.ready) {
+          Q.pairsMade++;
+          Q.pairsBy[R.lit] = (Q.pairsBy[R.lit] || 0) + 1;
+        }
+      }
+    }
+    out.doodles[sh] = Q;
+  }
+  // ---- said
+  const top3 = (o) => Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} ${v}`).join(', ');
+  const rowF = (id) => {
+    const F = out.free[id];
+    return { id: (START.includes(id) ? '* ' : '  ') + id, 'whole made %': pct(F.made, F.n), good: F.whole.good, okay: F.whole.okay0, finger: F.whole.finger, rough: F.whole.rough, 'sloppy(drop) %': pct(F.sloppy.made, F.sloppy.n), '1 line named/made %': `${pct(F.p1.named, F.p1.n)} / ${pct(F.p1.made, F.p1.n)}`, '2 lines named/made %': `${pct(F.p2.named, F.p2.n)} / ${pct(F.p2.made, F.p2.n)}`, 'made as another %': pct(F.other, F.n), 'as': top3(F.took) };
+  };
+  const rowL = (id) => {
+    const L = out.learn[id];
+    return { id: (START.includes(id) ? '* ' : '  ') + id, 'whole made %': pct(L.made, L.n), good: L.whole.good, okay: L.whole.okay0, finger: L.whole.finger, rough: L.whole.rough, 'sloppy(drop) %': pct(L.sloppy.made, L.sloppy.n), '1 line made %': pct(L.p1.made, L.p1.n), '2 lines made %': pct(L.p2.made, L.p2.n), 'others taken %': pct(L.other, L.otherN), from: top3(L.by), 'doodles taken %': pct(L.doodle, L.doodleN) };
+  };
+  console.log(`\n=== FREE (nothing picked): ${NR} drawings a level; * the start kit`);
+  console.table(todo.filter((id) => out.free[id]).map(rowF));
+  console.log(`\n=== LEARN (the thing picked first): ${NR} drawings a level; * the start kit`);
+  console.table(todo.filter((id) => out.learn[id]).map(rowL));
+  const sum = (ids, path, f) => ids.reduce((a, id) => a + (out[path][id] ? f(out[path][id]) : 0), 0);
+  const tot = (ids, name) => {
+    const I = ids.filter((id) => out.free[id]);
+    if (!I.length) return;
+    const lv3 = (path) => ['good', 'okay0', 'finger'].map((lv) => I.reduce((a, id) => a + out[path][id].whole[lv], 0) / I.length);
+    const f3 = lv3('free');
+    const l3 = lv3('learn');
+    console.log(`${name} (${I.length} things)`);
+    console.log(`  free:  whole drawings made ${pct(sum(I, 'free', (F) => F.made), sum(I, 'free', (F) => F.n))}% (good ${f3[0].toFixed(1)}, okay ${f3[1].toFixed(1)}, finger ${f3[2].toFixed(1)}; careful+fair+finger ${((f3[0] + f3[1] + f3[2]) / 3).toFixed(1)}) · with parts left out (sloppy) ${pct(sum(I, 'free', (F) => F.sloppy.made), sum(I, 'free', (F) => F.sloppy.n))}% · 1 line: named ${pct(sum(I, 'free', (F) => F.p1.named), sum(I, 'free', (F) => F.p1.n))}% made ${pct(sum(I, 'free', (F) => F.p1.made), sum(I, 'free', (F) => F.p1.n))}% · 2 lines: named ${pct(sum(I, 'free', (F) => F.p2.named), sum(I, 'free', (F) => F.p2.n))}% made ${pct(sum(I, 'free', (F) => F.p2.made), sum(I, 'free', (F) => F.p2.n))}% · all unfinished: named ${pct(sum(I, 'free', (F) => F.part.named), sum(I, 'free', (F) => F.part.n))}% made ${pct(sum(I, 'free', (F) => F.part.made), sum(I, 'free', (F) => F.part.n))}% · whole drawings made as another thing ${pct(sum(I, 'free', (F) => F.other), sum(I, 'free', (F) => F.n))}%`);
+    console.log(`  learn: whole drawings made ${pct(sum(I, 'learn', (L) => L.made), sum(I, 'learn', (L) => L.n))}% (good ${l3[0].toFixed(1)}, okay ${l3[1].toFixed(1)}, finger ${l3[2].toFixed(1)}; careful+fair+finger ${((l3[0] + l3[1] + l3[2]) / 3).toFixed(1)}) · with parts left out (sloppy) ${pct(sum(I, 'learn', (L) => L.sloppy.made), sum(I, 'learn', (L) => L.sloppy.n))}% · 1 line made ${pct(sum(I, 'learn', (L) => L.p1.made), sum(I, 'learn', (L) => L.p1.n))}% · 2 lines made ${pct(sum(I, 'learn', (L) => L.p2.made), sum(I, 'learn', (L) => L.p2.n))}% · all unfinished made ${pct(sum(I, 'learn', (L) => L.part.made), sum(I, 'learn', (L) => L.part.n))}% · other things' drawings taken ${pct(sum(I, 'learn', (L) => L.other), sum(I, 'learn', (L) => L.otherN))}% · doodles and random lines taken ${pct(sum(I, 'learn', (L) => L.doodle), sum(I, 'learn', (L) => L.doodleN))}%`);
+  };
+  console.log('');
+  tot(START, 'THE START KIT');
+  tot(allIds, 'EVERYTHING');
+  // (the unfinished drawings, by kind)
+  const kinds = {};
+  for (const id of todo) {
+    if (!out.free[id]) continue;
+    for (const [k, v] of Object.entries(out.free[id].part.by)) {
+      const key = k.replace(/ of \d+/, '').replace(/in \d+/, 'in pieces');
+      const q = (kinds[key] = kinds[key] || { named: 0, made: 0, n: 0, learn: 0 });
+      q.named += v.named;
+      q.made += v.made;
+      q.n += v.n;
+      q.learn += out.learn[id].part.by[k] ? out.learn[id].part.by[k].made : 0;
+    }
+  }
+  console.log('\nunfinished drawings, by kind:');
+  console.table(Object.entries(kinds).map(([k, v]) => ({ kind: k, n: v.n, 'free: named %': pct(v.named, v.n), 'free: made %': pct(v.made, v.n), 'learn: made %': pct(v.learn, v.n) })));
+  console.log('doodles, nothing picked:');
+  console.table(Object.entries(out.doodles).map(([sh, Q]) => ({ shelf: sh, 'doodles named %': pct(Q.named, Q.n), 'doodles made %': pct(Q.made, Q.n), as: top3(Q.by), 'random lines named %': pct(Q.pairsNamed, Q.pairsN), 'random lines made %': pct(Q.pairsMade, Q.pairsN), 'as ': top3(Q.pairsBy) })));
+  if (process.env.OUT) fs.writeFileSync(process.env.OUT, JSON.stringify(out));
   process.exit(0);
 }
 

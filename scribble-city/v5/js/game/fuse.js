@@ -1231,7 +1231,8 @@ export class Fuse {
       } else if (p.type === 'spring') {
         const coils = n.coils || 4;
         if (p.v === 'bumper') v.bumper = { k: clamp(1.4 + coils * 0.14, 1.5, 2.8) };
-        else fz.jump = clamp(6 + coils * 0.85 + (n.len || 0.6) * 1.6, 7, 16);
+        // (R27: at least the two and a half metres the owner asks of a spring)
+        else fz.jump = clamp(7 + coils * 0.85 + (n.len || 0.6) * 1.6, 10, 16);
       } else if (p.type === 'barrel') {
         // (the gun itself: game/partsum.js's, as long and as thick as drawn, of its ink)
         const r = n.thick ? clamp(n.r, 0.11, 0.24) : clamp(n.r || 0.06, 0.04, 0.1);
