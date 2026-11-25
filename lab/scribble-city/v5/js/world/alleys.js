@@ -46,6 +46,8 @@ function meters(ctx, r, x, face, z, top) {
   const M = ctx.M;
   const n = r.int(2, 4);
   const w = 0.32 * n + 0.2;
+  // (R26: where the walls are busy - a blueprint's page is not put over them, game/finds.js)
+  (ctx.wallProps || (ctx.wallProps = [])).push({ x, z, half: w / 2 + 0.4 });
   wbox(ctx, M.steel, x, face, 0, 0.22, CURB + 1.15, CURB + 1.95, z - w / 2, z + w / 2, GREY);
   for (let k = 0; k < n; k++) {
     const zc = z - w / 2 + 0.26 + k * 0.32;
@@ -66,6 +68,7 @@ function condenser(ctx, r, x, face, z) {
   const M = ctx.M;
   const xc = x + face * 0.5;
   if (ctx.col.pointInside(xc, 0.6, z, 0.6)) return;
+  (ctx.wallProps || (ctx.wallProps = [])).push({ x, z, half: 0.9 });
   const id = ctx.objects.begin(ctx, 'condenser', xc, z);
   wbox(ctx, M.prop, x, face, 0.12, 0.92, CURB, CURB + 0.82, z - 0.42, z + 0.42, srgb(0.86, 0.86, 0.84));
   const fan = new THREE.CylinderGeometry(0.31, 0.31, 0.03, 14);
@@ -89,6 +92,7 @@ function backStair(ctx, r, x, face, z0, z1) {
   const zm = up > 0 ? zs : zl + 1.4;
   const zM = up > 0 ? zl + 1.4 : zs;
   if (ctx.col.pointInside(x + face * 0.6, 0.8, (zm + zM) / 2, 0.5)) return;
+  (ctx.wallProps || (ctx.wallProps = [])).push({ x, z: (zm + zM) / 2, half: (zM - zm) / 2 + 0.5 });
   const id = ctx.objects.begin(ctx, 'stair', x + face * 0.6, (zm + zM) / 2);
   // the landing and its rail, the door behind it
   wbox(ctx, M.frame, x, face, 0, 1.15, yL - 0.08, yL, zl, zl + 1.4, IRON);

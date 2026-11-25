@@ -165,9 +165,12 @@ const BY_ID = Object.fromEntries(FINDS.map((f) => [f.id, f]));
 // roof), or, with no board, an alley of its own
 const HIDE = new WeakMap();
 const SLOT_FR = [0.3, 0.7, 0.5, 0.18, 0.84, 0.4, 0.6, 0.26];
+// (not alleys: open places) and what a page's wall is seen through when it is looked for (a fence or a board in front hides it)
+const ALLEY_NOT = new Set(['park', 'plaza', 'motel', 'towers', 'market']);
+const ALLEY_SEE = new Set(['prop', 'cover', 'car', 'furniture', 'rail']);
 function hiddenSpot(world, id) {
   let memo = HIDE.get(world);
-  if (!memo) HIDE.set(world, (memo = { at: new Map(), used: new Map() }));
+  if (!memo) HIDE.set(world, (memo = { at: new Map(), used: new Map(), pts: [] }));
   if (memo.at.has(id)) return memo.at.get(id);
   const col = world.collision;
   const boards = (world.billboards || []).filter((b) => b.id === id);
@@ -185,29 +188,52 @@ function hiddenSpot(world, id) {
       break;
     }
   }
-  const alleys = world.alleys || [];
-  if (!spot && alleys.length) {
+  // (a real alley - not a park, a square, a motel's lot, the towers' or the market's - its page on a building's wall that
+  // nothing stands in front of, with room for him to stand before it, and no other page within 10 m)
+  const alleys = (world.alleys || []).filter((q) => !ALLEY_NOT.has(q.type));
+  if (!spot && alleys.length && col) {
     const b = boards.find((q) => !q.roof);
-    let a = null;
-    if (b) {
-      let bd = Infinity;
-      for (const q of alleys) {
-        const d = Math.hypot((q.x0 + q.x1) / 2 - b.x, (q.z0 + q.z1) / 2 - b.z) + (memo.used.get(q) || 0) * 40;
-        if (d < bd) {
-          bd = d;
-          a = q;
-        }
+    let h = 0;
+    for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    const ax = b ? b.x : 0;
+    const az = b ? b.z : 0;
+    const order = alleys
+      .map((q) => ({ q, d: b ? Math.hypot((q.x0 + q.x1) / 2 - ax, (q.z0 + q.z1) / 2 - az) + (memo.used.get(q) || 0) * 40 : ((h + alleys.indexOf(q) * 7) % 97) }))
+      .sort((p1, p2) => p1.d - p2.d);
+    for (const { q: a } of order) {
+      const cx = (a.x0 + a.x1) / 2;
+      const n = memo.used.get(a) || 0;
+      for (let k = 0; k < SLOT_FR.length * 2 && !spot; k++) {
+        const fr = SLOT_FR[(n + k) % SLOT_FR.length];
+        const side = (n + k) % 2 ? 1 : -1;
+        const z = a.z0 + (a.z1 - a.z0) * fr;
+        const hit = col.raycast(cx, 1.85, z, side, 0, 0, 14, ALLEY_SEE);
+        if (!hit || !hit.box || hit.box.tag !== 'wall' || Math.abs(hit.x - cx) < 1.2) continue;
+        const x = hit.x - side * 0.04;
+        // (room to stand before it, and the wall the page is on runs on past both its edges)
+        if (col.pointInside(x - side * 1.6, 1.0, z) || col.pointInside(x - side * 1.6, 1.0, z + 0.8) || col.pointInside(x - side * 1.6, 1.0, z - 0.8)) continue;
+        const e1 = col.raycast(cx, 1.85, z + 0.8, side, 0, 0, 14, ALLEY_SEE);
+        const e2 = col.raycast(cx, 1.85, z - 0.8, side, 0, 0, 14, ALLEY_SEE);
+        if (!e1 || !e2 || Math.abs(e1.x - hit.x) > 0.3 || Math.abs(e2.x - hit.x) > 0.3) continue;
+        if (memo.pts.some(([px, pz]) => Math.hypot(px - x, pz - z) < 10)) continue;
+        // (nothing standing before it - a palm, a pole, a lamp, crates - within a metre and a half out from the wall)
+        let blocked = false;
+        const fx0 = Math.min(x, x - side * 3.4);
+        const fx1 = Math.max(x, x - side * 3.4);
+        col.forEachIn(fx0, z - 1.6, fx1, z + 1.6, (q) => {
+          if (q.tag === 'wall' || q.y1 < 1.3 || q.y0 > 3.2) return false;
+          blocked = true;
+          return true;
+        });
+        if (blocked) continue;
+        // (not over the meters or an air conditioner on that wall)
+        if ((world.wallProps || []).some((q) => Math.abs(q.x - x) < 0.7 && Math.abs(q.z - z) < q.half + 0.9)) continue;
+        spot = { x, y: 1.85, z, nx: -side, ny: 0, nz: 0, ux: 0, uy: 1, uz: 0 };
+        memo.used.set(a, n + 1);
+        memo.pts.push([x, z]);
       }
-    } else {
-      let h = 0;
-      for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-      a = alleys[h % alleys.length];
+      if (spot) break;
     }
-    const n = memo.used.get(a) || 0;
-    memo.used.set(a, n + 1);
-    const z = a.z0 + (a.z1 - a.z0) * SLOT_FR[n % SLOT_FR.length];
-    const w = alleyWall(world, a.col, a.row, z, n % 2 ? 1 : -1);
-    if (w) spot = { ...w, y: 1.85 };
   }
   memo.at.set(id, spot);
   return spot;

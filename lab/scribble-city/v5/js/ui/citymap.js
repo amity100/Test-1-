@@ -338,6 +338,9 @@ export class CityMap {
     if (!this.bpSigns) this.bpSigns = this.items.filter((it) => it.cat === 'blueprint');
     this.items = this.items.filter((it) => it.cat !== 'blueprint');
     if (!(F && F.rules)) this.items.push(...this.bpSigns);
+    // (R26: no old blueprint signs to photograph under the start kit's rules - not in the legend either)
+    const lgBp = document.querySelector('.lg-row[data-cat="blueprint"]');
+    if (lgBp) lgBp.style.display = F && F.rules ? 'none' : '';
     if (F && F.on) {
       for (const sp of F.ensureSpots()) {
         // (R26, the owner's word: "a few on the map - most not, that's the mystery")

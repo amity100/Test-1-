@@ -283,6 +283,7 @@ export async function buildCity(scene, o = {}) {
     billboards: ctx.billboards,
     territories: ctx.territories,
     alleys: ctx.alleys,
+    wallProps: ctx.wallProps || [],
     parks: ctx.parks,
     plazas: ctx.plazas,
     markets: ctx.markets,
