@@ -181,6 +181,7 @@ export class PrologueUI {
     this.root.classList.toggle('thin', !!(on && thin));
     this.root.classList.toggle('film', on);
     document.body.classList.toggle('prologue-film', on);
+    this.filming = !!on;
   }
 
   // a line said: the speaker's name in their colour, the words in the player's language

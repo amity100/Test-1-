@@ -44,7 +44,8 @@ export class DepthTrial {
     this.memo = memo;
     // (the card's own time for the pass, where the browser lets it be measured)
     this.timer = new GpuTimer(gl);
-    this.at = [4, 120];
+    // (R28: not in the first seconds of play - twelve seconds in, the first heavy moments behind it)
+    this.at = [12, 120];
     this.played = 0;
     // (paused in the middle of one: tried again a little later)
     this.hold = 0;

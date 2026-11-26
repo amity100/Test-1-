@@ -303,6 +303,7 @@ const PORTRAIT_MODE = typeof location !== 'undefined' ? new URLSearchParams(loca
 // size. Coming in and going out over a quarter of a second, never a pop
 // (characters round 2: out only below 60 - a face held at about the edge does not go back and forth;
 // coming in and going out over two fifths of a second)
+const PARAMS_WARM_FACES = typeof location !== 'undefined' && new URLSearchParams(location.search).has('warmfaces');
 const PORTRAIT_NEAR = 80;
 const PORTRAIT_FAR = 60;
 const PORTRAIT_FADE = 0.4;
@@ -1626,7 +1627,10 @@ export class PersonRenderer {
     const inRange = heldFace(fig) || (PORTRAIT_STREET && px > (mine ? Math.min(PORTRAIT_FAR, near * 0.75) : near));
     // (ROADMAP 14.9: a phone makes a face a little at a time - a few seconds: begun while they are
     // still coming, two or three times as far, so that it is there by the time they are near)
-    if (!P0 && this.touch && PORTRAIT_STREET && px > PORTRAIT_NEAR * 0.38 && !(this.portraitQueue && this.portraitQueue.length > 1)) P0 = this.makePortrait(k);
+    // (R28: a computer too. It made every kind's face ahead, all 72 of them, from the moment the game was up - five seconds
+    // of work, four milliseconds of every frame of the opening film and the first minute of play, each face's shape and
+    // picture sent up as it was done; now, as a phone, whoever is coming)
+    if (!P0 && PORTRAIT_STREET && px > PORTRAIT_NEAR * 0.38 && !(this.portraitQueue && this.portraitQueue.length > (this.touch ? 1 : 2))) P0 = this.makePortrait(k);
     // (going out: still theirs while it fades, unless somebody else of the kind comes near)
     if (!inRange && !(mine && P0.fade > 0.01)) return null;
     const P = P0 || this.makePortrait(k);
@@ -1708,11 +1712,10 @@ export class PersonRenderer {
   // first comes near in play
   warmPortraits() {
     if (PORTRAIT_MODE === 'off' || !PORTRAIT_STREET || this.touch) return;
-    // (Sal's first - he comes over at the start - then every kind of the city's people, a little a frame)
+    // (Sal's - he comes over at the start. R28: the rest as they come near, portraitFor - not every kind of the city's
+    // people ahead, a little of every frame for the first minute; ?warmfaces: all of them, as it was)
     const ks = [2];
-    // (characters round 2: the people at work theirs when they are first near - not all of them made
-    // ahead: a few dozen more faces in the memory for nothing)
-    for (let k = 0; k < FOLK.length; k++) if (k !== 2 && portraitKind(k) && !FOLK[k].role) ks.push(k);
+    if (PARAMS_WARM_FACES) for (let k = 0; k < FOLK.length; k++) if (k !== 2 && portraitKind(k) && !FOLK[k].role) ks.push(k);
     for (const k of ks) if (!(this.portraits && this.portraits.get(k))) this.makePortrait(k);
   }
 
@@ -1743,7 +1746,8 @@ export class PersonRenderer {
   stepPortraits() {
     const Q = this.portraitQueue;
     if (!Q || !Q.length) return;
-    if (Q[0].step(this.touch ? 2 : 4)) Q.shift();
+    // (R28: behind the title page and the pause menu, where nothing moves, much more of it - game/game.js portraitMs)
+    if (Q[0].step(this.portraitMs || (this.touch ? 2 : 4))) Q.shift();
   }
 
   // (the graphics card's: the city's people's pictures are written straight into their atlases)
