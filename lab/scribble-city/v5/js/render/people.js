@@ -1632,6 +1632,8 @@ export class PersonRenderer {
     const P = P0 || this.makePortrait(k);
     if (heldFace(fig)) P.keeper = fig;
     // (somebody near whose face is still being made, or painted: theirs next)
+    // (R28: wanted - made at the full pace whatever is on the screen, stepPortraits)
+    if (!P.ready) P.wanted = true;
     if (!P.ready) {
       for (const Q of [this.portraitQueue, this.paintQueue]) {
         const i = Q ? Q.indexOf(P) : -1;
@@ -1709,6 +1711,8 @@ export class PersonRenderer {
   warmPortraits() {
     if (PORTRAIT_MODE === 'off' || !PORTRAIT_STREET || this.touch) return;
     // (Sal's first - he comes over at the start - then every kind of the city's people, a little a frame)
+    // (R28: still all of them ahead - a face is there the moment a film's cut lands on it - but made where it costs nothing
+    // seen: most of it behind the title page, none of it over the story's films, a trickle in play: stepPortraits)
     const ks = [2];
     // (characters round 2: the people at work theirs when they are first near - not all of them made
     // ahead: a few dozen more faces in the memory for nothing)
@@ -1719,6 +1723,8 @@ export class PersonRenderer {
   // (characters round) the next face's picture to the painter (render/heroworker.js), when it is free
   pumpPaint() {
     if (this.painting || !this.paintQueue || !this.paintQueue.length) return;
+    // (R28: over the story's films only a face somebody near is waiting for)
+    if (this.filmNow && !this.paintQueue[0].wanted) return;
     const P = this.paintQueue.shift();
     this.painting = P;
     paintPortrait(
@@ -1743,7 +1749,15 @@ export class PersonRenderer {
   stepPortraits() {
     const Q = this.portraitQueue;
     if (!Q || !Q.length) return;
-    if (Q[0].step(this.touch ? 2 : 4)) Q.shift();
+    // (R28) A face somebody near is waiting for: at the full pace. The ones made ahead (warmPortraits - 72 of them on a
+    // computer, five seconds of work that took four milliseconds of every frame of the opening film and the first minute of
+    // play): behind the title page and the pause menu, where nothing moves, ten milliseconds a frame (game/game.js
+    // portraitMs); over the story's films none; in play a trickle
+    const P = Q[0];
+    const ms = this.portraitMs || (P.wanted ? (this.touch ? 2 : 4) : this.filmNow ? 0 : this.touch ? 2 : 1.2);
+    if (ms > 0 && P.step(ms)) Q.shift();
+    // (and its picture, painted off the game's thread and sent up when done: the next begun here, not over a film)
+    if (!this.painting && this.paintQueue && this.paintQueue.length) this.pumpPaint();
   }
 
   // (the graphics card's: the city's people's pictures are written straight into their atlases)

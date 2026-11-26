@@ -1060,6 +1060,12 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     shared.uFogDensity.value = fog;
   }
 
+  // (R28) the story's film on the screen now (game/prologue/ui.js film)
+  filmOn() {
+    const P = this.prologue;
+    return !!(P && P.active && P.ui && P.ui.filming);
+  }
+
   loop() {
     if (this.params.has('test')) {
       window.__test = { buildWeaponModel, WEAPON_DEFS, BLUEPRINTS };
@@ -1134,7 +1140,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
           const real = pace.interval / 1000;
           perf.frameEnd(real);
           if (this.tele) this.tele.frame(real, this.state === 'play' && drawn && !perf.probed);
-          if (!perf.probed) trial.frame(real, this.state === 'play', pace.cost);
+          if (!perf.probed) trial.frame(real, this.state === 'play' && !this.filmOn(), pace.cost);
           pace.frozen = trial.busy;
         }
         requestAnimationFrame(tick);
@@ -1170,7 +1176,9 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       // while the depth first is being tried)
       const live = this.state === 'play' && !perf.bench;
       if (this.tele) this.tele.frame(raw, live && !perf.probed && !this.citymap.covering);
-      if (!perf.probed) trial.frame(raw, live);
+      // (R28: nor over the story's film - its two ways drawn in turns for seconds of the opening flight on a device new
+      // to the game: tried once the film is over)
+      if (!perf.probed) trial.frame(raw, live && !this.filmOn());
       if (live && !trial.busy && !perf.probed) {
         acc += raw;
         n++;
@@ -1311,6 +1319,12 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     if (this.gear) dt *= this.gear.timeK(this.realDt);
     // (v5, ROADMAP 18: the prologue's slow motion - the drawing, the top of the jump)
     if (this.prologue) dt *= this.prologue.timeK();
+    // (R28: the faces being made - render/people.js stepPortraits - much more of them a frame where the picture stands
+    // still behind a page: the title, the pause menu)
+    if (this.figures && this.figures.bodies) {
+      this.figures.bodies.portraitMs = this.state === 'play' ? 0 : this.state === 'title' ? 5 : 10;
+      this.figures.bodies.filmNow = this.filmOn();
+    }
     if (this.vision) {
       this.vision.update(this.realDt);
       dt *= this.vision.timeK();

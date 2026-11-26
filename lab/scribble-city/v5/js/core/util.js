@@ -117,8 +117,12 @@ export const GFX = (() => {
     on,
     off: false,
     shopView: part('shopview'), // Stage 1: a shop's goods its own walls hide
-    carLod: part('carlod'), // Stage 1: a car far off in fewer points
-    folkLod: part('folklod'), // Stage 2: the people by their size on the screen
+    // (R28: a computer too - the makes are taken by pixels a metre, each where it differs from the full car by under a pixel,
+    // and the start of the game drew 39 cars whole, near a million triangles of its three; ?nocarlod: as it was)
+    carLod: part('carlod') || (!phone && !q.has('nocarlod') && !q.has('oldgfx')), // Stage 1: a car far off in fewer points
+    // (R28: a computer too - a person near is 19,000 triangles, 8,440 of them the head, and 39 of them stood round the start
+    // of the game; each lighter list is used only where it is within half a pixel of the full shape; ?nofolklod: as it was)
+    folkLod: part('folklod') || (!phone && !q.has('nofolklod') && !q.has('oldgfx')), // Stage 2: the people by their size on the screen
     // (Stage 3's goodsFar and farHide were tried and not built: ROADMAP 19.3)
     glowLite: part('glowlite'), // Stage 4: the glow in five passes
     finalLite: part('finallite'), // Stage 4: the last pass reads the glow once

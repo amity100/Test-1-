@@ -13,7 +13,8 @@ const SLOW = 0.38; // the city's pace while it is on
 export const FAR = 160; // a blueprint as near as this is shown
 
 const CSS = `
-#vision-fx{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0;transition:opacity .35s}
+#vision-fx{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0;transition:opacity .35s;display:none}
+#vision-fx.live{display:block}
 #vision-fx.on{opacity:1}
 #vision-fx .vv{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 50%,transparent 42%,rgba(255,40,190,.28) 70%,rgba(40,230,255,.5) 100%);mix-blend-mode:screen}
 #vision-fx .vc{position:absolute;inset:-30%;background:conic-gradient(from 0deg,rgba(255,0,170,.16),rgba(255,230,0,.12),rgba(0,255,200,.16),rgba(90,80,255,.16),rgba(255,0,170,.16));mix-blend-mode:overlay;filter:blur(30px)}
@@ -26,9 +27,10 @@ const CSS = `
 @media (max-height:520px){#btn-vision{width:36px;height:36px;left:calc(max(10px,env(safe-area-inset-left)) + 230px)}body.touch #saving{left:calc(max(12px,env(safe-area-inset-left)) + 274px)}}
 #btn-vision .ico{width:22px;height:22px;border-radius:50%;background:rgba(255,253,246,.95);display:flex;align-items:center;justify-content:center}
 #btn-vision svg{width:18px;height:18px;fill:none;stroke:#1b1430;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-#btn-vision.ready{animation:vready 1.6s ease-in-out infinite}
+#btn-vision::before{content:'';position:absolute;inset:-4px;border-radius:50%;box-shadow:0 0 10px 3px #ff4fd8;opacity:0;pointer-events:none}
+#btn-vision.ready::before{animation:vready 1.6s ease-in-out infinite}
 #btn-vision.on .ico{background:#ffe14d}
-@keyframes vready{0%,100%{box-shadow:0 2px 0 #1b1430}50%{box-shadow:0 2px 0 #1b1430,0 0 10px 3px #ff4fd8}}
+@keyframes vready{0%,100%{opacity:0}50%{opacity:1}}
 body:not(.touch) #btn-vision{display:none}
 #btn-vision.off{display:none}
 body.prologue-film #btn-vision,body.paused #btn-vision,body.fd-open #btn-vision,body.phone-cam #btn-vision,body.boxing #btn-vision,body.prologue-film #vision-fx,body.prologue-film #vision-mark{display:none !important}
@@ -104,6 +106,12 @@ export class Vision {
       return;
     }
     if (!this.can()) return;
+    // (into the page a moment before it fades in: a layer that comes in and is shown in the same frame does not fade)
+    if (this.fx && !this.liveOn) {
+      this.liveOn = true;
+      this.fx.classList.add('live');
+      void this.fx.offsetWidth;
+    }
     this.on = true;
     this.t = 0;
     this.uses++;
@@ -194,6 +202,13 @@ export class Vision {
       }
     }
     const fxOn = this.k > 0.02;
+    // (R28: out of the page altogether while it is off - a blurred, blended layer the size of the screen is nothing for
+    // the browser to carry under every frame of the game)
+    const live = this.on || this.k > 0.001;
+    if (live !== this.liveOn) {
+      this.liveOn = live;
+      this.fx.classList.toggle('live', live);
+    }
     if (fxOn !== this.fxOn) {
       this.fxOn = fxOn;
       this.fx.classList.toggle('on', fxOn);
