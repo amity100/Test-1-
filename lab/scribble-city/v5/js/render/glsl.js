@@ -81,7 +81,7 @@ uniform float uDepthOnly;
 // each one - 1 the pens, 2 the sun's shadow, 4 the lamps, 8 the haze, 16 all but the colour, 32 the
 // mirror image in the street. Always 0 but then)
 uniform float uProbe;
-// (R28, a phone's own tier - render/materials.js shared.uTier, bits: 1 the sun's shadow looked up once a map, not four times)
+// (R28, a phone's own tier - render/materials.js shared.uTier, bits: 1 the sun's shadow looked up twice a map, not four times)
 uniform float uTier;
 // (ROADMAP 18.9: how busy the pens are over everything - render/materials.js)
 uniform float uPenDens;
@@ -203,7 +203,6 @@ float farTaps(sampler2D map, mat4 m, vec3 wp, vec3 n) {
   vec3 s = sc.xyz / sc.w * 0.5 + 0.5;
   if (s.x <= 0.0 || s.x >= 1.0 || s.y <= 0.0 || s.y >= 1.0 || s.z >= 1.0) return 1.0;
   vec2 t = uShadowFarTexel;
-  if (uTier > 0.5) return step(s.z - 0.0009, textureLod(map, s.xy, 0.0).r);
   float v = 0.0;
   v += step(s.z - 0.0009, textureLod(map, s.xy + vec2(-0.6, -0.6) * t, 0.0).r);
   v += step(s.z - 0.0009, textureLod(map, s.xy + vec2(0.6, -0.6) * t, 0.0).r);
@@ -227,13 +226,24 @@ float sunShadow(vec3 wp, vec3 n) {
   float t = uShadowTexel;
   float v = 0.0;
   if (uTier > 0.5) {
-    // (the phone's tier: each map looked up once, at the point itself - a hard edge, as a pen's own)
-    v = step(s.z - 0.0012, textureLod(uShadowMap, s.xy, 0.0).r);
-    if (uShadowStaticOn > 0.5 && v > 0.0) {
+    // (the phone's tier: each map looked up twice, corner to corner, not four times. Once was tried: a thin shadow - a person's
+    // at dusk - went from a soft grey to full black, and the far map's own squares showed)
+    vec2 q0 = vec2(-0.6, -0.6);
+    vec2 q1 = vec2(0.6, 0.6);
+    float b0 = 1.0;
+    float b1 = 1.0;
+    if (uShadowStaticOn > 0.5) {
       vec4 scT = uShadowStaticMatrix * vec4(wp + n * 0.06, 1.0);
       vec3 sT = scT.xyz / scT.w * 0.5 + 0.5;
-      v *= step(sT.z - uShadowStaticBias, textureLod(uShadowStatic, sT.xy, 0.0).r);
+      float zT = sT.z - uShadowStaticBias;
+      b0 = step(zT, textureLod(uShadowStatic, sT.xy + q0 * uShadowStaticTexel, 0.0).r);
+      b1 = step(zT, textureLod(uShadowStatic, sT.xy + q1 * uShadowStaticTexel, 0.0).r);
     }
+    if (b0 + b1 > 0.0) {
+      v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + q0 * t, 0.0).r) * b0;
+      v += step(s.z - 0.0012, textureLod(uShadowMap, s.xy + q1 * t, 0.0).r) * b1;
+    }
+    v *= 0.5;
     vec2 eT = min(s.xy, 1.0 - s.xy);
     float fadeT = smoothstep(0.0, 0.08, min(eT.x, eT.y));
     if (fadeT >= 1.0) return v;

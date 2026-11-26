@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { shared, pens, mergeMoving } from './render/materials.js';
+import { shared, pens, mergeMoving, tier } from './render/materials.js';
 import { Settings } from './core/settings.js';
 import { Pipeline } from './render/pipeline.js';
 import { buildAtlas } from './render/atlas.js';
@@ -292,6 +292,8 @@ async function boot() {
     pipe.depthFixed = true;
   }
   // (the mirror under the street every frame; a phone every other one, as it always was)
+  // (R28: a phone's tier - the six nearest lamps, the sun's shadow in one tap: render/materials.js tier)
+  tier.on = GFX.phone && !params.has('notier') && !params.has('oldgfx');
   pipe.reflEvery = low ? 2 : 1;
   pipe.reflEveryDefault = pipe.reflEvery;
   shared.uPR.value = pipe.pixelsPerCss;

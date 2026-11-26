@@ -1352,11 +1352,14 @@ export class Perf {
         for (const n of draws) delete gl[n];
       }
       // the sun's shadow looked up once a map (uTier 1)
+      const tier0 = shared.uTier.value;
       try {
+        shared.uTier.value = 0;
+        out.sun4 = time(() => pipe.drawMain());
         shared.uTier.value = 1;
         out.sun1 = time(() => pipe.drawMain());
       } finally {
-        shared.uTier.value = 0;
+        shared.uTier.value = tier0;
       }
       // the lamps nearest: six of them, three
       const lampN = shared.uLightN.value;
@@ -2096,7 +2099,7 @@ export class Perf {
       st ? `כל שלב לבד, נמדד ישירות בסוף (ms): צל ${ms(st.shadow)} · השתקפות ${ms(st.reflection)} · ציור ${ms(st.main)}${g.pipe.deferred && st.pens !== undefined ? ` (מזה העטים ${ms(st.pens)})` : ''} · דיו ${ms(st.ink)} · זוהר ${ms(st.glow)} · סיום ${ms(st.final)} · פריים שלם ${ms(st.frame)}` : 'כל שלב לבד: המדידה לא הצליחה',
       st && st.other ? `הציור בדרך השנייה (ms): ${g.pipe.deferred ? 'בשלב אחד, כמו קודם' : 'בשני שלבים'} ${ms(st.other)} · ככה: ${ms(st.main)}` : '',
       st && st.flip !== undefined ? `הציור (ms): כמו שהוא ${ms(st.main)} · בלי אנשים ומכוניות ${ms(st.city)} · ב-1/16 מהפיקסלים ${ms(st.tiny)} · ${g.pipe.wallsFirst ? 'בלי' : 'עם'} עומק הקירות קודם ${ms(st.walls)} · ${g.pipe.depthFirst ? 'בלי' : 'עם'} עומק קודם מלא ${ms(st.flip)}${st.kill !== undefined ? ` · בחומרים הישנים (עם discard) ${ms(st.kill)}` : ''}` : st ? `הציור (ms): כמו שהוא ${ms(st.main)} · בלי אנשים ומכוניות ${ms(st.city)}${st.tiny !== undefined ? ` · ב-1/16 מהפיקסלים ${ms(st.tiny)} · בלי לצייר (רק ההכנה והשליחה) ${ms(st.nodraw)} · רק צבע ${ms(st.flat)} · בלי העטים ${ms(st.noPens)} · בלי הצל ${ms(st.noSun)} · בלי הפנסים ${ms(st.noLamps)} · בלי הערפל ${ms(st.noHaze)}${st.pens !== undefined ? ` · מעבר העטים לבד ${ms(st.pens)}` : ''} · ההמתנה לכרטיס לבד ${ms(st.wait)}` : ''}` : '',
-      st && st.one !== undefined ? `רמת הטלפון, כל פישוט לבד (הציור, ms; כמו שהוא ${ms(st.main)}): משולש אחד לכל ציור ${ms(st.one)} · צל השמש בדגימה אחת ${ms(st.sun1)} · ${Math.round(st.lampN)} פנסים ← 6: ${ms(st.lamp6)}, ← 3: ${ms(st.lamp3)}${st.ldr !== undefined ? ` · צבע ב-8 ביט ${ms(st.ldr)} (פריים שלם ${ms(st.hdrFrame)} ← ${ms(st.ldrFrame)})` : st.ldrErr ? ` · צבע ב-8 ביט: נכשל (${st.ldrErr})` : ''}` : '',
+      st && st.one !== undefined ? `רמת הטלפון, כל פישוט לבד (הציור, ms; כמו שהוא ${ms(st.main)}): משולש אחד לכל ציור ${ms(st.one)} · צל השמש בארבע דגימות ${ms(st.sun4)}, בשתיים ${ms(st.sun1)} · ${Math.round(st.lampN)} פנסים ← 6: ${ms(st.lamp6)}, ← 3: ${ms(st.lamp3)}${st.ldr !== undefined ? ` · צבע ב-8 ביט ${ms(st.ldr)} (פריים שלם ${ms(st.hdrFrame)} ← ${ms(st.ldrFrame)})` : st.ldrErr ? ` · צבע ב-8 ביט: נכשל (${st.ldrErr})` : ''}` : '',
       st && st.noPens !== undefined ? `הציור בלי חלק אחד (ms): בלי העטים ${ms(st.noPens)} · בלי הצל של השמש ${ms(st.noSun)} · בלי הפנסים ${ms(st.noLamps)} · בלי הערפל ${ms(st.noHaze)} · רק צבע ${ms(st.flat)} · בלי ההשתקפות ברחוב ${ms(st.noReflImg)} · המראה ${g.pipe.mirrorPlain ? 'עם' : 'בלי'} עטים ${ms(st.reflFlip)} (ככה: ${ms(st.reflection)})` : '',
       gpu && Object.keys(gpu).length ? `כרטיס מסך: ${PASSES.filter((p) => gpu[p] !== undefined).map((p) => `${PASS_HE[p]} ${gpu[p].toFixed(2)}ms`).join(' · ')}` : 'כרטיס מסך: הדפדפן לא מאפשר למדוד',
       `draw calls: ממוצע ${Math.round(s.calls)} · שיא ${s.maxCalls} · ${(s.tris / 1e6).toFixed(2)}M משולשים`,

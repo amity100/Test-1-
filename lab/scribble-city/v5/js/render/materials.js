@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { provokeFirst, provokeLast } from './provoke.js';
+import { GFX } from '../core/util.js';
 import { HEAD, FUNCS, SURF_VERT, SURF_FRAG, SKY_VERT, SKY_FRAG, DEPTH_VERT, DEPTH_FRAG, LINE_VERT, LINE_FRAG, SPRITE_BATCH_VERT, SPRITE_BATCH_FRAG, MAX_LIGHTS, MAX_HOLES, MAX_OWNERS, MAX_SPOTS } from './glsl.js';
 
 // The pens every material draws with, and the light of the sunset they draw by.
@@ -293,7 +294,15 @@ export function setLampK(k) {
 }
 // The lights nearest the camera go to the shaders; one about to be dropped for a nearer one
 // fades out first, so nothing ever pops.
+// (R28, the phone's tier - the owner: "take something else down a little, not the sharpness"; his phone's own report: the six
+// lamps nearest instead of twelve 5 ms of a 63 ms drawing, the sun's shadow looked up once a map 4 ms (twice here: once made thin shadows black and blocky). The lamps fade in and
+// out at the edge of the six as they did at the edge of the twelve: nothing pops. on: main.js, a phone; ?notier: as it was)
+export const tier = { on: false, lamps: 6 };
+
 export function pickLights(cam) {
+  const tierOn = tier.on && !GFX.off;
+  shared.uTier.value = tierOn ? 1 : 0;
+  const MAXN = tierOn ? Math.min(MAX_LIGHTS, tier.lamps) : MAX_LIGHTS;
   const cx = cam ? cam.x : 0;
   const cz = cam ? cam.z : 0;
   if (!cam || Math.hypot(cx - lastPick.x, cz - lastPick.z) > 6) {
@@ -304,7 +313,7 @@ export function pickLights(cam) {
   const C = shared.uLightCol.slots;
   let n = 0;
   for (const l of dynLights) {
-    if (n >= MAX_LIGHTS - 4) break;
+    if (n >= Math.max(2, MAXN - 4)) break;
     P[n].set(l.x, l.y, l.z, l.r);
     C[n].set(l.c.r !== undefined ? l.c.r : l.c[0], l.c.g !== undefined ? l.c.g : l.c[1], l.c.b !== undefined ? l.c.b : l.c[2], l.i);
     n++;
@@ -312,9 +321,9 @@ export function pickLights(cam) {
   dynLights.length = 0;
   for (const l of near) l.d = l.on ? Math.hypot(l.x - cx, l.z - cz) - l.r * 0.5 : 1e9;
   near.sort((a, b) => a.d - b.d);
-  const room = MAX_LIGHTS - n;
+  const room = MAXN - n;
   const cut = near.length > room ? near[room].d : 1e9;
-  for (let k = 0; k < near.length && n < MAX_LIGHTS; k++) {
+  for (let k = 0; k < near.length && n < MAXN; k++) {
     const l = near[k];
     if (l.d > 1e8) break;
     const fade = Math.min(1, Math.max(0, (cut - l.d) / 10));
