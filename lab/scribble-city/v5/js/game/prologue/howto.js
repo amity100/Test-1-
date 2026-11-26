@@ -6,7 +6,7 @@
 
 import { lang } from '../../core/lang.js';
 
-const OF = 6;
+const OF = 9;
 
 // (round 22: at the wheel of a phone, the buttons of the big phone games - ◀ ▶ under the left thumb, the
 // pedals under the right - and not the stick, unless it was chosen: game/game.js drive-btns)
@@ -61,20 +61,79 @@ function howtoHe(key, touch) {
             : [['ג׳ויסטיק', 'גז, ברקס והגה'], ['כפתור הרכב', 'לצאת מהמכונית']]
           : [['W', 'גז'], ['S', 'ברקס, ורוורס'], ['A D', 'הגה'], ['Space', 'בלם יד (להחלקות)'], ['E', 'לצאת מהמכונית']],
       };
-    // (round 17, the player's word: in the car - the pen draws on it, the turbo first, the game showing
-    // how it is drawn; on foot, the short list as before: 'drawFoot')
-    case 'draw':
+    // (R27, the owner's word: a full guide to the start - the pen's things first, each shown by the pencil on the screen;
+    // then led to the first blueprint hidden in the city, photographed and drawn: a turbo)
+    case 'wings':
       return {
         step: 5, of: OF, title: 'מציירים - וזה נהיה אמיתי!',
-        say: 'מה שמציירים קם לחיים. ציירו על המכונית טורבו - להבה שיוצאת מאחוריה - והיא תזנק קדימה.',
+        say: 'מה שמציירים קם לחיים. ציירו כנפיים על המכונית - העיפרון על המסך מראה איך, ואתם אחריו.',
         lines: T
-          ? [['כפתור העיפרון', 'פותח את העט'], ['להבה מאחורי המכונית', 'זה טורבו - העיפרון על המסך מראה איך'], ['כפתור הטורבו', 'וטסים קדימה']]
-          : [['Q', 'פותח את העט'], ['להבה מאחורי המכונית', 'זה טורבו - העיפרון על המסך מראה איך'], ['Shift', 'וטסים קדימה']],
-        tip: 'במכונית אפשר לצייר עוד: מקלע, שריון, כנפיים. כל דבר מציירים פעם אחת - ומאז הוא שלכם, בנגיעה.',
+          ? [['כפתור העיפרון', 'פותח את העט'], ['ציור כנפיים מעל המכונית', 'כמו שהעיפרון מצייר - בערך, לא צריך מדויק'], ['מרימים את האצבע', 'והכנפיים עליה']]
+          : [['Q', 'פותח את העט'], ['ציור כנפיים מעל המכונית', 'כמו שהעיפרון מצייר - בערך, לא צריך מדויק'], ['משחררים את העכבר', 'והכנפיים עליה']],
+        tip: 'כל דבר מציירים פעם אחת - ומאז הוא שלכם, בנגיעה. במהירות ובקפיצה המכונית דואה.',
+      };
+    case 'getout':
+      return {
+        step: 6, of: OF, title: 'יוצאים מהמכונית',
+        say: 'את הנשקים מהספרייה מציירים ברגל.',
+        lines: T ? [['כפתור הרכב', 'לצאת מהמכונית']] : [['E', 'לצאת מהמכונית']],
+      };
+    case 'weapon':
+      return {
+        step: 6, of: OF, title: 'נשק מהספרייה',
+        say: 'בעיפרון יש ספרייה של נשקים ורכבים. ציירו את רובה העיפרון: העיפרון על המסך מצייר אותו קודם - ואתם אחריו, מעל הקווים.',
+        lines: T
+          ? [['כפתור העיפרון', 'פותח את הספרייה'], ['מציירים מעל הקווים', 'בערך כמו בתמונה'], ['✓', 'והרובה ביד']]
+          : [['Q', 'פותח את הספרייה'], ['מציירים מעל הקווים', 'בערך כמו בתמונה'], ['Q', 'שוב: והרובה ביד']],
+        tip: 'כל דבר בספרייה מציירים פעם אחת. מאז הוא מוכן בנגיעה.',
+      };
+    case 'fire':
+      return {
+        step: 6, of: OF, title: 'יורים',
+        say: 'נסו את הרובה: מכוונים ויורים.',
+        lines: T ? [['כפתור הכוונת', 'מחזיקים: מכוונים'], ['כפתור הירי', 'יורים']] : [['קליק ימני', 'מחזיקים: מכוונים'], ['קליק', 'יורים']],
+      };
+    case 'find':
+      return {
+        step: 7, of: OF, title: 'שרטוט מוסתר בעיר',
+        say: 'בכל העיר מוסתרים שרטוטים - נשקים, רכבים, חלקים. אחד מהם קרוב, והמפה מסמנת אותו.',
+        lines: [['המפה', 'הנקודה היא השרטוט, והחץ מראה את הדרך'], [T ? 'העין 👁 למעלה' : 'O', 'ראייה מיוחדת: הזמן מאט והשרטוט זוהר'], ['דף לבן עם קווים בזהב', 'על קיר בסמטה']],
+        tip: 'רוב השרטוטים לא מסומנים במפה - אותם מחפשים בסמטאות ועל הגגות.',
+      };
+    case 'photo':
+      return {
+        step: 7, of: OF, title: 'מצלמים את השרטוט',
+        say: 'עמדו מול הדף ליד הקיר וצלמו אותו - והשרטוט שלכם.',
+        lines: T ? [['כפתור המצלמה 📷', 'ליד הדף: מצלמים']] : [['F', 'ליד הדף: מצלמים']],
+        tip: 'מצלמים ברגל: במכונית? צאו ממנה ליד הדף.',
+      };
+    case 'getin':
+      return {
+        title: 'חוזרים למכונית',
+        say: 'את מה שמציירים על מכונית - מציירים כשיושבים בה. המכונית מסומנת במפה.',
+        lines: T ? [['כפתור הרכב', 'ליד הדלת: נכנסים']] : [['E', 'ליד הדלת: נכנסים']],
+      };
+    // (round 17, the player's word: in the car - the pen draws on it, the turbo first, the game showing
+    // how it is drawn; on foot, the short list as before: 'drawFoot')
+    // (R27: the turbo is the blueprint just photographed)
+    case 'draw':
+      return {
+        step: 8, of: OF, title: 'מציירים את הטורבו',
+        say: 'זה הטורבו שצילמתם. ציירו אותו על המכונית - להבה שיוצאת מאחוריה - והיא תזנק קדימה.',
+        lines: T
+          ? [['כפתור העיפרון', 'פותח את העט'], ['להבה מאחורי המכונית', 'זה טורבו - העיפרון על המסך מראה איך'], ['מרימים את האצבע', 'והטורבו עליה']]
+          : [['Q', 'פותח את העט'], ['להבה מאחורי המכונית', 'זה טורבו - העיפרון על המסך מראה איך'], ['משחררים את העכבר', 'והטורבו עליה']],
+        tip: 'מכאן והלאה: כל שרטוט שמוצאים בעיר מציירים פעם אחת, והוא שלכם. אלה שבהמשך משוגעים יותר.',
+      };
+    case 'boost':
+      return {
+        step: 8, of: OF, title: 'טורבו!',
+        say: 'צברו קצת מהירות ולחצו טורבו.',
+        lines: T ? [['כפתור הטורבו', 'מזנקים קדימה']] : [['Shift', 'מזנקים קדימה']],
       };
     case 'drawFoot':
       return {
-        step: 5, of: OF, title: 'מציירים - וזה נהיה אמיתי!',
+        step: 6, of: OF, title: 'מציירים - וזה נהיה אמיתי!',
         say: 'מה שמציירים קם לחיים. בעיפרון יש לכם כמה נשקים ורכבים - כל אחד מציירים פעם אחת, ומאז הוא שלכם. את השאר מוצאים בעיר.',
         lines: T
           ? [['כפתור העיפרון', 'פותח את הרשימה'], ['נגיעה בציור', 'ומציירים אותו באוויר, כמו בתמונה'], ['✓', 'והוא נוצר - ונשמר אצלכם לפעם הבאה']]
@@ -83,7 +142,7 @@ function howtoHe(key, touch) {
       };
     case 'lily':
       return {
-        step: 6, of: OF, title: 'הולכים לפגוש את לילי',
+        step: 9, of: OF, title: 'הולכים לפגוש את לילי',
         say: 'הבת של דני מחכה לו ליד דוכן הגלידה בטיילת.',
         lines: T
           ? [['המפה', 'הנקודה הצהובה היא היעד, והחץ מראה את הדרך'], ['כפתור הרכב', 'אם אתם במכונית: יוצאים ממנה ליד הדוכן']]
@@ -224,18 +283,74 @@ function howtoEn(key, touch) {
         say: 'Drive a little through the streets, to get the feel of the car.',
         lines: T ? (btns() ? [['◀ ▶', 'steer'], ['Gas, brake', 'the pedals on the right'], ['Car button', 'get out of the car']] : [['Stick', 'gas, brake and steering'], ['Car button', 'get out of the car']]) : [['W', 'gas'], ['S', 'brake, and reverse'], ['A D', 'steer'], ['Space', 'handbrake (for drifts)'], ['E', 'get out of the car']],
       };
-    case 'draw':
+    case 'wings':
       return {
         step: 5, of: OF, title: 'Draw - and it comes to life!',
-        say: 'What you draw becomes real. Draw a turbo on the car - a flame out of its back - and it leaps forward.',
+        say: 'What you draw becomes real. Draw wings on the car - the pencil on the screen shows how, then you.',
         lines: T
-          ? [['Pencil button', 'opens the pen'], ['A flame behind the car', 'is a turbo - the pencil on the screen shows how'], ['Turbo button', 'and off you shoot']]
-          : [['Q', 'opens the pen'], ['A flame behind the car', 'is a turbo - the pencil on the screen shows how'], ['Shift', 'and off you shoot']],
-        tip: 'In a car you can draw more: a machine gun, armor, wings. Draw each thing once - from then on it\'s yours, at a tap.',
+          ? [['Pencil button', 'opens the pen'], ['Wings over the car', 'as the pencil draws them - roughly, it need not be exact'], ['Lift your finger', 'and the wings are on']]
+          : [['Q', 'opens the pen'], ['Wings over the car', 'as the pencil draws them - roughly, it need not be exact'], ['Let go of the mouse', 'and the wings are on']],
+        tip: 'Each thing is drawn once - from then on it\'s yours, at a tap. At speed and in a jump the car glides.',
+      };
+    case 'getout':
+      return {
+        step: 6, of: OF, title: 'Out of the car',
+        say: 'The library\'s weapons are drawn on foot.',
+        lines: T ? [['Car button', 'get out of the car']] : [['E', 'get out of the car']],
+      };
+    case 'weapon':
+      return {
+        step: 6, of: OF, title: 'A weapon from the library',
+        say: 'The pencil holds a library of weapons and rides. Draw the pencil rifle: the pencil on the screen draws it first - then you, over its lines.',
+        lines: T
+          ? [['Pencil button', 'opens the library'], ['Draw over the lines', 'roughly like the picture'], ['✓', 'and the rifle is in your hands']]
+          : [['Q', 'opens the library'], ['Draw over the lines', 'roughly like the picture'], ['Q', 'again: and the rifle is in your hands']],
+        tip: 'Everything in the library is drawn once. From then on it\'s ready at a tap.',
+      };
+    case 'fire':
+      return {
+        step: 6, of: OF, title: 'Fire it',
+        say: 'Try the rifle: aim and fire.',
+        lines: T ? [['Aim button', 'hold: aim'], ['Fire button', 'fire']] : [['Right click', 'hold: aim'], ['Click', 'fire']],
+      };
+    case 'find':
+      return {
+        step: 7, of: OF, title: 'A blueprint hidden in the city',
+        say: 'Blueprints are hidden all over the city - weapons, rides, parts. One is close, and the map marks it.',
+        lines: [['Map', 'the dot is the blueprint, the arrow shows the way'], [T ? 'The eye 👁 up top' : 'O', 'special vision: time slows, the blueprint glows'], ['A white page, gold lines', 'on a wall in an alley']],
+        tip: 'Most blueprints are not on the map - those you hunt for in alleys and up on roofs.',
+      };
+    case 'photo':
+      return {
+        step: 7, of: OF, title: 'Photograph the blueprint',
+        say: 'Stand in front of the page by the wall and photograph it - and the blueprint is yours.',
+        lines: T ? [['Camera button 📷', 'by the page: take the photo']] : [['F', 'by the page: take the photo']],
+        tip: 'Photos are taken on foot: in a car? Get out by the page.',
+      };
+    case 'getin':
+      return {
+        title: 'Back in the car',
+        say: 'What is drawn on a car is drawn sitting in it. The car is marked on the map.',
+        lines: T ? [['Car button', 'by the door: get in']] : [['E', 'by the door: get in']],
+      };
+    case 'draw':
+      return {
+        step: 8, of: OF, title: 'Draw the turbo',
+        say: 'This is the turbo you photographed. Draw it on the car - a flame out of its back - and it leaps forward.',
+        lines: T
+          ? [['Pencil button', 'opens the pen'], ['A flame behind the car', 'is a turbo - the pencil on the screen shows how'], ['Lift your finger', 'and the turbo is on']]
+          : [['Q', 'opens the pen'], ['A flame behind the car', 'is a turbo - the pencil on the screen shows how'], ['Let go of the mouse', 'and the turbo is on']],
+        tip: 'From here on: every blueprint found in the city is drawn once, and it is yours. The later ones are crazier.',
+      };
+    case 'boost':
+      return {
+        step: 8, of: OF, title: 'Turbo!',
+        say: 'Pick up a little speed and hit the turbo.',
+        lines: T ? [['Turbo button', 'leap forward']] : [['Shift', 'leap forward']],
       };
     case 'drawFoot':
       return {
-        step: 5, of: OF, title: 'Draw - and it comes to life!',
+        step: 6, of: OF, title: 'Draw - and it comes to life!',
         say: 'What you draw becomes real. The pencil holds a few weapons and rides - draw each one once and it\'s yours. The rest are found in the city.',
         lines: T
           ? [['Pencil button', 'opens the list'], ['Touch a drawing', 'and draw it in the air, like the picture'], ['✓', 'and it is made - and kept for next time']]
@@ -244,7 +359,7 @@ function howtoEn(key, touch) {
       };
     case 'lily':
       return {
-        step: 6, of: OF, title: 'Go and meet Lily',
+        step: 9, of: OF, title: 'Go and meet Lily',
         say: 'Danny\'s daughter is waiting for him by the ice cream stand on the promenade.',
         lines: T ? [['Map', 'the yellow dot is where to go, the arrow shows the way'], ['Car button', 'in a car: get out by the stand']] : [['Map', 'the yellow dot is where to go, the arrow shows the way'], ['E', 'in a car: get out by the stand']],
       };

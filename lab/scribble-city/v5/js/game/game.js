@@ -109,6 +109,7 @@ import { Fire } from './fire.js';
 import { Gadgets } from './gadgets.js';
 import { FreeDraw } from '../ui/freedraw.js';
 import { Finds } from './finds.js';
+import { Vision } from './vision.js';
 import { Places } from './places.js';
 import { Boxing } from './boxing.js';
 import { Signs } from './signs.js';
@@ -392,6 +393,8 @@ export class Game {
     this.freedraw = this.classic ? null : new FreeDraw(this);
     // (ROADMAP 29.5) drawings found in the city: the start kit, what is locked till found, the drawings on the walls
     this.finds = this.classic ? null : new Finds(this);
+    // (R27) the special vision: the colours turned up, the city slowed, the nearest hidden blueprint lit (game/vision.js)
+    this.vision = this.classic ? null : new Vision(this);
     // (ROADMAP 29.5) the places built for the finds: the racing garage, the car park's roof, the helipad, the surf
     // club, the mechanic's van (game/places.js) - built once the opening story is over, one a frame
     this.places = this.classic ? null : new Places(this);
@@ -1308,6 +1311,10 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     if (this.gear) dt *= this.gear.timeK(this.realDt);
     // (v5, ROADMAP 18: the prologue's slow motion - the drawing, the top of the jump)
     if (this.prologue) dt *= this.prologue.timeK();
+    if (this.vision) {
+      this.vision.update(this.realDt);
+      dt *= this.vision.timeK();
+    }
     if (this.boxing) dt *= this.boxing.timeK(this.realDt);
     this.time += dt;
     shared.uTime.value = this.time;
@@ -1773,6 +1780,8 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       if (input.wasPressed('KeyT')) this.freedraw.close();
     }
     if (input.wasPressed('KeyF')) this.takePhoto();
+    // (R27: O - the special vision, game/vision.js; on a phone its eye up top)
+    if (this.vision && input.wasPressed('KeyO')) this.vision.toggle();
     // (a graffiti on the wall in front of you: ROADMAP 9.3)
     if (this.graffiti && input.wasPressed('KeyG') && !p.inVehicle) this.spray();
     if ((!this.freedraw && input.wasPressed('KeyQ')) || input.wasPressed('KeyT')) this.openDraw();
@@ -2904,6 +2913,11 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     }
     if (this.touch) {
       $('btn-photo').classList.toggle('hidden', !photo);
+      // (R27: the camera's button over the aim's - by a page with a gun in hand the aim's stands aside, css/style.css)
+      if (!!photo !== this.photoCls) {
+        this.photoCls = !!photo;
+        document.body.classList.toggle('photo-ready', this.photoCls);
+      }
       $('btn-enter').classList.toggle('hidden', !enter);
       // the pencil: how many photos you carry, and a wiggle when one is waiting to be drawn
       const n = this.album.size;

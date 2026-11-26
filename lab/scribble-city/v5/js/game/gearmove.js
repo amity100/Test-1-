@@ -11,7 +11,8 @@ import { tr } from '../core/lang.js';
 const REWIND_S = [3, 5, 8];
 const NITRO_S = [3, 5, 7];
 const NITRO_FILL = [0.35, 0.55, 0.8];
-const JUMP_V = [8, 12.5, 16];
+// (R27, the owner's word: the spring jumps the car about two and a half metres - v²/40 m with the car's own gravity, 20 m/s²)
+const JUMP_V = [10, 13, 16];
 const _p = { x: 0, y: 0, z: 0 };
 
 export const MOVE = {

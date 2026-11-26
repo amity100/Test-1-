@@ -395,6 +395,130 @@ export class Autopilot {
 
   tour(o, pl, c) {
     const g = this.g;
+    // (R27: the opening's lessons - each done as a player would: the pen's lines drawn along the teaching pencil's, the
+    // library's rifle drawn over its blueprint and fired, the hidden page walked to and photographed)
+    if (this.boosting && !/Hit the <b>turbo<\/b>/.test(o)) {
+      this.boosting = false;
+      g.input.boost = false;
+    }
+    if (/<b>wings<\/b> on the car/.test(o)) {
+      this.set(0, 0);
+      if (!c) return;
+      const F = g.freedraw;
+      if (F && !F.isOpen) {
+        const s = this.since('wpen');
+        if (s < 0 || s > 1.5) {
+          this.did.wpen = g.time;
+          F.show();
+        }
+        return;
+      }
+      if (this.since('wpen') > 2.4 && this.P.wingPts && (this.since('wings') < 0 || this.since('wings') > 4)) {
+        this.did.wings = g.time;
+        this.drawLine(this.P.wingPts);
+      }
+      return;
+    }
+    if (/on foot<\/b> now/.test(o)) {
+      this.set(0, 0);
+      const s = this.since('getout');
+      if (c && (s < 0 || s > 1.2)) {
+        this.did.getout = g.time;
+        this.press('KeyE');
+      }
+      return;
+    }
+    if (/pencil rifle<\/b>/.test(o)) {
+      this.set(0, 0);
+      const F = g.freedraw;
+      if (!F || c) return;
+      this.once('rifle', () => F.show());
+      if (this.since('rifle') > 2.2) {
+        this.once('rifledraw', () => {
+          if (!F.isOpen || !BLUEPRINTS.rifle) return;
+          F.inkBp(BLUEPRINTS.rifle);
+          F.bake();
+          F.read();
+          F.render();
+          F.make();
+        });
+      }
+      if (this.since('rifle') > 5) this.once('rifleshut', () => F.isOpen && F.close());
+      return;
+    }
+    if (/<b>fire<\/b> the rifle/.test(o)) {
+      this.set(0, 0);
+      const s = this.since('fire');
+      if (s < 0 || s > 1.5) {
+        this.did.fire = g.time;
+        g.input.fire = true;
+        setTimeout(() => (g.input.fire = false), 350);
+      }
+      return;
+    }
+    if (/<b>find it<\/b>|<b>Photograph<\/b> the blueprint/.test(o)) {
+      const FI = g.finds;
+      const sp = FI && FI.ensureSpots().find((q) => q.f.id === 'turbo1');
+      if (!sp) return;
+      if (c) {
+        const s = this.since('fout');
+        this.set(0, 0);
+        if (s < 0 || s > 1.2) {
+          this.did.fout = g.time;
+          this.press('KeyE');
+        }
+        return;
+      }
+      // (a few seconds on the card that says where it is - the special vision on, as a player would - then taken to the alley's
+      // mouth and walked up to the page)
+      this.once('fseen', () => g.vision && g.vision.toggle());
+      if (this.since('fseen') < 3) return this.set(0, 0);
+      // (out from the page as far as the alley lets him - not through the building across it)
+      this.once('fgo', () => {
+        const col = g.world && g.world.collision;
+        const hit = col ? col.raycast(sp.x + sp.nx * 0.3, 1.0, sp.z + sp.nz * 0.3, sp.nx, 0, sp.nz, 14) : null;
+        const free = hit ? Math.hypot(hit.x - sp.x, hit.z - sp.z) : 14;
+        const k = Math.max(3, Math.min(14, free - 1.5));
+        pl.spawn(sp.x + sp.nx * k, sp.z + sp.nz * k, Math.atan2(-sp.nx, -sp.nz));
+      });
+      const d = this.walkTo(sp.x + sp.nx * 1.4, sp.z + sp.nz * 1.4, false, 0.5);
+      // (near it: turned to the page, photographed as soon as the camera can - from where he stands, if a bin is in the way)
+      const dp = Math.hypot(sp.x - pl.pos.x, sp.z - pl.pos.z);
+      if (dp < 7) {
+        g.camRig.yaw = Math.atan2(-sp.nx, -sp.nz);
+        g.camRig.pitch = 0.05;
+      }
+      if ((d < 0.8 || this.since('fgo') > 8) && FI.target()) {
+        this.once('fsnap', () => {
+          // (for the tests: how near he could walk to it)
+          this.P.snapD = +d.toFixed(2);
+          FI.interact();
+        });
+      }
+      return;
+    }
+    if (/^Get in a <b>car<\/b>$/.test(o)) {
+      if (c) return this.set(0, 0);
+      const car = this.P.tutCar && !this.P.tutCar.gone ? this.P.tutCar : null;
+      if (!car) return this.set(0, 1);
+      const fx = Math.sin(car.yaw);
+      const fz = Math.cos(car.yaw);
+      this.once('gin', () => pl.spawn(car.pos.x + fz * 2.2, car.pos.z - fx * 2.2, 0));
+      const d = this.walkTo(car.pos.x, car.pos.z, false, 1.8);
+      const s = this.since('ginE');
+      if (d < 2.8 && (s < 0 || s > 1)) {
+        this.did.ginE = g.time;
+        this.press('KeyE');
+      }
+      return;
+    }
+    if (/Hit the <b>turbo<\/b>/.test(o) && c) {
+      // (along the streets toward where Lily waits, and the turbo once it is going)
+      this.driveTo(25, 214, 1);
+      this.boosting = true;
+      g.input.boost = c.speed > 10;
+      return;
+    }
     if (/Explore|Walk around/.test(o)) {
       this.set(0, 1, false);
       return;

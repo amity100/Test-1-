@@ -66,7 +66,7 @@ export const START_BP = new Set(['paint', 'rifle', 'mp5', 'shotgun', 'inkbomb', 
 // (the owner, 23.11: the helicopter's rotor too - drawn in the story's jump off the roof, his from then on)
 // (R27, the owner's word: the turbo is the first drawing found in the city, in the opening's lesson - not in the start kit)
 // (on with the opening's new lesson, game/prologue/director.js tutorial: till then the turbo stays in the start kit)
-export const TURBO_FOUND = false;
+export const TURBO_FOUND = true;
 export const START_PARTS = TURBO_FOUND ? { wing: 2, jump: 1, mg: 1, armor: 1, rotor: 1 } : { turbo: 1, wing: 2, jump: 1, mg: 1, armor: 1, rotor: 1 };
 // the parts whose level is found, not bought
 const FOUND_LEVELS = new Set(['wing', 'turbo']);
@@ -277,6 +277,17 @@ function hiddenSpot(world, id, anchor = null) {
           return true;
         });
         if (blocked) continue;
+        // (R27: and a way to walk up to it from the alley - nothing at a knee's height or more, a bin, a railing, a fence along
+        // the alley's side, between the page and the middle of the alley: low things do not hide a page, but they keep him from it)
+        let low = false;
+        const lx0 = Math.min(x - side * 0.2, cx);
+        const lx1 = Math.max(x - side * 0.2, cx);
+        col.forEachIn(lx0, z - 0.9, lx1, z + 0.9, (q) => {
+          if (q.tag === 'wall' || q.y1 < 0.45 || q.y0 > 1.8) return false;
+          low = true;
+          return true;
+        });
+        if (low) continue;
         // (not over the meters or an air conditioner on that wall)
         if ((world.wallProps || []).some((q) => Math.abs(q.x - x) < 0.7 && Math.abs(q.z - z) < q.half + 0.9)) continue;
         spot = { x, y: 1.85, z, nx: -side, ny: 0, nz: 0, ux: 0, uy: 1, uz: 0 };
@@ -455,8 +466,12 @@ function pageModel(W, H, strokes, seed) {
 const SEE_THROUGH = new Set(['pole', 'prop', 'tree', 'cover', 'car', 'board', 'fence', 'rail', 'furniture']);
 
 const SHEEN_FAR = 25;
+// (R27) the page lit by the special vision (game/vision.js)
+const VISION_GLOW = new THREE.Color(1.0, 0.62, 0.95);
 const NEAR = 10;
 const REACH = 4;
+// (R27) a page photographed from as far as this when the camera is pointed at it
+const FAR_SNAP = 6.5;
 // the lines: a pencil's on the wall, dark (the look pales what is light - a light line on a sunlit wall is lost); their
 // light: deep gold ink, the colour of all that can be taken
 const CHALK = [0.1, 0.08, 0.08];
@@ -479,6 +494,10 @@ export class Finds {
     this.scratchT = 0;
     this.fading = [];
     this.boardsDone = false;
+    // (R27) the story's lesson on the find it leads to (game/prologue/director.js lessonFind): its id while it is on
+    this.lesson = null;
+    // (R27) the parts seen on a ride as he got into it - the ones put on after are his drawing
+    this.partsSeen = new WeakSet();
   }
 
   // (R26, the owner's word: "from the very start of the game") the rules - the start kit open, the rest found, each thing
@@ -638,6 +657,8 @@ export class Finds {
     const P = this.game.prologue;
     if (id === 'rotor' && P && P.active && !(P.sceneN >= 8)) return false;
     if (id in START_PARTS) return true;
+    // (R27: the turbo is the first page found - should this world have no place for it, it is open as it was)
+    if (id === 'turbo' && TURBO_FOUND && this.game.world && this.ensureSpots().length && !this.spots.some((s) => s.f.id === 'turbo1')) return true;
     return FINDS.some((f) => (f.part === id || f.alsoPart === id) && !f.lv && this.has(f.id));
   }
 
@@ -739,6 +760,11 @@ export class Finds {
     }
     const p = g.player;
     const at = p.inVehicle ? p.inVehicle.pos : p.pos;
+    this.learnT = (this.learnT || 0) - dt;
+    if (this.learnT <= 0) {
+      this.learnT = 0.4;
+      this.learnParts();
+    }
     this.scratchT -= dt;
     this.nearSet = this.nearSet || new Set();
     for (const s of spots) {
@@ -748,7 +774,7 @@ export class Finds {
       const d = Math.hypot(s.x - at.x, (s.y - at.y) * 0.8, s.z - at.z);
       // (R26, the owner's word: "when the player comes to a blueprint's area, a message pops up that one is near") from 30 m,
       // once - again only after he has been 60 m off (a van: once a game)
-      if (d < 30 && !this.nearSet.has(s.f.id) && !this.quiet) {
+      if (d < 30 && !this.nearSet.has(s.f.id) && !this.quiet && this.mayTell(s.f)) {
         this.nearSet.add(s.f.id);
         if (!this.state.coached.near) this.coach('near', tr('שרטוט מוסתר קרוב! חפשו דף לבן עם קווים בזהב — כשמתקרבים שומעים עיפרון משרבט', 'A hidden blueprint is close! Look for a white page with gold lines — up close you can hear a pencil scratching'), { t: 6, icon: '✦' });
         else if (g.hud) g.hud.toast(s.ny > 0.7 ? tr('✦ שרטוט מוסתר קרוב — על גג, למעלה', '✦ A hidden blueprint is close — up on a roof') : tr('✦ שרטוט מוסתר קרוב — הסתכלו מסביב', '✦ A hidden blueprint is close — look around'), 'info', 3.2);
@@ -779,6 +805,38 @@ export class Finds {
     this.tickTry(dt);
   }
 
+  // (R27) in the story, before its lesson has led him to the first page: no word of any other (the opening teaches one
+  // thing at a time) - after it, every page as in the game
+  mayTell(f) {
+    const P = this.game.prologue;
+    if (!(P && P.active) || !TURBO_FOUND || this.has('turbo1')) return true;
+    return f.id === this.lesson;
+  }
+
+  // (R27, the owner's word: "drawn once - from then on at a tap") a part put on his ride by his own drawing (the pen) is
+  // learned, as one traced over its lines in the parts tray: the parts on a ride as he got in are not his drawing
+  learnParts() {
+    const g = this.game;
+    const v = g.player.inVehicle;
+    const T = g.tray;
+    if (!v || !v.fuse || !v.fuse.parts || !T || !T.store || !T.learnAll) {
+      this.inRide = null;
+      return;
+    }
+    if (this.inRide !== v) {
+      this.inRide = v;
+      for (const q of v.fuse.parts) this.partsSeen.add(q);
+      return;
+    }
+    for (const q of v.fuse.parts) {
+      if (this.partsSeen.has(q)) continue;
+      this.partsSeen.add(q);
+      if (!q.item || T.store.learned[q.item]) continue;
+      T.learnAll([q.item]);
+      if (T.store.learned[q.item]) this.onLearned(q.item);
+    }
+  }
+
   // (R26) the GPS to the nearest find on the map not taken yet - the first thing to go for after the story
   guideTo() {
     const g = this.game;
@@ -788,7 +846,8 @@ export class Finds {
     let bd = Infinity;
     for (const s of this.spots) {
       if (this.has(s.f.id) || !s.f.pin) continue;
-      const d = Math.hypot(s.x - at.x, s.z - at.z);
+      // (R27: the turbo's page before any other - the first one, near the start)
+      const d = Math.hypot(s.x - at.x, s.z - at.z) - (s.f.tutorial ? 1e5 : 0);
       if (d < bd) {
         bd = d;
         best = s;
@@ -827,7 +886,9 @@ export class Finds {
       const fade = this.fading.find((q) => q.s === s);
       if (this.has(s.f.id) && !fade) continue;
       const d = Math.hypot(s.x - cam.x, s.y - cam.y, s.z - cam.z);
-      if (d > 75) continue;
+      // (R27: the special vision on - the blueprint it is after lit up from far off, game/vision.js)
+      const vk = g.vision && g.vision.target === s ? g.vision.k : 0;
+      if (d > 75 && vk < 0.05) continue;
       // (seen from behind its surface: nothing)
       if ((cam.x - s.x) * s.nx + (cam.y - s.y) * s.ny + (cam.z - s.z) * s.nz < 0) continue;
       const out = fade ? 1 - clamp(fade.t / 0.5, 0, 1) : 1;
@@ -839,10 +900,11 @@ export class Finds {
         const dayK = clamp((h - 7) / 2, 0, 1) * clamp((17.6 - h) / 1.2, 0, 1);
         u.uAlbedo.value.setScalar(1 - 0.32 * dayK);
         u.uEmissive.value.setRGB(0.36, 0.36, 0.34).multiplyScalar(1 - 0.85 * dayK);
+        if (vk > 0) u.uEmissive.value.lerp(VISION_GLOW, vk * (0.55 + 0.25 * Math.sin(t * 7)));
       }
-      const sheen = clamp((SHEEN_FAR - d) / (SHEEN_FAR - NEAR), 0, 1);
+      const sheen = Math.max(vk, clamp((SHEEN_FAR - d) / (SHEEN_FAR - NEAR), 0, 1));
       const near = d < NEAR ? clamp((NEAR - d) / (NEAR - REACH), 0, 1) : 0;
-      const lit = Math.max(sheen * 0.55, d < NEAR ? 0.6 + 0.4 * near : 0);
+      const lit = Math.max(sheen * 0.55, d < NEAR ? 0.6 + 0.4 * near : 0, vk);
       // (a slow run of light along all the lines, every 3.6 s; near, one stroke at a time is gone over)
       const run = ((t % 3.6) / 2.6) * s.total;
       const ink = d < NEAR ? (t * 0.9) % (s.strokes.length + 0.6) : -1;
@@ -866,7 +928,7 @@ export class Finds {
           } else if (!printed) fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], lit > 0.5 ? mix(CHALK, GOLD_DEEP, (lit - 0.5) * 0.5) : CHALK, w0, s.seed + k * 31 + i, alpha, 0.003, 0);
           // (near: a soft warm halo round the lines on the page)
           // (on a printed page by day it would only soften the ink: there it is a night thing)
-          if (lit > 0.4) fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], GOLD_HOT, 9 + 6 * near, s.seed + 500 + k * 31 + i, (0.06 + 0.1 * near + 0.06 * night) * (printed ? night : 1) * out, 0.004, 0);
+          if (lit > 0.4) fr.lineXYZ(a[0], a[1], a[2], b[0], b[1], b[2], GOLD_HOT, 9 + 6 * near + 10 * vk, s.seed + 500 + k * 31 + i, ((0.06 + 0.1 * near + 0.06 * night) * (printed ? night : 1) + 0.45 * vk) * out, 0.004, 0);
           // (the stroke gone over now: the pencil's line drawn fresh, up to where the hand is)
           if (redo >= 0 && st.at[i - 1] < redo) {
             const f2 = Math.min(1, (redo - st.at[i - 1]) / Math.max(1e-3, st.at[i] - st.at[i - 1]));
@@ -925,6 +987,19 @@ export class Finds {
     for (const s of this.spots) if (s.page && !s.taking) s.page.visible = true;
   }
 
+  // (R27) the camera pointed at the page: it near the middle of the picture
+  aimedAt(s) {
+    const cam = this.game.camera;
+    if (!cam) return false;
+    const f = this.fwd || (this.fwd = new THREE.Vector3());
+    cam.getWorldDirection(f);
+    const dx = s.x - cam.position.x;
+    const dy = s.y - cam.position.y;
+    const dz = s.z - cam.position.z;
+    const L = Math.hypot(dx, dy, dz) || 1;
+    return (f.x * dx + f.y * dy + f.z * dz) / L > 0.87;
+  }
+
   // within reach and before it: E - copy it
   target() {
     if (!this.on || this.copying) return null;
@@ -933,11 +1008,13 @@ export class Finds {
     if (p.mode !== 'foot' || p.inVehicle) return null;
     for (const s of this.spots) {
       if (this.has(s.f.id)) continue;
-      if (Math.abs(s.x - p.pos.x) > REACH + 2 || Math.abs(s.z - p.pos.z) > REACH + 2) continue;
+      if (Math.abs(s.x - p.pos.x) > FAR_SNAP || Math.abs(s.z - p.pos.z) > FAR_SNAP) continue;
       const dy = s.ny > 0.7 ? 0 : Math.max(0, Math.abs(s.y - (p.pos.y + 1.2)) - 1.6);
       const d = Math.hypot(s.x - p.pos.x, dy, s.z - p.pos.z);
       // (a drawing on a floor is read from on it, a little further off)
-      if (d > (s.ny > 0.7 ? REACH + 1.8 : REACH)) continue;
+      // (R27: and like a real camera, from further off too when it is pointed at the page - a bin or a railing before it is
+      // no matter then)
+      if (d > (s.ny > 0.7 ? REACH + 1.8 : REACH) && !(d < FAR_SNAP && this.aimedAt(s))) continue;
       // (on its side, not round the corner of the wall; on the same floor as it)
       if (s.ny > 0.7) {
         if (Math.abs(p.pos.y - s.y) > 1.2) continue;
@@ -1026,6 +1103,9 @@ export class Finds {
     if (!f || this.state.tried.includes(f.id)) return;
     this.state.tried.push(f.id);
     this.save();
+    // (R27: in the story's lesson the try is the lesson's own next step)
+    const P = this.game.prologue;
+    if (f.tutorial && P && P.active) return;
     if (f.tryText) setTimeout(() => this.startTry(f), 2200);
   }
 

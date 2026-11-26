@@ -16,6 +16,14 @@ const OBJ_HE = {
   '<b>Drive</b> - get a feel for it': '<b>סעו</b> קצת - להרגיש את המכונית',
   'Open the pen and <b>draw</b> a weapon or a ride': 'פתחו את העט ו<b>ציירו</b> נשק או כלי רכב',
   'Open the pen and draw a <b>turbo</b> on the car': 'פתחו את העט וציירו <b>טורבו</b> על המכונית',
+  'Open the pen and draw <b>wings</b> on the car': 'פתחו את העט וציירו <b>כנפיים</b> על המכונית',
+  'Get out of the car - <b>on foot</b> now': 'צאו מהמכונית - עכשיו <b>ברגל</b>',
+  'Open the pencil and draw the <b>pencil rifle</b>': 'פתחו את העיפרון וציירו את <b>רובה העיפרון</b>',
+  'Aim and <b>fire</b> the rifle': 'כוונו ו<b>ירו</b> ברובה',
+  'A blueprint is hidden nearby - <b>find it</b>': 'שרטוט מוסתר קרוב - <b>מצאו אותו</b>',
+  '<b>Photograph</b> the blueprint': '<b>צלמו</b> את השרטוט',
+  'Get in a <b>car</b>': 'היכנסו ל<b>מכונית</b>',
+  'Hit the <b>turbo</b>!': 'לחצו <b>טורבו</b>!',
   'Walk with <b>Lily</b> to the pier': 'לכו עם <b>לילי</b> אל המזח',
   'Look at the <b>giant wheel</b>': 'הסתכלו על <b>הגלגל הענק</b>',
   'Where did he go? <b>Look for him</b> on the pier': 'לאן הוא נעלם? <b>חפשו אותו</b> על המזח',
@@ -25,7 +33,7 @@ const OBJ_HE = {
   'Fly to the <b>beach</b> - set down on the sand': 'טוסו אל ה<b>חוף</b> ונחתו על החול',
 };
 
-const MARK_HE = { 'Car park': 'חניון', Up: 'למעלה', Lily: 'לילי', Car: 'מכונית', Pier: 'מזח', Edge: 'הקצה', Beach: 'חוף' };
+const MARK_HE = { 'Car park': 'חניון', Up: 'למעלה', Lily: 'לילי', Car: 'מכונית', Pier: 'מזח', Edge: 'הקצה', Beach: 'חוף', Blueprint: 'שרטוט' };
 
 const THOUGHT_EN = {
   'ערב אחד רגיל. רק אני והיא.': 'One ordinary evening. Just me and her.',
