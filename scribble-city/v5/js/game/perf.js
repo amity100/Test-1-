@@ -341,6 +341,11 @@ function shareText(text) {
   return false;
 }
 
+// (R28) the opening's record (openNote): how long of each part is kept, in seconds, and how many frames at most
+const OPEN_SECS = { title: 45, film: 40, play: 40 };
+const OPEN_MAX = 6000;
+const OPEN_HE = { title: 'מסך הכותרת', film: 'סרט הפתיחה', play: 'תחילת המשחק' };
+
 export class Perf {
   constructor(game) {
     this.game = game;
@@ -570,6 +575,7 @@ export class Perf {
     const now = performance.now();
     this.lastUpd = this._fu - this._fs;
     this.lastRen = now - this._fu;
+    this.openNote(rawDt * 1000, this.lastUpd, this.lastRen);
     if (!this.on && !this.bench) return;
     const upd = this.lastUpd;
     const ren = this.lastRen;
@@ -604,6 +610,48 @@ export class Perf {
       this.shownAt = now;
       this.show();
     }
+  }
+
+  // (R28) The opening's own record, kept whether the numbers are shown or not: every frame's time on the title page, over
+  // the opening film and in the first seconds of play - so one look at the panel a minute in says which of the three is
+  // not smooth on this device, and how (a few long frames, or all of them slow). A few numbers a frame: nothing to it.
+  openNote(dt, upd, ren) {
+    const g = this.game;
+    if (this.bench || document.hidden || !(dt > 0) || dt > 10000) return;
+    const k = g.state === 'title' ? 'title' : g.state === 'play' ? (g.filmOn() ? 'film' : 'play') : null;
+    if (!k) return;
+    const O = this.open || (this.open = {});
+    const o = O[k] || (O[k] = { t: 0, n: 0, dts: new Float32Array(OPEN_MAX), upd: 0, ren: 0, o50: 0, o100: 0, worst: 0, worstAt: 0, scale: 1, paced: 0 });
+    if (o.t >= OPEN_SECS[k] || o.n >= OPEN_MAX) return;
+    // (the first film only: the next one is minutes on, after play)
+    if (k === 'film' && O.play && O.play.t > 5) return;
+    o.t += dt / 1000;
+    o.dts[o.n++] = dt;
+    o.upd += upd;
+    o.ren += ren;
+    if (dt > 50) o.o50++;
+    if (dt > 100) o.o100++;
+    if (dt > o.worst) {
+      o.worst = dt;
+      o.worstAt = o.t;
+    }
+    o.scale = g.pipe.scale;
+    if (g.pace && g.pace.engaged) o.paced++;
+  }
+
+  openLines() {
+    const O = this.open;
+    if (!O) return '';
+    const out = [];
+    for (const k of ['title', 'film', 'play']) {
+      const o = O[k];
+      if (!o || o.n < 5) continue;
+      const d = Array.from(o.dts.subarray(0, o.n)).sort((a, b) => a - b);
+      const med = d[Math.floor(d.length / 2)];
+      const p99 = d[Math.min(d.length - 1, Math.floor(d.length * 0.99))];
+      out.push(`${OPEN_HE[k]} ${o.t.toFixed(0)} שנ׳: ${((o.n / o.t) || 0).toFixed(0)} פריימים בשנייה · חציון ${med.toFixed(1)}ms · 1% האיטיים ${p99.toFixed(0)}ms · הארוך ${o.worst.toFixed(0)}ms (בשנייה ${o.worstAt.toFixed(1)}) · מעל 50ms: ${o.o50} · מעל 100ms: ${o.o100} · משחק ${(o.upd / o.n).toFixed(1)} / ציור ${(o.ren / o.n).toFixed(1)}ms · קנה מידה ${o.scale.toFixed(2)}${o.paced ? ` · קצב קבוע ${Math.round((o.paced / o.n) * 100)}%` : ''}`);
+    }
+    return out.length ? `<span class="perf-sys">הפתיחה במכשיר הזה:<br>${out.join('<br>')}</span>` : '';
   }
 
   // ---------------------------------------------------------------- the panel
@@ -669,6 +717,7 @@ export class Perf {
       `<span class="perf-sys">${g.pipe.software ? 'בלי כרטיס מסך (תוכנה): ' : ''}${g.pipe.gpuName || ''}</span>`,
       this.shaderLine(),
       this.loadLine(),
+      this.openLines(),
       g.tele && g.tele.line() ? `<span class="perf-sys">${g.tele.line()}</span>` : '',
     ].filter(Boolean).join('<br>');
   }
