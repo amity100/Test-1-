@@ -81,6 +81,8 @@ uniform float uDepthOnly;
 // each one - 1 the pens, 2 the sun's shadow, 4 the lamps, 8 the haze, 16 all but the colour, 32 the
 // mirror image in the street. Always 0 but then)
 uniform float uProbe;
+// (R28, a phone's own tier - render/materials.js shared.uTier, bits: 1 the sun's shadow looked up once a map, not four times)
+uniform float uTier;
 // (ROADMAP 18.9: how busy the pens are over everything - render/materials.js)
 uniform float uPenDens;
 uniform float uPxK;
@@ -201,6 +203,7 @@ float farTaps(sampler2D map, mat4 m, vec3 wp, vec3 n) {
   vec3 s = sc.xyz / sc.w * 0.5 + 0.5;
   if (s.x <= 0.0 || s.x >= 1.0 || s.y <= 0.0 || s.y >= 1.0 || s.z >= 1.0) return 1.0;
   vec2 t = uShadowFarTexel;
+  if (uTier > 0.5) return step(s.z - 0.0009, textureLod(map, s.xy, 0.0).r);
   float v = 0.0;
   v += step(s.z - 0.0009, textureLod(map, s.xy + vec2(-0.6, -0.6) * t, 0.0).r);
   v += step(s.z - 0.0009, textureLod(map, s.xy + vec2(0.6, -0.6) * t, 0.0).r);
@@ -223,6 +226,19 @@ float sunShadow(vec3 wp, vec3 n) {
   if (s.x <= 0.0 || s.x >= 1.0 || s.y <= 0.0 || s.y >= 1.0 || s.z >= 1.0) return sunShadowFar(wp, n);
   float t = uShadowTexel;
   float v = 0.0;
+  if (uTier > 0.5) {
+    // (the phone's tier: each map looked up once, at the point itself - a hard edge, as a pen's own)
+    v = step(s.z - 0.0012, textureLod(uShadowMap, s.xy, 0.0).r);
+    if (uShadowStaticOn > 0.5 && v > 0.0) {
+      vec4 scT = uShadowStaticMatrix * vec4(wp + n * 0.06, 1.0);
+      vec3 sT = scT.xyz / scT.w * 0.5 + 0.5;
+      v *= step(sT.z - uShadowStaticBias, textureLod(uShadowStatic, sT.xy, 0.0).r);
+    }
+    vec2 eT = min(s.xy, 1.0 - s.xy);
+    float fadeT = smoothstep(0.0, 0.08, min(eT.x, eT.y));
+    if (fadeT >= 1.0) return v;
+    return mix(sunShadowFar(wp, n), v, fadeT);
+  }
   vec2 o0 = vec2(-0.6, -0.6);
   vec2 o1 = vec2(0.6, -0.6);
   vec2 o2 = vec2(-0.6, 0.6);
