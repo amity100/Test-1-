@@ -1338,6 +1338,59 @@ export class Perf {
         for (const n of draws) delete gl[n];
       }
       out.wait = time(() => {});
+      // (R28, the second report: what a draw costs by itself, and what each lighter way of the phone's tier really saves here)
+      // every draw of a single triangle, once: what is left of "a sixteenth of the pixels" is the draws' own price, not the points'
+      const proto = Object.getPrototypeOf(gl);
+      try {
+        if (gl.drawElements) gl.drawElements = function one(m, c, t, o) { return proto.drawElements.call(this, m, Math.min(c, 3), t, o); };
+        if (gl.drawArrays) gl.drawArrays = function one(m, f, c) { return proto.drawArrays.call(this, m, f, Math.min(c, 3)); };
+        if (gl.drawElementsInstanced) gl.drawElementsInstanced = function one(m, c, t, o, n) { return proto.drawElementsInstanced.call(this, m, Math.min(c, 3), t, o, Math.min(n, 1)); };
+        if (gl.drawArraysInstanced) gl.drawArraysInstanced = function one(m, f, c, n) { return proto.drawArraysInstanced.call(this, m, f, Math.min(c, 3), Math.min(n, 1)); };
+        if (gl.drawRangeElements) gl.drawRangeElements = function one(m, a, b, c, t, o) { return proto.drawRangeElements.call(this, m, a, b, Math.min(c, 3), t, o); };
+        out.one = time(() => pipe.drawMain());
+      } finally {
+        for (const n of draws) delete gl[n];
+      }
+      // the sun's shadow looked up once a map (uTier 1)
+      try {
+        shared.uTier.value = 1;
+        out.sun1 = time(() => pipe.drawMain());
+      } finally {
+        shared.uTier.value = 0;
+      }
+      // the lamps nearest: six of them, three
+      const lampN = shared.uLightN.value;
+      out.lampN = lampN;
+      try {
+        shared.uLightN.value = Math.min(lampN, 6);
+        out.lamp6 = time(() => pipe.drawMain());
+        shared.uLightN.value = Math.min(lampN, 3);
+        out.lamp3 = time(() => pipe.drawMain());
+      } finally {
+        shared.uLightN.value = lampN;
+      }
+      // every picture the drawing is made in at 8 bits a colour, not 16 (the whole numbers' two as they are)
+      const realloc = () => {
+        pipe.alloc.set(0, 0);
+        pipe.outSize.set(0, 0);
+        pipe.render(center);
+      };
+      const type0 = pipe.type;
+      if (pipe.hdr && type0 !== THREE.UnsignedByteType) {
+        try {
+          const f16 = time(() => pipe.render(center));
+          pipe.type = THREE.UnsignedByteType;
+          realloc();
+          out.ldr = time(() => pipe.drawMain());
+          out.ldrFrame = time(() => pipe.render(center));
+          out.hdrFrame = f16;
+        } catch (e) {
+          out.ldrErr = String(e && e.message ? e.message : e).slice(0, 120);
+        } finally {
+          pipe.type = type0;
+          realloc();
+        }
+      }
       out.ink = time(() => pipe.pass(pipe.steady ? pipe.mInkD : pipe.mInk, pipe.inkRT));
       out.glow = time(() => pipe.drawGlow(pipe.mBright.uniforms.tSrc.value, pipe._glowSize));
       out.final = time(() => pipe.pass(pipe.finalMat(), null));
@@ -2024,7 +2077,7 @@ export class Perf {
       `מסך: ${c.width}×${c.height} · קנה מידה ${g.pipe.scale.toFixed(2)} · ציור חכם ${g.pipe.taa ? `${Math.round(g.pipe.taaFrac * 100)}%` : 'כבוי'} · ${navigator.userAgent.includes('Mobile') ? 'טלפון' : 'מחשב'}`,
       `פריימים בשנייה, ממוצע: ${s.fps.toFixed(1)} · 1% האיטיים: ${s.low1.toFixed(1)} · הפריים האיטי ביותר: ${s.worst.toFixed(1)}ms`,
       g.pace && g.pace.on ? `קצב הפריימים במשחק: יציב (${{ auto: 'אוטומטי', 60: '60', 30: '30' }[g.pace.mode]}) · המסלול עצמו נמדד בקצב הרגיל` : 'קצב הפריימים במשחק: רגיל',
-      `פריימים: עד 17ms ${share(0, 17.5)}% · עד 34ms ${share(17.5, 34.5)}% · יותר ${share(34.5, 1e9)}% · הכנת שיידרים ${b.compiles} (${Math.round(b.compileMs)}ms)`,
+      `פריימים: עד 17ms ${share(0, 17.5)}% · עד 34ms ${share(17.5, 34.5)}% · עד 50ms ${share(34.5, 51)}% · עד 67ms ${share(51, 68)}% · יותר ${share(68, 1e9)}% · הכנת שיידרים ${b.compiles} (${Math.round(b.compileMs)}ms)`,
       b.still && b.still.fps.length >= b.islandN ? `עומדים במקום, פריימים בשנייה: ${b.stands.slice(0, b.islandN).map(({ name }, i) => `${name} ${b.still.fps[i].toFixed(1)}`).join(' · ')}` : '',
       b.still && b.still.gap && b.still.gap.length >= b.islandN ? `מזה, זמן בכל פריים מחוץ לקוד המשחק (ms): ${b.stands.slice(0, b.islandN).map(({ name }, i) => `${name} ${b.still.gap[i].toFixed(0)}`).join(' · ')}` : '',
       // (ROADMAP 19) what each stand drew: thousands of triangles / draw calls a frame
@@ -2043,6 +2096,7 @@ export class Perf {
       st ? `כל שלב לבד, נמדד ישירות בסוף (ms): צל ${ms(st.shadow)} · השתקפות ${ms(st.reflection)} · ציור ${ms(st.main)}${g.pipe.deferred && st.pens !== undefined ? ` (מזה העטים ${ms(st.pens)})` : ''} · דיו ${ms(st.ink)} · זוהר ${ms(st.glow)} · סיום ${ms(st.final)} · פריים שלם ${ms(st.frame)}` : 'כל שלב לבד: המדידה לא הצליחה',
       st && st.other ? `הציור בדרך השנייה (ms): ${g.pipe.deferred ? 'בשלב אחד, כמו קודם' : 'בשני שלבים'} ${ms(st.other)} · ככה: ${ms(st.main)}` : '',
       st && st.flip !== undefined ? `הציור (ms): כמו שהוא ${ms(st.main)} · בלי אנשים ומכוניות ${ms(st.city)} · ב-1/16 מהפיקסלים ${ms(st.tiny)} · ${g.pipe.wallsFirst ? 'בלי' : 'עם'} עומק הקירות קודם ${ms(st.walls)} · ${g.pipe.depthFirst ? 'בלי' : 'עם'} עומק קודם מלא ${ms(st.flip)}${st.kill !== undefined ? ` · בחומרים הישנים (עם discard) ${ms(st.kill)}` : ''}` : st ? `הציור (ms): כמו שהוא ${ms(st.main)} · בלי אנשים ומכוניות ${ms(st.city)}${st.tiny !== undefined ? ` · ב-1/16 מהפיקסלים ${ms(st.tiny)} · בלי לצייר (רק ההכנה והשליחה) ${ms(st.nodraw)} · רק צבע ${ms(st.flat)} · בלי העטים ${ms(st.noPens)} · בלי הצל ${ms(st.noSun)} · בלי הפנסים ${ms(st.noLamps)} · בלי הערפל ${ms(st.noHaze)}${st.pens !== undefined ? ` · מעבר העטים לבד ${ms(st.pens)}` : ''} · ההמתנה לכרטיס לבד ${ms(st.wait)}` : ''}` : '',
+      st && st.one !== undefined ? `רמת הטלפון, כל פישוט לבד (הציור, ms; כמו שהוא ${ms(st.main)}): משולש אחד לכל ציור ${ms(st.one)} · צל השמש בדגימה אחת ${ms(st.sun1)} · ${Math.round(st.lampN)} פנסים ← 6: ${ms(st.lamp6)}, ← 3: ${ms(st.lamp3)}${st.ldr !== undefined ? ` · צבע ב-8 ביט ${ms(st.ldr)} (פריים שלם ${ms(st.hdrFrame)} ← ${ms(st.ldrFrame)})` : st.ldrErr ? ` · צבע ב-8 ביט: נכשל (${st.ldrErr})` : ''}` : '',
       st && st.noPens !== undefined ? `הציור בלי חלק אחד (ms): בלי העטים ${ms(st.noPens)} · בלי הצל של השמש ${ms(st.noSun)} · בלי הפנסים ${ms(st.noLamps)} · בלי הערפל ${ms(st.noHaze)} · רק צבע ${ms(st.flat)} · בלי ההשתקפות ברחוב ${ms(st.noReflImg)} · המראה ${g.pipe.mirrorPlain ? 'עם' : 'בלי'} עטים ${ms(st.reflFlip)} (ככה: ${ms(st.reflection)})` : '',
       gpu && Object.keys(gpu).length ? `כרטיס מסך: ${PASSES.filter((p) => gpu[p] !== undefined).map((p) => `${PASS_HE[p]} ${gpu[p].toFixed(2)}ms`).join(' · ')}` : 'כרטיס מסך: הדפדפן לא מאפשר למדוד',
       `draw calls: ממוצע ${Math.round(s.calls)} · שיא ${s.maxCalls} · ${(s.tris / 1e6).toFixed(2)}M משולשים`,
