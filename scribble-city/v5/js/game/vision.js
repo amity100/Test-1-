@@ -106,6 +106,12 @@ export class Vision {
       return;
     }
     if (!this.can()) return;
+    // (into the page a moment before it fades in: a layer that comes in and is shown in the same frame does not fade)
+    if (this.fx && !this.liveOn) {
+      this.liveOn = true;
+      this.fx.classList.add('live');
+      void this.fx.offsetWidth;
+    }
     this.on = true;
     this.t = 0;
     this.uses++;
@@ -198,7 +204,7 @@ export class Vision {
     const fxOn = this.k > 0.02;
     // (R28: out of the page altogether while it is off - a blurred, blended layer the size of the screen is nothing for
     // the browser to carry under every frame of the game)
-    const live = this.k > 0.001;
+    const live = this.on || this.k > 0.001;
     if (live !== this.liveOn) {
       this.liveOn = live;
       this.fx.classList.toggle('live', live);
