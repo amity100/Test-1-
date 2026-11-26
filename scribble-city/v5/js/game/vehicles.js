@@ -14,6 +14,14 @@ import { tr } from '../core/lang.js';
 // them shows: a wonky drawing pulls to one side, a bad one barely runs.
 
 const _v = new THREE.Vector3();
+// (R27) a door broken open: how far it swings (rad), the dark of its doorway, its ink
+const DOOR_SWING = 1.08;
+const DOOR_DARK = [0.035, 0.03, 0.05];
+const DOOR_INK = [0.06, 0.06, 0.08];
+const _da = new THREE.Vector3();
+const _db = new THREE.Vector3();
+// (R27) the first shot of a gun drawn on a ride, of its own width: nearly true - fire kept up opens it (turretSpread)
+const TURRET_FIRST = 0.2;
 const _tb = new THREE.Vector3();
 const _tz = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -347,6 +355,8 @@ class Vehicle {
 
   update(dt) {
     this.time += dt;
+    // (R27: broken into - its alarm, its door: game.js tickEntry)
+    if (this.alarmT > 0 || this.doorK > 0) this.breakinTick(dt);
     if (this.materializing) {
       // (still turning from the drawing into the thing: it stands still where it was drawn)
       if (this.kind !== 'car') {
@@ -494,6 +504,141 @@ class Vehicle {
     return B;
   }
 
+  // ------------------------------------------------------------------ broken into (R27; game.js beginEntry / tickEntry)
+  // its alarm for a few seconds: the whoop again and again (its lamps flash while alarmT runs - draw); its door, let go
+  // once he is in, swung shut
+  breakinTick(dt) {
+    if (this.alarmT > 0) {
+      this.alarmT -= dt;
+      this.alarmBeep = (this.alarmBeep || 0) - dt;
+      if (this.alarmBeep <= 0 && this.alarmT > 0.5) {
+        this.alarmBeep = 1.55;
+        this.game.audio.play('alarm', 0.6);
+      }
+      if (this.alarmT <= 0) this.alarmBeep = 0;
+    }
+    if (this.doorShut && this.doorK > 0) {
+      this.doorK = Math.max(0, this.doorK - dt * 5);
+      if (this.doorK === 0) {
+        this.doorShut = false;
+        this.game.audio.play('punch', 0.35);
+        this.game.audio.play('click', 0.7);
+      }
+    }
+  }
+
+  // the driver's door in the car's own frame: { zr, zf (its back edge, its hinge), yb (its foot), yr, yf (the waist at
+  // each), yt (the top of its window's frame), zt (where the frame meets the windscreen's pillar), xr, xf, xt (how far out
+  // from the middle line: at its back edge, at its hinge, at the top of the frame) } - null: nothing with a door
+  doorFrame() {
+    if (this.kind !== 'car') return null;
+    if (this._door !== undefined) return this._door;
+    const K = KINDS[this.carKind] || KINDS.sedan;
+    const G = K.glass;
+    this._door = null;
+    if (!G) return null;
+    const L = K.len;
+    const t1 = G.tD - 0.02;
+    // (the pillar behind the front seat - or, a cab with none, the back of its glass)
+    const pl = (G.pillars || []).filter((q) => q > G.tA + 0.05 && q < t1 - 0.12);
+    const t0 = Math.max(pl.length ? pl[pl.length - 1] : G.tA + 0.035, t1 - 1.25 / L);
+    const belt = (t) => {
+      const B = K.belt;
+      for (let i = 1; i < B.length; i++) {
+        if (t <= B[i][0]) return B[i - 1][1] + ((B[i][1] - B[i - 1][1]) * (t - B[i - 1][0])) / Math.max(1e-6, B[i][0] - B[i - 1][0]);
+      }
+      return B[B.length - 1][1];
+    };
+    const zr = t0 * L - L / 2;
+    const zf = t1 * L - L / 2;
+    const yr = belt(t0) - 0.02;
+    const yf = belt(t1) - 0.02;
+    const yb = K.clear + 0.1;
+    const side = (z, y) => {
+      const q = sidePoint(this.carKind, z, y, 1);
+      return q ? q[0] : (K.W / 2) * 0.94;
+    };
+    this._door = { zr, zf, yb, yr, yf, yt: G.R - 0.06, zt: G.tC * L - L / 2, xr: side(zr, yr - 0.1) + 0.012, xf: side(zf, yf - 0.1) + 0.012, xt: (K.W / 2) * (G.w1 || 0.7) * 0.97 };
+    return this._door;
+  }
+
+  // a point of that door, swung open by doorK, in the world: z along the car, y up, x out from its middle line (as shut)
+  doorPoint(x, y, z, out) {
+    const D = this.doorFrame();
+    const a = (this.doorK || 0) * DOOR_SWING;
+    const dz = z - D.zf;
+    const dx = x - D.xf;
+    const lx = D.xf + dx * Math.cos(a) - dz * Math.sin(a);
+    const lz = D.zf + dz * Math.cos(a) + dx * Math.sin(a);
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
+    return out.set(this.pos.x + fz * lx + fx * lz, (this.pos.y || 0) + y, this.pos.z - fx * lx + fz * lz);
+  }
+
+  // (where a hand takes hold of it: its back edge at the waist, a little in from it)
+  doorEdge(out, up = 0) {
+    const D = this.doorFrame();
+    if (!D) return out.copy(this.pos);
+    return this.doorPoint(D.xr, D.yr + up, D.zr + 0.06, out);
+  }
+
+  // the door swung open: drawn in the pen's lines, as the wipers are - its panel hatched in the car's own colour (its
+  // inside, darker), its edges and its window's frame in ink, and the dark of the doorway it left
+  drawDoor() {
+    const D = this.doorFrame();
+    if (!D) return;
+    const fr = this.game.figures;
+    const cam = this.game.camera;
+    const a = _da;
+    const b = _db;
+    // (a hatch's width on the screen for its width on the door: the pen's lines are as wide in pixels wherever they are)
+    const mid = this.doorPoint(D.xr, (D.yb + D.yr) / 2, (D.zr + D.zf) / 2, a);
+    const dist = Math.max(0.8, mid.distanceTo(cam.position));
+    const ppm = (window.innerHeight || 720) / 2 / Math.tan(((cam.fov || 60) * Math.PI) / 360) / dist;
+    const c0 = this.dirt > 0.05 ? this.dustyColor() : this.color;
+    const col = this._doorCol || (this._doorCol = [0, 0, 0]);
+    const col2 = this._doorCol2 || (this._doorCol2 = [0, 0, 0]);
+    for (let i = 0; i < 3; i++) {
+      col[i] = Math.pow(c0[i], 2.2) * 0.5 + 0.012;
+      col2[i] = col[i] * 0.72;
+    }
+    const seed = 7100 + (this.seedN || 0);
+    const N = 7;
+    const hW = clamp((((D.yr - D.yb) / N) * ppm * 1.7) / 0.8, 3, 90);
+    // (the doorway: the dark inside, where the door was)
+    const k = clamp((this.doorK || 0) * 2.2, 0, 1);
+    for (let i = 0; i < N; i++) {
+      const u = (i + 0.5) / N;
+      const fxw = Math.sin(this.yaw);
+      const fzw = Math.cos(this.yaw);
+      const y = D.yb + (D.yr - D.yb) * u;
+      const x = D.xr + 0.004;
+      const z0 = D.zr + 0.03;
+      const z1 = D.zr + (D.zf - D.zr - 0.05) * k;
+      a.set(this.pos.x + fzw * x + fxw * z0, (this.pos.y || 0) + y, this.pos.z - fxw * x + fzw * z0);
+      b.set(this.pos.x + fzw * D.xf + fxw * z1, (this.pos.y || 0) + y + (D.yf - D.yr) * u * k, this.pos.z - fxw * D.xf + fzw * z1);
+      fr.lineXYZ(a.x, a.y, a.z, b.x, b.y, b.z, DOOR_DARK, hW, seed + i, 1, 0.003, 0);
+    }
+    // (the panel)
+    for (let i = 0; i < N; i++) {
+      const u = (i + 0.5) / N;
+      this.doorPoint(D.xr, D.yb + (D.yr - D.yb) * u, D.zr, a);
+      this.doorPoint(D.xf, D.yb + (D.yf - D.yb) * u, D.zf, b);
+      fr.lineXYZ(a.x, a.y, a.z, b.x, b.y, b.z, i % 2 ? col2 : col, hW, seed + 20 + i, 1, 0.004, 0);
+    }
+    // (its edges, and the frame of its window)
+    const P = [[D.xf, D.yb, D.zf], [D.xr, D.yb, D.zr], [D.xr, D.yr, D.zr], [D.xr * 0.5 + D.xt * 0.5, D.yt, D.zr + 0.04], [D.xt, D.yt, D.zt], [D.xf, D.yf, D.zf], [D.xf, D.yb, D.zf]];
+    for (let i = 0; i + 1 < P.length; i++) {
+      this.doorPoint(P[i][0], P[i][1], P[i][2], a);
+      this.doorPoint(P[i + 1][0], P[i + 1][1], P[i + 1][2], b);
+      fr.lineXYZ(a.x, a.y, a.z, b.x, b.y, b.z, DOOR_INK, i > 1 && i < 5 ? 4.2 : 3, seed + 40 + i, 1, 0.004, 0.01);
+    }
+    // (the waist)
+    this.doorPoint(D.xr, D.yr, D.zr, a);
+    this.doorPoint(D.xf, D.yf, D.zf, b);
+    fr.lineXYZ(a.x, a.y, a.z, b.x, b.y, b.z, DOOR_INK, 2.6, seed + 50, 1, 0.004, 0.01);
+  }
+
   draw(cars) {
     if (this.kind !== 'car' || this.dead) return;
     const BP = this.bodyPose();
@@ -503,14 +648,17 @@ class Vehicle {
     const U = this.up;
     cars.draw(this.carKind, this.dirt > 0.05 ? this.dustyColor() : this.color, this.pos.x, this.pos.y, this.pos.z, this.yaw, {
       spin: this.wheelSpin, steer: clamp((this.turn || 0) * 0.35, -0.45, 0.45), extra: this.extra || (this.racing ? 'plain' : null), siren, scale: this.pop || 1,
-      lift: BP.lift, roll: BP.roll, tilt: BP.tilt, reveal: rv, dmg: this.dmg || null, signal: this.signal || 0,
+      // (R27: its alarm going - all four of its corner lamps flashing)
+      lift: BP.lift, roll: BP.roll, tilt: BP.tilt, reveal: rv, dmg: this.dmg || null, signal: this.alarmT > 0 ? 2 : this.signal || 0,
       // (ROADMAP 11.20: wheels drawn onto it in place of its own - game/fuse.js)
       noWheels: !!(this.fz && this.fz.hideWheels),
       // (yours: the side windows down, you and whoever rides with you seen through them)
-      open: !this.game.classic && !rv,
+      // (R27: one he is breaking into - its windows up, as it stood at the curb, till he is through one: game.js tickEntry)
+      open: !this.game.classic && !rv && !this.winShut,
       // (the garage's work: ROADMAP 4.6)
       mods: U && !rv ? U : null, rim: U && U.tires ? RIM_UP[U.tires] : null, matrixOut: (this.design || this.dirt > 0.2 || this.shineT || this.fuse) && !rv ? _cm : null,
     });
+    if (this.doorK > 0.01 && !rv) this.drawDoor();
     // (ROADMAP 11.20) the parts drawn onto it, in its frame
     if (this.fuse && !rv && this.game.fuse) this.game.fuse.place(this, _cm);
     if (!rv && (this.design || this.dirt > 0.2 || this.shineT)) this.drawOn(_cm);
@@ -1331,14 +1479,29 @@ class Vehicle {
       if (!fire || this.gunJam) this.gunHeat = Math.max(0, (this.gunHeat || 0) - dt / 2.2);
       if (this.gunJam && this.gunHeat < 0.3) this.gunJam = false;
     } else this.gunJam = false;
+    // (R27: the crosshair's mark as the picture on the screen has it - not a frame behind it: this runs before the weapons')
+    if (fire && !tgt) this.game.weapons.computeAim();
+    // (what the crosshair is on is out of every gun's turn - one on the hood turns a little either way: ui/hud.js dims it)
+    this.aimOff = !tgt && !this.turrets.some((t) => Math.abs(angleDiff(t.yaw0, want)) <= t.arc + 0.45);
     for (const t of this.turrets) {
       // (ROADMAP 11.27: one still taking shape as it was drawn, game/partpen.js fly)
       const target = t.p && t.p.shaping > performance.now() ? t.yaw0 : t.yaw0 + clamp(angleDiff(t.yaw0, want), -t.arc, t.arc);
       t.yaw = dampAngle(t.yaw, target, 4, dt);
       t.node.rotation.y = t.yaw;
       t.cool -= dt;
+      // (R27: the trigger let go - a moment, and its next shot is as true as its first: fireTurret)
+      if (t.heat > 0 && t.cool < -0.09) t.heat = Math.max(0, t.heat - dt * 4);
       if (fire && t.cool <= 0 && !this.gunJam) this.fireTurret(t);
     }
+  }
+
+  // (R27) how wide a gun drawn on it throws now (rad, a cone's half angle): its first shot close to true, fire kept up as
+  // wide as it was drawn (game/partsum.js gunOf - half its spread either way, as it always was)
+  turretSpread(t) {
+    const g = t.gun;
+    if (!g) return 0.01;
+    const full = (g.spread || 0.02) * 0.5;
+    return g.type === 'mg' ? full * (TURRET_FIRST + (1 - TURRET_FIRST) * (t.heat || 0)) : full;
   }
 
   fireTurret(t) {
@@ -1353,12 +1516,22 @@ class Vehicle {
     t.node.localToWorld(along);
     along.subVectors(mw, along).normalize();
     const dir = (this._aimAt || game.weapons.aimPoint).clone().sub(mw).normalize();
-    if (dir.dot(along) < Math.cos(Math.min(Math.PI, t.arc + 0.45))) dir.copy(along);
+    const blocked = dir.dot(along) < Math.cos(Math.min(Math.PI, t.arc + 0.45));
+    if (blocked) dir.copy(along);
+    const heat = t.heat || 0;
+    // (the story's chase, where the gun finds them by itself: as it was)
+    const wide = this._aimAt ? (g.spread || 0.02) * 0.5 : this.turretSpread(t);
+    t.heat = Math.min(1, heat + 1 / 6);
     // (ROADMAP 28.15: a gun of the hand on its mount - it fires what it fires in the hand, game/weapons.js)
     if (g.type === 'hand') {
-      game.weapons.fireMounted(g.hand, mw, dir, this);
+      game.weapons.fireMounted(g.hand, mw, dir, this, this._aimAt ? null : { aim: !blocked, heat });
       return;
     }
+    // (R27, the owner's word: "this rifle doesn't really hit even when you aim") at what the crosshair is on - a passer-by, a
+    // car, now the crosshair's mark too, game/weapons.js computeAim - from the muzzle: led by how that moves, lifted by what
+    // the shot falls on its way (shotDir); a shell's, a stream's own fall. A mortar's goes its own way (lob)
+    const G = g.type !== 'mg' ? 3 : g.el === 'fire' ? -1.5 : g.el === 'water' ? 9 : g.el === 'light' ? 0 : 2;
+    if (!blocked && !g.arc && !this._aimAt) game.weapons.shotDir(mw, g.speed, G, dir);
     // (the chase's gun: hotter with every shot)
     if (g.type === 'mg' && game.prologue && game.prologue.chaseGun) {
       this.gunHeat = (this.gunHeat || 0) + g.reload / 3.1;
@@ -1368,11 +1541,7 @@ class Vehicle {
         game.fx.smoke(mw.x, mw.y + 0.1, mw.z, 0.8);
       }
     }
-    const sp = g.spread || 0.02;
-    dir.x += (Math.random() - 0.5) * sp;
-    dir.y += (Math.random() - 0.5) * sp;
-    dir.z += (Math.random() - 0.5) * sp;
-    dir.normalize();
+    game.weapons.scatter(dir, wide);
     if (g.type === 'mg') {
       const c = this.mgColor || [1.0, 0.82, 0.3];
       const pr = { kind: 'paintmg', owner: 'player', x: mw.x, y: mw.y, z: mw.z, vx: dir.x * g.speed, vy: dir.y * g.speed, vz: dir.z * g.speed, gravity: 2, damage: g.dmg, radius: 0, life: g.life || 2.5, t: 0, seed: Math.random() * 100, wobble: 0, color: c, ignoreCar: this };
@@ -1474,12 +1643,13 @@ class Vehicle {
     this.group.updateMatrixWorld(true);
     const mw = this.muzzleLocal.clone();
     this.turret.localToWorld(mw);
-    const dir = game.weapons.aimPoint.clone().sub(mw).normalize();
-    dir.x += (Math.random() - 0.5) * 0.035;
-    dir.y += (Math.random() - 0.5) * 0.035;
-    dir.z += (Math.random() - 0.5) * 0.035;
-    dir.normalize();
     const sp = 88;
+    // (R27: at the crosshair's mark, led and lifted - game/weapons.js shotDir; its first shot close, fire kept up as wide as it was)
+    const hot = this.mgHeat && game.time - (this.mgHeatT || 0) < 0.3 ? this.mgHeat : 0;
+    const dir = game.weapons.shotDir(mw, sp, 2, new THREE.Vector3());
+    game.weapons.scatter(dir, 0.0175 * (TURRET_FIRST + (1 - TURRET_FIRST) * hot));
+    this.mgHeat = Math.min(1, hot + 1 / 6);
+    this.mgHeatT = game.time;
     const c = this.mgColor || [1.0, 0.82, 0.3];
     game.weapons.projectiles.push({ kind: 'paintmg', owner: 'player', x: mw.x, y: mw.y, z: mw.z, vx: dir.x * sp, vy: dir.y * sp, vz: dir.z * sp, gravity: 2, damage: 13, radius: 0, life: 2.5, t: 0, seed: Math.random() * 100, wobble: 0, color: c, ignoreCar: this });
     game.fx.muzzle(mw.x, mw.y, mw.z, 0.9);

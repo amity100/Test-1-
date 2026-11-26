@@ -2217,6 +2217,11 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
   }
 
   tryEnter() {
+    // (R27: asked again while he is at it - the rest of it at three times the pace)
+    if (this.entry) {
+      this.entry.rate = 3;
+      return;
+    }
     const t = this.enterTarget();
     // (intelligence round) nothing to get into: somebody right in front of you - a hello
     if (!t) {
@@ -2239,9 +2244,16 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
   }
 
   // (round 15, the player's word) into a car as GTA has it: to its driver's door; a parked one's window
-  // smashed with the fist and the door opened from inside; one with somebody at the wheel, its door
+  // smashed and the door opened from inside; one with somebody at the wheel, its door
   // pulled open and the driver dragged out onto the road; in - and a second or so later, away. The car
   // stands still from the start (out of the traffic: game/traffic.js take)
+  // (R27, the owner's word: "it isn't really a break-in. It must be more realistic") A parked car, locked: he looks over
+  // his shoulders (the first couple of times), turns his side to it and puts his elbow through the driver's window - the
+  // glass is there till then, and falls in pieces down the door and onto the road; he leans in through the hole to the
+  // catch, the door swings open in his hand (game/vehicles.js drawDoor), he ducks in and it shuts after him; its alarm,
+  // if it has one, whoops and flashes its lamps for a few seconds as he drives off. Two seconds and a bit; quicker once he
+  // has done it twice; asked again on the way (tryEnter) - at three times the pace. E.T: its beats (s); E.keys: where he
+  // stands at each [time, m out from the car's middle line, m behind the seat's line]
   beginEntry(kind, c) {
     const p = this.player;
     if (this.entry || p.mode !== 'foot' || p.inVehicle) return;
@@ -2260,7 +2272,70 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     const sx = t.pos.x + fx * DRIVER_SEAT.u;
     const sz = t.pos.z + fz * DRIVER_SEAT.u;
     const quiet = kind === 'parked' && this.gadgets ? this.gadgets.useKey() : false;
-    this.entry = { kind, v, t, fx, fz, lx, lz, sx, sz, door: { x: sx + lx * 1.05, z: sz + lz * 1.05 }, from: p.pos.clone(), time: 0, quiet, hit: false, out: false, driver: null };
+    // (something with a door and windows - not a motorbike out of the traffic)
+    const D = v.doorFrame ? v.doorFrame() : null;
+    const E = { kind, v, t, fx, fz, lx, lz, sx, sz, door: { x: sx + lx * 1.05, z: sz + lz * 1.05 }, from: p.pos.clone(), time: 0, quiet, hit: false, out: false, driver: null, rate: 1, D, T: null, keys: null, clicked: false };
+    if (D) {
+      // (its windows up and its door shut, as it stood: his own car's side windows are down - game/vehicles.js draw)
+      v.winShut = true;
+      v.doorK = 0;
+      v.doorShut = false;
+      // (how far out he stands clear of the door's skin, and behind its back edge while it swings)
+      const out = D.xr + 0.36;
+      const rear = -DRIVER_SEAT.u + D.zr - 0.34;
+      const seat = [D.xr - 0.12, 0.02];
+      // (level with the middle of the driver's window)
+      const atWin = DRIVER_SEAT.u - (D.zr + (D.zt - D.zr) * 0.42);
+      if (kind === 'parked' && !quiet) {
+        const n = (this.entryN = (this.entryN || 0) + 1);
+        const look = n <= 2 ? 0.46 : 0;
+        const k = n <= 2 ? 1 : 0.86;
+        const T = { walk: 0.35, wind: 0.35 + look };
+        T.hit = T.wind + 0.27 * k;
+        T.reach = T.hit + 0.2 * k;
+        T.latch = T.reach + 0.38 * k;
+        T.open = T.latch + 0.4 * k;
+        T.in = T.open + 0.34 * k;
+        E.T = T;
+        E.look = look > 0;
+        E.keys = [[T.walk, out, atWin], [T.hit - 0.08, out + 0.1, atWin], [T.hit, out - 0.16, atWin], [T.reach + 0.12, out - 0.18, atWin + 0.1], [T.latch, out - 0.18, atWin + 0.1], [T.open, out + 0.22, -rear], [T.in, seat[0], seat[1]]];
+      } else if (kind === 'carjack') {
+        E.T = { walk: 0.35, grab: 0.36, open: 0.62, pull: 0.62, flung: 1.12, in: 1.58 };
+        E.keys = [[0.35, out + 0.05, -rear], [1.12, out + 0.1, -rear + 0.05], [1.58, seat[0], seat[1]]];
+      } else {
+        E.T = { walk: 0.35, grab: 0.36, key: 0.6, open: 0.92, in: 1.24 };
+        E.keys = [[0.35, out + 0.05, -rear], [0.92, out + 0.1, -rear + 0.05], [1.24, seat[0], seat[1]]];
+      }
+    }
+    this.entry = E;
+  }
+
+  // (R27) the window gone: the crash of it, its pieces down the door and in over the seat, a few of them left on the road
+  // for a moment; the car's own side windows are his from here (down); and, under half the time, its alarm
+  entrySmash(E, win) {
+    const v = E.v;
+    v.winShut = false;
+    this.audio.play('punch', 0.75);
+    this.audio.play('glass', 1);
+    this.camRig.addShake(0.13);
+    const fxs = this.fx;
+    if (fxs && fxs.particles) {
+      for (let i = 0; i < 64; i++) {
+        if (fxs.particles.length > 420) fxs.particles.shift();
+        const r = Math.random();
+        // (most of it in, with the blow; the rest down the outside of the door)
+        const inw = i % 3 ? 0.6 + Math.random() * 2.2 : -(0.2 + Math.random() * 0.9);
+        fxs.particles.push({ x: win.x + E.fx * (Math.random() - 0.5) * 0.62, y: win.y + (Math.random() - 0.5) * 0.36, z: win.z + E.fz * (Math.random() - 0.5) * 0.62, vx: -E.lx * inw + (Math.random() - 0.5) * 1.3, vy: 0.3 + Math.random() * 1.9, vz: -E.lz * inw + (Math.random() - 0.5) * 1.3, life: 0.7 + Math.random() * 1.1, t: 0, len: 0.05 + Math.random() * 0.11, color: r < 0.4 ? [0.85, 0.95, 1] : r < 0.7 ? [0.6, 0.8, 0.9] : [1, 1, 1], seed: Math.random() * 50, spin: Math.random() * 12 });
+      }
+      if (fxs.sprite) fxs.sprite('fx_impact', win.x, win.y, win.z, { size: 1.0, grow: 0.9, life: 0.22 });
+    }
+    if (Math.random() < 0.45) {
+      // (its whoop and its lamps: game/vehicles.js breakinTick)
+      v.alarmT = 5.4;
+      v.alarmBeep = 0;
+      this.hud.toast(tr('אזעקה! מישהו בטח שמע…', 'Alarm! Somebody must have heard…'), 'bad', 1.8);
+      this.enemies.noise(v.pos, 35, 'alarm');
+    }
   }
 
   tickEntry(dt) {
@@ -2268,84 +2343,156 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     if (!E) return;
     const p = this.player;
     const f = p.fig;
-    E.time += dt;
+    E.time += dt * (E.rate || 1);
     const t = E.time;
     const v = E.v;
-    // (to the door, facing the car)
-    const k = Math.min(1, t / 0.35);
-    const e = k * k * (3 - 2 * k);
-    p.pos.x = E.from.x + (E.door.x - E.from.x) * e;
-    p.pos.z = E.from.z + (E.door.z - E.from.z) * e;
+    const T = E.T;
+    const D = E.D;
+    const vy = v.pos.y || 0;
+    // (0 before a, 1 after b, eased between)
+    const sm = (a, b) => {
+      const k = Math.min(1, Math.max(0, (t - a) / Math.max(1e-4, b - a)));
+      return k * k * (3 - 2 * k);
+    };
+    const turn = (a, b, k) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * k;
+    const yawCar = Math.atan2(-E.lx, -E.lz);
+    const yawFwd = Math.atan2(E.fx, E.fz);
+    const win = this._entW || (this._entW = new THREE.Vector3());
+    const hand = this._entH || (this._entH = new THREE.Vector3());
+    const hand2 = this._entH2 || (this._entH2 = new THREE.Vector3());
+    const pole = this._entP || (this._entP = new THREE.Vector3());
     p.vel.set(0, 0, 0);
-    p.yaw = Math.atan2(-E.lx, -E.lz);
-    f.yaw = p.yaw;
-    f.speed = k < 1 ? 2.2 : 0;
     // (the camera round behind him along the car's side: the window, the door and whoever comes out of
     // it in the picture - not the back of his head)
-    this.camRig.yaw = dampAngle(this.camRig.yaw, Math.atan2(E.fx, E.fz), 6, dt);
-    const vy = v.pos.y || 0;
-    const win = this._entW || (this._entW = new THREE.Vector3());
-    win.set(E.sx + E.lx * 0.86, vy + 1.18, E.sz + E.lz * 0.86);
+    // (R27: and out into the road a little, looking in at the door - from straight behind, a van's own tail was all of
+    // the picture; back behind the car as he gets in, where the driving camera takes it up)
+    const ca = D ? 0.62 * (1 - sm(T.in - 0.34, T.in)) : 0;
+    this.camRig.yaw = dampAngle(this.camRig.yaw, Math.atan2(E.fx * Math.cos(ca) - E.lx * Math.sin(ca), E.fz * Math.cos(ca) - E.lz * Math.sin(ca)), 6, dt);
+    f.reachR = null;
+    f.reachL = null;
+    f.poleR = null;
+    f.punch = -1;
     let done = false;
-    if (E.kind === 'parked' && !E.quiet) {
-      // the fist through the window
-      f.punchSide = 1;
-      f.punch = t > 0.4 && t < 1.0 ? (t - 0.4) / 0.6 : -1;
-      if (!E.hit && t > 0.6) {
-        E.hit = true;
-        this.audio.play('punch', 0.8);
-        this.audio.play('glass', 0.9);
-        const fxs = this.fx;
-        if (fxs && fxs.particles) {
-          for (let i = 0; i < 46; i++) {
-            if (fxs.particles.length > 420) fxs.particles.shift();
-            const r = Math.random();
-            fxs.particles.push({ x: win.x + (Math.random() - 0.5) * 0.5, y: win.y + (Math.random() - 0.5) * 0.35, z: win.z + (Math.random() - 0.5) * 0.5, vx: -E.lx * (0.5 + Math.random() * 2) + (Math.random() - 0.5) * 1.6, vy: Math.random() * 1.6, vz: -E.lz * (0.5 + Math.random() * 2) + (Math.random() - 0.5) * 1.6, life: 0.6 + Math.random() * 0.6, t: 0, len: 0.06 + Math.random() * 0.1, color: r < 0.4 ? [0.85, 0.95, 1] : r < 0.7 ? [0.6, 0.8, 0.9] : [1, 1, 1], seed: Math.random() * 50, spin: Math.random() * 12 });
-          }
-          if (fxs.sprite) fxs.sprite('fx_impact', win.x, win.y, win.z, { size: 0.9, grow: 0.8, life: 0.2 });
+    if (!D) {
+      // (a motorbike: up to it, and on - its rider, if it has one, off it first)
+      const k = Math.min(1, t / 0.35);
+      const e = k * k * (3 - 2 * k);
+      p.pos.x = E.from.x + (E.door.x - E.from.x) * e;
+      p.pos.z = E.from.z + (E.door.z - E.from.z) * e;
+      p.yaw = yawCar;
+      f.yaw = p.yaw;
+      f.speed = k < 1 ? 2.2 : 0;
+      win.set(E.sx + E.lx * 0.86, vy + 1.18, E.sz + E.lz * 0.86);
+      if (E.kind === 'carjack') {
+        if (t > 0.35) f.reachL = win;
+        this.entryDriver(E, t, 0.5, 1.0, win);
+        done = t > 1.5 || (!E.t.driver && t > 0.9);
+      } else done = t > 0.7;
+    } else {
+      // where he stands: from where he was, a beat at a time
+      const K = E.keys;
+      let i = 0;
+      while (i < K.length - 1 && t > K[i][0]) i++;
+      const k1 = K[i];
+      const t0 = i ? K[i - 1][0] : 0;
+      const u = sm(t0, k1[0]);
+      const x1 = E.sx + E.lx * k1[1] - E.fx * k1[2];
+      const z1 = E.sz + E.lz * k1[1] - E.fz * k1[2];
+      const x0 = i ? E.sx + E.lx * K[i - 1][1] - E.fx * K[i - 1][2] : E.from.x;
+      const z0 = i ? E.sz + E.lz * K[i - 1][1] - E.fz * K[i - 1][2] : E.from.z;
+      const wasX = p.pos.x;
+      const wasZ = p.pos.z;
+      p.pos.x = x0 + (x1 - x0) * u;
+      p.pos.z = z0 + (z1 - z0) * u;
+      const going = Math.hypot(p.pos.x - wasX, p.pos.z - wasZ) / Math.max(1e-4, dt);
+      f.speed = t < T.walk || t > T.open ? Math.min(2.4, going) : Math.min(1.2, going * 0.6);
+      // (the middle of the driver's window, the catch inside the door, the handle outside it)
+      v.doorK = 0;
+      v.doorPoint((D.xr + D.xt) / 2 - 0.03, (D.yr + D.yt) / 2 - 0.04, D.zr + (D.zt - D.zr) * 0.42, win);
+      let yaw = yawCar;
+      let crouch = 0;
+      let look = null;
+      if (E.kind === 'parked' && !E.quiet) {
+        // (a look over each shoulder: the street behind him, the street ahead)
+        if (E.look && t > T.walk && t < T.wind) {
+          const h = (t - T.walk) / (T.wind - T.walk) < 0.5 ? -1 : 1;
+          look = hand2.set(p.pos.x + E.fx * 5 * h + E.lx * 2.2, vy + 1.5, p.pos.z + E.fz * 5 * h + E.lz * 2.2);
+          crouch = 0.1;
         }
-        if (Math.random() < 0.45) {
-          this.audio.play('alarm', 0.7);
-          this.hud.toast(tr('אזעקה! מישהו בטח שמע…', 'Alarm! Somebody must have heard…'), 'bad', 1.8);
-          this.enemies.noise(v.pos, 35, 'alarm');
+        // (his side to the car, his arm folded, the elbow up and at the glass - and into it)
+        const side = sm(T.wind, T.hit - 0.08) * (1 - sm(T.hit + 0.08, T.reach + 0.12));
+        yaw = turn(yawCar, yawFwd, side * 0.86);
+        if (t > T.wind && t < T.hit + 0.1) {
+          const n = f.j.neck;
+          hand.set(n.x + E.fx * 0.14 + E.lx * 0.1, n.y - 0.1, n.z + E.fz * 0.14 + E.lz * 0.1);
+          f.reachR = hand;
+          f.poleR = pole.set(-E.lx, 0.3, -E.lz);
+          crouch = 0.12 * side;
+        }
+        if (!E.hit && t > T.hit) {
+          E.hit = true;
+          this.entrySmash(E, win);
+        }
+        // (in through the hole to the catch, his other hand on the sill)
+        if (t >= T.hit + 0.1 && t < T.latch + 0.05) {
+          const a = sm(T.hit + 0.1, T.reach + 0.16);
+          v.doorPoint(D.xr - 0.2 - 0.06 * a, D.yr - 0.02 - 0.16 * a, D.zr + 0.3 + 0.2 * a, hand);
+          f.reachR = hand;
+          if (t > T.reach) f.reachL = v.doorPoint(D.xr + 0.01, D.yr + 0.02, D.zr + 0.12, hand2);
+          look = hand;
+          crouch = 0.2 * a;
+        }
+        if (!E.clicked && t > T.latch - 0.05) {
+          E.clicked = true;
+          this.audio.play('click', 0.9);
+        }
+        // (the door swung open in his hand, he a step back out of its way)
+        v.doorK = sm(T.latch, T.open);
+        if (t >= T.latch + 0.05 && t < T.open + 0.06) {
+          f.reachR = v.doorEdge(hand, -0.03);
+          yaw = turn(yawCar, yawFwd, 0.35 * sm(T.latch, T.open));
+        }
+      } else {
+        // (his hand on the handle - the drawn key in it - and the door pulled open)
+        v.doorK = sm(E.kind === 'carjack' ? 0.42 : T.key, T.open);
+        if (t > T.grab && t < T.open + 0.08) f.reachR = v.doorEdge(hand, -0.14);
+        if (E.kind !== 'carjack' && !E.clicked && t > T.key) {
+          E.clicked = true;
+          this.audio.play('click', 0.9);
+        }
+        if (E.kind === 'carjack') {
+          // (and him out of the seat by his collar, onto the road)
+          this.entryDriver(E, t, T.pull, T.flung, null);
+          if (t > T.open && t < T.flung) f.reachL = v.doorEdge(hand2, -0.02);
+          if (!E.t.driver && t > T.open + 0.1 && E.time < T.flung) E.time = T.flung;
         }
       }
-      // (a hand in through it to the door's catch)
-      if (t > 1.0) f.reachR = win;
-      done = t > 1.45;
-    } else if (E.kind === 'carjack') {
-      const d = E.t.driver;
-      // the door pulled open, a hand on it - and him out of the seat by his collar
-      if (t > 0.35) f.reachL = win;
-      if (t > 0.5 && !E.driver && d) {
-        if (d.fig) d.fig.dispose();
-        E.driver = this.civilians.spawnAt(E.sx + E.lx * 0.45, E.sz + E.lz * 0.45, d.look);
-        if (E.driver) E.driver.yaw = Math.atan2(E.lx, E.lz);
+      // (in: ducked under the roof, onto the seat)
+      if (t > T.open) {
+        const a = sm(T.open, T.in);
+        yaw = turn(yaw, yawFwd, a);
+        crouch = 0.55 * sm(T.open + 0.06, T.in);
       }
-      const c = E.driver;
-      if (c && !E.out) {
-        const u = Math.min(1, Math.max(0, (t - 0.5) / 0.5));
-        c.pos.x = E.sx + E.lx * (0.45 + 1.4 * u) + E.fx * 0.4 * u;
-        c.pos.z = E.sz + E.lz * (0.45 + 1.4 * u) + E.fz * 0.4 * u;
-        c.vel.set(0, 0, 0);
-        if (c.fig && c.fig.j && c.fig.j.neck) f.reachR = c.fig.j.neck;
-        if (u >= 1) {
-          // (flung down onto the road)
-          E.out = true;
-          f.reachR = null;
-          this.audio.play('punch', 0.7);
-          if (this.civilians.struck) this.civilians.struck(c, { dmg: 0, push: 3.2, down: true }, new THREE.Vector3(E.lx, 0, E.lz), 1);
-          const lines = ['Hey!! My car!', 'Help! Thief!', 'Okay, okay!', 'Take it! Take it!'];
-          if (this.bubbles) this.bubbles.say(c, lines[Math.floor(Math.random() * lines.length)], 'alarm');
-        }
+      p.yaw = yaw;
+      f.yaw = yaw;
+      f.crouch = crouch;
+      if (look || E.looked) {
+        f.lookAt = look;
+        E.looked = !!look;
       }
-      done = t > 1.5 || (!d && t > 0.9);
-    } else done = t > 0.7;
+      done = t >= T.in;
+    }
     if (!done) return;
     f.reachR = null;
     f.reachL = null;
+    f.poleR = null;
     f.punch = -1;
+    f.crouch = 0;
+    if (E.looked) f.lookAt = null;
     this.entry = null;
+    // (his car now: its side windows down, its door swung shut after him - game/vehicles.js)
+    v.winShut = false;
+    if (v.doorK > 0) v.doorShut = true;
     this.enterVehicle(v);
     // (a second or so to start it before it can go)
     v.holdT = 1.1;
@@ -2356,6 +2503,33 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     } else {
       if (E.quiet) this.hud.toast(tr('המפתח נכנס, הדלת נפתחת. אף אחד לא חושד', 'The key goes in, the door opens. Nobody suspects a thing'), 'good', 2);
       if (this.onCrime) this.onCrime(E.t.spec && E.t.spec.police && !this.classic ? 'copcar' : E.quiet ? 'quietSteal' : 'steal', E.t.pos.x, E.t.pos.z);
+    }
+  }
+
+  // (round 15) whoever is at the wheel: out of the seat by his collar between t0 and t1, and flung down onto the road
+  entryDriver(E, t, t0, t1, hold) {
+    const f = this.player.fig;
+    const d = E.t.driver;
+    if (t > t0 && !E.driver && d) {
+      if (d.fig) d.fig.dispose();
+      E.driver = this.civilians.spawnAt(E.sx + E.lx * 0.45, E.sz + E.lz * 0.45, d.look);
+      if (E.driver) E.driver.yaw = Math.atan2(E.lx, E.lz);
+    }
+    const c = E.driver;
+    if (!c || E.out) return;
+    const u = Math.min(1, Math.max(0, (t - t0) / Math.max(1e-4, t1 - t0)));
+    c.pos.x = E.sx + E.lx * (0.45 + 1.4 * u) + E.fx * 0.4 * u;
+    c.pos.z = E.sz + E.lz * (0.45 + 1.4 * u) + E.fz * 0.4 * u;
+    c.vel.set(0, 0, 0);
+    if (c.fig && c.fig.j && c.fig.j.neck) f.reachR = c.fig.j.neck;
+    if (u >= 1) {
+      // (flung down onto the road)
+      E.out = true;
+      f.reachR = null;
+      this.audio.play('punch', 0.7);
+      if (this.civilians.struck) this.civilians.struck(c, { dmg: 0, push: 3.2, down: true }, new THREE.Vector3(E.lx, 0, E.lz), 1);
+      const lines = ['Hey!! My car!', 'Help! Thief!', 'Okay, okay!', 'Take it! Take it!'];
+      if (this.bubbles) this.bubbles.say(c, lines[Math.floor(Math.random() * lines.length)], 'alarm');
     }
   }
 

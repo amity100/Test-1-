@@ -182,6 +182,8 @@ body.air-drawing #ink { display: none !important; }
 #crosshair.ads { --len: 9px; --w: 3px; }
 #crosshair.enemy span, #crosshair.enemy i { background: #ff3b30; }
 #crosshair.enemy::before { border-color: #ff3b30; }
+/* (R27) a car's gun that cannot turn to what the crosshair is on (one on the hood turns only a little either way): dimmed */
+#crosshair.off { opacity: 0.32; }
 #crosshair.melee span { background: var(--red); }
 #hitmarker { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(0.6); font-size: 34px; color: var(--red); opacity: 0; font-weight: 900; transition: opacity 0.1s, transform 0.1s; }
 #hitmarker.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }

@@ -103,6 +103,24 @@ const _gm = new THREE.Matrix4();
 const _hp = new THREE.Vector3();
 const _hd = new THREE.Vector3();
 const _md = new THREE.Vector3();
+// (R27: how a shot is spread - game/weapons.js spreadNow) the first shot from the hip, of the gun's own width; fire kept up
+// aimed in, of it
+const HIP_FIRST = 0.25;
+const ADS_FULL = 0.45;
+const _sx = new THREE.Vector3();
+const _sy = new THREE.Vector3();
+// a unit vector turned off its way by up to R (rad), anywhere in the round of it alike (it was a box, each axis its own:
+// its corners half as far again)
+export function scatter(d, R) {
+  if (!(R > 0)) return d;
+  const a = Math.random() * Math.PI * 2;
+  const r = R * Math.sqrt(Math.random());
+  _sx.set(d.z, 0, -d.x);
+  if (_sx.lengthSq() < 1e-8) _sx.set(1, 0, 0);
+  _sx.normalize();
+  _sy.crossVectors(d, _sx);
+  return d.addScaledVector(_sx, Math.cos(a) * r).addScaledVector(_sy, Math.sin(a) * r).normalize();
+}
 // (round 17, the player's word) the big pencil held the right way up: its graphite point leading, the
 // hand round it near the eraser's end (game/items.js pencil: the point at -z, the eraser at +z) -
 // the way a pencil is carried by somebody who does not know yet that its other end rubs things out
@@ -279,34 +297,173 @@ export class Weapons {
   }
 
   // where the crosshair points (world), using the camera ray
+  // (R27, the owner's word: "the crosshair must be accurate") The crosshair is the middle of the picture, and what it is on is
+  // what the shot is sent at - a wall, the street, and whoever or whatever stands in it: a gangster, a passer-by, a car.
+  // (A passer-by and a car were not looked for: with the crosshair on one the mark was the wall far behind them, and the
+  // shot - which leaves the gun, a pace beside the camera's line, a car's hood four metres under it - went past them.)
+  // aimHit: { type: 'enemy' | 'civ' | 'car', who } or null; aimVel: how what it is on moves (shotDir leads it by this)
   computeAim() {
-    const cam = this.game.camera;
+    const game = this.game;
+    const cam = game.camera;
     const dir = _v.set(0, 0, -1).applyQuaternion(cam.quaternion);
     const o = cam.position;
-    const world = this.game.world.collision.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, 400);
+    const world = game.world.collision.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, 400);
     let t = world ? world.t : 400;
     this.aimWorld = world;
+    // (nothing there: the sky)
+    this.aimFar = !world;
     // ground plane
     if (dir.y < -1e-3) {
       const tg = (0.15 - o.y) / dir.y;
       if (tg > 0 && tg < t) {
         t = tg;
         this.aimWorld = null;
+        this.aimFar = false;
       }
     }
-    const e = this.game.enemies.rayHit(o, dir, t);
-    this.aimHitEnemy = null;
-    if (e) {
-      t = e.t;
-      this.aimHitEnemy = e.enemy;
-    }
     // never aim behind the player (in a car: where he sits)
-    const P = this.game.player;
+    const P = game.player;
     const p = P.mode === 'vehicle' ? P.fig.pos : P.pos;
     const along = (p.x - o.x) * dir.x + (p.y + 1.4 - o.y) * dir.y + (p.z - o.z) * dir.z;
+    this.aimHitEnemy = null;
+    this.aimHit = null;
+    this.aimVel = null;
+    // (who the crosshair is on: looked for from where he is, on - not between the camera and his back)
+    const t0 = Math.max(0, along - 0.2);
+    if (t > t0 + 0.05) {
+      const ox = o.x + dir.x * t0;
+      const oy = o.y + dir.y * t0;
+      const oz = o.z + dir.z * t0;
+      const L = t - t0;
+      let k = 1;
+      const e = game.enemies.segmentHit(ox, oy, oz, dir.x * L, dir.y * L, dir.z * L, 1);
+      if (e) {
+        k = e.t;
+        this.aimHitEnemy = e.enemy;
+        this.aimHit = { type: 'enemy', who: e.enemy };
+      }
+      const c = game.civilians.segmentHit(ox, oy, oz, dir.x * L, dir.y * L, dir.z * L, k);
+      if (c) {
+        k = c.t;
+        this.aimHitEnemy = null;
+        this.aimHit = { type: 'civ', who: c.civ };
+      }
+      const car = game.classic ? null : game.traffic.segmentHit(ox, oy, oz, dir.x * L, dir.y * L, dir.z * L, k, P.inVehicle || null);
+      if (car) {
+        k = car.t;
+        this.aimHitEnemy = null;
+        this.aimHit = { type: 'car', who: car.car };
+      }
+      // (a thumb is not a mouse: on a phone, a crosshair that is a hand's width off a gangster is on him - the shot bends to
+      // him, the camera does not move; game/gunhold.js magnet)
+      if (!this.aimHit && this.hold && this.hold.magnet) {
+        const m = this.hold.magnet(o, dir, t0, t);
+        if (m) {
+          this.aimHitEnemy = m.enemy;
+          this.aimHit = { type: 'enemy', who: m.enemy, bent: true };
+          this.aimPoint.copy(m.point);
+          this.aimWorld = null;
+          this.aimFar = false;
+          this.aimVelOf(m.enemy);
+          return this.aimPoint;
+        }
+      }
+      if (this.aimHit) {
+        t = t0 + L * k;
+        this.aimWorld = null;
+        this.aimFar = false;
+        this.aimVelOf(this.aimHit.who);
+      }
+    }
     if (t < along + 1.5) t = along + 1.5;
     this.aimPoint.set(o.x + dir.x * t, o.y + dir.y * t, o.z + dir.z * t);
     return this.aimPoint;
+  }
+
+  // (R27) how what the crosshair is on moves: somebody walking, a car going by (null: standing)
+  aimVelOf(who) {
+    const V = this._aimV || (this._aimV = new THREE.Vector3());
+    if (who && who.vel && who.vel.isVector3) V.set(who.vel.x, 0, who.vel.z);
+    else if (who && typeof who.speed === 'number' && typeof who.yaw === 'number') V.set(Math.sin(who.yaw) * who.speed, 0, Math.cos(who.yaw) * who.speed);
+    else V.set(0, 0, 0);
+    const l = V.length();
+    if (l > 40) V.multiplyScalar(40 / l);
+    this.aimVel = l > 0.3 ? V : null;
+  }
+
+  // (R27) the way a shot leaves `from` (its muzzle) at `sp` m/s under gravity G to pass through what the crosshair is on (or
+  // through `at`, a point of the caller's own): led by how that moves - a walker is a pace on by the time a pencil gets to
+  // him - and lifted by what the shot falls on its way (a paint ball falls half a metre in twenty; it landed at his knees).
+  // The shot itself is what it was: its speed, its fall, its arc. Past what it reaches in a second and a bit it is not lifted
+  // further (it crosses the crosshair's line there, and falls short beyond). out: a unit vector
+  shotDir(from, sp, G, out, at = null) {
+    const a = at || this.aimPoint;
+    let ax = a.x - from.x;
+    let ay = a.y - from.y;
+    let az = a.z - from.z;
+    const V = at ? null : this.aimVel;
+    if (V && sp > 1) {
+      let T = Math.hypot(ax, ay, az) / sp;
+      for (let i = 0; i < 2; i++) {
+        T = Math.min(1.5, T);
+        ax = a.x + V.x * T - from.x;
+        az = a.z + V.z * T - from.z;
+        T = Math.hypot(ax, ay, az) / sp;
+      }
+    }
+    const len = Math.hypot(ax, ay, az) || 1e-6;
+    if (G && sp > 1) {
+      // (the sky, or something further than the shot carries: lifted as for the furthest it does)
+      const reach = sp * (this.aimFar && !at ? 0.5 : 1.2);
+      const k = len > reach ? reach / len : 1;
+      const bx = ax * k;
+      const by = ay * k;
+      const bz = az * k;
+      // (the fall as the game steps it: game/weapons.js updateProjectiles - the speed first, then the place)
+      const dt = clamp(this._dt || 1 / 60, 1 / 240, 1 / 20);
+      let lift = 0;
+      for (let i = 0; i < 3; i++) {
+        const T = Math.hypot(bx, by + lift, bz) / sp;
+        lift = 0.5 * G * T * (T + dt);
+      }
+      out.set(bx, by + lift, bz);
+    } else out.set(ax, ay, az);
+    return out.normalize();
+  }
+
+  // (R27) how wide the next shot of it goes (rad, a cone's half angle) - and so how wide the crosshair stands (ui/hud.js).
+  // The first shot of a gun aimed in goes where the crosshair is; from the hip it is close; only fire kept up opens it
+  // (slot.heat, a shot at a time, shut again a moment after the trigger is let go) - to the gun's own width (def.spread: the
+  // minigun's is wide, the M16's narrow), under half of it aimed in. A drawing that came out crooked is never true.
+  // pellet: one of a shotgun's - its pattern is its own, aimed in or not (one of them goes down the middle)
+  spreadNow(slot, pellet = false) {
+    const def = slot.def;
+    const g = GRADE[slot.grade] || GRADE.good;
+    const game = this.game;
+    const base = (def.spread || 0) * g.spread * (game.skills ? game.skills.spreadMul : 1) * this.armfx.spreadK(slot);
+    const heat = slot.heat || 0;
+    let f;
+    // (out of a car's window, one hand)
+    if (this.shootOut) f = pellet ? 1 : 0.4 + 0.6 * heat;
+    else {
+      const H = this.hold;
+      const hip = pellet ? 1 : HIP_FIRST + (1 - HIP_FIRST) * heat;
+      const ads = pellet ? 0.6 : ADS_FULL * heat;
+      f = (hip + (ads - hip) * clamp(H.adsK, 0, 1)) * H.moveK();
+    }
+    return base * Math.max(f, 1 - 1 / g.spread);
+  }
+
+  // (for a ride's own guns: game/vehicles.js)
+  scatter(d, R) {
+    return scatter(d, R);
+  }
+
+  // (a shot of it fired: a little wider for the next)
+  heatUp(slot) {
+    const def = slot.def;
+    slot.heat = Math.min(1, (slot.heat || 0) + 1 / clamp(Math.round((def.rate || 4) * 0.45), 3, 9));
+    slot.heatT = this.game.time;
   }
 
   update(dt) {
@@ -314,9 +471,12 @@ export class Weapons {
     const input = game.input;
     const player = game.player;
     this.cooldown -= dt;
+    this._dt = dt;
     if (this.jam > 0) this.jam -= dt;
     const slot = this.current;
     const def = slot.def;
+    // (R27: the trigger let go - a moment, and the gun is as true as its first shot again: spreadNow)
+    if (slot.heat > 0 && game.time - (slot.heatT || 0) > 1 / (def.rate || 4) + 0.09) slot.heat = Math.max(0, slot.heat - dt * 4);
     // (a thing just drawn is still turning real in the air: it is not in the hand yet)
     // (hands up, or cuffed: nothing in them, ROADMAP 6.3)
     const onFoot = player.mode === 'foot' && !game.inBar && !game.dialog.open && !slot.present && !(game.arrest && game.arrest.frozen);
@@ -496,7 +656,9 @@ export class Weapons {
   }
 
   // fired from its mount: m its muzzle there, dir the way it points, car the ride it is on
-  fireMounted(hand, m, dir, car) {
+  // (R27) o.aim: at the crosshair's mark - led and lifted as in the hand, shotDir; o.heat (0..1): how long the mount has been
+  // firing - steady on its mount, its first shots close. No o (the story's chase): as it was
+  fireMounted(hand, m, dir, car, o = null) {
     const game = this.game;
     const def = WEAPON_DEFS[hand.id];
     if (!def) return;
@@ -504,13 +666,11 @@ export class Weapons {
     const g = GRADE[slot.grade] || GRADE.good;
     const sp = def.speed * g.speed;
     const n = def.pellets || 1;
+    const heat = o && o.heat !== undefined ? o.heat : 1;
     const spread = def.spread * g.spread;
+    if (o && o.aim) dir = this.shotDir(m, sp, def.gravity || 0, _md).clone();
     for (let i = 0; i < n; i++) {
-      const d = _v.copy(dir);
-      d.x += (Math.random() - 0.5) * spread * 2;
-      d.y += (Math.random() - 0.5) * spread * 2;
-      d.z += (Math.random() - 0.5) * spread * 2;
-      d.normalize();
+      const d = scatter(_v.copy(dir), spread * Math.max(n > 1 && i > 0 ? 1 : HIP_FIRST + (1 - HIP_FIRST) * heat, 1 - 1 / g.spread));
       const extra = { ignoreCar: car };
       if (def.projectile === 'plane') {
         extra.homing = def.homing;
@@ -575,8 +735,6 @@ export class Weapons {
     const shots = def.volley || 1;
     // (a bent barrel: its shots bend after whoever is aimed at)
     const target = def.curve ? this.aimTarget() : null;
-    // (steadier off its legs, wilder on the move: game/armfx.js)
-    const fxSpread = this.armfx.spreadK(slot);
     let muzzle = null;
     for (let b = 0; b < shots; b++) {
       const k = def.volley ? b : (slot.shot = (slot.shot || 0) + 1);
@@ -585,14 +743,12 @@ export class Weapons {
       if (!ms && shots > 1) muzzle.y += (b - (shots - 1) / 2) * 0.07;
       const el = def.elements ? def.elements[k % def.elements.length] : def.element || null;
       const spe = el === 'light' ? sp * 1.4 : el === 'water' ? sp * 0.75 : sp;
+      // (R27: at what the crosshair is on - led, lifted: shotDir; as wide as the gun stands now: spreadNow. The shooting skill,
+      // ROADMAP 5.6, and the gun's own steadiness, game/armfx.js, are in that width)
+      const elG = el === 'light' ? 0 : el === 'water' ? (def.gravity || 0) + 7 : def.gravity || 0;
       for (let i = 0; i < n; i++) {
-        const dir = _v.copy(this.aimPoint).sub(muzzle).normalize();
-        // (the shooting skill: ROADMAP 5.6, not with ?classic)
-        const spread = def.spread * g.spread * (game.skills ? game.skills.spreadMul : 1) * fxSpread * (this.shootOut ? 1 : this.hold.spreadK());
-        dir.x += (Math.random() - 0.5) * spread * 2;
-        dir.y += (Math.random() - 0.5) * spread * 2;
-        dir.z += (Math.random() - 0.5) * spread * 2;
-        dir.normalize();
+        const dir = this.shotDir(muzzle, spe, elG, _v);
+        scatter(dir, this.spreadNow(slot, n > 1 && i > 0));
         const extra = {};
         if (def.projectile === 'plane') {
           // the planes leave a little up and to the side, then find their way
@@ -629,6 +785,7 @@ export class Weapons {
       if (own !== true) this.muzzleFx(def, muzzle, _md);
     }
     slot.ammo--;
+    this.heatUp(slot);
     if (game.arsenal) game.arsenal.fired(slot);
     // (a propeller on it: a gust out of its mouth too - the quicker it fires, the less each)
     if (def.wind) this.gust(muzzle, def.wind * Math.min(1, 2.5 / def.rate));
@@ -790,6 +947,8 @@ export class Weapons {
     slot.ammo = Math.max(0, slot.ammo - dt);
     const a = this.muzzleWorld(slot, new THREE.Vector3());
     const b = this.aimPoint.clone();
+    // (R27: the crosshair on somebody - the ray on through the mark on his skin, not stopping a hair short of it)
+    if (this.aimHit && this.aimHit.type !== 'car') b.addScaledVector(_u.copy(b).sub(a).normalize(), 0.6);
     const len = a.distanceTo(b);
     if (len > def.range) b.sub(a).setLength(def.range).add(a);
     // wonky drawings shake their beam about
