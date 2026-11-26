@@ -787,6 +787,9 @@ export class Perf {
     // page around the game, how long the game has been open, the battery
     b.open = performance.now() / 60000;
     b.cpu = [cpu0];
+    // (R28: how long the test waited for the device to settle after the loading, and what its processor read meanwhile)
+    b.warm = this._warm && this._warm.secs !== undefined ? { secs: this._warm.secs, first: this._warm.seen[0], last: this._warm.seen[this._warm.seen.length - 1] } : null;
+    this._warm = null;
     b.gpuMs = [gpu0];
     b.busy = { self: 0, other: 0 };
     try {
@@ -906,6 +909,32 @@ export class Perf {
           size = sz;
           const waited = performance.now() - t0;
           if ((same >= 4 && waited > 1500 && g.state === 'play' && !(g.prologue && g.prologue.active)) || waited > 8000) {
+            // (R28) ... and the device itself has settled after the loading: its processor was 2.5 times slower in the
+            // first minute than at the test's end (45 ms against 18 for the same work), and the test's first numbers with
+            // it. The same fixed work each second, until two in a row are within a tenth of the fastest seen - 90 seconds
+            // at the most
+            if (!quick) {
+              const W = this._warm || (this._warm = { t0: performance.now(), seen: [], note: null });
+              const ms = cpuSpeed();
+              W.seen.push(ms);
+              const min = Math.min(...W.seen);
+              const n = W.seen.length;
+              const settled = n >= 4 && ms <= min * 1.12 && W.seen[n - 2] <= min * 1.12;
+              const waitedW = performance.now() - W.t0;
+              if (!settled && waitedW < 90000) {
+                if (!W.note) {
+                  W.note = document.createElement('div');
+                  W.note.style.cssText = 'position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:46;padding:8px 14px;border-radius:10px;background:rgba(16,12,30,0.82);color:#fff8ec;direction:rtl;font:600 14px "Rubik",system-ui,sans-serif;text-align:center';
+                  (document.getElementById('app') || document.body).appendChild(W.note);
+                }
+                W.note.textContent = `מחכים שהטלפון יירגע אחרי הטעינה, ואז המבחן מתחיל לבד… ${Math.round(waitedW / 1000)} שנ׳`;
+                setTimeout(wait, 1000);
+                return;
+              }
+              if (W.note) W.note.remove();
+              W.note = null;
+              W.secs = waitedW / 1000;
+            }
             if (focus) {
               this.startBench(0, 0, 0, mode);
               if (this.bench && quick) this.bench.focus.quick = true;
@@ -1277,6 +1306,36 @@ export class Perf {
       const life = pipe.hideMoving().slice();
       out.city = time(() => pipe.drawMain());
       for (const o of life) o.visible = true;
+      // (R28) What the drawing's time is made of, on the device itself - each a few draws, no shader made for any:
+      // at a sixteenth of its pixels (what is left is not the pixels'); with one part of the pens' work left out at a
+      // time (uProbe); with the draws themselves left out (what is left is the page's own work and the state sent with
+      // it); the pens' own pass; and the waiting for the card by itself
+      const vps = [pipe.gRT, pipe.G && pipe.G.pen, pipe.G && pipe.G.over].filter(Boolean).map((t) => [t.viewport, t.viewport.clone()]);
+      for (const [vp, keep] of vps) vp.set(0, 0, Math.max(1, Math.floor(keep.z / 4)), Math.max(1, Math.floor(keep.w / 4)));
+      try {
+        out.tiny = time(() => pipe.drawMain());
+      } finally {
+        for (const [vp, keep] of vps) vp.copy(keep);
+      }
+      const probe = shared.uProbe;
+      try {
+        for (const [k, bit] of [['flat', 16], ['noPens', 1], ['noSun', 2], ['noLamps', 4], ['noHaze', 8]]) {
+          probe.value = bit;
+          out[k] = time(() => pipe.drawMain());
+        }
+      } finally {
+        probe.value = 0;
+      }
+      if (pipe.deferred && pipe.drawPens) out.pens = time(() => pipe.drawPens());
+      const gl = this.game.renderer.getContext();
+      const draws = ['drawElements', 'drawArrays', 'drawElementsInstanced', 'drawArraysInstanced', 'drawRangeElements'].filter((n) => typeof gl[n] === 'function');
+      try {
+        for (const n of draws) gl[n] = function nothing() {};
+        out.nodraw = time(() => pipe.drawMain());
+      } finally {
+        for (const n of draws) delete gl[n];
+      }
+      out.wait = time(() => {});
       out.ink = time(() => pipe.pass(pipe.steady ? pipe.mInkD : pipe.mInk, pipe.inkRT));
       out.glow = time(() => pipe.drawGlow(pipe.mBright.uniforms.tSrc.value, pipe._glowSize));
       out.final = time(() => pipe.pass(pipe.finalMat(), null));
@@ -1973,7 +2032,7 @@ export class Perf {
       // (ROADMAP 19.4, 5.1: the drive on the mainland: the stalls and what the streamers had in hand then)
       ...this.driveLines(b),
       ...this.healthLines(b),
-      `דפדפן: ${browserName()}${window.top !== window ? ' · בתוך מסגרת' : ''} · המשחק פתוח ${b.open.toFixed(0)} דקות${b.battery ? ` · סוללה ${Math.round(b.battery.level * 100)}%${b.battery.charging ? ' בטעינה' : ''}` : ''}`,
+      `דפדפן: ${browserName()}${window.top !== window ? ' · בתוך מסגרת' : ''} · המשחק פתוח ${b.open.toFixed(0)} דקות${b.battery ? ` · סוללה ${Math.round(b.battery.level * 100)}%${b.battery.charging ? ' בטעינה' : ''}` : ''}${b.warm ? ` · המתנה להתייצבות אחרי הטעינה ${b.warm.secs.toFixed(0)} שנ׳ (מעבד ${b.warm.first.toFixed(0)} → ${b.warm.last.toFixed(0)}ms)` : ''}`,
       `מהירות המכשיר (ms לאותה עבודה, פחות זה מהר יותר): מעבד בהתחלה ${b.cpu[0].toFixed(1)}, בסוף ${b.cpu[1].toFixed(1)} · כרטיס מסך בהתחלה ${b.gpuMs[0].toFixed(1)}, בסוף ${b.gpuMs[1].toFixed(1)}`,
       b.po ? `משימות ארוכות בכל שנייה: של המשחק ${(b.busy.self / secs).toFixed(0)}ms · של הדף שמסביב ${(b.busy.other / secs).toFixed(0)}ms` : 'משימות ארוכות: הדפדפן לא מאפשר למדוד',
       `מעבד: משחק ${s.upd.toFixed(2)}ms · שליחת הציור ${s.ren.toFixed(2)}ms`,
@@ -1981,7 +2040,7 @@ export class Perf {
       pensLine(g, false),
       st ? `כל שלב לבד, נמדד ישירות בסוף (ms): צל ${ms(st.shadow)} · השתקפות ${ms(st.reflection)} · ציור ${ms(st.main)}${g.pipe.deferred && st.pens !== undefined ? ` (מזה העטים ${ms(st.pens)})` : ''} · דיו ${ms(st.ink)} · זוהר ${ms(st.glow)} · סיום ${ms(st.final)} · פריים שלם ${ms(st.frame)}` : 'כל שלב לבד: המדידה לא הצליחה',
       st && st.other ? `הציור בדרך השנייה (ms): ${g.pipe.deferred ? 'בשלב אחד, כמו קודם' : 'בשני שלבים'} ${ms(st.other)} · ככה: ${ms(st.main)}` : '',
-      st && st.flip !== undefined ? `הציור (ms): כמו שהוא ${ms(st.main)} · בלי אנשים ומכוניות ${ms(st.city)} · ב-1/16 מהפיקסלים ${ms(st.tiny)} · ${g.pipe.wallsFirst ? 'בלי' : 'עם'} עומק הקירות קודם ${ms(st.walls)} · ${g.pipe.depthFirst ? 'בלי' : 'עם'} עומק קודם מלא ${ms(st.flip)}${st.kill !== undefined ? ` · בחומרים הישנים (עם discard) ${ms(st.kill)}` : ''}` : st ? `הציור (ms): כמו שהוא ${ms(st.main)} · בלי אנשים ומכוניות ${ms(st.city)}` : '',
+      st && st.flip !== undefined ? `הציור (ms): כמו שהוא ${ms(st.main)} · בלי אנשים ומכוניות ${ms(st.city)} · ב-1/16 מהפיקסלים ${ms(st.tiny)} · ${g.pipe.wallsFirst ? 'בלי' : 'עם'} עומק הקירות קודם ${ms(st.walls)} · ${g.pipe.depthFirst ? 'בלי' : 'עם'} עומק קודם מלא ${ms(st.flip)}${st.kill !== undefined ? ` · בחומרים הישנים (עם discard) ${ms(st.kill)}` : ''}` : st ? `הציור (ms): כמו שהוא ${ms(st.main)} · בלי אנשים ומכוניות ${ms(st.city)}${st.tiny !== undefined ? ` · ב-1/16 מהפיקסלים ${ms(st.tiny)} · בלי לצייר (רק ההכנה והשליחה) ${ms(st.nodraw)} · רק צבע ${ms(st.flat)} · בלי העטים ${ms(st.noPens)} · בלי הצל ${ms(st.noSun)} · בלי הפנסים ${ms(st.noLamps)} · בלי הערפל ${ms(st.noHaze)}${st.pens !== undefined ? ` · מעבר העטים לבד ${ms(st.pens)}` : ''} · ההמתנה לכרטיס לבד ${ms(st.wait)}` : ''}` : '',
       st && st.noPens !== undefined ? `הציור בלי חלק אחד (ms): בלי העטים ${ms(st.noPens)} · בלי הצל של השמש ${ms(st.noSun)} · בלי הפנסים ${ms(st.noLamps)} · בלי הערפל ${ms(st.noHaze)} · רק צבע ${ms(st.flat)} · בלי ההשתקפות ברחוב ${ms(st.noReflImg)} · המראה ${g.pipe.mirrorPlain ? 'עם' : 'בלי'} עטים ${ms(st.reflFlip)} (ככה: ${ms(st.reflection)})` : '',
       gpu && Object.keys(gpu).length ? `כרטיס מסך: ${PASSES.filter((p) => gpu[p] !== undefined).map((p) => `${PASS_HE[p]} ${gpu[p].toFixed(2)}ms`).join(' · ')}` : 'כרטיס מסך: הדפדפן לא מאפשר למדוד',
       `draw calls: ממוצע ${Math.round(s.calls)} · שיא ${s.maxCalls} · ${(s.tris / 1e6).toFixed(2)}M משולשים`,
