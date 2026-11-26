@@ -227,20 +227,24 @@ async function boot() {
   camera.rotation.order = 'YXZ';
   const pipe = new Pipeline(renderer, scene, camera, { low });
   // drawing pixels per CSS pixel: 1.75 on a phone, 1.5 on a computer (less if the screen has less)
-  const want = params.has('pr') ? +params.get('pr') : low ? (GFX.lite ? 1.45 : 1.75) : 1.5;
+  // (R28, the owner on his phone: "everything looks so blurred, most of all far away - grainy, in bits". The light version drew
+  // at 1.45 and the steady pace brought it down to 1.2 of a CSS pixel on a screen of 2.6: now 1.75 as before the light version,
+  // and never under 1.65 - a slow moment is not paid for with the sharpness any more (the owner: "don't take from the sharpness, take from
+  // something else"). ?pr=1.45: as it was)
+  const want = params.has('pr') ? +params.get('pr') : low ? 1.75 : 1.5;
   pipe.scale = Math.min(1, want / pr);
   // (the test route is drawn at this, whatever the resolution has come down to: game/perf.js)
   pipe.defaultScale = pipe.scale;
   // (never coarser than this: a drawing made at too few pixels turns to mush in the distance. v5,
   // ROADMAP 11.43: higher than it was - the game looks as it should all the time; what is least
   // seen is given up first, game.js applyDetail)
-  pipe.minScale = Math.min(pipe.scale, low ? Math.max(0.6, 1.4 / pr) : 0.85);
+  pipe.minScale = Math.min(pipe.scale, low ? Math.max(0.6, (params.has('pr') ? 1.4 : 1.65) / pr) : 0.85);
   // (the steady pace, when it is chosen, may come down a little further on a computer: a weak
   // graphics card that cannot keep the beat otherwise; game/pace.js)
   // (round 22b, a phone: a steady 30 first - the drawing may come down a little further for a heavy
   // moment than the free pace's, as the big games' own dynamic resolution does, before the beat would
   // come down to 20; sharpened as it does, game/pace.js, render/pipeline.js)
-  pipe.minScaleSteady = low ? Math.min(pipe.scale, Math.max(0.55, 1.2 / pr)) : Math.min(pipe.scale, 0.8);
+  pipe.minScaleSteady = low ? Math.min(pipe.scale, Math.max(0.55, (params.has('pr') ? 1.2 : 1.65) / pr)) : Math.min(pipe.scale, 0.8);
   // which graphics card draws (where the browser tells): none, in software (SwiftShader, llvmpipe,
   // the basic render driver), and every frame takes seconds
   const gl0 = renderer.getContext();

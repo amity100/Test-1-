@@ -22,7 +22,7 @@ const ROUTE_SECONDS = 60;
 // up, the first and the last tell)
 // (ROADMAP 19: 'כמו קודם' - the phone's own way of drawing, GFX, switched off for the stand: the same
 // place drawn as it was before it, right after the first, on a device where it is on)
-const STILL = [['רגיל', null], ['כמו קודם', 'old'], ['רזולוציה נמוכה', 'scale'], ['בלי השתקפות', 'mirror'], ['בלי צל', 'shadow'], ['בלי אנשים ומכוניות', 'life'], ['בלי ציור', 'draw'], ['שוב רגיל', null]];
+const STILL = [['רגיל', null], ['כמו קודם', 'old'], ['רזולוציה נמוכה', 'scale'], ['רזולוציה מלאה', 'full'], ['בלי השתקפות', 'mirror'], ['בלי צל', 'shadow'], ['בלי אנשים ומכוניות', 'life'], ['בלי ציור', 'draw'], ['שוב רגיל', null]];
 const STILL_SECONDS = 5;
 // (ROADMAP 19: after those, two places of the mainland where a frame is heaviest - the street east of
 // Bayview Mall, looking at it, and under its dome - each stood in as it is and, where GFX is on, as it
@@ -788,7 +788,7 @@ export class Perf {
     b.open = performance.now() / 60000;
     b.cpu = [cpu0];
     // (R28: how long the test waited for the device to settle after the loading, and what its processor read meanwhile)
-    b.warm = this._warm && this._warm.secs !== undefined ? { secs: this._warm.secs, first: this._warm.seen[0], last: this._warm.seen[this._warm.seen.length - 1] } : null;
+    b.settle = this._warm && this._warm.secs !== undefined ? { secs: this._warm.secs, first: this._warm.seen[0], last: this._warm.seen[this._warm.seen.length - 1] } : null;
     this._warm = null;
     b.gpuMs = [gpu0];
     b.busy = { self: 0, other: 0 };
@@ -1168,7 +1168,9 @@ export class Perf {
     s.settle = P ? 2 : 1;
     s.total = P ? 2 + b.stillSecs : b.stillSecs;
     const what = st.what;
-    if (what === 'scale') pipe.scale = pipe.minScale;
+    if (what === 'scale') pipe.scale = pipe.minScaleSteady || pipe.minScale;
+    // (R28: and at every pixel of the screen's picture - what the sharpest drawing costs on this device)
+    else if (what === 'full') pipe.scale = 1;
     else if (what === 'mirror') pipe.reflections = false;
     else if (what === 'shadow') pipe.noSunPass = true;
     else if (what === 'life') pipe.hideLife = true;
@@ -2032,7 +2034,7 @@ export class Perf {
       // (ROADMAP 19.4, 5.1: the drive on the mainland: the stalls and what the streamers had in hand then)
       ...this.driveLines(b),
       ...this.healthLines(b),
-      `דפדפן: ${browserName()}${window.top !== window ? ' · בתוך מסגרת' : ''} · המשחק פתוח ${b.open.toFixed(0)} דקות${b.battery ? ` · סוללה ${Math.round(b.battery.level * 100)}%${b.battery.charging ? ' בטעינה' : ''}` : ''}${b.warm ? ` · המתנה להתייצבות אחרי הטעינה ${b.warm.secs.toFixed(0)} שנ׳ (מעבד ${b.warm.first.toFixed(0)} → ${b.warm.last.toFixed(0)}ms)` : ''}`,
+      `דפדפן: ${browserName()}${window.top !== window ? ' · בתוך מסגרת' : ''} · המשחק פתוח ${b.open.toFixed(0)} דקות${b.battery ? ` · סוללה ${Math.round(b.battery.level * 100)}%${b.battery.charging ? ' בטעינה' : ''}` : ''}${b.settle ? ` · המתנה להתייצבות אחרי הטעינה ${b.settle.secs.toFixed(0)} שנ׳ (מעבד ${b.settle.first.toFixed(0)} → ${b.settle.last.toFixed(0)}ms)` : ''}`,
       `מהירות המכשיר (ms לאותה עבודה, פחות זה מהר יותר): מעבד בהתחלה ${b.cpu[0].toFixed(1)}, בסוף ${b.cpu[1].toFixed(1)} · כרטיס מסך בהתחלה ${b.gpuMs[0].toFixed(1)}, בסוף ${b.gpuMs[1].toFixed(1)}`,
       b.po ? `משימות ארוכות בכל שנייה: של המשחק ${(b.busy.self / secs).toFixed(0)}ms · של הדף שמסביב ${(b.busy.other / secs).toFixed(0)}ms` : 'משימות ארוכות: הדפדפן לא מאפשר למדוד',
       `מעבד: משחק ${s.upd.toFixed(2)}ms · שליחת הציור ${s.ren.toFixed(2)}ms`,
