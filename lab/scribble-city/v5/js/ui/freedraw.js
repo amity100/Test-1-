@@ -19,7 +19,7 @@ import { PartView } from './partview.js';
 import { comboReward, comboName } from '../game/combos.js';
 import { fmt } from '../game/money.js';
 import { DrawMemory } from '../game/drawmemory.js';
-import { matchCatalog, gradeOf, drawnWhole, tooEarly, copyRead, COPY_MIN, MATCH_MIN, PICK_SLACK, SHELVES, SHELF_NAME, shelfOf, shelfIds } from '../game/catmatch.js';
+import { readShelf, gradeOf, copyRead, COPY_MIN, MATCH_MIN, SHELVES, SHELF_NAME, shelfOf, shelfIds } from '../game/catmatch.js';
 import { BLUEPRINTS, blueprintBounds } from '../game/blueprints.js';
 import { PEN_CATS, PEN_REST, PEN_REST_TOUCH, parList } from '../game/partpen.js';
 import { DRAWN_ON, WORLD_SAY } from '../game/gadgets.js';
@@ -72,6 +72,11 @@ const LONG_PRESS = 0.45;
 // finger is slower to the next line than a mouse
 const GROUP_MS = 700;
 const GROUP_TOUCH = 850;
+// (R27, the owner's word: "it recognises what I draw far too fast, before I have finished drawing it") on foot: how long
+// the pen rests, a line just lifted, before the drawing is named (ms) - the next line begun before that, and nothing
+// is said of it half drawn; a finger is slower to the next line than a mouse
+const NAME_REST = 550;
+const NAME_REST_TOUCH = 700;
 // (ROADMAP 11.15) the two looks of what is made: as drawn, or each part the game's own
 const LOOKS = [
   ['faithful', tr('כמו שציירתי', 'As I drew it')],
@@ -186,7 +191,7 @@ export function worldSay(r) {
 
 // how it came out, in a word
 const GRADE_WORD = { perfect: tr('מושלם', 'Perfect'), good: tr('טוב', 'Good'), wonky: tr('עקום', 'Crooked') };
-const moreLines = (n) => (n === 1 ? tr('עוד קו אחד', 'One more line') : tr(`עוד ${n} קווים`, `${n} more lines`));
+const moreParts = (n) => (n === 1 ? tr('עוד חלק אחד', 'One more part') : tr(`עוד ${n} חלקים`, `${n} more parts`));
 
 export class FreeDraw {
   constructor(game) {
@@ -388,6 +393,12 @@ export class FreeDraw {
     this.cv = $('fd-air');
     this.g = this.cv.getContext('2d');
     this.tagEl = $('fd-tag');
+    // (R27, the owner's word: "sometimes I draw the thing exactly right and the game still doesn't recognise it") The
+    // tag sits just over the drawing - right where a tank goes on a paint gun, a scope on a rifle, a wing on a tail,
+    // a rail on a bridge - and a line begun on it was no line: it pressed the tag's button. The tag lets the pen
+    // through now: a line begun on it is a line, and a tap on it is still its button (penUp, tagTap). Its menu, once
+    // out, takes touches as ever
+    this.tagEl.style.pointerEvents = 'none';
     this.nameEl = $('fd-name');
     this.statsEl = $('fd-stats');
     this.noteEl = $('fd-note');
@@ -398,6 +409,7 @@ export class FreeDraw {
     this.toolsEl = $('fd-tools');
     this.makeBtn = $('fd-make');
     this.menuEl = $('fd-menu');
+    this.menuEl.style.pointerEvents = 'auto';
     this.inkFill = $('fd-ink-fill');
     this.inkCost = $('fd-ink-cost');
     this.colorBtn = $('fd-color');
@@ -429,6 +441,7 @@ export class FreeDraw {
       } catch (err) {
         // (synthetic pointers)
       }
+      const menuWas = !this.menuEl.classList.contains('hidden');
       this.menu(false);
       this.autoShut = 0;
       // (ROADMAP 11.22: in a car, a line begun away from the drawing being drawn - something new: that
@@ -441,7 +454,7 @@ export class FreeDraw {
       const chip = this.chipAt(e.clientX, e.clientY);
       const imp = chip < 0 ? this.impAt(e.clientX, e.clientY) : null;
       this.partMenu(-1);
-      this.cur = { p: [this.toPage(e)], c: this.ink, pid: e.pointerId, chip, imp, menuAt: chip >= 0 && this.chipArrow(chip, e.clientX), t0: performance.now() };
+      this.cur = { p: [this.toPage(e)], c: this.ink, pid: e.pointerId, chip, imp, menuAt: chip >= 0 && this.chipArrow(chip, e.clientX), t0: performance.now(), menuWas };
       // (the cards fade while the pen is down: the line under them shows. ROADMAP 11.21)
       if (chip < 0 && !imp) document.body.classList.add('fd-pen');
       if (chip >= 0) {
@@ -884,7 +897,7 @@ export class FreeDraw {
     }
     // (ROADMAP 11.22: back to driving - the drawing on the car is made first; its tag goes with the
     // pen, off the driving buttons)
-    if (this.group.length) this.finishGroup();
+    if (this.group.length) this.finishGroup('close');
     const fz = game.fuse;
     if (this.carOpen && fz && fz.tagEl) {
       fz.tagEl.classList.remove('on');
@@ -973,6 +986,8 @@ export class FreeDraw {
     }
     let len = 0;
     for (let i = 1; i < c.p.length; i++) len += Math.hypot(c.p[i][0] - c.p[i - 1][0], c.p[i][1] - c.p[i - 1][1]);
+    // (R27) a tap on the drawing's tag: its button (tagTap) - no dot
+    if (len < 0.012 && this.tagTap(c.p[0][0] * this.U, c.p[0][1] * this.U, c.menuWas)) return;
     // (a dot: a little round one)
     if (len < 0.012) {
       const [x, y] = c.p[0];
@@ -990,9 +1005,32 @@ export class FreeDraw {
       return;
     }
     this.strokes.push({ p: c.p, c: c.c });
+    // (R27: what it is, is said once the pen has rested a moment - read, update)
+    this.nameAt = performance.now() + (this.game.touch ? NAME_REST_TOUCH : NAME_REST);
     this.bake();
     this.read();
     this.render();
+  }
+
+  // (R27) a tap at (x, y) (screen px) on the drawing's tag - its name: what else it could be (the menu, out or away);
+  // one of the names under it: that one - or not on it at all (false). menuWas: the menu was out as the finger came down
+  tagTap(x, y, menuWas) {
+    if (!this.isOpen || this.tagEl.classList.contains('hidden')) return false;
+    const on = (el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    };
+    for (const b of this.altsEl.querySelectorAll('.fd-chip')) {
+      if (!on(b)) continue;
+      if (b.dataset.k === '…') this.menu(!menuWas);
+      else this.choose(b.dataset.k || null);
+      this.render();
+      return true;
+    }
+    if (!on($('fd-kind'))) return false;
+    this.menu(!menuWas);
+    this.render();
+    return true;
   }
 
   // (ROADMAP 11.9) the line just lifted: a quick sign (game/signs.js) - it acts, and goes; else
@@ -1112,7 +1150,9 @@ export class FreeDraw {
 
   // (ROADMAP 11.22) the drawing on the car done - the pen rested, a line began away from it, or back
   // to driving: what it is, made of its lines where they were drawn (game/fuse.js addDrawing)
-  finishGroup() {
+  // (R27) by: 'rest' - the pen rested; 'close' - the pen put away; else asked for (✓, Enter, a right click) - what the
+  // part pen is not sure of goes on only when asked for (game/partpen.js make)
+  finishGroup(by = 'ask') {
     const fz = this.game.fuse;
     const caps = this.group;
     const raws = this.strokes.map((st) => st.raw || st.p);
@@ -1126,7 +1166,7 @@ export class FreeDraw {
       this.strokes = [];
       this.bake();
       this.render();
-      if (fz && fz.pen) fz.pen.make(caps.map((st) => st.P), inkI, caps.map((st) => st.cap));
+      if (fz && fz.pen) fz.pen.make(caps.map((st) => st.P), inkI, caps.map((st) => st.cap), by);
       return;
     }
     if (!fz || !raws.length) return;
@@ -1289,7 +1329,13 @@ export class FreeDraw {
     this.R = null;
     this.R0 = null;
     this.readRide();
-    if (!this.PR) this.R = this.R0 || (this.strokes.length ? this.readNow() : null);
+    // (R27, the owner's word: nothing named while it is being drawn) from the catalog, a line just lifted: what the
+    // drawing is, is said once the pen has rested a moment (update) - the next line begun before that, and nothing was
+    // said of it half drawn; nor is it read till then (a line and the next follow one another with nothing to wait
+    // for). A thing picked first is named all along: it was said, not guessed. And ✓ makes it at once all the same
+    // (make reads it itself)
+    const resting = !this.force && !this.target && this.strokes.length > 0 && this.catalogOn() && performance.now() < (this.nameAt || 0);
+    if (!this.PR) this.R = this.R0 || (!this.strokes.length ? null : resting ? { cat: null, why: tr('ממשיכים לצייר — נזהה כשהציור יהיה שלם', 'Keep drawing — we\'ll name it once it\'s all there'), alts: [], lit: null, resting: true } : this.readNow());
     this.readHand();
     this.readGear();
     this.chipsDirty = true;
@@ -1828,30 +1874,20 @@ export class FreeDraw {
     const shelf = this.shelf;
     const ids = shelfIds(shelf).filter((id) => this.bpOpen(id));
     // (picked in the legend or by a chip; or drawn like one picked before - ROADMAP 11.37)
-    const mem = this.force ? null : this.remembered();
     const ok = (k) => k && BLUEPRINTS[k] && shelfOf(BLUEPRINTS[k]) === shelf && this.bpOpen(k);
-    let pick = ok(this.force) ? this.force : ok(mem) ? mem : null;
-    const all = matchCatalog(this.strokes, ids);
-    if (!all) return null;
-    const top = all.best;
-    // (ROADMAP 25, the owner's word: things popping up as if he had tried to draw them) a drawing the pen remembers as another
-    // thing is that thing only while the catalog says it may be - not when the likeliest is plainly something else: a rifle
-    // picked once was what every long drawing lit up as from then on (tools/test-catalog.mjs MEMORY=1)
-    if (pick && pick === mem && pick !== top.id) {
-      const m = all.list.find((x) => x.id === pick);
-      if (!m || top.score > m.score + PICK_SLACK || top.rank > m.rank + 2 * PICK_SLACK) pick = null;
-    }
-    const b = (pick && all.list.find((x) => x.id === pick)) || top;
+    const force = ok(this.force) ? this.force : null;
+    const mem = this.force ? null : this.remembered();
+    // (R27, the owner's word: "it recognises far too fast, before I have finished drawing - two lines and it is a car")
+    // the one say of it, game/catmatch.js readShelf: nothing is named, and nothing made, till the drawing is all there -
+    // each of the thing's parts by ink of its own; a thing picked first is read as that, and named from the start
+    const S = readShelf(this.strokes, ids, { force, mem: ok(mem) ? mem : null });
+    if (!S) return null;
+    const b = S.b;
+    if (!S.lit) return { cat: null, why: S.have < 3 || S.top.score >= MATCH_MIN ? tr('ממשיכים לצייר — נזהה כשהציור יהיה שלם', 'Keep drawing — we\'ll name it once it\'s all there') : tr('לא דומה עדיין לשום דבר במאגר — ציירו אחד מהציורים שבמקרא', 'It doesn\'t look like anything we know yet — draw one of the drawings in the guide'), alts: [], lit: null };
     const bp = BLUEPRINTS[b.id];
-    // (ROADMAP 11.43: no guessing from a line or two - the likeliest named only with half of it there)
-    const early = tooEarly(top, all.have);
-    const alts = early ? [] : all.list.filter((x) => x.id !== b.id && x.score >= Math.max(MATCH_MIN, top.score - 0.08)).slice(0, 2).map((x) => ({ key: x.id, name: BLUEPRINTS[x.id].name }));
-    if (!pick && early) return { cat: null, why: all.have < 2 || top.score >= MATCH_MIN ? tr('ממשיכים לצייר — ננחש כשחצי מהציור יהיה שם', 'Keep drawing — we\'ll guess once half the drawing is there') : tr('לא דומה עדיין לשום דבר במאגר — ציירו אחד מהציורים שבמקרא', 'It doesn\'t look like anything we know yet — draw one of the drawings in the guide'), alts, lit: null };
+    const alts = S.alts.map((id) => ({ key: id, name: BLUEPRINTS[id].name }));
     // (picked, but what is drawn is another thing: said, and not made)
-    const other = pick && top.id !== b.id && top.score > b.score + PICK_SLACK && !tooEarly(top, all.have) ? BLUEPRINTS[top.id].name : null;
-    const like = b.score >= MATCH_MIN;
-    const whole = drawnWhole(b, all.have);
-    return { cat: 'bp', bp, kind: bp.id, name: bp.name, choice: b.id, lit: b.id, score: b.score, like, whole, other, ready: like && whole && !other, grade: gradeOf(b.score), need: b.need, parts: b.n, have: all.have, missing: Math.max(0, b.n - b.hit), cost: costOfBp(bp), alts, remembered: !this.force && !!mem && pick === mem };
+    return { cat: 'bp', bp, kind: bp.id, name: bp.name, choice: b.id, lit: b.id, score: b.score, like: S.like, whole: S.whole, other: S.other ? BLUEPRINTS[S.other].name : null, ready: S.ready, grade: gradeOf(b.score), need: b.need, parts: b.n, have: S.have, missing: S.gone, cost: costOfBp(bp), alts, remembered: S.fromMemory };
   }
 
   // (ROADMAP 29.5, the owner's word: the game must not squint at a drawing of something else) copying a drawing found
@@ -1867,9 +1903,9 @@ export class FreeDraw {
     const all = { have: C.have };
     const b = C.m;
     const like = b.score >= COPY_MIN && !C.rival;
-    const whole = drawnWhole(b, all.have);
+    const whole = C.whole;
     const ready = C.ready;
-    return { cat: 'bp', bp, kind: id, name: bp.name, choice: id, lit: ready ? id : null, score: b.score, like, whole, other: null, ready, grade: gradeOf(Math.max(b.score, MATCH_MIN)), need: b.need, parts: b.n, have: all.have, missing: Math.max(0, b.n - b.hit), cost: 0, alts: [], remembered: false, copy: true };
+    return { cat: 'bp', bp, kind: id, name: bp.name, choice: id, lit: ready ? id : null, score: b.score, like, whole, other: null, ready, grade: gradeOf(Math.max(b.score, MATCH_MIN)), need: b.need, parts: b.n, have: all.have, missing: C.gone, cost: 0, alts: [], remembered: false, copy: true };
   }
 
   // (ROADMAP 29.5) a drawing found in the city, copied here: the pen opened on it alone, its picture big at the top;
@@ -1908,7 +1944,8 @@ export class FreeDraw {
   notYetSay(R, long) {
     if (R.copy && !R.ready && R.have < 2) return long ? tr('ממשיכים להעתיק — עוד כמה קווים', 'Keep copying — a few more lines') : tr('ממשיכים להעתיק', 'Keep copying');
     if (R.other) return long ? tr(`זה נראה כמו ${R.other}, לא ${R.name} — ציירו את מה שבחרתם, או בחרו אחר`, `That looks like ${R.other}, not ${R.name} — draw what you picked, or pick another`) : tr(`נראה כמו ${R.other}`, `Looks like ${R.other}`);
-    if (R.have < R.need) return long ? tr(`${moreLines(R.need - R.have)} — ל${R.name} יש ${R.parts} חלקים`, `${moreLines(R.need - R.have)} — ${R.name} has ${R.parts} parts`) : tr(`${moreLines(R.need - R.have)} · ${R.parts} חלקים`, `${moreLines(R.need - R.have)} · ${R.parts} parts`);
+    // (R27: by its parts - how many of them are not there yet - not by how many lines the hand took)
+    if (!R.whole && R.missing > 0 && R.missing < R.parts) return long ? tr(`${moreParts(R.missing)} — ל${R.name} יש ${R.parts} חלקים`, `${moreParts(R.missing)} — ${R.name} has ${R.parts} parts`) : tr(`${moreParts(R.missing)} · ${R.parts} חלקים`, `${moreParts(R.missing)} · ${R.parts} parts`);
     if (!R.whole) return long ? tr(`חלקים של ${R.name} חסרים או לא במקום — ציירו את כולו, כמו במקרא`, `Parts of ${R.name} are missing or out of place — draw all of it, like in the guide`) : tr('חלקים חסרים או לא במקום', 'Parts missing or out of place');
     if (!R.like) return long ? tr(`זה עוד לא מספיק דומה ל${R.name} — ציירו אותו כמו במקרא`, `That isn't close enough to ${R.name} yet — draw it like in the guide`) : tr('עוד לא דומה — ציירו כמו במקרא', 'Not close yet — draw it like in the guide');
     return null;
@@ -2501,7 +2538,10 @@ export class FreeDraw {
     const tr = this.toolsEl.getBoundingClientRect();
     // (the catalog: along the bottom on a phone - at the side elsewhere, out of the tag's way)
     const cr = (this.catalogOn() && this.game.touch ? this.legEl : this.catsEl).getBoundingClientRect();
-    const top = cr.height && cr.top < H / 2 ? cr.bottom + 6 : 8;
+    // (R27: nor under the picture of the one being drawn, at the top - what the tag says of it there, "one more part",
+    // is what the player draws by)
+    const pic = this.refEl && this.refEl.classList.contains('on') ? this.refEl.getBoundingClientRect() : null;
+    const top = Math.max(cr.height && cr.top < H / 2 ? cr.bottom + 6 : 8, pic && pic.height ? pic.bottom + 6 : 0);
     const bottom = cr.height && cr.top >= H / 2 ? cr.top - 8 : H - 8;
     const right = this.game.touch ? tr.left - 8 : W - 8;
     let x = clamp(b.x0, 8, Math.max(8, right - w));
@@ -3130,8 +3170,13 @@ export class FreeDraw {
     if (v && v.drawn) jetFlames(game, v, dt);
     this.teachTick();
     if (!this.isOpen) return;
+    // (R27) the pen rested since the last line: what the drawing is, said now (read)
+    if (this.R && this.R.resting && !this.cur && performance.now() >= this.nameAt) {
+      this.read();
+      this.render();
+    }
     // (ROADMAP 11.26: the part pen, not sure which of two - it asks, and the drawing waits)
-    if (this.group.length && !this.cur && performance.now() > this.groupAt && !(this.group[0].pen && this.game.fuse.pen.holds())) this.finishGroup();
+    if (this.group.length && !this.cur && performance.now() > this.groupAt && !(this.group[0].pen && this.game.fuse.pen.holds())) this.finishGroup('rest');
     if (this.autoShut && performance.now() > this.autoShut) {
       this.autoShut = 0;
       if (!this.cur && !this.strokes.length) {

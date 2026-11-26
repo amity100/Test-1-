@@ -1,4 +1,4 @@
-import { readItem, CATS, CAT_ORDER } from './partnet.js';
+import { penSay, CATS, CAT_ORDER } from './partnet.js';
 import { rotorLift, takeoffOf, WING_TOP } from './fusedraw.js';
 import { lookOf } from './itemlook.js';
 import { designOf, variantOf, DESIGNED } from './itemdesign.js';
@@ -46,13 +46,30 @@ export function parList(game) {
 // how long the pen rests before the drawing goes (ms): another line before that is more of it
 export const PEN_REST = 1000;
 export const PEN_REST_TOUCH = 1150;
-// (ROADMAP 11.26) the two likeliest this near, the second at least this likely: not sure which
-export const ASK_GAP = 0.3;
-export const ASK_MIN = 0.2;
-// none of them, but the likeliest this likely and none of them not much more: not sure either
-const ASK_NONE = 0.3;
+// (ROADMAP 11.26) the two likeliest this near, the second at least this likely: not sure which (game/partnet.js askOf)
+export { ASK_GAP, ASK_MIN } from './partnet.js';
 // (ROADMAP 11.27) not sure: the tip out this much longer (ms) before the likelier goes on
 export const TIP_MS = 1500;
+// (R27, the owner's word: "the game recognises what I draw far too fast, before I have finished drawing it - two lines
+// and it already recognises"; "two random lines must never be accepted") The pen named the drawing by the finger as
+// it was drawn, and a second after any line lifted whatever the network thought likeliest went on the car - a line
+// alone was a harpoon, a rotor, a ram (tools/test-partpen.mjs: an unfinished drawing went on three times in four, a
+// random line or two nearly half the time). Now by how sure the reading is, and by what of the thing's picture is
+// there (game/partnet.js penSay):
+//   nothing is named while a line is being drawn, nor till the pen has rested a moment (NAME_REST);
+//   sure of it, its picture all there - it is named, and goes on once the pen has rested (PEN_REST), as it did;
+//   likely, all there - or sure of it, the drawing the hand's own and not the legend's picture - named with a
+//   question, and the pen waits longer (LONG_REST) before it goes on;
+//   read as a thing, but not all of its picture there yet (or neither sure nor all there) - named with a question,
+//   and nothing goes on by itself, not as the pen is put away either: the rest of it is drawn, or ✓ says "this is it";
+//   not sure at all, or a line or two of nothing - no name, and nothing goes on by itself (a line or two of nothing
+//   goes on not even with ✓).
+// The story's own drawings (force: the turbo, the rotor in the air) and a part chosen and then drawn (the drawn parts)
+// are as they were.
+export const NAME_REST = 450;
+export const NAME_REST_TOUCH = 600;
+export const LONG_REST = 2300;
+export const LONG_REST_TOUCH = 2700;
 // (ROADMAP 11.27) a moment after one went on, the legend says how to put it right
 const MADE_MS = 3200;
 const CAT_NAME = CAT_NAMES;
@@ -465,17 +482,14 @@ export class PartPen {
   // the drawing (lines of screen px) as one of the category's things: readItem's, and if it is one,
   // its numbers and what they do - or null (nothing drawn). ask: the two it could be, not sure which
   // (the likelier first)
-  read(strokes, o, cat = this.cat) {
+  read(strokes, o, cat = this.cat, quick = false) {
     const lines = strokes.filter((L) => L && L.length >= 2);
     if (!lines.length) return null;
-    const r = readItem(lines, cat);
+    // (R27: and how sure it is - tier: 'sure', 'likely', 'more', 'wait'; plain: a line or two of nothing. quick: a
+    // line being drawn - whether its picture is all there is looked at once the pen is up)
+    const r = penSay(lines, cat, quick);
     const z = sizeOf(lines, o.F);
-    const R = { ...r, cat, z, ask: null };
-    const [a, b] = r.ranked;
-    if (a && b) {
-      if (r.item && b[1] >= ASK_MIN && a[1] - b[1] < ASK_GAP) R.ask = [a[0], b[0]];
-      else if (!r.item && a[1] >= ASK_NONE && r.none - a[1] < ASK_GAP) R.ask = [a[0], b[0]];
-    }
+    const R = { ...r, cat, z, quick };
     if (!r.item) return R;
     const n = nOf(r.item, z);
     const st = statOf(r.item, n, o.mass, o.top);
@@ -489,6 +503,10 @@ export class PartPen {
   feel(strokes, tip, now = false) {
     const t = performance.now();
     this.liveTip = tip || null;
+    // (R27: nothing is said of it while the pen is down, nor till it has rested a moment since - said)
+    if (tip) this.restAt = Infinity;
+    else if (now) this.restAt = t + (this.game.touch ? NAME_REST_TOUCH : NAME_REST);
+    this.waiting = false;
     // (the tip out, and more drawn or a line taken back: read again - the pen rests again first)
     if (this.tipping && (tip || now)) {
       this.tipping = false;
@@ -502,32 +520,80 @@ export class PartPen {
     }
     this.liveAt = t;
     const o = this.own();
-    this.live = o && strokes.length ? (this.cat === 'par' ? { par: this.par, item: null, text: PAR[this.par] ? PAR[this.par].how : WORLD_SAY[this.par], ok: true } : this.read(strokes, o)) : null;
+    this.live = o && strokes.length ? (this.cat === 'par' ? { par: this.par, item: null, text: PAR[this.par] ? PAR[this.par].how : WORLD_SAY[this.par], ok: true } : this.read(strokes, o, this.cat, !!tip)) : null;
     this.showLive(strokes);
     this.showLegend();
   }
 
   // (game/freedraw.js, the pen rested) not sure which of two: the tip by the drawing, and a little longer
   // to draw in what tells them apart - true; else (or the tip out that long already) it is done now
+  // (R27) and by how sure the reading is (game/partnet.js penSay): sure of it, its picture all there - it is done now;
+  // likely (or not sure which of two), all there - the pen waits the longer rest, once, and then it goes on; not all
+  // of its picture there yet, or not sure at all - it waits, and nothing goes on by itself
   holds() {
     const fd = this.game.freedraw;
-    const L = this.live;
-    if (this.tipping || !L || !L.ask || !this.isOpen || !fd || fd.cur || !fd.group.length) return false;
-    this.tipping = true;
-    fd.groupAt = performance.now() + TIP_MS;
-    this.showTip();
+    let L = this.live;
+    if (!L || !this.isOpen || !fd || fd.cur || !fd.group.length) return false;
+    // (the story's own drawing, whatever it is read as: as ever - the tip a moment if it is not sure which of two, and
+    // then it goes on as the thing the story says)
+    if (this.force) {
+      if (this.tipping || !L.ask) return false;
+      this.tipping = true;
+      this.tipLen = TIP_MS;
+      fd.groupAt = performance.now() + TIP_MS;
+      this.showTip();
+      return true;
+    }
+    // (read while a line was being drawn, and that line let go of: read in full now)
+    if (L.quick) {
+      this.feel(fd.group.map((s) => s.P), null, true);
+      L = this.live;
+      if (!L) return false;
+    }
+    // (a part chosen and then drawn; and one it is sure of: done now)
+    if (L.par || L.tier === 'sure') return false;
+    if (L.tier === 'likely') {
+      if (this.tipping) return false;
+      this.tipping = true;
+      this.tipLen = L.ask ? TIP_MS : (this.game.touch ? LONG_REST_TOUCH - PEN_REST_TOUCH : LONG_REST - PEN_REST);
+      fd.groupAt = performance.now() + this.tipLen;
+      this.showTip();
+      return true;
+    }
+    // (not all of its picture there yet, or not sure at all: it waits - for more of it, or for ✓)
+    if (!this.waiting) {
+      this.waiting = true;
+      // (not sure which of two: what tells them apart, by the drawing, while it waits)
+      if (L.tier === 'more' && L.ask) this.tipping = true;
+      this.showLive(fd.group.map((s) => s.P));
+    }
     return true;
+  }
+
+  // (R27) what of the drawing is said now - its name by it, its place lit on the car, its picture lit in the legend:
+  // nothing while a line is being drawn, nor till the pen has rested a moment (the story's own drawing, and a part
+  // chosen first, as ever)
+  said() {
+    const L = this.live;
+    if (!L) return null;
+    if (this.force || L.par) return L;
+    const fd = this.game.freedraw;
+    if ((fd && fd.cur) || performance.now() < (this.restAt || 0)) return null;
+    return L;
   }
 
   // ------------------------------------------------------------------ made
   // (game/freedraw.js finishGroup) the drawing done: what it is, on the car - the ink flies there
   // first. None of the category's things: it says so, and the ink goes. strokes: lines of screen px,
   // inkI its ink. true if something went on
-  make(strokes, inkI = 1, caps = null) {
+  // (R27) by: 'rest' - the pen rested (game/freedraw.js update, once holds lets it); 'close' - the pen put away with
+  // the drawing still wet; else asked for (✓, Enter, a right click)
+  make(strokes, inkI = 1, caps = null, by = 'ask') {
     const g = this.game;
     const fz = this.fz;
     if (this.cat === 'par') return this.makePar(strokes, inkI, caps);
     this.tipping = false;
+    this.waiting = false;
     this.showTip();
     this.live = null;
     this.showLive();
@@ -540,12 +606,19 @@ export class PartPen {
     // (ROADMAP 11.27: not sure of two - the likelier of them, the tip said what tells them apart; so
     // too when not sure it is one of them at all: what the tip showed is what goes on)
     // (the tests: what it is made as, whatever it was read as)
-    const item = this.force || R.item || (R.ask ? R.ask[0] : null);
+    let item = this.force || R.item || (R.ask ? R.ask[0] : null);
+    // (R27: a line or two of nothing is none of them, whoever asks; and what the pen is not sure of at all goes on
+    // when it is asked for - not by itself as the pen is put away)
+    // (and what the pen asked about - named with a question, not all of it there or not sure of it - goes on with ✓
+    // alone: not as the pen is put away)
+    const asked = !this.force && !R.plain && R.tier === 'more' && by !== 'ask' ? item : null;
+    if (!this.force && (R.plain || ((R.tier === 'wait' || R.tier === 'more') && by !== 'ask'))) item = null;
     this.force = null;
     if (!item) {
       this.flights.push({ v: null, from: lines.map((L) => L.map((q) => q.slice())), c: inkI, t0: performance.now() });
       g.audio.play('rubber', 0.5);
-      g.hud.toast(tr(`${NONE_SAY[R.cat]} — נסו כמו בציורים שמעל הכפתורים`, `${NONE_SAY[R.cat]} — try it like in the drawings above the buttons`), 'bad', 2.6);
+      if (asked) g.hud.toast(tr(`${ITEMS[asked].name}? הציור לא הושלם — לא הורכב. ציירו את כולו, או ✓`, `${ITEMS[asked].name}? The drawing was not finished — nothing put on. Draw all of it, or ✓`), 'bad', 3);
+      else g.hud.toast(tr(`${NONE_SAY[R.cat]} — נסו כמו בציורים שמעל הכפתורים`, `${NONE_SAY[R.cat]} — try it like in the drawings above the buttons`), 'bad', 2.6);
       return false;
     }
     // (ROADMAP 11.28: not open yet - blueprint pages to find first, game/gearplay.js: the ink goes)
@@ -905,10 +978,17 @@ export class PartPen {
     if (this.isOpen) {
       // (the drawing waiting to go: the bar under its name runs down)
       if (this.liveEl && this.live && fd && fd.group.length && !fd.cur) {
-        const len = this.tipping ? TIP_MS : g.touch ? PEN_REST_TOUCH : PEN_REST;
-        const k = clamp((fd.groupAt - now) / len, 0, 1);
+        const len = this.tipping ? this.tipLen || TIP_MS : g.touch ? PEN_REST_TOUCH : PEN_REST;
+        const k = this.waiting ? 0 : clamp((fd.groupAt - now) / len, 0, 1);
         this.dryEl.style.transform = `scaleX(${k.toFixed(3)})`;
       } else if (this.dryEl) this.dryEl.style.transform = 'scaleX(1)';
+      // (R27: the pen has rested since the last line - what the drawing is, said now)
+      const say = this.said() ? 1 : 0;
+      if (say !== this.saidWas) {
+        this.saidWas = say;
+        this.showLive(fd && fd.group.length ? fd.group.map((s) => s.P) : undefined);
+        this.showLegend();
+      }
       // (the word on putting right the one just made, a moment)
       if (this.made && !this.made.old && now - this.made.rt > MADE_MS) {
         this.made.old = true;
@@ -1066,7 +1146,8 @@ export class PartPen {
   // ------------------------------------------------------------------ drawn in the world
   // the place on the car of what the drawing is now, lit while the pen draws it
   draw(fr) {
-    if (!this.isOpen || !this.live || !this.live.item) return;
+    const S = this.isOpen ? this.said() : null;
+    if (!S || !S.item || (S.tier === 'wait' && !this.force)) return;
     const g = this.game;
     const v = g.player.inVehicle;
     if (!v || v.dead) return;
@@ -1182,9 +1263,10 @@ export class PartPen {
   showLegend() {
     const el = this.legEl;
     if (!el) return;
-    const L = this.live;
+    // (R27: what is said of the drawing now - nothing while it is drawn; no picture lit for one it is not sure of at all)
+    const L = this.said();
     const M = this.made && !this.made.old ? this.made : null;
-    const lit = L && L.item ? L.item : M ? M.item : '';
+    const lit = L && L.item && (L.tier !== 'wait' || this.force) ? L.item : M ? M.item : '';
     // (ROADMAP 11.28: what is open yet, and at what level - game/gearplay.js)
     const play = this.game.gear && this.game.gear.play;
     const vv = this.game.player.inVehicle;
@@ -1228,16 +1310,34 @@ export class PartPen {
   showLive(strokes) {
     const el = this.liveEl;
     if (!el) return;
-    const L = this.live;
+    // (R27: nothing by the pen while it draws, nor till it has rested a moment - said)
+    const L = this.said();
+    this.saidWas = L ? 1 : 0;
     if (!L || !this.isOpen) {
       el.classList.remove('on');
       this.showTip();
       return;
     }
-    if (L.ask) {
+    const unsure = !this.force && !L.par;
+    if (unsure && L.tier === 'wait') {
+      // (R27: not sure at all - no name; it waits for more of it, or for ✓)
+      this.liveName.textContent = '?';
+      this.liveText.textContent = L.plain || !(L.item || L.ask) ? tr('לא זוהה עדיין — ממשיכים לצייר', 'Not recognized yet — keep drawing') : tr('עוד לא בטוח — ממשיכים לצייר, או ✓', 'Not sure yet — keep drawing, or ✓');
+      this.liveText.classList.add('bad');
+    } else if (L.ask) {
       this.liveName.textContent = `${ITEMS[L.ask[0]].name}?`;
       this.liveText.textContent = tr('עוד פרט אחד יכריע', 'One more detail will decide it');
       this.liveText.classList.add('bad');
+    } else if (unsure && L.tier === 'more' && L.item) {
+      // (R27: read as it, but not all of its picture is there yet - named with a question; the rest of it, or ✓)
+      this.liveName.textContent = `${L.vname || ITEMS[L.item].name}?`;
+      this.liveText.textContent = tr('ממשיכים לצייר — או ✓ אם זה זה', 'Keep drawing — or ✓ if that is it');
+      this.liveText.classList.add('bad');
+    } else if (unsure && L.tier === 'likely' && L.item) {
+      // (R27: likely - named with a question; the pen waits a little longer for the rest of it)
+      this.liveName.textContent = `${L.vname || ITEMS[L.item].name}?`;
+      this.liveText.textContent = L.text;
+      this.liveText.classList.toggle('bad', !L.ok);
     } else if (L.par) {
       this.liveName.textContent = PAR[L.par] ? PAR[L.par].name : WORLD_NAME[L.par];
       this.liveText.textContent = L.text;
@@ -1251,7 +1351,7 @@ export class PartPen {
       this.liveText.textContent = tr('לא זוהה עדיין', 'Not recognized yet');
       this.liveText.classList.add('bad');
     }
-    el.classList.toggle('none', (!L.item && !L.par) || !!L.ask);
+    el.classList.toggle('none', (!L.item && !L.par) || !!L.ask || (unsure && L.tier === 'wait'));
     el.classList.add('on');
     this.place(strokes);
     this.showTip();

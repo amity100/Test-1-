@@ -1,6 +1,8 @@
 import { picture, ready, chances } from './sketchnet.js';
 import { PNET } from './partnet_w.js';
 import { ITEMS, CATS as ITEM_CATS, CAT_ORDER as ITEM_ORDER } from './itemcat.js';
+import { coverOf, passOf, drawnOf } from './catmatch.js';
+import { svgLines } from './svglines.js';
 
 // (ROADMAP 11.25) What is drawn for the car, of one category's things. The player says the
 // category - a weapon, something it can do, protection - and draws; this tells which of that
@@ -66,6 +68,263 @@ export function readItem(strokes, cat) {
   const none = p[OTHER] / s;
   const [best, pb] = ranked[0];
   return { item: pb > none || best === shape ? best : null, p: pb, none, ranked };
+}
+
+// (ROADMAP 11.26) the two likeliest this near, the second at least this likely: not sure which
+export const ASK_GAP = 0.3;
+export const ASK_MIN = 0.2;
+// none of them, but the likeliest this likely and none of them not much more: not sure either
+const ASK_NONE = 0.3;
+// a reading (readItem's): the two it could be, not sure which (the likelier first) - or null
+export function askOf(r) {
+  const [a, b] = r.ranked;
+  if (!a || !b) return null;
+  if (r.item && b[1] >= ASK_MIN && a[1] - b[1] < ASK_GAP) return [a[0], b[0]];
+  if (!r.item && a[1] >= ASK_NONE && r.none - a[1] < ASK_GAP) return [a[0], b[0]];
+  return null;
+}
+
+// (R27, the owner's word: "the game recognises what I draw far too fast, before I have finished drawing it"; "two random
+// lines must never be accepted"; "sometimes I draw the thing exactly and it is not recognised") What the pen does with a
+// drawing on the car when it rests (game/partpen.js). It took whatever the network thought likeliest of the category's
+// things, a second after any line - a line alone, in the weapons, was a harpoon nine times in twenty; an unfinished
+// drawing went on as something three times in four (tools/test-partpen.mjs). Now by how sure the reading is, and by
+// what of the thing's picture - the one in the legend, the one a hand copies - is there (thereOf, partCopy):
+//   sure    the network all but certain of it (SURE_P), nearly nothing for "none of them", no other thing near it, and
+//           its picture all there: it is named, and goes on once the pen has rested;
+//   likely  less certain (or not sure which of two), its picture all there - or certain of it, and the drawing not
+//           the legend's picture at all (a helicopter for the rotor, a rifle of the hand's own): named with a
+//           question, and it waits longer before it goes on;
+//   more    read as a thing, and not all of it there yet - some of its picture's lines drawn and the others not (a
+//           plate's square without its cross, a parachute's canopy without its ropes), a gun's outline half drawn
+//           (its shape still open) - or neither sure of it nor all of its picture there: named with a question, and
+//           nothing goes on by itself - the rest of it is drawn, or ✓ says "this is it";
+//   wait    not sure at all, or a line or two of nothing (straight, a bow, one bend - unless they are an X, which is
+//           the rotor, or close a shape with corners between them): no name, and nothing goes on by itself.
+export const SURE_P = 0.9;
+export const SURE_NONE = 0.1;
+export const LIKELY_P = 0.6;
+export const LIKELY_NONE = 0.25;
+
+const lenOf = (s) => {
+  let L = 0;
+  for (let i = 1; i < s.length; i++) L += Math.hypot(s[i][0] - s[i - 1][0], s[i][1] - s[i - 1][1]);
+  return L;
+};
+// the corners of a line: how many turns of more than half a right angle it makes, seen coarsely (a hand's shake is none)
+function turns(s) {
+  const b = boxOf(s);
+  const step = Math.max(b.w, b.h, 1e-6) * 0.12;
+  // (a point every eighth of its size along it - between the points it was drawn with where they are far apart: a
+  // fast hand leaves few, a mouse fewer, and each of them a corner)
+  const P = [s[0]];
+  let left = step;
+  for (let i = 1; i < s.length; i++) {
+    let x = s[i - 1][0];
+    let y = s[i - 1][1];
+    let d = Math.hypot(s[i][0] - x, s[i][1] - y);
+    while (d >= left) {
+      x += ((s[i][0] - x) * left) / d;
+      y += ((s[i][1] - y) * left) / d;
+      P.push([x, y]);
+      d -= left;
+      left = step;
+    }
+    left -= d;
+  }
+  const e = s[s.length - 1];
+  const q = P[P.length - 1];
+  if (Math.hypot(e[0] - q[0], e[1] - q[1]) > step * 0.5) P.push(e);
+  let n = 0;
+  let turned = 0;
+  for (let i = 2; i < P.length; i++) {
+    const a = Math.atan2(P[i - 1][1] - P[i - 2][1], P[i - 1][0] - P[i - 2][0]);
+    const c = Math.atan2(P[i][1] - P[i - 1][1], P[i][0] - P[i - 1][0]);
+    let d = c - a;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    // (a bend gathered over the points it takes, then counted once; a bend the other way is another)
+    const bent = Math.abs(d) > 0.25;
+    if (bent && turned * d >= 0) turned += d;
+    else {
+      if (Math.abs(turned) > 0.8) n++;
+      turned = bent ? d : 0;
+    }
+  }
+  if (Math.abs(turned) > 0.8) n++;
+  return n;
+}
+// a line of nothing much: straight, a bow, one bend - its ends well apart
+function plainLine(s) {
+  const b = boxOf(s);
+  const size = Math.max(b.w, b.h, 1e-6);
+  const chord = Math.hypot(s[0][0] - s[s.length - 1][0], s[0][1] - s[s.length - 1][1]);
+  if (chord < size * 0.5) return false;
+  return lenOf(s) <= chord * 1.3 || turns(s) <= 1;
+}
+// two lines that close a shape between them, end to end, and the shape has corners (a triangle drawn as a roof and a
+// floor; two bows are a leaf, two lines side by side nothing): the shape as one line round - or null
+const ROUND_NEAR = 0.2;
+function roundOf(lines) {
+  if (lines.length !== 2) return null;
+  const [A, B] = lines;
+  const all = boxOf(lines.flat());
+  const near = Math.hypot(all.w, all.h) * ROUND_NEAR;
+  const d = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+  const a0 = A[0];
+  const a1 = A[A.length - 1];
+  const b0 = B[0];
+  const b1 = B[B.length - 1];
+  const fwd = Math.max(d(a1, b0), d(b1, a0));
+  const rev = Math.max(d(a1, b1), d(b0, a0));
+  if (Math.min(fwd, rev) > near) return null;
+  return A.concat(fwd <= rev ? B : B.slice().reverse());
+}
+// (the corners of a shape drawn round: a corner where the round begins is no corner to turns - so it is counted from
+// two places, half a round apart)
+function cornersRound(P) {
+  const h = P.length >> 1;
+  const R = P.slice(h).concat(P.slice(0, h));
+  return Math.max(turns(P.concat([P[0], P[1]])), turns(R.concat([R[0], R[1]])));
+}
+// a shape not closed yet: an end of one of its lines with no other end near it (its own other end, or another
+// line's - an outline drawn in two lines or three meets end to end). A line inside the shape, both its ends loose,
+// leaves it as it is: an outline with something drawn in it
+function openShape(lines) {
+  const all = boxOf(lines.flat());
+  const near = Math.hypot(all.w, all.h) * 0.2;
+  const ends = [];
+  lines.forEach((s, i) => ends.push([s[0], i], [s[s.length - 1], i]));
+  let loose = 0;
+  const lone = new Array(lines.length).fill(0);
+  ends.forEach(([q, i], k) => {
+    if (ends.some(([o], j) => j !== k && Math.hypot(o[0] - q[0], o[1] - q[1]) <= near)) return;
+    loose++;
+    lone[i]++;
+  });
+  // (lines with both ends loose are things drawn in it or by it - unless that is all there is)
+  const inner = lone.filter((v) => v === 2).length;
+  return lines.length === 1 ? loose > 0 : loose - inner * 2 > 0;
+}
+// a thing whose picture in the legend is one closed shape (a gun's outline, a flame, a triangle)
+const CLOSED = Object.fromEntries(Object.keys(ITEMS).map((id) => [id, /^<path d="M[^M"]*Z"\/>$/.test(ITEMS[id].icon)]));
+
+// (R27) all of a thing's picture there: its biggest line - the outline, the body - half of it at the least, and the
+// lines not there no more than a sixth of its ink in all (a plate's bolts, a balloon's ropes; not its cross, not its
+// basket); the drawing over most of the picture, and half of the drawing at least the picture. Each of the picture's
+// lines by its own ink (game/catmatch.js coverOf, as the things drawn on foot are read): a line that only passes by
+// another is not that one drawn. A hand is not a ruler - the numbers are loose (tools/test-partpen.mjs: whole drawings
+// by a finger all there nineteen times in twenty, unfinished ones nearly never)
+export const PIC = { main: 0.45, part: 0.4, left: 0.16, cov: 0.58, prec: 0.5 };
+// a thing's picture: its lines, and what an unfinished drawing of it is a drawing of (partCopy) - the ones and twos of
+// its lines that are not all of it (a line under a twelfth of its ink is no part to begin a drawing with)
+const COPY_LINE = 0.08;
+const COPY_MOST = 0.86;
+const COPY_FIT = 0.6;
+// (a drawing most of whose ink is on the picture's own lines is a copy of the picture, begun or done)
+const COPY_PREC = 0.7;
+// (and not one of a shape as long for its height as this many times over, or as tall: a hand stretches a thing by a
+// third, not by two)
+const COPY_SHAPE = Math.log(1.8);
+const pics = {};
+function picOf(id) {
+  let q = pics[id];
+  if (!q) {
+    const P = svgLines(ITEMS[id].icon);
+    const len = P.map(lenOf);
+    const all = len.reduce((a, b) => a + b, 0) || 1;
+    const big = P.map((_, i) => i).filter((i) => len[i] / all >= COPY_LINE);
+    const subs = [];
+    // (lines of nothing much - a shaft, a mast, a cross's arms - are no picture to be a copy of: anything long and
+    // thin lies along them, a rifle of the hand's own as well as a harpoon begun)
+    const dull = P.map(plainLine);
+    // (each with how long it is for its height: a drawing of another shape altogether is not held against it)
+    const sub = (k) => {
+      const L = k.map((i) => P[i]);
+      const bx = boxOf(L.flat());
+      subs.push({ key: `${id}#${k.join('.')}`, lines: () => L, a: Math.log(Math.max(bx.w, 0.5) / Math.max(bx.h, 0.5)) });
+    };
+    for (let a = 0; a < big.length; a++) {
+      if (len[big[a]] / all <= COPY_MOST && !dull[big[a]]) sub([big[a]]);
+      for (let b = a + 1; b < big.length; b++) if (P.length > 2 && (len[big[a]] + len[big[b]]) / all <= COPY_MOST && !(dull[big[a]] && dull[big[b]])) sub([big[a], big[b]]);
+    }
+    q = pics[id] = { P, subs };
+  }
+  return q;
+}
+// d: the drawing made ready (game/catmatch.js drawnOf). what of the picture is there (coverOf's), and whether that is
+// all of it
+function thereOf(d, id) {
+  const C = coverOf(d, id, () => picOf(id).P);
+  if (!C || !C.parts.length) return { C: null, whole: false };
+  let big = 0;
+  for (let i = 1; i < C.parts.length; i++) if (C.parts[i].w > C.parts[big].w) big = i;
+  let left = 0;
+  for (const q of C.parts) if (q.c < PIC.part) left += q.w;
+  return { C, whole: C.parts[big].c >= PIC.main && left <= PIC.left && C.cov >= PIC.cov && C.prec >= PIC.prec };
+}
+// some of a picture's lines drawn, and the others not: the drawing is one or two of its lines - all of each, and
+// little else - and they are not all of the picture. The picture of the thing it is read as - or of any other thing
+// of the category (cat): a parachute's canopy alone is read as wings, and is no more done for that
+export function partCopy(d, id, cat = null) {
+  const ids = cat && CATS[cat] ? [id, ...CATS[cat].filter((x) => x !== id)] : [id];
+  const a = Math.log(d.frames[0].w / d.frames[0].h);
+  for (const it of ids) {
+    for (const q of picOf(it).subs) {
+      if (Math.abs(a - q.a) > COPY_SHAPE) continue;
+      // (at a glance first: most of them it is nowhere near)
+      const n = passOf(d, q.key, q.lines);
+      if (!n || Math.min(n.cov, n.prec) < COPY_FIT) continue;
+      const C = coverOf(d, q.key, q.lines);
+      if (!C) continue;
+      let least = 1;
+      for (const x of C.parts) least = Math.min(least, x.c);
+      if (Math.min(C.cov, C.prec, least) >= COPY_FIT) return true;
+    }
+  }
+  return false;
+}
+
+// the drawing as one of a category's things, and what the pen at rest does with it: readItem's, and { ask (the two it
+// could be, not sure which), plain (a line or two of nothing), half (a closed shape's outline still open), whole (its
+// picture all there), unfinished (some of its picture drawn, the rest not), tier: 'sure' | 'likely' | 'more' | 'wait' }
+// quick: while a line is being drawn - nothing is said of it then (game/partpen.js said), and what of its picture is
+// there is not looked at (tier 'more' at the most): the pen up, it is read in full
+export function penSay(strokes, cat, quick = false) {
+  const lines = strokes.filter((s) => s && s.length >= 2);
+  const r = readItem(lines, cat);
+  const ask = askOf(r);
+  // (a line or two of nothing: each of them plain - but not an X, the rotor, nor two that close a shape with corners)
+  const round = roundOf(lines);
+  const plain = lines.length <= 2 && lines.every(plainLine) && !(cat === 'func' && rotorOrBridge(lines) === 'rotor') && !(round && cornersRound(round) >= 3);
+  const certain = !!r.item && !ask && r.p >= SURE_P && r.none <= SURE_NONE;
+  const likely = !!ask || (!!r.item && r.p >= LIKELY_P && r.none <= LIKELY_NONE);
+  const it = r.item || (ask ? ask[0] : null);
+  const half = !!it && CLOSED[it] && openShape(lines);
+  let tier = 'wait';
+  let whole = false;
+  let unfinished = false;
+  if (!plain && (certain || likely)) {
+    tier = 'more';
+    if (!quick) {
+      const d = drawnOf(lines);
+      // (the rotor is its X: the hub in the middle is the picture's, not the drawing's to make)
+      const X = it === 'rotor' && cat === 'func' && rotorOrBridge(lines) === 'rotor';
+      const T = X ? { C: null, whole: true } : thereOf(d, it);
+      // (the legend's picture copied - most of the drawing's ink on its lines - and its outline not closed yet)
+      const open = half && !!T.C && T.C.prec >= COPY_PREC;
+      whole = T.whole && !open;
+      if (whole) tier = certain ? 'sure' : 'likely';
+      else {
+        unfinished = open || partCopy(d, it, cat);
+        // (not the legend's picture, begun or done - the hand's own drawing of the thing, a helicopter for the rotor:
+        // by the network alone, sure of it, and after the longer rest. Less than sure, it waits for ✓: lines of
+        // nothing are "likely" something one time in twenty - tools/test-partpen.mjs)
+        if (!unfinished && certain) tier = 'likely';
+      }
+    }
+  }
+  return { ...r, ask, plain, half, whole, unfinished, tier };
 }
 
 // the likeliest one of rivals ({ id: how likely the network must think it at least }), and id the

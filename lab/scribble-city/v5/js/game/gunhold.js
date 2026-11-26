@@ -58,6 +58,9 @@ const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // put somewhere, the gun turned about that wrist to the crosshair - and a hand moved a little further out every time the
 // gun touched him, for ever: after a minute of play his arms were straight out and his left hand a foot off the gun.
 const AIM_OFF = 0.62;
+// (R27) a phone's shot bends to a gangster this near the crosshair's line (rad: under a degree - a hand's width at twenty metres)
+const MAGNET = 0.016;
+const _mp = new THREE.Vector3();
 // things thrown, held: which of their axes his fist is round (0 x, 1 y, 2 z), the middle of what he holds, how thick
 const THROWN = { inkbomb: { ax: 1, c: [0, 0.01, 0], r: 0.045 }, boomerang: { ax: 0, c: [0, 0, -0.06], r: 0.019 }, any: { ax: 1, c: [0, 0, 0], r: 0.03 } };
 // how each kind is carried and raised: blade - his body turned off the line (the gun's shoulder back); stance - how deep in
@@ -615,66 +618,131 @@ export class GunHold {
   }
 
   // how wide its shots go: closer aimed in, wider on the move, closer down low
+  // (R27: the width itself is game/weapons.js spreadNow's now - the first shot true, fire kept up wider; this is what is
+  // left of it: on the move, down low)
   spreadK() {
+    return (1 - 0.55 * this.adsK) * this.moveK();
+  }
+
+  moveK() {
     const p = this.game.player;
     const sp = Math.hypot(p.vel.x, p.vel.z);
-    return (1 - 0.55 * this.adsK) * (sp > 2 ? 1.3 : 1) * (p.crouched ? 0.8 : 1);
+    return (sp > 2 ? 1.3 : 1) * (p.crouched ? 0.8 : 1);
   }
 
   // (the crosshair's gap, in pixels: as wide as the shots go)
-  crossGap(slot, kick) {
+  // (R27: as wide as they go on the screen itself - the cone's half angle (rad) through the camera's own lens; it was a
+  // number that grew with the gun's width, a third of it or less. rad: a car's gun's - game/vehicles.js)
+  crossGap(slot, kick, rad = null) {
     const def = slot.def;
-    const want = def.kind === 'gun' || def.kind === 'beam' ? clamp(3.5 + (def.spread || 0) * this.spreadK() * 230 + kick * 7, 3.5, 30) : 7;
+    const game = this.game;
+    let want = 7;
+    if (rad !== null || def.kind === 'gun' || def.kind === 'beam') {
+      const a = rad !== null ? rad : game.weapons.spreadNow(slot, !!def.pellets);
+      const cam = game.camera;
+      const pxPerRad = (window.innerHeight || 720) / 2 / Math.tan(((cam.fov || 60) * Math.PI) / 360);
+      // (a phone's crosshair is drawn 1.3 times as big: css/style.css body.touch #crosshair)
+      want = clamp((a * pxPerRad) / (game.touch ? 1.3 : 1), 3.5, 60);
+    }
     this.gap += (want - this.gap) * 0.35;
     return this.gap;
   }
 
-  // on a phone (or a pad): the crosshair drawn a little to whoever is nearly on it, and - as he aims in - over to them.
+  // (R27) on a phone (or a pad), a crosshair that is nearly on a gangster is on him: the shot is sent at him, and nothing
+  // on the screen moves. o, dir: the crosshair's ray; t0..tMax: from where the player is to what the ray meets. Whoever is
+  // nearest the ray within MAGNET (rad) of it, in the open: { enemy, point } or null
+  magnet(o, dir, t0, tMax) {
+    const game = this.game;
+    if (!game.touch && !(game.input.pad && game.input.pad.used)) return null;
+    let best = null;
+    let bd = MAGNET;
+    for (const e of game.enemies.list) {
+      if (!e.alive || !e.fig || !e.fig.j) continue;
+      const j = e.fig.j;
+      // (his trunk: its middle, and a little under his neck)
+      for (let i = 0; i < 2; i++) {
+        const c = i ? _a.copy(j.neck) : _a.copy(e.fig.center);
+        if (i) c.y -= 0.15;
+        const dx = c.x - o.x;
+        const dy = c.y - o.y;
+        const dz = c.z - o.z;
+        const d = dx * dir.x + dy * dir.y + dz * dir.z;
+        if (d < t0 + 1.5 || d > Math.min(tMax + 0.5, 70)) continue;
+        const off = Math.sqrt(Math.max(0, dx * dx + dy * dy + dz * dz - d * d));
+        const ang = off / d;
+        if (ang >= bd) continue;
+        bd = ang;
+        best = e;
+        _mp.copy(c);
+      }
+    }
+    if (!best) return null;
+    // (nobody behind a wall)
+    _b.copy(_mp).sub(o);
+    const d = _b.length();
+    _b.multiplyScalar(1 / d);
+    const hit = game.world.collision.raycast(o.x, o.y, o.z, _b.x, _b.y, _b.z, d);
+    if (hit && hit.t < d - 0.6) return null;
+    return { enemy: best, point: _mp };
+  }
+
+  // on a phone (or a pad): the crosshair drawn a little to whoever is nearly on it.
   // Before the camera is placed. looked: the thumb is moving it itself this frame
+  // (R27, the owner's word: "accurate, like the strongest games today" - and their help is one that is not seen. It was a
+  // snap as he aimed in: the picture thrown up to a sixth of a turn in a fifth of a second. Now: the look slower while the
+  // crosshair is on somebody or right by them - the thumb's own turn, part of it; a slow pull to a gangster who is nearly
+  // under it, eased as it gets there, weaker while the thumb is moving; and the shot itself bent to him - magnet)
   assist(dt, looked) {
     const game = this.game;
+    const rig = game.camRig;
+    const y0 = this._ay;
+    const p0 = this._ap;
+    this._ay = this._ap = undefined;
     if (!game.touch && !(game.input.pad && game.input.pad.used)) return;
     const W = game.weapons;
     const def = W.current.def;
     const p = game.player;
-    if (p.mode !== 'foot' || (def.kind !== 'gun' && def.kind !== 'beam')) {
-      this.wasAds = false;
-      return;
-    }
+    if (p.mode !== 'foot' || (def.kind !== 'gun' && def.kind !== 'beam')) return;
     const firing = game.input.fire || game.time - W.lastFire < 0.5;
-    const entered = this.ads && !this.wasAds;
-    this.wasAds = this.ads;
-    if (entered) this.snapT = 0.22;
-    this.snapT = Math.max(0, (this.snapT || 0) - dt);
-    if (!this.ads && !firing) return;
-    const rig = game.camRig;
-    const cam = game.camera.position;
-    const cone = this.snapT > 0 ? 0.3 : this.ads ? 0.11 : 0.085;
-    let best = null;
-    let bd = cone;
-    for (const e of game.enemies.list) {
-      if (!e.alive || !e.fig) continue;
-      const n = e.fig.j.neck;
-      _a.set(n.x - cam.x, n.y - 0.22 - cam.y, n.z - cam.z);
-      const d = _a.length();
-      if (d < 2 || d > 70) continue;
-      _a.multiplyScalar(1 / d);
-      const ang = Math.acos(clamp(_a.dot(rig.fwd), -1, 1));
-      if (ang >= bd) continue;
-      // (nobody behind a wall)
-      const hit = game.world.collision.raycast(cam.x, cam.y, cam.z, _a.x, _a.y, _a.z, d);
-      if (hit && hit.t < d - 0.6) continue;
-      bd = ang;
-      best = _b.copy(_a);
+    if (this.ads || firing) {
+      const cam = game.camera.position;
+      const cone = this.ads ? 0.11 : 0.085;
+      let best = null;
+      let bd = cone;
+      for (const e of game.enemies.list) {
+        if (!e.alive || !e.fig) continue;
+        const n = e.fig.j.neck;
+        _a.set(n.x - cam.x, n.y - 0.22 - cam.y, n.z - cam.z);
+        const d = _a.length();
+        if (d < 2 || d > 70) continue;
+        _a.multiplyScalar(1 / d);
+        const ang = Math.acos(clamp(_a.dot(rig.fwd), -1, 1));
+        if (ang >= bd) continue;
+        // (nobody behind a wall)
+        const hit = game.world.collision.raycast(cam.x, cam.y, cam.z, _a.x, _a.y, _a.z, d);
+        if (hit && hit.t < d - 0.6) continue;
+        bd = ang;
+        best = _b.copy(_a);
+      }
+      // (the look slower: on somebody - a passer-by too - or within a couple of degrees of a gangster)
+      const on = (W.aimHit && W.aimHit.type !== 'car') || (best && bd < 0.04);
+      if (on && y0 !== undefined) {
+        const k = this.ads ? 0.55 : 0.7;
+        rig.yaw = y0 + wrap(rig.yaw - y0) * k;
+        rig.pitch = clamp(p0 + (rig.pitch - p0) * k, rig.minPitch, rig.maxPitch);
+      }
+      if (best) {
+        let dyaw = Math.atan2(best.x, best.z) - rig.yaw;
+        dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
+        const dpitch = Math.asin(clamp(best.y, -1, 1)) - rig.pitch;
+        // (a pull - weaker while his thumb is moving it, slower as it gets there, never past them)
+        const rate = (this.ads ? 1.2 : 0.8) * (looked ? 0.35 : 1);
+        const step = Math.min(rate * dt, Math.hypot(dyaw, dpitch) * (1 - Math.exp(-5 * dt)));
+        rig.yaw += clamp(dyaw, -step, step);
+        rig.pitch = clamp(rig.pitch + clamp(dpitch, -step, step), rig.minPitch, rig.maxPitch);
+      }
     }
-    if (!best) return;
-    let dyaw = Math.atan2(best.x, best.z) - rig.yaw;
-    dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
-    const dpitch = Math.asin(clamp(best.y, -1, 1)) - rig.pitch;
-    // (a snap as he aims in; else a pull - weaker while his thumb is moving it, never past them)
-    const rate = this.snapT > 0 ? 7 : (this.ads ? 1.5 : 1.0) * (looked ? 0.35 : 1);
-    const step = rate * dt;
-    rig.yaw += clamp(dyaw, -step, step);
-    rig.pitch = clamp(rig.pitch + clamp(dpitch, -step, step), rig.minPitch, rig.maxPitch);
+    this._ay = rig.yaw;
+    this._ap = rig.pitch;
   }
 }
