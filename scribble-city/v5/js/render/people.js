@@ -303,7 +303,6 @@ const PORTRAIT_MODE = typeof location !== 'undefined' ? new URLSearchParams(loca
 // size. Coming in and going out over a quarter of a second, never a pop
 // (characters round 2: out only below 60 - a face held at about the edge does not go back and forth;
 // coming in and going out over two fifths of a second)
-const PARAMS_WARM_FACES = typeof location !== 'undefined' && new URLSearchParams(location.search).has('warmfaces');
 const PORTRAIT_NEAR = 80;
 const PORTRAIT_FAR = 60;
 const PORTRAIT_FADE = 0.4;
@@ -1627,15 +1626,14 @@ export class PersonRenderer {
     const inRange = heldFace(fig) || (PORTRAIT_STREET && px > (mine ? Math.min(PORTRAIT_FAR, near * 0.75) : near));
     // (ROADMAP 14.9: a phone makes a face a little at a time - a few seconds: begun while they are
     // still coming, two or three times as far, so that it is there by the time they are near)
-    // (R28: a computer too. It made every kind's face ahead, all 72 of them, from the moment the game was up - five seconds
-    // of work, four milliseconds of every frame of the opening film and the first minute of play, each face's shape and
-    // picture sent up as it was done; now, as a phone, whoever is coming)
-    if (!P0 && PORTRAIT_STREET && px > PORTRAIT_NEAR * 0.38 && !(this.portraitQueue && this.portraitQueue.length > (this.touch ? 1 : 2))) P0 = this.makePortrait(k);
+    if (!P0 && this.touch && PORTRAIT_STREET && px > PORTRAIT_NEAR * 0.38 && !(this.portraitQueue && this.portraitQueue.length > 1)) P0 = this.makePortrait(k);
     // (going out: still theirs while it fades, unless somebody else of the kind comes near)
     if (!inRange && !(mine && P0.fade > 0.01)) return null;
     const P = P0 || this.makePortrait(k);
     if (heldFace(fig)) P.keeper = fig;
     // (somebody near whose face is still being made, or painted: theirs next)
+    // (R28: wanted - made at the full pace whatever is on the screen, stepPortraits)
+    if (!P.ready) P.wanted = true;
     if (!P.ready) {
       for (const Q of [this.portraitQueue, this.paintQueue]) {
         const i = Q ? Q.indexOf(P) : -1;
@@ -1712,16 +1710,21 @@ export class PersonRenderer {
   // first comes near in play
   warmPortraits() {
     if (PORTRAIT_MODE === 'off' || !PORTRAIT_STREET || this.touch) return;
-    // (Sal's - he comes over at the start. R28: the rest as they come near, portraitFor - not every kind of the city's
-    // people ahead, a little of every frame for the first minute; ?warmfaces: all of them, as it was)
+    // (Sal's first - he comes over at the start - then every kind of the city's people, a little a frame)
+    // (R28: still all of them ahead - a face is there the moment a film's cut lands on it - but made where it costs nothing
+    // seen: most of it behind the title page, none of it over the story's films, a trickle in play: stepPortraits)
     const ks = [2];
-    if (PARAMS_WARM_FACES) for (let k = 0; k < FOLK.length; k++) if (k !== 2 && portraitKind(k) && !FOLK[k].role) ks.push(k);
+    // (characters round 2: the people at work theirs when they are first near - not all of them made
+    // ahead: a few dozen more faces in the memory for nothing)
+    for (let k = 0; k < FOLK.length; k++) if (k !== 2 && portraitKind(k) && !FOLK[k].role) ks.push(k);
     for (const k of ks) if (!(this.portraits && this.portraits.get(k))) this.makePortrait(k);
   }
 
   // (characters round) the next face's picture to the painter (render/heroworker.js), when it is free
   pumpPaint() {
     if (this.painting || !this.paintQueue || !this.paintQueue.length) return;
+    // (R28: over the story's films only a face somebody near is waiting for)
+    if (this.filmNow && !this.paintQueue[0].wanted) return;
     const P = this.paintQueue.shift();
     this.painting = P;
     paintPortrait(
@@ -1746,8 +1749,15 @@ export class PersonRenderer {
   stepPortraits() {
     const Q = this.portraitQueue;
     if (!Q || !Q.length) return;
-    // (R28: behind the title page and the pause menu, where nothing moves, much more of it - game/game.js portraitMs)
-    if (Q[0].step(this.portraitMs || (this.touch ? 2 : 4))) Q.shift();
+    // (R28) A face somebody near is waiting for: at the full pace. The ones made ahead (warmPortraits - 72 of them on a
+    // computer, five seconds of work that took four milliseconds of every frame of the opening film and the first minute of
+    // play): behind the title page and the pause menu, where nothing moves, ten milliseconds a frame (game/game.js
+    // portraitMs); over the story's films none; in play a trickle
+    const P = Q[0];
+    const ms = this.portraitMs || (P.wanted ? (this.touch ? 2 : 4) : this.filmNow ? 0 : this.touch ? 2 : 1.2);
+    if (ms > 0 && P.step(ms)) Q.shift();
+    // (and its picture, painted off the game's thread and sent up when done: the next begun here, not over a film)
+    if (!this.painting && this.paintQueue && this.paintQueue.length) this.pumpPaint();
   }
 
   // (the graphics card's: the city's people's pictures are written straight into their atlases)

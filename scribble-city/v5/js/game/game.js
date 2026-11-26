@@ -1321,7 +1321,10 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     if (this.prologue) dt *= this.prologue.timeK();
     // (R28: the faces being made - render/people.js stepPortraits - much more of them a frame where the picture stands
     // still behind a page: the title, the pause menu)
-    if (this.figures && this.figures.bodies) this.figures.bodies.portraitMs = this.state === 'play' ? 0 : 10;
+    if (this.figures && this.figures.bodies) {
+      this.figures.bodies.portraitMs = this.state === 'play' ? 0 : this.state === 'title' ? 5 : 10;
+      this.figures.bodies.filmNow = this.filmOn();
+    }
     if (this.vision) {
       this.vision.update(this.realDt);
       dt *= this.vision.timeK();
