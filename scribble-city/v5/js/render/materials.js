@@ -297,10 +297,11 @@ export function setLampK(k) {
 // (R28, the phone's tier - the owner: "take something else down a little, not the sharpness"; his phone's own report: the six
 // lamps nearest instead of twelve 5 ms of a 63 ms drawing, the sun's shadow looked up once a map 4 ms (twice here: once made thin shadows black and blocky). The lamps fade in and
 // out at the edge of the six as they did at the edge of the twelve: nothing pops. on: main.js, a phone; ?notier: as it was)
-export const tier = { on: false, lamps: 6 };
+// (auto: game/game.js applyDetail - a computer that cannot keep up takes the tier too, while it cannot)
+export const tier = { on: false, auto: false, lamps: 6 };
 
 export function pickLights(cam) {
-  const tierOn = tier.on && !GFX.off;
+  const tierOn = (tier.on || tier.auto) && !GFX.off;
   shared.uTier.value = tierOn ? 1 : 0;
   const MAXN = tierOn ? Math.min(MAX_LIGHTS, tier.lamps) : MAX_LIGHTS;
   const cx = cam ? cam.x : 0;
