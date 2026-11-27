@@ -111,7 +111,7 @@ export const GFX = (() => {
   // (ROADMAP 20.15, the owner's word: the look into the game itself - it is on unless the address says ?look=0 or ?nolook)
   const lite = phone && !q.has('oldgfx') && (q.has('lite') || (q.get('look') !== '0' && !q.has('nolook') && !q.has('nolite')));
   const fast = q.has('fast') || lite;
-  const part = (name) => on && !q.has('no' + name) && (APPROVED[name] || q.has(name) || ((q.has('newgfx') || fast) && !LOOK.has(name)) || (fast && (name === 'penlite' || name === 'peoplelite')));
+  const part = (name) => on && !q.has('no' + name) && (APPROVED[name] || q.has(name) || ((q.has('newgfx') || fast) && !LOOK.has(name)) || (fast && (name === 'penlite' || name === 'peoplelite' || name === 'glowlite')));
   return {
     phone,
     on,

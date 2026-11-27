@@ -59,6 +59,9 @@ uniform float uLineW;
 // (ROADMAP 18.9) how much heavier the people's outlines are drawn (the film: as an animated film
 // inks its characters, bolder than the world round them)
 uniform float uPersonW;
+// (R28, a phone's tier 2 - render/materials.js tier: the line drawn once, not a second fainter time beside itself, and where it is
+// in the world read at the pixel alone - some 22 looks at the pictures a pixel instead of 38)
+uniform float uTier;
 uniform mat4 uInvProj;
 uniform mat4 uCamWorld;
 // (the steady pace, DYN: the drawing made in the corner of its pictures, uUvK of each side of them;
@@ -140,7 +143,7 @@ float lineAt(float tick, vec3 w, float far, float steady, float r, out float z) 
   vec2 j1 = (vec2(vn(q), vn(q + 41.0)) - 0.5) * 2.0 * uPR * steady;
   float e = edgeAt(vUv + j1 * uTexel, r, far, z);
   // the second, lighter pass of the pen that makes a near line sketchy (not for far things)
-  if (far < 0.97) {
+  if (far < 0.97 && uTier < 1.5) {
     vec2 j2 = (vec2(vn(q * 1.6 + 13.0), vn(q * 1.6 + 77.0)) - 0.5) * 2.6 * uPR * steady;
     float z2;
     e = max(e, edgeAt(vUv + j2 * uTexel, max(r * 0.7, 1.0), far, z2) * 0.55 * (1.0 - far));
@@ -153,10 +156,12 @@ float lineAt(float tick, vec3 w, float far, float steady, float r, out float z) 
 vec3 worldAt(vec2 uv, out float dist) {
   vec2 o = uTexel * 2.0 * uPR;
   float d = texture(tDepth, TC(uv)).r;
-  d = min(d, texture(tDepth, TC(uv + vec2(o.x, 0.0))).r);
-  d = min(d, texture(tDepth, TC(uv - vec2(o.x, 0.0))).r);
-  d = min(d, texture(tDepth, TC(uv + vec2(0.0, o.y))).r);
-  d = min(d, texture(tDepth, TC(uv - vec2(0.0, o.y))).r);
+  if (uTier < 1.5) {
+    d = min(d, texture(tDepth, TC(uv + vec2(o.x, 0.0))).r);
+    d = min(d, texture(tDepth, TC(uv - vec2(o.x, 0.0))).r);
+    d = min(d, texture(tDepth, TC(uv + vec2(0.0, o.y))).r);
+    d = min(d, texture(tDepth, TC(uv - vec2(0.0, o.y))).r);
+  }
   vec4 v = uInvProj * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
   v /= v.w;
   dist = -v.z;
@@ -1064,6 +1069,7 @@ export class Pipeline {
     const uvLo = { value: this.uvLo };
     this.mInk = mk(INK_FRAG, {
       tColor: { value: null }, tAux: { value: null }, tDepth: { value: null }, uNoise: shared.uNoise, uTexel: { value: new THREE.Vector2() },
+      uTier: shared.uTier,
       uNear: { value: 0.1 }, uFar: { value: 3000 }, uBoil: shared.uBoil, uBoilPrev: { value: 0 }, uTaa: { value: 0 }, uPR: shared.uPR, uLineW: { value: 1 }, uPersonW: { value: 1 },
       uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uUvK: uvK, uUvLo: uvLo,
       // (v5: the edge of the page, render/pagedge.js)
