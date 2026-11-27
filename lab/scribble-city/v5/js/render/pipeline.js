@@ -1494,6 +1494,41 @@ export class Pipeline {
     return this._compileRT;
   }
 
+  // (R28, the owner: "on the computer it must not get stuck when the game starts") Every piece of the still city drawn once,
+  // for real - in the sun's view, the mirror and the drawing itself - while the page still says the game is being made ready:
+  // a piece's first draw is where a computer's card sets things up for it (its points' layout, its pictures sent, Direct3D's own
+  // version of its shader for that layout), and the opening film's first second drew 121 pieces for the first time, its next
+  // ones the car park's and more - each a small stop of the flying camera. Nothing is hidden for where the camera is (the far
+  // pieces, the ones behind buildings, the ones out of sight): two frames, all of it, then as it was.
+  preroll(center) {
+    const keep = [];
+    const occ = this.occlusionOn;
+    const chunk = /^-?\d+_-?\d+(#\d+)?$/;
+    this.occlusionOn = false;
+    this.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      keep.push(o, o.visible, o.frustumCulled);
+      o.frustumCulled = false;
+      // (a piece of the city left out for being far: shown for these frames. What is hidden for any other reason stays hidden)
+      if (!o.visible && o.parent && o.parent.name === 'city' && (chunk.test(o.name) || o.name === 'whole' || o.name === 'big')) o.visible = true;
+    });
+    let n = 0;
+    try {
+      this.render(center);
+      this.render(center);
+      n = keep.length / 3;
+    } catch (err) {
+      console.warn('preroll failed', err);
+    } finally {
+      for (let i = 0; i < keep.length; i += 3) {
+        keep[i].visible = keep[i + 1];
+        keep[i].frustumCulled = keep[i + 2];
+      }
+      this.occlusionOn = occ;
+    }
+    return n;
+  }
+
   // (11.5, main.js: once the game's people, cars and the rest are there, while the page still says
   // the pens are being made ready) Every shader the frames will draw with, made now and not by the
   // first frames that use them - on Windows a second or more each, the picture standing still, and

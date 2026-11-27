@@ -105,12 +105,32 @@ function breathe(label) {
   // (what still held the page long, before this breath: the test route reads it)
   if (now - breathAt > 250) (window.__slowBreaths = window.__slowBreaths || []).push([label, Math.round(now - breathAt)]);
   if (label === 'block' || label === 'ground' || label === 'boulevard' || label === 'blocks' || label === 'ocean' || label === 'streets' || label === 'extra' || label === 'hills' || label === 'towers' || label === 'landmarks' || label === 'north' || label === 'pens' || label === 'meshes' || label === 'rooms') progress('city', Math.min(0.98, breathN / 30));
-  return new Promise((r) =>
-    setTimeout(() => {
+  // (R28, the loading shorter: a breath by a message, not by a timer - a timer inside a timer waits 4 ms at the least, some 25
+  // times a second of the loading; every eighth by the timer still, for what only timers let through)
+  return new Promise((r) => {
+    const done = () => {
       breathAt = performance.now();
       r();
-    }, 0),
-  );
+    };
+    if (!breathPort || breathN % 8 === 0) setTimeout(done, 0);
+    else {
+      breathDone = done;
+      breathPort.postMessage(0);
+    }
+  });
+}
+let breathDone = null;
+let breathPort = null;
+try {
+  const ch = new MessageChannel();
+  ch.port1.onmessage = () => {
+    const d = breathDone;
+    breathDone = null;
+    if (d) d();
+  };
+  breathPort = ch.port2;
+} catch (e) {
+  breathPort = null;
 }
 
 // (v5, ROADMAP 18.9) the city's meshes sent up to the graphics card a few at a time, before anything
@@ -360,6 +380,16 @@ async function boot() {
   world.interiors = new Interiors(world, { pipe, low, warm: world.mainland ? (m) => world.mainland.warm(m) : null });
   world.interiors.addAll(world.stockRecs);
   mark('interiors');
+  // (R28, the loading shorter: the city's pens asked of the graphics card now, not after the city has gone up, the shadows and
+  // the people are made - the card makes them alongside all that (where it can), and the wait for them at the end is that
+  // much shorter. Asked for again later with the rest: the ones made now are there already)
+  let earlyProgs = [];
+  try {
+    earlyProgs = pipe.precompile() || [];
+  } catch (e) {
+    earlyProgs = [];
+  }
+  mark('pens asked');
 
   // (ROADMAP 18.9: the city up on the graphics card a little at a time, first)
   setStatus(tr('מעלים את העיר…', 'Raising the city…'));
@@ -463,6 +493,7 @@ async function boot() {
   const catalog = params.has('nocatalog') ? null : penCatalog(world, pipe);
   if (catalog) scene.add(catalog);
   const progs = pipe.precompile();
+  for (const p of earlyProgs) progs.push(p);
   if (catalog) scene.remove(catalog);
   mark('precompile');
 
@@ -536,6 +567,18 @@ async function boot() {
     if (catalog) warmCatalog(game, catalog);
     // (and shown with the frame's numbers, F3: game/perf.js - the whole of it from the page's start)
     game.loadSteps = loadT;
+    // (R28: the whole still city drawn once behind the loading page - render/pipeline.js preroll; ?nopreroll: as it was)
+    // (a computer's: what it is for is Direct3D's first draw; on a phone it would only lengthen the loading)
+    if (!params.has('nopreroll') && !GFX.phone) {
+      try {
+        game.update(1 / 60);
+        game.renderFrame();
+        if (game.lastCenter) pipe.preroll(game.lastCenter);
+      } catch (e) {
+        console.warn('preroll', e);
+      }
+      mark('first draws');
+    }
     game.loadTotal = Math.round(performance.now());
     game.loop();
     if (params.has('autostart')) game.start();

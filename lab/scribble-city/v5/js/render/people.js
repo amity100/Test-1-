@@ -1713,10 +1713,11 @@ export class PersonRenderer {
     // (Sal's first - he comes over at the start - then every kind of the city's people, a little a frame)
     // (R28: still all of them ahead - a face is there the moment a film's cut lands on it - but made where it costs nothing
     // seen: most of it behind the title page, none of it over the story's films, a trickle in play: stepPortraits)
-    const ks = [2];
+    // (R28: and the one the opening film asks for in its first second, before Sal)
+    const ks = [4, 2];
     // (characters round 2: the people at work theirs when they are first near - not all of them made
     // ahead: a few dozen more faces in the memory for nothing)
-    for (let k = 0; k < FOLK.length; k++) if (k !== 2 && portraitKind(k) && !FOLK[k].role) ks.push(k);
+    for (let k = 0; k < FOLK.length; k++) if (k !== 2 && k !== 4 && portraitKind(k) && !FOLK[k].role) ks.push(k);
     for (const k of ks) if (!(this.portraits && this.portraits.get(k))) this.makePortrait(k);
   }
 
@@ -1754,7 +1755,9 @@ export class PersonRenderer {
     // play): behind the title page and the pause menu, where nothing moves, ten milliseconds a frame (game/game.js
     // portraitMs); over the story's films none; in play a trickle
     const P = Q[0];
-    const ms = this.portraitMs || (P.wanted ? (this.touch ? 2 : 4) : this.filmNow ? 0 : this.touch ? 2 : 1.2);
+    // (R28, second pass: over a film a trickle too, not nothing - with Start pressed at once all 72 were left for the first
+    // minute of play; and one that is wanted now at 3 ms a frame on a computer, not 4)
+    const ms = this.portraitMs || (P.wanted ? (this.touch ? 2 : 3) : this.filmNow ? (this.touch ? 0 : 1.2) : this.touch ? 2 : 1.2);
     if (ms > 0 && P.step(ms)) Q.shift();
     // (and its picture, painted off the game's thread and sent up when done: the next begun here, not over a film)
     if (!this.painting && this.paintQueue && this.paintQueue.length) this.pumpPaint();

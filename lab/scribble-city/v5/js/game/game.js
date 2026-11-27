@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { shared, pickLights, flashLight, pens } from '../render/materials.js';
+import { shared, pickLights, flashLight, pens, tier } from '../render/materials.js';
 import { Input } from '../core/input.js';
 import { Audio } from '../core/audio.js';
 import { CameraRig } from './camera.js';
@@ -965,8 +965,11 @@ export class Game {
   applyDetail(k) {
     const pipe = this.pipe;
     this.detail = k;
-    pipe.detailReflEvery = k >= 1 ? 2 : 1;
+    pipe.detailReflEvery = k >= 4 ? 3 : k >= 1 ? 2 : 1;
     pipe.detailShadowEvery = k >= 2 ? 2 : 1;
+    // (R28, a computer that cannot keep up: two more steps before the sharpness goes - the phone's own tier (the six nearest
+    // lamps, the sun's shadow in two taps: measured on a phone, some 7 ms of 63, hardly seen), then the mirror every third frame)
+    tier.auto = k >= 3;
   }
 
   // (ROADMAP 19.13) ?fps: how many frames a second are drawn, at the top of the screen, every second - for walking round and seeing it
@@ -1050,6 +1053,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       tele.idleStep(sc);
       tele.frameBegin();
     }
+    this.lastCenter = sc;
     this.pipe.render(sc);
     // (ROADMAP 18.9: the film's comic page takes the frame just drawn into its live panel)
     const C = this.prologue && this.prologue.comic;
@@ -1099,7 +1103,44 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     let n = 0;
     let slow = 0;
     let fast = 0;
-    let settle = 3;
+    let settle = 4;
+    // (R28, the owner: "on the computer it must not get stuck when the game starts". Every start began at the full drawing, and
+    // a computer that cannot hold it came down a step every four or five seconds of play - half a minute of the opening film and
+    // the first of play stuck, each time the game was opened. So: (1) what this computer came down to is kept (by its card and
+    // its screen) and the next start begins there; (2) the title page's frames are counted too - by the time Start is pressed the
+    // drawing is where it should be; (3) the first seconds decide twice as fast, and a drawing far too slow comes down at once.
+    // ?noqmem: as it was)
+    const detailMax = (this.detailMax = GFX.phone ? DETAIL_MAX : 4);
+    const qOn = !this.params.has('noqmem') && !this.params.has('test');
+    const qKey = `bto.q1|${pipe.gpuName || ''}|${Math.round((window.innerWidth * (window.devicePixelRatio || 1)) / 160)}x${Math.round((window.innerHeight * (window.devicePixelRatio || 1)) / 160)}`;
+    let qSaved = '';
+    const qSave = () => {
+      if (!qOn) return;
+      const v = JSON.stringify({ d: this.detail, s: +pipe.scale.toFixed(3) });
+      if (v === qSaved) return;
+      qSaved = v;
+      try {
+        localStorage.setItem(qKey, v);
+      } catch (e) {
+        // (no store here: the next start begins at the full drawing, as it did)
+      }
+    };
+    let quick = 30;
+    const qFrames = [];
+    let vslow = 0;
+    if (qOn) {
+      try {
+        const q0 = JSON.parse(localStorage.getItem(qKey) || 'null');
+        if (q0 && typeof q0.s === 'number') {
+          this.applyDetail(Math.min(detailMax, Math.max(0, q0.d | 0)));
+          pipe.scale = Math.min(pipe.maxScale, Math.max(pipe.minScale, q0.s));
+          qSaved = JSON.stringify({ d: this.detail, s: +pipe.scale.toFixed(3) });
+          this.qFrom = { d: this.detail, s: pipe.scale };
+        }
+      } catch (e) {
+        // (nothing kept, or not to be read: the full drawing)
+      }
+    }
     // the scale that was last too slow, and when (it is not tried again for a while)
     let ceiling = Infinity;
     let ceilingAt = -1e9;
@@ -1179,13 +1220,39 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       // (R28: nor over the story's film - its two ways drawn in turns for seconds of the opening flight on a device new
       // to the game: tried once the film is over)
       if (!perf.probed) trial.frame(raw, live && !this.filmOn());
-      if (live && !trial.busy && !perf.probed) {
+      // (R28: the title page's frames too)
+      if ((live || (this.state === 'title' && !perf.bench)) && !trial.busy && !perf.probed) {
         acc += raw;
         n++;
+        if (quick > 0) qFrames.push(raw);
       }
-      if (acc > 1.0) {
-        const ms = (acc / n) * 1000;
+      const need = 2;
+      if (acc > (quick > 0 ? 0.5 : 1.0) && n > 2) {
+        // (at the start the middle frame of the window, not their mean: one frame that stood - a thing being made, sent up -
+        // is not what the drawing costs, and a computer whose every frame is slow is still seen for what it is)
+        let ms = (acc / n) * 1000;
+        if (quick > 0 && qFrames.length > 2) {
+          qFrames.sort((x, y) => x - y);
+          ms = qFrames[qFrames.length >> 1] * 1000;
+        }
+        // (the title page's frames carry the faces being made ahead, 5 ms of each - render/people.js: not the drawing's)
+        if (this.state === 'title' && this.figures && this.figures.bodies && this.figures.bodies.portraitQueue && this.figures.bodies.portraitQueue.length) ms -= 5;
+        qFrames.length = 0;
+        if (quick > 0) quick--;
         if (settle > 0) settle--;
+        else if (quick > 0 && !tried && ms > 45 && this.detail < detailMax && !held(hold.detail, this.detail, this.time, ms)) {
+          // (far too slow at the start - under 22 frames a second, two half-seconds running: all that is least seen given up at
+          // once. As every step it has to pay for itself: if the next window is no faster - the processor holds the frames, not
+          // the card - it is taken back, below. The sharpness after it by its own steps, as always)
+          if (++vslow >= 2) {
+            tried = { kind: 'detail', from: this.detail, ms };
+            this.applyDetail(detailMax);
+            vslow = 0;
+            slow = 0;
+            fast = 0;
+            settle = 1;
+          }
+        }
         else if (tried) {
           // (the first second after a step down: did it make the frames faster?)
           const h = hold[tried.kind];
@@ -1210,20 +1277,23 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
           fast = 0;
         } else {
           // slow: under 40 frames a second; fast: keeping up with a 60 Hz screen
-          slow = ms > 25 ? slow + 1 : 0;
+          // (at the start a step down is taken sooner - two half-seconds - but only under 33 frames a second: a computer at a steady
+          // 45 would not climb back from it by itself)
+          vslow = 0;
+          slow = ms > (quick > 0 ? 30 : 25) ? slow + 1 : 0;
           fast = ms < 18.5 ? fast + 1 : 0;
           const now = this.time;
           const cap = now - ceilingAt < 40 ? Math.min(pipe.maxScale, ceiling - 0.05) : pipe.maxScale;
           const capT = now - ceilingTAt < 40 ? Math.min(pipe.taaMax, ceilingT - 0.05) : pipe.taaMax;
           // (v5, ROADMAP 11.43: what is least seen goes first - applyDetail - and only then the
           // sharpness: the drawing's share, its resolution, never under their floors, main.js)
-          if (slow >= 2 && this.detail < DETAIL_MAX && !held(hold.detail, this.detail, now, ms)) {
+          if (slow >= need && this.detail < detailMax && !held(hold.detail, this.detail, now, ms)) {
             tried = { kind: 'detail', from: this.detail, ms };
             this.applyDetail(this.detail + 1);
             slow = 0;
             fast = 0;
             settle = 2;
-          } else if (slow >= 2 && pipe.taa && pipe.taaFrac > pipe.taaMin + 0.001 && !held(hold.taa, pipe.taaFrac, now, ms)) {
+          } else if (slow >= need && pipe.taa && pipe.taaFrac > pipe.taaMin + 0.001 && !held(hold.taa, pipe.taaFrac, now, ms)) {
             tried = { kind: 'taa', from: pipe.taaFrac, ms };
             ceilingT = pipe.taaFrac;
             ceilingTAt = now;
@@ -1231,7 +1301,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
             slow = 0;
             fast = 0;
             settle = 2;
-          } else if (slow >= 2 && pipe.scale > pipe.minScale && !held(hold.scale, pipe.scale, now, ms)) {
+          } else if (slow >= need && pipe.scale > pipe.minScale && !held(hold.scale, pipe.scale, now, ms)) {
             tried = { kind: 'scale', from: pipe.scale, ms };
             ceiling = pipe.scale;
             ceilingAt = now;
@@ -1256,6 +1326,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
         }
         acc = 0;
         n = 0;
+        if (!tried) qSave();
       }
       requestAnimationFrame(tick);
     };
