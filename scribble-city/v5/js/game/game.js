@@ -1235,18 +1235,22 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
           qFrames.sort((x, y) => x - y);
           ms = qFrames[qFrames.length >> 1] * 1000;
         }
+        // (the title page's frames carry the faces being made ahead, 5 ms of each - render/people.js: not the drawing's)
+        if (this.state === 'title' && this.figures && this.figures.bodies && this.figures.bodies.portraitQueue && this.figures.bodies.portraitQueue.length) ms -= 5;
         qFrames.length = 0;
         if (quick > 0) quick--;
         if (settle > 0) settle--;
-        else if (quick > 0 && !tried && ms > 45 && (this.detail < detailMax || pipe.scale > pipe.minScale + 0.001)) {
+        else if (quick > 0 && !tried && ms > 45 && this.detail < detailMax && !held(hold.detail, this.detail, this.time, ms)) {
           // (far too slow at the start - under 22 frames a second, two half-seconds running: all that is least seen given up at
-          // once, then a step of the sharpness; it comes back by itself, a step at a time, where the frames have time to spare)
+          // once. As every step it has to pay for itself: if the next window is no faster - the processor holds the frames, not
+          // the card - it is taken back, below. The sharpness after it by its own steps, as always)
           if (++vslow >= 2) {
-            if (this.detail < detailMax) this.applyDetail(detailMax);
-            else pipe.scale = Math.max(pipe.minScale, pipe.scale - 0.1);
-            vslow = 1;
+            tried = { kind: 'detail', from: this.detail, ms };
+            this.applyDetail(detailMax);
+            vslow = 0;
             slow = 0;
             fast = 0;
+            settle = 1;
           }
         }
         else if (tried) {

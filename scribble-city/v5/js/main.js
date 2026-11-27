@@ -258,13 +258,13 @@ async function boot() {
   // (never coarser than this: a drawing made at too few pixels turns to mush in the distance. v5,
   // ROADMAP 11.43: higher than it was - the game looks as it should all the time; what is least
   // seen is given up first, game.js applyDetail)
-  pipe.minScale = Math.min(pipe.scale, low ? Math.max(0.6, (params.has('pr') ? 1.4 : 1.65) / pr) : 0.75);
+  pipe.minScale = Math.min(pipe.scale, low ? Math.max(0.6, (params.has('pr') ? 1.4 : 1.65) / pr) : 0.85);
   // (the steady pace, when it is chosen, may come down a little further on a computer: a weak
   // graphics card that cannot keep the beat otherwise; game/pace.js)
   // (round 22b, a phone: a steady 30 first - the drawing may come down a little further for a heavy
   // moment than the free pace's, as the big games' own dynamic resolution does, before the beat would
   // come down to 20; sharpened as it does, game/pace.js, render/pipeline.js)
-  pipe.minScaleSteady = low ? Math.min(pipe.scale, Math.max(0.55, (params.has('pr') ? 1.2 : 1.65) / pr)) : Math.min(pipe.scale, 0.72);
+  pipe.minScaleSteady = low ? Math.min(pipe.scale, Math.max(0.55, (params.has('pr') ? 1.2 : 1.65) / pr)) : Math.min(pipe.scale, 0.8);
   // which graphics card draws (where the browser tells): none, in software (SwiftShader, llvmpipe,
   // the basic render driver), and every frame takes seconds
   const gl0 = renderer.getContext();
@@ -568,7 +568,8 @@ async function boot() {
     // (and shown with the frame's numbers, F3: game/perf.js - the whole of it from the page's start)
     game.loadSteps = loadT;
     // (R28: the whole still city drawn once behind the loading page - render/pipeline.js preroll; ?nopreroll: as it was)
-    if (!params.has('nopreroll')) {
+    // (a computer's: what it is for is Direct3D's first draw; on a phone it would only lengthen the loading)
+    if (!params.has('nopreroll') && !GFX.phone) {
       try {
         game.update(1 / 60);
         game.renderFrame();
