@@ -774,7 +774,8 @@ export class Finds {
       const d = Math.hypot(s.x - at.x, (s.y - at.y) * 0.8, s.z - at.z);
       // (R26, the owner's word: "when the player comes to a blueprint's area, a message pops up that one is near") from 30 m,
       // once - again only after he has been 60 m off (a van: once a game)
-      if (d < 30 && !this.nearSet.has(s.f.id) && !this.quiet && this.mayTell(s.f)) {
+      // (R28: not over a shot of the story's film - the word waits for play)
+      if (d < 30 && !this.nearSet.has(s.f.id) && !this.quiet && this.mayTell(s.f) && !(g.filmOn && g.filmOn())) {
         this.nearSet.add(s.f.id);
         if (!this.state.coached.near) this.coach('near', tr('שרטוט מוסתר קרוב! חפשו דף לבן עם קווים בזהב — כשמתקרבים שומעים עיפרון משרבט', 'A hidden blueprint is close! Look for a white page with gold lines — up close you can hear a pencil scratching'), { t: 6, icon: '✦' });
         else if (g.hud) g.hud.toast(s.ny > 0.7 ? tr('✦ שרטוט מוסתר קרוב — על גג, למעלה', '✦ A hidden blueprint is close — up on a roof') : tr('✦ שרטוט מוסתר קרוב — הסתכלו מסביב', '✦ A hidden blueprint is close — look around'), 'info', 3.2);
