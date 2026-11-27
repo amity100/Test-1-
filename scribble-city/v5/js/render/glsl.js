@@ -505,7 +505,8 @@ vec3 drawPens(vec2 p, vec2 dpx, vec2 dpy, vec3 lit, vec3 shade, float light, flo
       seed = 51.0;
       lenK = 1.2;
     } else if (i == 4) {
-      if (!(hiAll > 0.02)) continue;
+      // (R28, a phone's tier 2: without the light pen's quick strokes where the low sun catches a wall)
+      if (!(hiAll > 0.02) || uTier > 1.5) continue;
       a = ang + 0.2;
       gap = 4.4;
       seed = 67.0;

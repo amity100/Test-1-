@@ -302,7 +302,9 @@ export const tier = { on: false, auto: false, lamps: 6 };
 
 export function pickLights(cam) {
   const tierOn = (tier.on || tier.auto) && !GFX.off;
-  shared.uTier.value = tierOn ? 1 : 0;
+  // (2: a phone's own - the finishing passes lighter too, render/pipeline.js INK_FRAG, render/glsl.js drawPens; 1: a computer
+  // that cannot keep up - the lamps and the sun's shadow only)
+  shared.uTier.value = tierOn ? (tier.on ? 2 : 1) : 0;
   const MAXN = tierOn ? Math.min(MAX_LIGHTS, tier.lamps) : MAX_LIGHTS;
   const cx = cam ? cam.x : 0;
   const cz = cam ? cam.z : 0;
