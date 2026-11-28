@@ -24,6 +24,7 @@ import { groundHeight } from '../../world/layout.js';
 import { seatPlace } from '../vehicles.js';
 import { lang, tr } from '../../core/lang.js';
 import { objT, markT, thoughtT } from './i18n.js';
+import { KIT_READY } from '../finds.js';
 
 // (v5, ROADMAP 18) THE LAST SUNSET - the game's prologue, directed.
 //
@@ -2311,7 +2312,13 @@ export class Prologue {
       penWas = onCar;
       const teaching = onCar && pen.cat === 'func' && tm < 0;
       if (pen) pen.force = teaching ? item : pen.force === item ? null : pen.force;
-      if (teaching && !teach) teach = teachFn(car);
+      // (R29: the one to tap lit in the pen's list - game/partpen.js hint)
+      if (pen && pen.hint !== (teaching ? item : null)) {
+        pen.hint = teaching ? item : null;
+        pen.legSig = '';
+        if (pen.showLegend) pen.showLegend();
+      }
+      if (teaching && !teach && teachFn) teach = teachFn(car);
       else if (!teaching && teach) {
         teach.remove();
         teach = null;
@@ -2323,16 +2330,19 @@ export class Prologue {
     };
     if (teach) teach.remove();
     if (pen && pen.force === item) pen.force = null;
+    if (pen && pen.hint === item) pen.hint = null;
     if (g.gps && out) g.gps.clear();
     // (the part on - or the lesson let go: the pen put away, so that the car drives on - the next step is at the wheel)
     if (F && F.isOpen) F.close();
     return tm >= 0;
   }
 
-  // 5. (R27) wings on the car - the car's own Movement wings, from the start kit: drawn once, the pencil showing how
+  // 5. (R27) wings on the car - the car's own Movement wings, from the start kit. (R29, the owner's word: what he has from the start
+  // is ready at a tap - no drawing: the pen opened, a touch on the wings, and they are on)
   *lessonWings() {
     if (!(yield* this.needCar())) return;
-    yield* this.penLesson('wing', 'Open the pen and draw <b>wings</b> on the car', 'wings', (car) => this.teachWings(car));
+    if (KIT_READY) this.lessonEnd = { ...(this.lessonEnd || {}), wings: (yield* this.penLesson('wing', 'Open the pen and tap <b>wings</b> - they are yours already', 'wings', null)) ? 'tapped' : 'timeout' };
+    else yield* this.penLesson('wing', 'Open the pen and draw <b>wings</b> on the car', 'wings', (car) => this.teachWings(car));
     yield 0.4;
   }
 
@@ -2344,8 +2354,13 @@ export class Prologue {
     const W = g.weapons;
     if (!F || !(yield* this.needFoot())) return;
     const ID = 'rifle';
-    this.objective('Open the pencil and draw the <b>pencil rifle</b>');
+    // (R29: in the library, ready at a tap - the rifle lit there to be touched)
+    this.objective(KIT_READY ? 'Open the pencil and tap the <b>pencil rifle</b>' : 'Open the pencil and draw the <b>pencil rifle</b>');
     this.howto('weapon');
+    if (KIT_READY) {
+      F.hint = ID;
+      F.legSig = '';
+    }
     const madeN = () => (F.stats && F.stats.made ? F.stats.made.weapon || 0 : 0);
     const m0 = madeN();
     const held = () => !!(W && W.current && W.current.def && W.current.def.id === ID);
@@ -2359,12 +2374,17 @@ export class Prologue {
       // (the pencil opened: the rifle chosen, its lines shown and drawn by the pencil - each time it is opened)
       if (F.isOpen && !asked && !F.carOpen && g.player.mode === 'foot') {
         asked = true;
-        if (F.force !== ID) F.learn(ID, true);
+        if (!KIT_READY && F.force !== ID) F.learn(ID, true);
       }
       if (!F.isOpen) asked = false;
-      if (tm < 0 && held() && (!had || madeN() > m0)) tm = t;
+      if (tm < 0 && held() && (!had || madeN() > m0 || KIT_READY)) tm = t;
       return (tm >= 0 && !F.isOpen && t > tm + 1) || (tm >= 0 && t > tm + 5) || t > 150;
     };
+    if (F.hint === ID) {
+      F.hint = null;
+      F.legSig = '';
+    }
+    this.lessonEnd = { ...(this.lessonEnd || {}), weapon: tm >= 0 ? 'done' : 'timeout' };
     if (tm < 0) return;
     // (and used: aimed and fired once)
     this.objective('Aim and <b>fire</b> the rifle');
@@ -2397,6 +2417,7 @@ export class Prologue {
     this.howto('find');
     let close = false;
     let outTold = false;
+    let drawTold = false;
     let t = 0;
     yield () => {
       t += this.dtR;
@@ -2404,8 +2425,14 @@ export class Prologue {
       if (d < 26 && !close) {
         close = true;
         this.beacon(fx, fz, 1.3);
-        this.objective('<b>Photograph</b> the blueprint', fx, fz, 'Blueprint');
+        // (R29, the owner's word: photographed - or drawn right there, by the page; the card says why one would photograph)
+        this.objective('<b>Photograph</b> the blueprint - or <b>draw it here</b>', fx, fz, 'Blueprint');
         this.howto('photo');
+      }
+      // (drawing it at the page: its own words while the sheet is up)
+      if (FI.here && !drawTold) {
+        drawTold = true;
+        this.objective('Draw the blueprint over its lines');
       }
       // (in a car by it: photos are taken on foot)
       if (close && P.inVehicle && d < 18 && !outTold) {
@@ -2420,8 +2447,10 @@ export class Prologue {
       }
       // (whatever happens, the story goes on: a long while gone by, the page is his all the same)
       if (t > 420 && !FI.has('turbo1')) FI.found(s);
-      return FI.has('turbo1');
+      // (drawn at the page: on once the drawing is done - or let go)
+      return FI.has('turbo1') && !FI.here;
     };
+    this.lessonEnd = { ...(this.lessonEnd || {}), find: t > 420 ? 'timeout' : g.tray && g.tray.knows('turbo') ? 'drawn' : 'photo' };
     this.unbeacon();
     if (g.gps) g.gps.clear();
     // (the polaroid flying to the pencil, the PHOTOGRAPHED card - game/finds.js showCard)
@@ -2435,7 +2464,12 @@ export class Prologue {
     const FI = g.finds;
     if (FI && FI.on && !FI.partOpen('turbo')) return;
     if (!(yield* this.needCar())) return;
-    const ok = yield* this.penLesson('turbo', 'Open the pen and draw a <b>turbo</b> on the car', 'draw', (car) => this.teachTurbo(car));
+    // (R29: drawn at its page already - his, at a tap; photographed - drawn once on the car, the pencil showing how)
+    const known = !!(g.tray && g.tray.knows && g.tray.knows('turbo'));
+    const ok = known
+      ? yield* this.penLesson('turbo', 'Open the pen and tap the <b>turbo</b> - you drew it, it is yours', 'tapTurbo', null)
+      : yield* this.penLesson('turbo', KIT_READY ? 'Open the pen and draw the <b>turbo</b> on the car - once, and it is yours' : 'Open the pen and draw a <b>turbo</b> on the car', 'draw', (car) => this.teachTurbo(car));
+    this.lessonEnd = { ...(this.lessonEnd || {}), turbo: ok ? (known ? 'tapped' : 'drawn') : 'timeout' };
     if (FI) FI.lesson = null;
     if (!ok || !P.inVehicle) return;
     this.objective('Hit the <b>turbo</b>!');

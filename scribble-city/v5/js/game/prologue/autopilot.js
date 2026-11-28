@@ -401,6 +401,31 @@ export class Autopilot {
       this.boosting = false;
       g.input.boost = false;
     }
+    // (R29: the start kit at a tap - the pen opened, the wings touched in its list; game/partpen.js tapPut)
+    if (/tap <b>wings<\/b>|tap the <b>turbo<\/b>/.test(o)) {
+      this.set(0, 0);
+      if (!c) return;
+      const F = g.freedraw;
+      const id = /wings/.test(o) ? 'wing' : 'turbo';
+      if (F && !F.isOpen) {
+        const s = this.since('tpen');
+        if (s < 0 || s > 1.5) {
+          this.did.tpen = g.time;
+          F.show();
+        }
+        return;
+      }
+      const pen = g.fuse && g.fuse.pen;
+      if (this.since('tpen') > 1.6 && pen && (this.since('tput') < 0 || this.since('tput') > 3)) {
+        this.did.tput = g.time;
+        // (the item in the pen's list, touched as a finger touches it)
+        const el = document.querySelector(`#pp-legend .pp-it[data-i="${id}"]`);
+        this.P.tapSeen = { id, el: !!el, cls: el ? el.className : '' };
+        if (el) el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+        else pen.tapPut(id);
+      }
+      return;
+    }
     if (/<b>wings<\/b> on the car/.test(o)) {
       this.set(0, 0);
       if (!c) return;
@@ -428,6 +453,26 @@ export class Autopilot {
       }
       return;
     }
+    if (/tap the <b>pencil rifle<\/b>/.test(o)) {
+      this.set(0, 0);
+      const F = g.freedraw;
+      if (!F || c) return;
+      this.once('rifle', () => F.show());
+      // (R29: in the library at a tap - touched in the list, a finger's down and up on it)
+      if (this.since('rifle') > 1.6) {
+        this.once('riflepick', () => {
+          const el = document.querySelector('.fd-it[data-i="rifle"]');
+          this.P.tapSeen = { id: 'rifle', el: !!el, cls: el ? el.className : '' };
+          if (!el) return F.quick('rifle');
+          const r = el.getBoundingClientRect();
+          const q = { bubbles: true, cancelable: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2, pointerType: 'mouse' };
+          el.dispatchEvent(new PointerEvent('pointerdown', q));
+          el.dispatchEvent(new PointerEvent('pointerup', q));
+        });
+      }
+      if (this.since('rifle') > 5) this.once('rifleshut', () => F.isOpen && F.close());
+      return;
+    }
     if (/pencil rifle<\/b>/.test(o)) {
       this.set(0, 0);
       const F = g.freedraw;
@@ -453,6 +498,23 @@ export class Autopilot {
         this.did.fire = g.time;
         g.input.fire = true;
         setTimeout(() => (g.input.fire = false), 350);
+      }
+      return;
+    }
+    // (R29: drawn at the page - the tray's card over the page's lines, drawn over as a hand would: every point of its guide)
+    if (/Draw the blueprint over its lines/.test(o)) {
+      this.set(0, 0);
+      const T = g.tray && g.tray.tracing;
+      if (T && !T.done && T.pts && this.since('hdraw') < 0) {
+        this.did.hdraw = g.time;
+        setTimeout(() => {
+          const T2 = g.tray.tracing;
+          if (!T2 || T2.done) return;
+          T2.strokes = T2.guide.map((L) => L.map(([x, y]) => [T2.ox + x * T2.k, T2.oy + y * T2.k]));
+          T2.hit = new Set(T2.pts.map((q, i) => i));
+          T2.cur = null;
+          g.tray.traceUp();
+        }, 1800);
       }
       return;
     }
@@ -492,7 +554,10 @@ export class Autopilot {
         this.once('fsnap', () => {
           // (for the tests: how near he could walk to it)
           this.P.snapD = +d.toFixed(2);
-          FI.interact();
+          // (R29: the two ways - photographed (F) or drawn here (E); ?pilotfind=draw for the second)
+          const T = FI.target();
+          if (g.params && g.params.get('pilotfind') === 'draw' && T && T.draw) this.press('KeyE');
+          else if (T) FI.snap(T.s);
         });
       }
       return;
@@ -584,6 +649,7 @@ export class Autopilot {
     // (round 17: in the car, the pen out on it and the turbo drawn - the flame out of its back, along
     // the teaching pencil's own line, as a hand draws it)
     if (/turbo<\/b> on the car/.test(o) && pl.inVehicle) {
+      // (drawn once on the car: the objective says so now)
       this.set(0, 0);
       const F = g.freedraw;
       if (F && !F.isOpen) {

@@ -4,6 +4,7 @@ import { clamp, damp } from '../core/util.js';
 import { ITEMS } from './itemcat.js';
 import { nOf } from './partpen.js';
 import { TABS, TAB_NAME, TAB_ICON, TRAY, TRAY_IDS, SIZE, SIZED, info, fits, buildsOn, trayIdOf, trayIdsOn, fusionsOf, fusionOf, FUSIONS, metersOf, hintOf } from './traycat.js';
+import { KIT_READY, START_BP, kitPart } from './finds.js';
 // (ROADMAP 28.8, 28.9) The parts tray: the way things are put on a ride.
 //
 // A part is drawn once - over a big guide of it, on a card - and from then on it is in the tray. In a ride, or beside
@@ -273,8 +274,8 @@ export class BuildTray {
       g.audio.play('rubber', 0.4);
       return null;
     }
-    // (drawn once: over its guide)
-    if (!this.store.learned[id] && !o.force) {
+    // (drawn once: over its guide - R29: not the start kit's, ready at a tap)
+    if (!this.knows(id) && !o.force) {
       this.trace(id, o);
       return null;
     }
@@ -709,9 +710,17 @@ export class BuildTray {
     this.game.audio.play('pageflip', 0.35);
   }
 
+  // (R29) drawn once already, or the start kit's (game/finds.js kitPart): put on at a tap
+  knows(id) {
+    return !!this.store.learned[id] || (!this.game.classic && kitPart(id));
+  }
+
   cancelTrace() {
     if (!this.tracing) return;
+    const T = this.tracing;
     this.tracing = null;
+    // (R29: a find's drawing at its page let go - game/finds.js hereLetGo)
+    if (T && !T.done && T.o && T.o.onCancel) T.o.onCancel();
     if (this.traceEl) this.traceEl.classList.remove('on');
   }
 
@@ -877,6 +886,8 @@ export class BuildTray {
   firstWanted(id) {
     const g = this.game;
     if (this.store.learned[`bp:${id}`] || g.classic) return false;
+    // (R29: the start kit's blueprints ready at a tap - only a found one is drawn first)
+    if (KIT_READY && START_BP.has(id)) return false;
     const P = g.params;
     if (P && P.get('test') === '1' && P.get('firstdraw') !== '1') return false;
     if (P && P.get('firstdraw') === '0') return false;
@@ -1101,7 +1112,7 @@ export class BuildTray {
     if (take && Wh.pick >= 0) {
       const id = Wh.ids[Wh.pick];
       if (this.partsOn(id).length) this.remove(id);
-      else if (!this.store.learned[id]) {
+      else if (!this.knows(id)) {
         // (not drawn yet: its guide - the tray out for it)
         this.open();
         this.attach(id, { wheel: true });
@@ -1602,7 +1613,7 @@ export class BuildTray {
     this.chipsEl.innerHTML = TRAY[this.tab].map((id) => {
       const it = info(id);
       const why = this.cannot(id, v);
-      const cls = ['bt-chip', has.has(id) ? 'has' : '', why ? 'no' : '', this.store.learned[id] ? '' : 'new'].filter(Boolean).join(' ');
+      const cls = ['bt-chip', has.has(id) ? 'has' : '', why ? 'no' : '', this.knows(id) ? '' : 'new'].filter(Boolean).join(' ');
       return `<button class="${cls}" data-i="${id}" aria-label="${it.name}">${svgIcon(it.icon)}<b>${it.name}</b>${has.has(id) ? '<i class="bt-on">✓</i>' : why ? `<i class="bt-why">${why}</i>` : this.store.learned[id] ? '' : `<i class="bt-new">${tr('לצייר', 'Draw')}</i>`}</button>`;
     }).join('');
     // the meters

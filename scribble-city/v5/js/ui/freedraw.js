@@ -2022,7 +2022,7 @@ export class FreeDraw {
       return `<div class="${cls}" data-i="${id}"${num ? ` data-n="${num}"` : ''}>${num ? `<em class="fd-n">${num}</em>` : ''}${bpSvg(bp)}<b>${bp.name}</b><i>${tag}</i></div>`;
     }).join('');
     // (R26) the two kinds of thing on the shelf, said plainly: drawn already - a touch; new - drawn once first
-    const say = this.game.touch ? tr('מה שכבר ציירתם: נגיעה והוא כאן · ✎ חדש: מציירים פעם אחת, ומאז הוא שלכם', "Drawn before: tap and it's here · ✎ New: draw it once, then it's yours") : tr('מה שכבר ציירתם: נגיעה או 1–9 · ✎ חדש: מציירים פעם אחת, ומאז הוא שלכם · ←→ מדפים', "Drawn before: tap or 1–9 · ✎ New: draw it once, then it's yours · ←→ shelves");
+    const say = this.game.touch ? tr('מה שלכם: נגיעה והוא כאן · ✎ שרטוט שמצאתם: מציירים פעם אחת, ומאז הוא שלכם', "Yours: tap and it's here · ✎ A blueprint you found: draw it once, then it's yours") : tr('מה שלכם: נגיעה או 1–9 · ✎ שרטוט שמצאתם: מציירים פעם אחת, ומאז הוא שלכם · ←→ מדפים', "Yours: tap or 1–9 · ✎ A blueprint you found: draw it once, then it's yours · ←→ shelves");
     el.innerHTML = `<div class="fd-shelves">${tabs}<span class="fd-leg-say">${say}</span></div><div class="fd-its">${items}</div>`;
   }
 
@@ -2254,7 +2254,7 @@ export class FreeDraw {
       const bp = BLUEPRINTS[id];
       const k = al.known(id);
       const num = k && n < 9 ? ++n : 0;
-      const cls = ['fd-it', lit === id ? 'on' : '', pick === id ? 'pick' : '', k ? 'known' : 'learn'].filter(Boolean).join(' ');
+      const cls = ['fd-it', lit === id ? 'on' : '', pick === id ? 'pick' : '', k ? 'known' : 'learn', this.hint === id ? 'hint' : ''].filter(Boolean).join(' ');
       return `<div class="${cls}" data-i="${id}"${num ? ` data-n="${num}"` : ''}>${num ? `<em class="fd-n">${num}</em>` : ''}${bpSvg(bp)}<b>${bp.name}</b><i>${k ? tr('✓ שלכם', '✓ Yours') : tr('✎ לצייר', '✎ Draw')}</i></div>`;
     };
     // (round 16, the player's word: the list took the screen, no room left to draw - a strip over the
@@ -2271,7 +2271,7 @@ export class FreeDraw {
       const rest = shelfIds(sh).filter((id) => !open.includes(id));
       return `<div class="fe-row"><span class="fe-sh">${SHELF_NAME[sh]}</span>${open.map(cell).join('')}${rest.map(lockCell).join('')}</div>`;
     }).join('');
-    const say = touch ? tr('נגיעה בציור ומציירים אותו · או סתם ציירו - המשחק יזהה', 'Tap a drawing and draw it · or just draw - the game will recognize it') : tr('לחיצה על ציור ומציירים אותו · או סתם ציירו - המשחק יזהה · מה שכבר ציירתם: המספר שלו', 'Click a drawing and draw it · or just draw - the game will recognize it · what you\'ve drawn before: its number');
+    const say = touch ? tr('נגיעה בציור — והוא אצלכם מיד · או סתם ציירו, המשחק יזהה', 'Tap a drawing — and it is yours at once · or just draw, the game will recognize it') : tr('לחיצה על ציור (או מספר) — והוא אצלכם מיד · או סתם ציירו, המשחק יזהה', 'Click a drawing (or a number) — and it is yours at once · or just draw, the game will recognize it');
     return tr(`<div class="fe-top"><b>מה מציירים?</b><span>${say}</span><em>🔒 עוד ייפתחו בהמשך</em></div><div class="fe-rows">${rows}</div>`, `<div class="fe-top"><b>What are you drawing?</b><span>${say}</span><em>🔒 More open up later</em></div><div class="fe-rows">${rows}</div>`);
   }
 

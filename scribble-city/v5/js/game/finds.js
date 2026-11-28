@@ -68,6 +68,22 @@ export const START_BP = new Set(['paint', 'rifle', 'mp5', 'shotgun', 'inkbomb', 
 // (on with the opening's new lesson, game/prologue/director.js tutorial: till then the turbo stays in the start kit)
 export const TURBO_FOUND = true;
 export const START_PARTS = TURBO_FOUND ? { wing: 2, jump: 1, mg: 1, armor: 1, rotor: 1 } : { turbo: 1, wing: 2, jump: 1, mg: 1, armor: 1, rotor: 1 };
+// (R29, the owner's word: "for now, everything Danny has in the library at the start is there at the press of a button - no need
+// to draw what he has from the start; only what he finds in the city is added as a drawing, photographed or drawn on the spot")
+// KIT_READY: the start kit - START_BP on foot, START_PARTS on a ride, the story's short list - ready at a tap. ?kitdraw: drawn once
+// first, as in R26-R28
+const Q29 = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
+export const KIT_READY = !Q29.has('kitdraw');
+// a part of the start kit, ready at a tap
+export function kitPart(id) {
+  return KIT_READY && Object.prototype.hasOwnProperty.call(START_PARTS, id);
+}
+// (R29, the owner's word: "whoever starts to draw one of these hidden, illegal drawings - criminals come to kill whoever dared to
+// draw it, and the police can come too") when the danger comes: 'here' - drawn at the page itself (a photograph, drawn later
+// elsewhere, is the quiet way: the reason to photograph); 'any' - whenever a found blueprint is drawn for the first time; 'off'.
+// ?danger=any|off
+export const DRAW_DANGER = ['any', 'off'].includes(Q29.get('danger')) ? Q29.get('danger') : 'here';
+
 // the parts whose level is found, not bought
 const FOUND_LEVELS = new Set(['wing', 'turbo']);
 // what a part's copy is read against: the other parts, and everything on the pen's shelves
@@ -754,7 +770,7 @@ export class Finds {
       this.toldT = (this.toldT || 0) + dt;
       if (this.toldT > 5) {
         const map = g.touch ? tr('המפה', 'the map') : tr('המפה (M)', 'the map (M)');
-        this.coach('handover', tr(`שרטוטים מוסתרים בכל העיר — כלי נשק, רכבים, חלקים. מצלמים שרטוט, והוא שלכם לצייר. כמה מהם מסומנים ב${map} בזהב; רוב השרטוטים לא — אותם מחפשים בסמטאות ועל הגגות`, `Blueprints are hidden all over the city — weapons, rides, parts. Photograph one and it's yours to draw. A few are marked in gold on ${map}; most are not — those you hunt for in the alleys and up on the roofs`), { t: 9, icon: '📷' });
+        this.coach('handover', tr(`שרטוטים מוסתרים בכל העיר — כלי נשק, רכבים, חלקים. מצלמים שרטוט — או מציירים אותו במקום, אבל אז באים עבריינים. כמה מהם מסומנים ב${map} בזהב; רוב השרטוטים לא — אותם מחפשים בסמטאות ועל הגגות`, `Blueprints are hidden all over the city — weapons, rides, parts. Photograph one — or draw it on the spot, and criminals come for you. A few are marked in gold on ${map}; most are not — those you hunt for in the alleys and up on the roofs`), { t: 9, icon: '📷' });
         this.guideTo();
       }
     }
@@ -1022,16 +1038,135 @@ export class Finds {
       } else if ((p.pos.x - s.x) * s.nx + (p.pos.z - s.z) * s.nz < 0.2) continue;
       // (on a van: while it stands)
       if (s.live.parked === false) return { s, wait: true, label: tr(`${s.f.title} — על הוואן; חכו שיעצור`, `${s.f.title} — on the van; wait for it to stop`) };
-      // (R26, the owner's word: "go to the blueprint and photograph it to get it")
-      return { s, photo: true, label: g.touch ? tr('📷 לצלם את השרטוט', '📷 Photograph the blueprint') : tr(`F — לצלם את השרטוט (${s.f.title})`, `F — photograph the blueprint (${s.f.title})`) };
+      // (R26, the owner's word: "go to the blueprint and photograph it to get it"; R29: "or draw it right there, by the page")
+      const draw = this.canDrawHere(s);
+      const label = g.touch
+        ? draw
+          ? tr('📷 לצלם · ✎ לצייר כאן (מסוכן)', '📷 Photograph · ✎ Draw it here (risky)')
+          : tr('📷 לצלם את השרטוט', '📷 Photograph the blueprint')
+        : draw
+        ? tr(`F — לצלם · E — לצייר כאן, מסוכן (${s.f.title})`, `F — photograph · E — draw it here, risky (${s.f.title})`)
+        : tr(`F — לצלם את השרטוט (${s.f.title})`, `F — photograph the blueprint (${s.f.title})`);
+      return { s, photo: true, draw, label };
     }
     return null;
   }
 
+  // (E) by the page: drawn here - or, where there is nothing to draw (a level), photographed
   interact() {
     const T = this.target();
     if (!T || T.wait) return !!(T && T.wait);
+    if (T.draw) return this.drawHere(T.s);
     return this.snap(T.s);
+  }
+
+  // (R29) what a page by him can be drawn on the spot: what it gives is drawn (not a level of a part he has), and not a drawing
+  // being drawn already
+  canDrawHere(s) {
+    const f = s.f;
+    if (f.lv || !this.drawId(f) || this.here) return false;
+    const g = this.game;
+    if (f.part) return !!(g.tray && g.tray.trace && g.tray.traceEl);
+    return !!(g.freedraw && g.freedraw.learn);
+  }
+
+  // (R29, the owner's word: "he can stand by the blueprint he finds and simply draw it - and once drawn it is among the things
+  // ready at a tap") the page is his as a photograph makes it (kept as a blueprint, should the drawing be let go), and the pen is
+  // opened on it there and then: a part on the tray's card, over its lines (game/buildtray.js trace); a weapon or a ride in the
+  // air, over its picture (ui/freedraw.js learn). Drawn right - his, at a tap (onLearned). And it is seen: DRAW_DANGER
+  drawHere(s) {
+    const g = this.game;
+    const f = s.f;
+    if (!this.canDrawHere(s)) return this.snap(s);
+    const p = g.player;
+    if (p.fig && s.ny < 0.7) p.faceYaw = Math.atan2(-s.nx, -s.nz);
+    if (!this.has(f.id)) {
+      this.state.found.push(f.id);
+      this.save();
+    }
+    if (f.part) this.partFound(f);
+    this.pendingLearn = f;
+    this.here = { f, s, t: 0, done: false };
+    const fd = g.freedraw;
+    if (fd) fd.legSig = '';
+    let ok = false;
+    if (f.part) {
+      const T = g.tray;
+      T.trace(f.part, {
+        say: tr(`${f.title}: ציירו אותו מעל הקווים — ואז הוא שלכם, מוכן בנגיעה`, `${f.title}: draw it over the lines — then it is yours, ready at a tap`),
+        then: () => {},
+        onCancel: () => this.hereLetGo(),
+      });
+      ok = !!T.tracing;
+    } else {
+      ok = !!fd.learn(f.bp);
+      if (ok) this.hereWatch = true;
+    }
+    if (!ok) {
+      this.here = null;
+      return this.snap(s);
+    }
+    if (g.audio) g.audio.play('pageflip', 0.6);
+    if (DRAW_DANGER === 'here') this.alarm(s);
+    return true;
+  }
+
+  // (R29) the drawing at the page let go before it was right: the page is his still, as photographed - to draw when he will
+  hereLetGo() {
+    const H = this.here;
+    if (!H || H.done) return;
+    this.here = null;
+    this.hereWatch = false;
+    this.coach(null, tr('השרטוט נשאר אצלכם — אפשר לצייר אותו אחר כך, במקום שקט', 'The blueprint stays with you — you can draw it later, somewhere quiet'), { t: 5 });
+  }
+
+  // (R29, the owner's word: "criminals come who want to kill whoever dared to draw it - and the police can come") someone saw a
+  // hidden blueprint being drawn: a word at once, before anyone is there - then a crew of the city's criminals, from out of
+  // sight 40-60 m off, already after him; and now and then somebody phones the police. Not in the story (its lesson only says
+  // so: the card), nor where there is nobody to send
+  alarm(s) {
+    const g = this.game;
+    if (DRAW_DANGER === 'off') return false;
+    const P = g.prologue;
+    if ((P && P.active) || g.classic || !g.enemies || !g.world || !g.world.nav) return false;
+    if (g.hud) g.hud.toast(tr('⚠ מישהו ראה אתכם מציירים שרטוט אסור — עבריינים בדרך. תזדרזו!', '⚠ Someone saw you drawing a forbidden blueprint — criminals are on the way. Hurry!'), 'bad', 3.6);
+    if (g.audio) g.audio.play('alarm', 0.35);
+    const at = { x: s.x, z: s.z };
+    setTimeout(() => this.hunters(at), 3500);
+    if (g.police && Math.random() < 0.55) setTimeout(() => {
+      if (!g.police.hold) g.police.phoned(1.9, at.x, at.z);
+    }, 7000 + Math.random() * 5000);
+    return true;
+  }
+
+  hunters(at, n = 3) {
+    const g = this.game;
+    const E = g.enemies;
+    const nav = g.world.nav;
+    const p = g.player.pos;
+    const col = g.world.collision;
+    let made = 0;
+    for (let i = 0; i < 40 && made < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 40 + Math.random() * 20;
+      const x = at.x + Math.cos(a) * r;
+      const z = at.z + Math.sin(a) * r;
+      if (!nav.walkable(x, z)) continue;
+      // (out of sight first: they come round the corner)
+      if (i < 28 && col && col.lineOfSight && col.lineOfSight(p.x, p.y + 1.6, p.z, x, 1.5, z)) continue;
+      const e = E.spawnAt(E.typeFor('crim'), x, z, null);
+      if (!e) continue;
+      e.home.set(x, 0, z);
+      e.lastSeen.copy(p);
+      e.squad.lastKnown.copy(p);
+      e.squad.knowT = g.time;
+      e.awareness = 1;
+      e.enterCombat(true);
+      e.hunter = true;
+      made++;
+    }
+    if (made && g.hud) g.hud.toast(tr(`${made} עבריינים מחפשים אתכם`, `${made} criminals are hunting you`), 'bad', 2.6);
+    return made;
   }
 
   // (R26) the photo: the flash, the shutter, the polaroid to the pencil (game/game.js snapFx) - his, still to be drawn once
@@ -1101,6 +1236,17 @@ export class Finds {
   onLearned(id) {
     const f = FINDS.find((q) => this.has(q.id) && (q.bp === id || (q.part === id && !q.lv) || q.alsoPart === id));
     if (this.pendingLearn && (this.pendingLearn.bp === id || this.pendingLearn.part === id)) this.pendingLearn = null;
+    // (R29) drawn at the page: done - its card says it is his, at a tap
+    const H = this.here;
+    if (H && f && H.f === f) {
+      H.done = true;
+      this.here = null;
+      this.hereWatch = false;
+      setTimeout(() => this.showCard(f, null, 'drawn'), 600);
+    } else if (f && DRAW_DANGER === 'any' && !this.state.tried.includes(f.id)) {
+      const s = this.spots && this.spots.find((q) => q.f === f);
+      if (s) this.alarm(s);
+    }
     if (!f || this.state.tried.includes(f.id)) return;
     this.state.tried.push(f.id);
     this.save();
@@ -1129,7 +1275,7 @@ export class Finds {
   }
 
   // ------------------------------------------------------------------ the card and the first try
-  showCard(f, res) {
+  showCard(f, res, how0 = null) {
     const g = this.game;
     css();
     if (this.card) this.card.remove();
@@ -1139,12 +1285,17 @@ export class Finds {
     const bp = BLUEPRINTS[f.draw || f.bp];
     const pen = g.touch ? tr('העיפרון ✏', 'the pencil ✏') : tr('העיפרון (Q)', 'the pencil (Q)');
     // (R26) what is next, said plainly: drawn once, and it is in the library for good
-    const next = f.lv
+    const drawn = how0 === 'drawn';
+    const next = drawn
+      ? f.part
+        ? tr(`שלכם, מוכן בנגיעה: ברכב ${pen} ← ${bp ? bp.name : f.title}`, `Yours, ready at a tap: in a ride ${pen} → ${bp ? bp.name : f.title}`)
+        : tr(`שלכם, מוכן בנגיעה: ${pen} ← ${bp ? bp.name : f.title}`, `Yours, ready at a tap: ${pen} → ${bp ? bp.name : f.title}`)
+      : f.lv
       ? tr('הכנפיים שלכם עכשיו ברמה הזו — על כל כלי עם כנפיים', 'Your wings are at this level now — on every ride with wings')
       : f.part
       ? tr(`ברכב: ${pen} ← חלקים ← ${bp ? bp.name : f.title} — ציירו אותו פעם אחת, והוא שלכם`, `In a ride: ${pen} → Parts → ${bp ? bp.name : f.title} — draw it once and it's yours`)
       : tr(`עכשיו ציירו אותו פעם אחת: ${pen} ← ${bp ? bp.name : f.title}. מאז הוא בספרייה, מוכן בנגיעה`, `Now draw it once: ${pen} → ${bp ? bp.name : f.title}. From then on it's in your library, ready at a tap`);
-    el.innerHTML = `<div class="fc-k">${tr('צולם', 'PHOTOGRAPHED')}</div><div class="fc-t">${f.title}</div><div class="fc-l">${f.line}</div><div class="fc-n">${next}</div><div class="fc-h">${how}</div>`;
+    el.innerHTML = `<div class="fc-k">${drawn ? tr('צויר — שלכם', 'DRAWN — YOURS') : tr('צולם', 'PHOTOGRAPHED')}</div><div class="fc-t">${f.title}</div><div class="fc-l">${f.line}</div><div class="fc-n">${next}</div><div class="fc-h">${how}</div>`;
     document.body.appendChild(el);
     this.card = el;
     requestAnimationFrame(() => el.classList.add('on'));
@@ -1154,7 +1305,7 @@ export class Finds {
       setTimeout(() => el.remove(), 700);
       if (this.card === el) this.card = null;
       // (the first photo: the next step said once more, short, where the eye is)
-      if (!f.lv) this.coach('firstphoto', f.part ? tr('השרטוט אצלכם — עכשיו ציירו אותו פעם אחת על רכב, והוא שלכם לתמיד', "The blueprint is yours — now draw it once on a ride, and it's yours for good") : tr(`השרטוט אצלכם — פתחו את העיפרון ${g.touch ? '✏' : '(Q)'} וציירו אותו פעם אחת. המשחק יראה לכם איך`, `The blueprint is yours — open the pencil ${g.touch ? '✏' : '(Q)'} and draw it once. The game will show you how`), { t: 6.5, icon: '✏' });
+      if (!f.lv && !drawn) this.coach('firstphoto', f.part ? tr('השרטוט אצלכם — עכשיו ציירו אותו פעם אחת על רכב, והוא שלכם לתמיד', "The blueprint is yours — now draw it once on a ride, and it's yours for good") : tr(`השרטוט אצלכם — פתחו את העיפרון ${g.touch ? '✏' : '(Q)'} וציירו אותו פעם אחת. המשחק יראה לכם איך`, `The blueprint is yours — open the pencil ${g.touch ? '✏' : '(Q)'} and draw it once. The game will show you how`), { t: 6.5, icon: '✏' });
     }, 6200);
   }
 
