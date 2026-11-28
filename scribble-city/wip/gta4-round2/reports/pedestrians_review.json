@@ -1,0 +1,103 @@
+{
+ "aspect": "pedestrians",
+ "issues": [
+  {
+   "issue": "(Found by the previous reviewer, re-checked and kept, 9eb758c.) Every bubble went to Civilians.spoke through the speaker's manager. Enemies and police have their own manager with no spoke method, so each line they shouted threw an error inside the update.",
+   "severity": "high",
+   "fixed": true
+  },
+  {
+   "issue": "(Previous reviewer, kept, c052112/cebb646/40268cd/5abd9da.) Several hand and state fixes: listeners filmed holding a shopping bag; coins were dropped from hands that held something; a friend stayed frozen in a photo pose; couples held hands around a coffee; a coffee vanished when a call started; people walked home at a slant into the yard wall; fed pigeons never came back. Also: a new closure every frame for meetings, debug counters left in the code, a curb place with too little room, and gestures fighting game/streetlife.js over the same hand.",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "Gestures and raised hands: a civilian with a gun pointed at them says \"Don't shoot!\" with the hands up (voices.aimAt sets armsUp, tone 'alarm'). gestureFor turned that line into a 'fist' gesture, and reachR takes priority over armsUp in doodle.js, so they shook a fist at the gun instead of keeping their hands up. Confirmed before and after with a browser probe (old version: reachR=true; now: false). Gestures now never override armsUp, surrender or a dance.",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "Curb overlap: each corner's waiting places were stored under each walker's own position, rounded to 3 m. Two people arriving a step apart were often treated as two different corners, each with its own first place, and could stand inside each other (steering is off while crossing). Corners are now keyed by the far corner their crossing goes to, and every slot uses the corner's own direction. Probe: 40 samples, 0 pairs closer than 0.45 m, closest pair 0.76 m.",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "Mall halls: routines also put sitters on the indoor benches (already the case on main) and on the fountain rim this branch added, inside an enclosed mall's hall. game/mall.js already uses those benches for its own shoppers. When routines let a sitter go, they walked straight toward the street through the hall walls and got stuck. Places inside a non-strip mall's hall are now skipped. Probe on the galleria: 8 benches and 1 fountain in the hall, 0 routine places.",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "Erased props: benches, planter rims and fountain rims can be rubbed out with the pen (world/objects.js). The people sitting on them stayed seated in the air, and new people were still sent to those seats. Each place now knows its prop (all 199 benches and 22 ledges matched). When the prop is erased, its sitters get up and leave, and nobody new sits there. Probe: after erasing a planter, the seat was free, sit=0, the person was released and baseY was 0. Also removed a pl.seats.concat() call that made a new array for every place every frame.",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "Tourist photos: the friend's posing spot was 2.6 m ahead along the walker's facing direction. Near a corner that put the friend in the road, and it could fall inside a bench or a pole (6 s of walking on the spot). The spot is now along the walk, flips back along it near the corner, and is used only where a person fits; otherwise the tourist takes a selfie. Probe: 18-21 walkers checked, every spot within 1.6 m of the walk line.",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "Wrong gestures from loose text matching: the laugh was read from the first two letters, so 'Have a nice day!', 'Half off!', 'Hands up!' and 'Happy hour!' were said holding the belly laughing. A wave was triggered by any line starting with 'hi', such as 'History...'. Both patterns now match whole words only (checked in the browser).",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "Voices: the grumble after being run into ('Jerk.') was only fired within 7 m, so if you ran off it waited until you came back, possibly minutes later. The impatient 'Seriously?' line was used for the rest of the game after the first 'Excuse me'. The grumble now only happens within 3 s, and the impatient line only within about 24 s of the previous one.",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "Civilians.remove() did not mark people as gone. Anyone still holding a reference to them (a posing friend, group members looking at them, a listener being released) treated them as still in the city. remove() now sets gone.",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "CPU cost: the civilians update is about 0.1-0.3 ms per frame higher on desktop with about 90 people (paired runs: +3% to +18% at the calle block), plus 0.05-0.1 ms for StreetSocial. Profiling shows it is spread out: more held items using the arm solver, heads turning, gestures, and more friend pairs updated every frame. There are no new per-frame allocations beyond the existing ctrl return pattern, and no O(n^2) work per frame. The builder had reported no measurable increase.",
+   "severity": "low",
+   "fixed": false
+  },
+  {
+   "issue": "The street musician strums the same chord every 0.62 s, which sounds monotonous (audio only; audio.js is not ours to change). In two staged shots the player figure hides a group standing right in front of the camera.",
+   "severity": "cosmetic",
+   "fixed": false
+  }
+ ],
+ "commits": [
+  "3e0b2e1 v5 GTA IV pass: pedestrians review (in progress): one corner, one row at the curb; a picture taken on the sidewalk (this review)",
+  "889c79d v5 GTA IV pass: pedestrians review (in progress): nobody left sitting on the air (this review)",
+  "299c4c5 v5 GTA IV pass: pedestrians review (in progress): hands up stay up; a laugh is a laugh (this review)",
+  "5abd9da / 40268cd / cebb646 / c052112 / 9eb758c: previous reviewer's fixes, re-read and kept",
+  "74425c6, 4bda00c: builder"
+ ],
+ "tests": [
+  "node --check passes on civilians.js, crowds.js, reactions.js, routines.js, ambient.js, voices.js and streetsocial.js; the working tree is clean; git diff 6277529..HEAD touches only the six owned files",
+  "func3 (640x360, current code), no [pageerror] and 0 errors in every step. Tourist pose spot: all inside the sidewalk. Places: bench+obj 199, ledge+obj 22. Erase test: the sitter got up and the seat was freed. At 21h: 4 groups including a 'night' one, calls and the musician. Rain 0.7: all groups, calls and the musician ended. Touch: 1 group of 2 and a crowd of 3 at the musician, within the caps. Island: 3 groups (friends, neighbours, tourists). Galleria: 0 routine places inside the hall",
+  "func2: curb waiting, 40 samples, 5 people waiting, at most 2 per corner, 0 overlaps, closest pair 0.76 m",
+  "final.json (1280x720): staged group of 3 friends. The speaker gestured with both hands and the listeners turned their heads to the speaker. gestureFor checked: 'Have a nice day!'->beat, 'Half off!'->explain, 'Ha ha ha!'->laugh, 'Hey guys!'->wave, 'History repeats.'->open",
+  "aim.json, old version (889c79d via git archive) vs current: aimed civilian with armsUp=1. Old: a raised fist over the raised hands (reachR=true). Now: hands stay up (reachR=false)",
+  "Memory, renderer process size: base and branch were alike at 320x180 (8x600 frames) and at 1280x720. Peak 4.3-4.6 GB while the world is built, settling at 1.4-2.9 GB, with no upward trend. Two earlier runs were OOM-killed because the 14 GB memory limit is shared by the whole team, and other agents' node world builds were running at the same time",
+  "Lab smoke test (?lab=1, 640x360) on the current code: identical to smoke/main.log"
+ ],
+ "lab_smoke": "[eval] 1 x5; [\"car\",\"sedan\",170]; [\"harpoon\",\"tow\",3.1,14]; [\"net\",\"net\",1]; [\"tesla\",\"emp\"]; [\"oil\",2,\"spin\"]; [\"decoy\",true,true,16.99,2]; \"{\\\"errors\\\":0,\\\"errs\\\":[]}\". Identical to /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/smoke/main.log, no [pageerror]. Log: /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/review_pedestrians/smoke.log",
+ "perf": "Measured against base_main (6277529) with perf2.json at 320x180, 13:00: calle block 3x600 frames after a 900-frame warm-up, then towers block 2x600. Each sample also timed a fixed reference loop to show machine load. Runs were interleaved (branch, base, branch, base).\n- Calle, civilians update per frame: base 1.81/1.71/1.70 and 2.47/2.00/1.91 ms; branch 2.19/1.77/1.94 and 2.47/2.27/1.84 ms. Mean +3% to +13%.\n- Towers: base 1.60/1.52 and 1.06/1.25 ms (base alone varies 1.06-1.60); branch 1.66/1.75 and 2.13/2.16 ms.\n- crowds update (StreetSocial): 0.01-0.02 ms on base, 0.06-0.13 ms on branch. Drawing the people (civDraw) is unchanged within noise. Total update per frame +0 to 6%.\n- Per-path profile at calle (prof.json): civilians 2.07 vs 1.75 ms. social() costs 0.02-0.05 ms (4-5 calls a frame). StreetSocial's people cost 0.13-0.26 ms. Ordinary walkers: 0.34-0.38 ms over 14-16 updates (base 0.44-0.49 over 25-30). Other scripted people: 0.93-1.07 vs 0.80-0.92 ms. Manager overhead is the same (0.36 ms). The branch does slightly fewer updates per frame, but each costs a little more.\n- Verdict: a modest +0.1 to 0.3 ms per frame on desktop with about 90 people, on a noisy machine. On touch the caps (1 group, 3 at the musician, 18 walkers) keep it smaller.\n- My own fixes add nothing per frame, and remove one array allocation per place per frame in routines.\n- Memory: base and branch renderer size are the same.",
+ "verdict": "ready",
+ "notes": "The branch is ready to merge into main. It was already in good shape; I found and fixed nine smaller real problems, none of which crashed the game.\n\n**How I worked**\n- I kept the five fixes by the previous reviewer, who was cut off before reporting. I re-read each one and they are correct.\n- I then re-read the whole diff 6277529..HEAD and checked every name it uses against the code: sounds, carried items, looks, the drawing calls, the fountain and planter sizes, weapons, the street notes.\n- Everything stays inside the owned files. There are no edits outside them and no debug code left.\n- The content rules hold: invented names only, no alcohol or smoking lines, English bubbles.\n\n**What I fixed (3 commits on gta4/pedestrians)**\n- **3e0b2e1:**\n  - People waiting at the curb no longer stand inside each other.\n  - A tourist's friend no longer poses out in the road or inside a bench.\n  - The \"Jerk.\" grumble and the impatient \"Seriously?\" no longer come minutes late.\n  - Nobody sits in an enclosed mall's hall any more. Those benches belong to the mall's own shoppers, and people let go there were walking into the hall walls.\n  - Civilians.remove() now marks people as gone.\n- **889c79d:** a bench, planter or fountain rim erased with the pen sends its sitters up and away. Nobody is left sitting in the air, and nobody new is sent there.\n- **299c4c5:** someone held at gunpoint keeps their hands up instead of shaking a fist at the gun. Lines like \"Have a nice day!\" no longer get the laugh gesture.\n\n**Checks**\n- Browser runs covered day, night (21h), rain, touch caps, the island, the galleria mall, erasing a prop and the gunpoint case.\n- No errors or [pageerror] in any run.\n- The lab smoke test matches the main branch exactly.\n\n**Performance**\n- The builder said there was no measurable increase. I measured a modest +0.1 to 0.3 ms per frame on desktop with about 90 people.\n- The cost is spread across many small things, and there are no new per-frame allocations. I judged it acceptable.\n\n**Not fixed**\n- The street musician strums the same chord every 0.62 s. It sounds monotonous, but the sound code is not ours to change.\n- In two staged shots the player hides a group standing right in front of the camera.\n\n**Images and notes**\n- My fixes don't change the look, so the builder's four before/after images are still accurate and I did not redo them. They are /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/pedestrians_1.jpg to pedestrians_4.jpg.\n- My notes and test scripts are in /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/notes/review_pedestrians.txt and /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/review_pedestrians/.\n- Warning for the team: test runs at 1280x720 that build several districts can be killed for lack of memory. The 14 GB limit is shared by everyone, and other agents' node world builds were running at the same time.",
+ "images": [
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/pedestrians_1.jpg",
+   "caption_he": "נגן רחוב עם גיטרה ונרתיק פתוח עם מטבעות; מעליו מילות שיר, ועוברים ושבים עוצרים להקשיב ולצלם"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/pedestrians_2.jpg",
+   "caption_he": "מרכז העיר בצהריים: מכרים קוראים זה לזה בשם, עוצרים ויוצאים יחד לארוחת צהריים"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/pedestrians_3.jpg",
+   "caption_he": "בצומת: ממתינים יחד על שפת המדרכה, מביטים בתנועה וחוצים יחד כשהאור מתחלף"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/pedestrians_4.jpg",
+   "caption_he": "חברים עוצרים לשיחה ליד התחנה, מדברים בתורות ומדברים גם בידיים"
+  }
+ ]
+}

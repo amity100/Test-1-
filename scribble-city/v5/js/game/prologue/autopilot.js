@@ -1,0 +1,806 @@
+// (v5, ROADMAP 18.9 round 10) the prologue played by itself, for its maker to watch: the admin's
+// film viewer (ui/admin.js) asks for it. Where the story hands the keys over - the tour (a walk, a
+// shop and something bought in it, a car, a drive, the pen), the pier, the man, the wheel, the
+// questions, the car park's climb, the ramp drawn, the jump, the way down, the beach - it plays
+// them, a cut here and there where the way is long; where the film holds the keys, it waits.
+import { PARK } from './carpark.js';
+import { BLUEPRINTS } from '../blueprints.js';
+
+const LILY_SEAT = { x: 40.2, z: 233.0 };
+const VIEW = { x: 63.5, z: 238.9 };
+const SITE = { x: 101.5, z: 242.6 };
+const LOOKOUT = { x: 60, z: 298 };
+const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+
+// the climb (round 11's car park): along a lane into the turn at the end of the floor, across it,
+// into the other lane, up its ramp - floor after floor - and on the roof round the north end's turn
+// into the run, west of its barriers
+const RN = PARK.main.zN;
+const RS = PARK.main.zS;
+const WLC = (PARK.lanes.W[0] + PARK.lanes.W[1]) / 2;
+const ELC = (PARK.lanes.E[0] + PARK.lanes.E[1]) / 2;
+const MX = PARK.main.xc;
+// (each ramp's foot come at straight along its lane: a point well short of it, in the lane, then the
+// ramp itself - a third number, how near is near enough, where it must be close)
+const UP = [[ELC, 268]];
+// (where the way up each floor starts in it: after a reset to a floor, the way on from there)
+const UP_AT = [];
+for (const r of PARK.ramps) {
+  UP_AT[r.k] = UP.length;
+  if (r.zLow === RN) UP.push([ELC, RN - 2], [ELC - 6, PARK.turnN], [MX, PARK.turnN - 4], [WLC + 2, PARK.turnN - 2], [WLC, RN - 8, 3], [WLC, RN + 3, 3], [WLC, RS + 5]);
+  else UP.push([WLC, RS + 2], [WLC + 6, PARK.turnS], [MX, PARK.turnS + 4], [ELC - 2, PARK.turnS + 2], [ELC, RS + 8, 3], [ELC, RS - 3, 3], [ELC, RN - 5]);
+}
+UP.push([ELC - 5, PARK.turnN], [MX, PARK.turnN - 3], [PARK.runup.x, PARK.turnN], [PARK.runup.x, RN + 12]);
+// and down Bayshore: a ramp a floor, round at the west end, round in the cross aisle
+const DOWN = [[-190, 340.6]];
+for (let k = 7; k >= 0; k--) {
+  if (k % 2 === 1) DOWN.push([-204, 340.6], [-238, 340.6], [-245, 336], [-245, 328]);
+  else {
+    DOWN.push([-234, 323.4], [-200, 323.4]);
+    if (k > 0) DOWN.push([-194, 328], [-194, 336]);
+  }
+}
+DOWN.push([-195.5, 323.4], [-195.5, 310]);
+
+export class Autopilot {
+  constructor(P) {
+    this.P = P;
+    this.g = P.game;
+    const inp = this.g.input;
+    // (the player's own sticks, given back at the end: kept by lock() while the film has them)
+    this.orig = P.saveRead || inp.readMove;
+    this.mv = { x: 0, y: 0, sprint: false };
+    this.mine = () => this.mv;
+    this.phase = '';
+    this.wp = 0;
+    this.did = {};
+    this.stuck = 0;
+    this.back = 0;
+    this.dt = 0.016;
+  }
+
+  // (back at where he came onto floor k - caught, or the car wrecked: the way on from there)
+  onReset(k) {
+    if (this.phase === 'up') this.wp = UP_AT[k] !== undefined ? UP_AT[k] : 0;
+    this.stuck = 0;
+    this.back = 0;
+  }
+
+  stop() {
+    const P = this.P;
+    const inp = this.g.input;
+    inp.flyUp = false;
+    inp.flyDown = false;
+    if (P.saveRead === this.mine) P.saveRead = this.orig;
+    if (inp.readMove === this.mine) inp.readMove = this.orig;
+  }
+
+  set(x, y, sprint = false) {
+    this.mv = { x, y, sprint };
+  }
+
+  once(k, fn) {
+    if (this.did[k] !== undefined) return;
+    this.did[k] = this.g.time;
+    fn();
+  }
+
+  since(k) {
+    return this.did[k] !== undefined ? this.g.time - this.did[k] : -1;
+  }
+
+  press(k) {
+    this.g.input.pressed.add(k);
+  }
+
+  walkTo(x, z, run = false, near = 1.2) {
+    const g = this.g;
+    const p = g.player;
+    const want = Math.atan2(x - p.pos.x, z - p.pos.z);
+    g.camRig.yaw += wrap(want - g.camRig.yaw) * Math.min(1, this.dt * 12);
+    const d = Math.hypot(x - p.pos.x, z - p.pos.z);
+    this.set(0, d > near ? 1 : 0, run && d > 4);
+    return d;
+  }
+
+  driveTo(x, z, top = 0.85) {
+    const c = this.g.player.inVehicle;
+    if (!c) return 99;
+    const da = wrap(Math.atan2(x - c.pos.x, z - c.pos.z) - c.yaw);
+    let thr = top;
+    // (going forward: by how fast it goes that way. Rolling backwards after a back-off, with where it is going behind it, it
+    // braked - backwards - for good: round and round the turn in reverse at nine metres a second. ROADMAP 23.19)
+    if (Math.abs(da) > 0.6 && c.speed > 8) thr = 0.1;
+    if (Math.abs(da) > 1.1 && c.speed > 5) thr = -0.4;
+    // (near the point and well off it: slow, not round and round it)
+    const dist = Math.hypot(x - c.pos.x, z - c.pos.z);
+    if (dist < 12 && Math.abs(da) > 0.5) thr = Math.min(thr, Math.abs(c.speed) > 6 ? -0.3 : 0.35);
+    let steer = Math.max(-1, Math.min(1, da * 2.2));
+    // (against something: back off a moment, the wheel the other way, and on)
+    if (thr > 0.3 && Math.abs(c.speed) < 1.0) this.stuck += this.dt;
+    else this.stuck = Math.max(0, this.stuck - this.dt / 2);
+    if (this.stuck > 1.4) {
+      this.stuck = 0;
+      this.back = 1.0;
+    }
+    // (against a parapet's end with its wheels still turning: its speed stays up and it goes nowhere - it stood so at the foot of
+    // a ramp for a minute and more, shot at. By how far it has got in a second and a half. ROADMAP 23.20)
+    const R = this.ref || (this.ref = { x: c.pos.x, z: c.pos.z, t: 0 });
+    R.t += this.dt;
+    if (R.t > 1.5) {
+      if (thr > 0.3 && this.back <= 0 && Math.hypot(c.pos.x - R.x, c.pos.z - R.z) < 1.2) {
+        this.back = 1.2;
+        this.stuck = 0;
+        // (and again at the same point of its way: it came at it from the wrong side - past the foot of a ramp, the ramp's wall
+        // between them. Back to the point two before it, and round to it again)
+        if (this.wp === this.snagWp) this.snagN++;
+        else {
+          this.snagWp = this.wp;
+          this.snagN = 1;
+        }
+        if (this.snagN >= 2 && this.wp >= 2) {
+          this.wp -= 2;
+          this.snagN = 0;
+          this.snagWp = -1;
+        }
+      }
+      R.x = c.pos.x;
+      R.z = c.pos.z;
+      R.t = 0;
+    }
+    if (this.back > 0) {
+      this.back -= this.dt;
+      thr = -0.8;
+      steer = -steer;
+    } else if (c.speed < -1.5) {
+      // (still rolling back when the back-off is over: forward again, the wheel as it was backing till it goes forward)
+      thr = 1;
+      steer = -steer;
+    }
+    this.set(-steer, thr);
+    return Math.hypot(x - c.pos.x, z - c.pos.z);
+  }
+
+  put(c, x, y, z, yaw, sp = 0) {
+    c.pos.set(x, y, z);
+    c.yaw = yaw;
+    c.speed = sp;
+    if ('vx' in c) {
+      c.vx = Math.sin(yaw) * sp;
+      c.vz = Math.cos(yaw) * sp;
+    }
+  }
+
+  follow(list, near = 5, top = 0.8) {
+    const c = this.g.player.inVehicle;
+    if (!c) return;
+    while (this.wp < list.length && Math.hypot(list[this.wp][0] - c.pos.x, list[this.wp][1] - c.pos.z) < (list[this.wp][2] || near)) this.wp++;
+    // (round and round a point it cannot turn tightly enough to touch - it went so on a floor for a minute and more: after some
+    // seconds at the same point and near it, the next. ROADMAP 23.20)
+    if (this.wp !== this.orbitWp) {
+      this.orbitWp = this.wp;
+      this.orbitT = 0;
+    } else if (this.wp < list.length) {
+      this.orbitT += this.dt;
+      if (this.orbitT > 5 && Math.hypot(list[this.wp][0] - c.pos.x, list[this.wp][1] - c.pos.z) < 9) this.wp++;
+    }
+    if (this.wp >= list.length) {
+      this.set(0, 0);
+      return;
+    }
+    this.driveTo(list[this.wp][0], list[this.wp][1], top);
+  }
+
+  // (the ramp, drawn as a player would: a line along the roof ahead to its edge, bowed up)
+  drawRamp(c, D) {
+    // (round 18: from the side - its slope, climbing from the roof by the car to the edge)
+    if (D.spec && D.spec.side && D.sideGuide) {
+      const G = D.sideGuide();
+      const pts = [];
+      for (let i = 0; i <= 24; i++) {
+        const u = i / 24;
+        const x = G.startX + (G.lipX - G.startX) * u;
+        const [wx, wz] = D.F.toWorld(x, D.spec.laneZ);
+        const q = D.toScreen(wx, D.spec.roofY + 0.3 + (G.h + 0.3) * Math.pow(u, 1.3), wz, [0, 0]);
+        if (q) pts.push([q[0], q[1]]);
+      }
+      D.pts = pts;
+      D.finish();
+      // (round 20: and its legs, straight down from it to the roof)
+      for (let k = 0; k < 3 && D.on; k++) {
+        const Lg = D.legAt(k);
+        const [wx, wz] = D.F.toWorld(Lg.x, D.spec.laneZ);
+        const lp = [];
+        for (let i = 0; i <= 8; i++) {
+          const q = D.toScreen(wx, Lg.top + (D.spec.roofY + 0.05 - Lg.top) * (i / 8), wz, [0, 0]);
+          if (q) lp.push([q[0], q[1]]);
+        }
+        D.pts = lp;
+        D.finish();
+      }
+      this.phase = 'drawn';
+      return;
+    }
+    const fx = Math.sin(c.yaw);
+    const fz = Math.cos(c.yaw);
+    const Ln = Math.max(10, (PARK.edge.z - c.pos.z) * Math.abs(fz) + 1.5);
+    const pts = [];
+    for (let i = 0; i <= 24; i++) {
+      const d = 4 + ((Ln - 4) * i) / 24;
+      const x = c.pos.x + fx * d;
+      const z = c.pos.z + fz * d;
+      const q = D.toScreen(x, D.floorY(x, z) + 0.04, z, [0, 0]);
+      if (q) pts.push([q[0], q[1]]);
+    }
+    if (pts.length > 3) {
+      const a = pts[0];
+      const b = pts[pts.length - 1];
+      const cl = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      pts.forEach((p, i) => {
+        p[1] -= Math.sin((Math.PI * i) / (pts.length - 1)) * cl * 0.14;
+      });
+    }
+    D.pts = pts;
+    D.finish();
+    this.phase = 'drawn';
+  }
+
+  // every frame, before the game reads its keys
+  tick(dt) {
+    this.dt = Math.min(0.1, dt || 0.016);
+    try {
+      this.step();
+    } catch (e) {
+      this.set(0, 0);
+    }
+  }
+
+  step() {
+    const g = this.g;
+    const P = this.P;
+    const pl = g.player;
+    const L = P.cast && P.cast.lily;
+    const c = pl.inVehicle;
+    const o = P.objKey || '';
+    const n = P.sceneN || 0;
+    // (the ramp drawn: the screen is the player's while the time all but stands - still locked)
+    if (n === 7 && c && P.draw && P.draw.on && this.phase !== 'drawn') {
+      this.drawRamp(c, P.draw);
+      return;
+    }
+    // (round 12: the rotor drawn on the car in the air - round 17: its X over the roof, as a hand draws
+    // it, on the pen's own page; again if it did not take)
+    if (P.drawingRotor && c) {
+      const fd = g.freedraw;
+      // (a beat first, the teaching pencil seen at its line - as a player would watch it)
+      this.once('rotorSeen', () => {});
+      const seen = (performance.now() - (this.seenAt || (this.seenAt = performance.now()))) / 1000;
+      if (fd && fd.isOpen && seen > 2.2 && (this.since('rotor') < 0 || this.since('rotor') > 3.5)) {
+        this.did.rotor = g.time;
+        this.drawRotor(c);
+      }
+      this.set(0, 0);
+      return;
+    }
+    // (the film's own walking while it holds the keys: lock's readMove - not touched then)
+    if (P.holdCam || P.locked) {
+      this.set(0, 0);
+      return;
+    }
+    g.input.readMove = this.mine;
+    // ---- 1. the tour
+    if (n === 1) return this.tour(o, pl, c);
+    // ---- 2-4. Lily, the pier, the wheel, the questions
+    if (n === 2) {
+      if (/pier/.test(o)) {
+        this.once('topier', () => {
+          P.putDanny(VIEW.x + 2, VIEW.z + 1, 0);
+          if (L) {
+            P.put(L, VIEW.x, VIEW.z);
+            L.pl.follow = true;
+          }
+        });
+      }
+      this.set(0, 0);
+      return;
+    }
+    if (n === 3) {
+      const m = P.cast.mark;
+      // (round 15: looking for him - running along the pier the way he went, after him while he is there)
+      if (/Look for him/.test(o)) {
+        if (m && m.alive) this.walkTo(m.pos.x, m.pos.z, true, 2.5);
+        else this.walkTo(pl.pos.x + 6, pl.pos.z, true, 1);
+        return;
+      }
+      if (/Go back to/.test(o) && L) {
+        this.once('back', () => P.putDanny(L.pos.x + 2.4, L.pos.z + 1.2, Math.atan2(-2.4, -1.2)));
+        this.walkTo(L.pos.x, L.pos.z, false, 1.6);
+        return;
+      }
+      if (/wheel/.test(o)) {
+        this.walkTo(SITE.x, SITE.z, false, 2);
+        return;
+      }
+      if (L) this.walkTo(L.pos.x, L.pos.z, false, 1.6);
+      return;
+    }
+    if (n === 4 || n === 5) {
+      const S = PARK.dannyStop;
+      // (round 22: his car at the curb by the pier - walked to, got into - and driven to the car park,
+      // a cut to 5th Street on the way, the way there being long)
+      const own = P.dannyCar;
+      if (/your <b>car/.test(o) && own && !c) {
+        const d = this.walkTo(own.pos.x, own.pos.z, true, 1.8);
+        if (d < 2.8 && (this.since('owncar') < 0 || this.since('owncar') > 1.0)) {
+          this.did.owncar = g.time;
+          this.press('KeyE');
+        }
+        return;
+      }
+      if (/car park/.test(o) && c) {
+        if (Math.hypot(c.pos.x - S.x, c.pos.z - S.z) > 70) this.once('to5th', () => this.put(c, S.x + 52, 0.1, 299.2, -Math.PI / 2, 9));
+        this.driveTo(S.x, 299.2, 0.6);
+        return;
+      }
+      if (/car/.test(o) || n === 5) {
+        if (c) return;
+        this.walkTo(S.x, S.z, false, 1);
+        return;
+      }
+      if (/wheel/.test(o)) {
+        this.walkTo(SITE.x, SITE.z, false, 2);
+        return;
+      }
+      this.set(0, 0);
+      return;
+    }
+    // ---- 6-9. the car park
+    if (n === 6) {
+      if (this.phase !== 'up') {
+        this.phase = 'up';
+        this.wp = 0;
+      }
+      this.follow(UP, 5, 0.85);
+      return;
+    }
+    if (n === 7 && c) {
+      const D = P.draw;
+      if (!(D && D.on) && this.phase !== 'drawn' && c.pos.z < PARK.edge.z - 62) {
+        const z = PARK.edge.z - 60.5;
+        const x = PARK.runup.x;
+        const y = PARK.floorAt(x, z, PARK.edge.y + 2);
+        this.put(c, x, (Number.isFinite(y) ? y : PARK.edge.y) + 0.06, z, 0, 14);
+        this.phase = 'run';
+      } else this.set(0, 1);
+      return;
+    }
+    if (n === 8 && c && !P.jump) {
+      this.set(0, 1);
+      this.once('s8', () => {});
+      if (this.since('s8') > 5 && P.ramp && P.ramp.P && P.draw && P.draw.F) {
+        this.once('lip', () => {
+          const prof = P.ramp.P;
+          const F = P.draw.F;
+          const [cx] = F.toLocal(c.pos.x, c.pos.z);
+          const [dx, dz] = F.toWorld(prof.lipX + 0.4 - cx, 0);
+          c.pos.set(c.pos.x + dx, P.draw.spec.roofY + prof.h * 0.95, c.pos.z + dz);
+          c.speed = 22;
+        });
+      }
+      return;
+    }
+    if (n === 9 && c) return this.flyHome(c);
+    this.set(0, 0);
+  }
+
+  tour(o, pl, c) {
+    const g = this.g;
+    // (R27: the opening's lessons - each done as a player would: the pen's lines drawn along the teaching pencil's, the
+    // library's rifle drawn over its blueprint and fired, the hidden page walked to and photographed)
+    if (this.boosting && !/Hit the <b>turbo<\/b>/.test(o)) {
+      this.boosting = false;
+      g.input.boost = false;
+    }
+    // (R29: the start kit at a tap - the pen opened, the wings touched in its list; game/partpen.js tapPut)
+    if (/tap <b>wings<\/b>|tap the <b>turbo<\/b>/.test(o)) {
+      this.set(0, 0);
+      if (!c) return;
+      const F = g.freedraw;
+      const id = /wings/.test(o) ? 'wing' : 'turbo';
+      if (F && !F.isOpen) {
+        const s = this.since('tpen');
+        if (s < 0 || s > 1.5) {
+          this.did.tpen = g.time;
+          F.show();
+        }
+        return;
+      }
+      const pen = g.fuse && g.fuse.pen;
+      if (this.since('tpen') > 1.6 && pen && (this.since('tput') < 0 || this.since('tput') > 3)) {
+        this.did.tput = g.time;
+        // (the item in the pen's list, touched as a finger touches it)
+        const el = document.querySelector(`#pp-legend .pp-it[data-i="${id}"]`);
+        this.P.tapSeen = { id, el: !!el, cls: el ? el.className : '' };
+        if (el) el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+        else pen.tapPut(id);
+      }
+      return;
+    }
+    if (/<b>wings<\/b> on the car/.test(o)) {
+      this.set(0, 0);
+      if (!c) return;
+      const F = g.freedraw;
+      if (F && !F.isOpen) {
+        const s = this.since('wpen');
+        if (s < 0 || s > 1.5) {
+          this.did.wpen = g.time;
+          F.show();
+        }
+        return;
+      }
+      if (this.since('wpen') > 2.4 && this.P.wingPts && (this.since('wings') < 0 || this.since('wings') > 4)) {
+        this.did.wings = g.time;
+        this.drawLine(this.P.wingPts);
+      }
+      return;
+    }
+    if (/on foot<\/b> now/.test(o)) {
+      this.set(0, 0);
+      const s = this.since('getout');
+      if (c && (s < 0 || s > 1.2)) {
+        this.did.getout = g.time;
+        this.press('KeyE');
+      }
+      return;
+    }
+    if (/tap the <b>pencil rifle<\/b>/.test(o)) {
+      this.set(0, 0);
+      const F = g.freedraw;
+      if (!F || c) return;
+      this.once('rifle', () => F.show());
+      // (R29: in the library at a tap - touched in the list, a finger's down and up on it)
+      if (this.since('rifle') > 1.6) {
+        this.once('riflepick', () => {
+          const el = document.querySelector('.fd-it[data-i="rifle"]');
+          this.P.tapSeen = { id: 'rifle', el: !!el, cls: el ? el.className : '' };
+          if (!el) return F.quick('rifle');
+          const r = el.getBoundingClientRect();
+          const q = { bubbles: true, cancelable: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2, pointerType: 'mouse' };
+          el.dispatchEvent(new PointerEvent('pointerdown', q));
+          el.dispatchEvent(new PointerEvent('pointerup', q));
+        });
+      }
+      if (this.since('rifle') > 5) this.once('rifleshut', () => F.isOpen && F.close());
+      return;
+    }
+    if (/pencil rifle<\/b>/.test(o)) {
+      this.set(0, 0);
+      const F = g.freedraw;
+      if (!F || c) return;
+      this.once('rifle', () => F.show());
+      if (this.since('rifle') > 2.2) {
+        this.once('rifledraw', () => {
+          if (!F.isOpen || !BLUEPRINTS.rifle) return;
+          F.inkBp(BLUEPRINTS.rifle);
+          F.bake();
+          F.read();
+          F.render();
+          F.make();
+        });
+      }
+      if (this.since('rifle') > 5) this.once('rifleshut', () => F.isOpen && F.close());
+      return;
+    }
+    if (/<b>fire<\/b> the rifle/.test(o)) {
+      this.set(0, 0);
+      const s = this.since('fire');
+      if (s < 0 || s > 1.5) {
+        this.did.fire = g.time;
+        g.input.fire = true;
+        setTimeout(() => (g.input.fire = false), 350);
+      }
+      return;
+    }
+    // (R29: drawn at the page - the tray's card over the page's lines, drawn over as a hand would: every point of its guide)
+    if (/Draw the blueprint over its lines/.test(o)) {
+      this.set(0, 0);
+      const T = g.tray && g.tray.tracing;
+      if (T && !T.done && T.pts && this.since('hdraw') < 0) {
+        this.did.hdraw = g.time;
+        setTimeout(() => {
+          const T2 = g.tray.tracing;
+          if (!T2 || T2.done) return;
+          T2.strokes = T2.guide.map((L) => L.map(([x, y]) => [T2.ox + x * T2.k, T2.oy + y * T2.k]));
+          T2.hit = new Set(T2.pts.map((q, i) => i));
+          T2.cur = null;
+          g.tray.traceUp();
+        }, 1800);
+      }
+      return;
+    }
+    if (/<b>find it<\/b>|<b>Photograph<\/b> the blueprint/.test(o)) {
+      const FI = g.finds;
+      const sp = FI && FI.ensureSpots().find((q) => q.f.id === 'turbo1');
+      if (!sp) return;
+      if (c) {
+        const s = this.since('fout');
+        this.set(0, 0);
+        if (s < 0 || s > 1.2) {
+          this.did.fout = g.time;
+          this.press('KeyE');
+        }
+        return;
+      }
+      // (a few seconds on the card that says where it is - the special vision on, as a player would - then taken to the alley's
+      // mouth and walked up to the page)
+      this.once('fseen', () => g.vision && g.vision.toggle());
+      if (this.since('fseen') < 3) return this.set(0, 0);
+      // (out from the page as far as the alley lets him - not through the building across it)
+      this.once('fgo', () => {
+        const col = g.world && g.world.collision;
+        const hit = col ? col.raycast(sp.x + sp.nx * 0.3, 1.0, sp.z + sp.nz * 0.3, sp.nx, 0, sp.nz, 14) : null;
+        const free = hit ? Math.hypot(hit.x - sp.x, hit.z - sp.z) : 14;
+        const k = Math.max(3, Math.min(14, free - 1.5));
+        pl.spawn(sp.x + sp.nx * k, sp.z + sp.nz * k, Math.atan2(-sp.nx, -sp.nz));
+      });
+      const d = this.walkTo(sp.x + sp.nx * 1.4, sp.z + sp.nz * 1.4, false, 0.5);
+      // (near it: turned to the page, photographed as soon as the camera can - from where he stands, if a bin is in the way)
+      const dp = Math.hypot(sp.x - pl.pos.x, sp.z - pl.pos.z);
+      if (dp < 7) {
+        g.camRig.yaw = Math.atan2(-sp.nx, -sp.nz);
+        g.camRig.pitch = 0.05;
+      }
+      if ((d < 0.8 || this.since('fgo') > 8) && FI.target()) {
+        this.once('fsnap', () => {
+          // (for the tests: how near he could walk to it)
+          this.P.snapD = +d.toFixed(2);
+          // (R29: the two ways - photographed (F) or drawn here (E); ?pilotfind=draw for the second)
+          const T = FI.target();
+          if (g.params && g.params.get('pilotfind') === 'draw' && T && T.draw) this.press('KeyE');
+          else if (T) FI.snap(T.s);
+        });
+      }
+      return;
+    }
+    if (/^Get in a <b>car<\/b>$/.test(o)) {
+      if (c) return this.set(0, 0);
+      const car = this.P.tutCar && !this.P.tutCar.gone ? this.P.tutCar : null;
+      if (!car) return this.set(0, 1);
+      const fx = Math.sin(car.yaw);
+      const fz = Math.cos(car.yaw);
+      this.once('gin', () => pl.spawn(car.pos.x + fz * 2.2, car.pos.z - fx * 2.2, 0));
+      const d = this.walkTo(car.pos.x, car.pos.z, false, 1.8);
+      const s = this.since('ginE');
+      if (d < 2.8 && (s < 0 || s > 1)) {
+        this.did.ginE = g.time;
+        this.press('KeyE');
+      }
+      return;
+    }
+    if (/Hit the <b>turbo<\/b>/.test(o) && c) {
+      // (along the streets toward where Lily waits, and the turbo once it is going)
+      this.driveTo(25, 214, 1);
+      this.boosting = true;
+      g.input.boost = c.speed > 10;
+      return;
+    }
+    if (/Explore|Walk around/.test(o)) {
+      this.set(0, 1, false);
+      return;
+    }
+    if (/shop/.test(o)) {
+      this.once('shop', () => {
+        const SL = g.streetlife;
+        const shops = SL && SL.active ? [...SL.active.values()].filter((a) => a.open && a.keeper && a.keeper.alive && a.room && /cafe|grocery|tacos|bakery|deli|pizza|diner|juice|ice/.test((a.shop && a.shop.kind) || '')) : [];
+        let best = null;
+        let bd = 1e9;
+        for (const a of shops) {
+          const d = Math.hypot(a.keeper.pos.x - pl.pos.x, a.keeper.pos.z - pl.pos.z);
+          if (d < bd) {
+            bd = d;
+            best = a;
+          }
+        }
+        this.shop = best;
+        if (best) {
+          const k = best.keeper.pos;
+          pl.pos.set(k.x + 1.6, k.y || 0, k.z + 0.4);
+          g.camRig.yaw = Math.atan2(k.x - pl.pos.x, k.z - pl.pos.z);
+        }
+      });
+      const a = this.shop;
+      if (a) {
+        const k = a.keeper.pos;
+        const d = this.walkTo(k.x, k.z, false, 1.3);
+        if (d < 1.6 && this.since('shop') > 1.2) this.once('buy', () => g.streetlife.interact());
+        if (this.since('buy') > 1.4 && g.dialog && g.dialog.open) this.once('pick', () => g.dialog.pick(0));
+      } else this.set(0, 1);
+      return;
+    }
+    if (/Take a|Break into/.test(o)) {
+      this.once('car', () => {
+        let best = null;
+        let bd = 1e9;
+        for (const q of (g.traffic && g.traffic.parked) || []) {
+          if (!q.parkedCar || q.gone) continue;
+          const d = Math.hypot(q.pos.x - pl.pos.x, q.pos.z - pl.pos.z);
+          if (d < bd) {
+            bd = d;
+            best = q;
+          }
+        }
+        this.car = best;
+        if (best) {
+          const fx = Math.sin(best.yaw);
+          const fz = Math.cos(best.yaw);
+          pl.pos.set(best.pos.x + fz * 2.2, 0.1, best.pos.z - fx * 2.2);
+        }
+      });
+      if (this.car && !c) {
+        const d = this.walkTo(this.car.pos.x, this.car.pos.z, false, 1.8);
+        if (d < 2.6 && this.since('car') > 0.8) this.press('KeyE');
+      }
+      return;
+    }
+    if (/Drive/.test(o) && c) {
+      this.set(0, 0.8);
+      return;
+    }
+    // (round 17: in the car, the pen out on it and the turbo drawn - the flame out of its back, along
+    // the teaching pencil's own line, as a hand draws it)
+    if (/turbo<\/b> on the car/.test(o) && pl.inVehicle) {
+      // (drawn once on the car: the objective says so now)
+      this.set(0, 0);
+      const F = g.freedraw;
+      if (F && !F.isOpen) {
+        const s = this.since('penopen');
+        if (s < 0 || s > 1.5) {
+          this.did.penopen = g.time;
+          F.show();
+        }
+        return;
+      }
+      if (this.since('penopen') > 2.4 && this.P.turboPts && !(F.group && F.group.length) && (this.since('turbo') < 0 || this.since('turbo') > 4)) {
+        this.did.turbo = g.time;
+        this.drawLine(this.P.turboPts);
+      }
+      return;
+    }
+    if (/Draw|draw<\/b> a weapon/.test(o)) {
+      this.set(0, 0.2);
+      // (out of the car first: the list is the pen's on foot)
+      if (pl.inVehicle) {
+        const s = this.since('penout');
+        if (s < 0 || s > 1.2) {
+          this.did.penout = this.g.time;
+          this.press('KeyE');
+        }
+        return;
+      }
+      // (round 15: one of the short list picked, and drawn as a player would - its own lines)
+      this.once('pen', () => {
+        if (g.freedraw) g.freedraw.learn('paint');
+      });
+      if (this.since('pen') > 1.6) {
+        this.once('pendraw', () => {
+          const F = g.freedraw;
+          if (!F || !F.isOpen || !BLUEPRINTS.paint) return;
+          F.inkBp(BLUEPRINTS.paint);
+          F.bake();
+          F.read();
+          F.render();
+          F.make();
+        });
+      }
+      if (this.since('pen') > 5) {
+        this.once('penshut', () => {
+          if (g.freedraw) g.freedraw.close();
+        });
+      }
+      return;
+    }
+    if (/Lily/.test(o)) {
+      if (c) {
+        this.once('tolily', () => this.put(c, 24.5, c.pos.y || 0.2, 214, 0.35, 6));
+        if (this.since('tolily') > 2.2) this.press('KeyE');
+        else this.set(0, 0.3);
+        return;
+      }
+      this.walkTo(LILY_SEAT.x, LILY_SEAT.z, true, 1);
+      return;
+    }
+    this.set(0, 0);
+  }
+
+  // (round 17) one line (screen px) drawn as a pointer would: down, along it, up
+  drawLine(pts) {
+    const cv = typeof document !== 'undefined' ? document.getElementById('fd-air') : null;
+    if (!cv || !pts || pts.length < 2) return;
+    const ev = (type, x, y) => {
+      try {
+        cv.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, pointerId: 72, button: 0, buttons: type === 'pointerup' ? 0 : 1, bubbles: true, cancelable: true, pointerType: 'mouse' }));
+      } catch (e) {
+        // (no pointer events here)
+      }
+    };
+    ev('pointerdown', pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ev('pointermove', pts[i][0], pts[i][1]);
+    ev('pointerup', pts[pts.length - 1][0], pts[pts.length - 1][1]);
+  }
+
+  // (round 17) the rotor's X over the roof drawn as a pointer would: one stroke corner to corner, the
+  // other across it (game/prologue/director.js rotorBox)
+  drawRotor(c) {
+    const cv = typeof document !== 'undefined' ? document.getElementById('fd-air') : null;
+    if (!cv || !this.P.rotorBox) return;
+    const { c: q } = this.P.rotorBox(c);
+    const ev = (type, x, y) => {
+      try {
+        cv.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, pointerId: 71, button: 0, buttons: type === 'pointerup' ? 0 : 1, bubbles: true, cancelable: true, pointerType: 'mouse' }));
+      } catch (e) {
+        // (no pointer events here)
+      }
+    };
+    for (const [[x0, y0], [x1, y1]] of [[q[0], q[2]], [q[1], q[3]]]) {
+      ev('pointerdown', x0, y0);
+      for (let i = 1; i <= 16; i++) ev('pointermove', x0 + ((x1 - x0) * i) / 16, y0 + ((y1 - y0) * i) / 16);
+      ev('pointerup', x1, y1);
+    }
+  }
+
+  // (round 12) on its rotor to the beach: high over the hotels, on, and down onto the sand
+  flyHome(c) {
+    const g = this.g;
+    const inp = g.input;
+    const flying = !!(c.fz && c.fz.rotor > 0) && c.air;
+    const d = Math.hypot(LOOKOUT.x - c.pos.x, LOOKOUT.z - c.pos.z);
+    if (!flying) {
+      inp.flyUp = false;
+      inp.flyDown = false;
+      this.set(0, c.speed > 1 ? -0.6 : 0);
+      return;
+    }
+    inp.flyUp = d > 40 && c.pos.y < 52;
+    inp.flyDown = d < 24;
+    if (d < 24) {
+      this.set(0, 0);
+      return;
+    }
+    // (as a helicopter is flown: turned to it first, then on - slower the nearer it is)
+    const da = wrap(Math.atan2(LOOKOUT.x - c.pos.x, LOOKOUT.z - c.pos.z) - c.yaw);
+    const steer = Math.max(-1, Math.min(1, da * 2.2));
+    const on = Math.abs(da) > 0.5 ? 0 : d > 70 ? 1 : d > 35 ? 0.45 : 0.22;
+    this.set(-steer, on);
+  }
+
+  away(o, c) {
+    if (/street/.test(o)) {
+      if (this.phase !== 'down') {
+        this.phase = 'down';
+        this.wp = 0;
+        this.once('down', () => {});
+      }
+      // (the first ramps driven - then, a cut, the last of the way down: the street floor at the gate)
+      if (this.since('down') > 9) this.once('gate', () => this.put(c, -195.5, 0.25, 326, Math.PI, 4));
+      if (this.did.gate !== undefined) {
+        this.driveTo(-195.5, 300, 0.6);
+        return;
+      }
+      this.follow(DOWN, 3.5, 0.6);
+      return;
+    }
+    if (/Lose/.test(o)) {
+      this.once('lose', () => {});
+      if (this.since('lose') > 4) this.once('beach', () => this.put(c, LOOKOUT.x - 13, 0.5, LOOKOUT.z - 6, 0.7, 8));
+      this.driveTo(LOOKOUT.x, LOOKOUT.z, this.did.beach !== undefined ? 0.4 : 0.9);
+      return;
+    }
+    if (/quiet/.test(o)) {
+      const d = Math.hypot(LOOKOUT.x - c.pos.x, LOOKOUT.z - c.pos.z);
+      if (d < 10) this.set(0, c.speed > 1 ? -0.6 : 0);
+      else this.driveTo(LOOKOUT.x, LOOKOUT.z, 0.5);
+      return;
+    }
+    this.set(0, 0);
+  }
+}

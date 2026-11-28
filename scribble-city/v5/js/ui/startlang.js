@@ -1,0 +1,104 @@
+import { lang, setLang, applyStaticLang } from '../core/lang.js';
+
+// (round 16, the player's word) The start screen's choice of language: עברית / English - its own
+// words switched at once, and the story told in it (core/lang.js).
+
+const $ = (id) => document.getElementById(id);
+
+const WORDS = {
+  he: {
+    kicker: 'חוף מיאמי · שקיעה',
+    title: 'Beyond the Outline',
+    sub: 'מה שמציירים — אמיתי',
+    tip: 'טיפ',
+    start: 'יוצאים לעיר',
+    loading: 'טוען את העטים…',
+    cont: 'המשך מאיפה שהפסקתם',
+    tips: [
+      'מה שמציירים נהיה אמיתי: ציירו באוויר רובה, חרב או אפילו מסוק — והם בידיים שלכם.',
+      'כל מכונית שחונה ברחוב יכולה להיות שלכם. רק שהמשטרה לא תראה.',
+      'טורבו על המכונית — והיא טסה קדימה.',
+      'ציור שציירתם פעם אחת נשמר אצלכם — ומאז הוא מוכן בלחיצה.',
+      'מצלמים שלטי שרטוטים ברחבי העיר ומציירים אותם. ככל שהציור טוב יותר — הנשק חזק יותר.',
+      'נכנסים לכל חנות שהדלת שלה פתוחה: לקנות, לאכול, או סתם להסתכל.',
+    ],
+  },
+  en: {
+    kicker: 'Miami Beach · Sunset',
+    title: 'Beyond the Outline',
+    sub: 'What you draw is real',
+    tip: 'Tip',
+    start: 'Into the city',
+    loading: 'Sharpening the pens…',
+    cont: 'Continue where you left off',
+    tips: [
+      'What you draw becomes real: sketch a rifle, a sword, even a helicopter in the air — and it’s in your hands.',
+      'Any car parked on the street can be yours. Just don’t let the cops see you.',
+      'Draw a turbo on your car — and it rockets forward.',
+      'Anything you’ve drawn once is saved — after that it’s ready at a tap.',
+      'Photograph blueprint signs around the city and draw them. The better your drawing, the stronger the weapon.',
+      'Walk into any shop with an open door: buy, eat, or just look around.',
+    ],
+  },
+};
+
+// the start screen's words in the language chosen
+export function applyStartLang() {
+  const L = lang();
+  const W = WORDS[L];
+  document.documentElement.lang = L;
+  document.documentElement.dir = L === 'he' ? 'rtl' : 'ltr';
+  document.body.classList.toggle('lang-en', L === 'en');
+  document.body.classList.toggle('lang-he', L === 'he');
+  const logo = document.querySelector('.ld-logo');
+  if (logo) {
+    const k = logo.querySelector('.ld-kicker');
+    const h = logo.querySelector('h1');
+    const s = logo.querySelector('.ld-sub');
+    if (k) k.textContent = W.kicker;
+    if (h) h.textContent = W.title;
+    if (s) s.textContent = W.sub;
+  }
+  const tips = document.querySelector('.ld-tips');
+  if (tips) {
+    const th = tips.querySelector('.ld-tip-h');
+    if (th) th.textContent = W.tip;
+    tips.querySelectorAll('p').forEach((p, i) => {
+      if (W.tips[i]) p.textContent = W.tips[i];
+    });
+    tips.dir = L === 'en' ? 'ltr' : 'rtl';
+  }
+  const sb = $('start-btn');
+  if (sb) sb.textContent = sb.disabled ? W.loading : W.start;
+  const cb = $('continue-btn');
+  if (cb && cb.firstChild && cb.firstChild.nodeType === 3) cb.firstChild.textContent = W.cont;
+  const pick = $('lang-pick');
+  if (pick) pick.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.l === L));
+}
+
+export function setupStartLang() {
+  const pick = $('lang-pick');
+  if (pick) {
+    pick.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-l]');
+      if (!b) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // (ROADMAP 24: the whole game speaks the language chosen, and its modules read their words once, as they load - a change
+      // of language loads the page again; the choice is kept)
+      const was = lang();
+      setLang(b.dataset.l);
+      if (lang() !== was) {
+        try {
+          location.reload();
+          return;
+        } catch (err) {
+          // (cannot: the start screen's own words at least)
+        }
+      }
+      applyStartLang();
+    });
+  }
+  applyStaticLang();
+  applyStartLang();
+}

@@ -1,0 +1,140 @@
+{
+ "aspect": "Living traffic (traffic) - adversarial review and fixes on gta4/traffic (worktree /home/user/Test-1-/.claude/worktrees/wf_a71e1740-598-3)",
+ "issues": [
+  {
+   "issue": "Cars pulling over to the curb slid straight through parked cars. This hit taxis, delivery vans, cars stopped by the police and cars parking. When c.pull was set, the car slid sideways at once, 12-20 m before its space (vans 16 m, taxis 14 m), and went through the cars parked in between. The browser overlap monitor measured up to 0.31 m inside parked cars. Fixed with a new pull model in Traffic.mind: the car is steered sideways only as it rolls, in metres sideways per metre forward, with the nose turned the way it goes. A new Traffic.roomBeside check, refreshed every 0.1 s, keeps it out of the parking lane wherever a parked car is beside it or just ahead before its stop point (pullLeft). Cars come up to a space at 4.5 m/s or less. A space is taken only if it is long enough to drive into nose first (Curbs.freeRun). Only one car may aim for a given space. Every pull-over now checks the parked cars beside it, and parked cars standing at an angle are measured by their corners (sideOf).",
+   "severity": "high",
+   "fixed": true
+  },
+  {
+   "issue": "A car pulling out of its space drove its front corner into the car parked in front, up to 1.06 m deep (265 monitor hits). Fixed: the car now turns out on full lock (steepness 1.0, faster ramp), and its nose is drawn turned as steeply as it is steered. Before, the drawn turn was capped at 18 degrees and lagged at low speed. In a tight space the car first backs up to 1.4 m into the room behind it, with straight wheels. Then it turns its wheels out and signals. A car with no room at either end is never chosen to leave.",
+   "severity": "high",
+   "fixed": true
+  },
+  {
+   "issue": "Leak: a person walking to their parked car who got frightened was never released (Curbs.update skipped release when 'lost'). They stayed scripted with owner=curbs and their ctrl, walked on to the driver's door and stood in the road there forever. Scripted people with an owner are never despawned. Fixed: they are released and rejoin the street, as deliveries.js already did.",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "When a block streamed out, its curb and lot cars were not marked gone. damage.js kept them in its set. A burning one could later explode and call traffic.unpark with a collision box id that the city had already given to another block, switching off a wall or prop box. Fixed: dropped and unvisited cars are marked gone and their box is cleared. Verified in the browser: a burning curb car, then a jump across the map leaves the damage set empty and the old box freed and untouched.",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "The walk to a leaving car was wrong in two ways. The walker went round the car's back at a fixed 0.9-1.2 m, which is through the car behind when the gap is smaller. And the walker spawned 7-11 m from a car chosen in plain view, so they popped up on screen. Fixed: the walker goes through the middle of a real gap (Curbs.gap). The driver is preferably a passer-by already on that sidewalk, otherwise someone coming from out of view or 50 m+ away (the civilians.js rule). The driver sits in with the left signal on and waits for the lane to clear (laneClear) before pulling out.",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "With curbs now lined with parked cars, taxi fares walked through a parked car to the curb-side back door, and got out into one. Fixed: the taxi stops with its back door at the nearest gap (Curbs.gapAt, unit-tested). The search stops a few metres short of the next crossing. The fare walks along the sidewalk to the gap and then through it.",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "Cars in lots and on driveways were drawn at road height (y=0), sunk 0.15 m into the lot up to their hubs. That was 111 of 297 parked cars near Little Havana, including the island's. Fixed with lotHeight: they now stand on the ground (close-up shot after_lot_close.png).",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "Cars parked by the traffic (parkIt) were left a few degrees askew, or as little as 70% into the space. That is up to 0.28 m into the traffic lane, so passing cars would clip them. Fixed: the car creeps on until it is straight and squares up to the curb. It parks only when it is at least 2.05 m in; otherwise it gives up the space and drives on.",
+   "severity": "medium",
+   "fixed": true
+  },
+  {
+   "issue": "Cars that had just parked (parkIt) stayed in Traffic.list for up to 0.8 s. pushOut, collideVehicle and signs.js do not skip gone cars. Fixed: gone cars are filtered out of the list at the end of the same update.",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "When a block streamed back in, its seeded curb cars could be placed on top of a car the traffic had parked there, or on top of the player's own car left at the curb. Fixed: Curbs.add keeps those places clear. The rng call order is unchanged.",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "Builder's known issue: a police stop or a double-parked delivery van could take a bus stop's place, and the bus behind could not pull in. Fixed with Traffic.nearStop: patrol stops and van shops skip bus stops.",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "spawnPatrol slowed the patrol car in ?classic too, where behaviour should stay as before. Fixed.",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "Curb cars' half-lengths were shorter than the drawn models (a sedan's box was 15 cm short), so gaps were tighter than computed. Fixed: HALF_LEN now uses the drawn lengths.",
+   "severity": "low",
+   "fixed": true
+  },
+  {
+   "issue": "Performance cost of the branch against the main branch (Little Havana, 320x180, per update). traffic.update: 0.37-0.38 ms → 0.43-0.68 ms (more cars). traffic.draw: 0.09-0.13 ms → 0.26-0.44 ms (about 68 parked cars drawn). On phones (touch caps) draw goes from 0.10 to about 0.23-0.39 ms. My fixes cost nothing measurable (pre-fix 0.65/0.68 update vs final 0.43/0.60). Not reduced further: caching the parked cars' instances would need render/cars.js, which is not an owned file.",
+   "severity": "medium",
+   "fixed": false
+  },
+  {
+   "issue": "Outside the owned files: while active, lab gear (gearweap*, gearguard2) calls gearfx.cars() every frame, which builds an array from traffic.list plus traffic.parked (about 600 cars on the mainland now). Cost is small; noted only.",
+   "severity": "low",
+   "fixed": false
+  },
+  {
+   "issue": "Parked cars' headlights glow in daylight (render/cars.js emissive 'head' material). This was already true for the island's parked cars; not an owned file.",
+   "severity": "low",
+   "fixed": false
+  },
+  {
+   "issue": "Builder's known issue, left as is: cars outside the view are not drawn, so at very low sun a long shadow from a car just off-screen can be missing at the screen edge.",
+   "severity": "low",
+   "fixed": false
+  }
+ ],
+ "commits": [
+  "d72ab23 v5 GTA IV review (gta4/traffic, in progress): cars ease into the curb round the parked ones, not through them; nobody left at a car door",
+  "6db024c v5 GTA IV review (gta4/traffic, in progress): cars in the lots stand on their ground; a driver who parked walks out through the wider gap",
+  "09784fb v5 GTA IV review (gta4/traffic, in progress): a taxi stops with its back door at a gap in the parked cars",
+  "c2bfecb v5 GTA IV review (gta4/traffic, in progress): the nose's turn into the curb smoothed",
+  "5dc3469 v5 GTA IV review (gta4/traffic, in progress): nobody is pulled over, nor double-parks a van, in a bus stop's place",
+  "62474af v5 GTA IV review (gta4/traffic, in progress): no darting into the hand's-width gaps on the way to a space",
+  "206046d v5 GTA IV review (gta4/traffic, in progress): the driver of a car leaving the curb may come from far enough off",
+  "d79ac91 v5 GTA IV review (gta4/traffic, in progress): a car pulls out of a tight space on full lock, round the car in front",
+  "b97bdb4 v5 GTA IV review (gta4/traffic, in progress): a car in a tight space backs up a little before it pulls out",
+  "d3fe802 v5 GTA IV review (gta4/traffic): a taxi looking for a gap at the curb keeps short of the crossing",
+  "9d3fbc1 v5 GTA IV review (gta4/traffic): one car to a space; every pull-over minds the cars parked beside it",
+  "9668add v5 GTA IV review (gta4/traffic): a parked car askew is minded by its corners; one parks square, and in far enough"
+ ],
+ "tests": [
+  "node --check on traffic.js, curbs.js, fleet.js, deliveries.js and patrol.js after every change: all pass.",
+  "Ownership: git diff 6277529..HEAD touches only traffic.js, fleet.js and the new curbs.js, deliveries.js and patrol.js. No outside edits, no console logs.",
+  "Unit test of Curbs.gapAt on made-up curbs (review_traffic/unit/gap_test.mjs): empty curb, a long gap, nose-to-tail rows. All give the expected stop point.",
+  "Clean test setup: every browser run used a git-archive export of a commit (review_traffic/pre = 301bf64, post1..post8). Editing the worktree during a run could not mix code versions.",
+  "Overlap monitor: a wrapper on traffic.update that runs a separating-axis test between every car easing over and every parked car near it, and later also between all traffic and the cars the traffic parked. Events were forced every 5 s: cars leaving the curb, cars parking, vans, patrol stops. Max penetration by run: r3 0.31 m (6 hits), r4 1.06 m (265, pull-outs), r5 0.27 m (9), r6 0, r7 0.19 m (18), r8 0.21 m (70), r9 on the final code: 0 hits over 5384 pull-frames.",
+  "Final functional run r9 (func_r9.json, 1280x720, HEAD 9668add). Result: no [pageerror]. Leaving the curb: 9 cars in view, 9 eligible, 3 of 6 attempts started, all with passers-by. 7 cars left the curb, 6 parked, 2 vans stopped and delivered 2 boxes, 3 patrol stops.",
+  "Burn and stream-out test in r9: a curb car set on fire, then a jump to the far end of the map and back. The car is gone, the damage set is empty, its old box is freed and untouched. Curb cars overlapping each other: 0. Scripted people still owned by curbs, deliveries or patrol after coming back: 0/0/0.",
+  "Night 22:30 with rain and phone caps (g.touch): 0 overlap hits, no errors. Island (09:00): buses sent 4 / served 1, yields 8, slow starts 7, garbage truck spawned, no errors.",
+  "Probe (before my fixes): 111 lot cars standing on CURB ground were drawn at y=0. Curb car boxes against non-car boxes: 0 hits. Curb overlaps: 0.",
+  "After shots, 1280x720, from the builder's final.json cameras on b97bdb4: bus at the stop with 3 boarding and 1 alighting; side street; crossing; lot; delivery (2 boxes); delivery_b; police. Plus lot_close, park_in and parked_in.",
+  "Police scene re-staged away from bus stops and hot dog carts. Shot on the branch (s3_post5) and on base_main (s2_base) with the same camera.",
+  "Perf pairs at 320x180 (300-update samples): base_main, pre-fix (301bf64), post2 and post5."
+ ],
+ "lab_smoke": "Ran on the final code (HEAD 9668add, export post8): runs/smoke_post8.log. Its [eval] lines are identical to the baseline smoke/main.log: [\"car\",\"sedan\",170]; [\"harpoon\",\"tow\",3.1,14]; [\"net\",\"net\",1]; [\"tesla\",\"emp\"]; [\"oil\",2,\"spin\"]; [\"decoy\",true,true,16.99,2]; \"{\\\"errors\\\":0,\\\"errs\\\":[]}\". No [pageerror], no step errors. The intermediate versions post5, post6 and post7 gave identical results too.",
+ "perf": "Measured at Little Havana, 320x180, headless software WebGL, 300 updates per sample (2 samples desktop, 1 with phone caps). Numbers are ms per update.\n\n- **base_main:** traffic.update 0.37/0.38 (24 cars), traffic.draw 0.09-0.13, fleet 0.03-0.06. With phone caps: update 0.43 (13 cars), draw 0.11.\n- **Branch before my fixes (301bf64):** update 0.65/0.68 (27-30 cars), draw 0.38-0.41 (68 parked cars drawn), fleet 0.07-0.15. With phone caps: update 0.46, draw 0.38.\n- **After my fixes:** post2 gave update 0.64/0.67, draw 0.36-0.44. The final pull-model code (post5) gave update 0.43/0.60 (26/33 cars), draw 0.26/0.35, fleet 0.07-0.09. With phone caps: update 0.44, draw 0.23.\n\nSo my fixes add no measurable cost. The extra per-frame work in Traffic.mind is one roomBeside per pulling car every 0.1 s, plus a few per-frame checks for a car waiting to pull out. Single-frame update+render times were 24-45 ms in every build, dominated by noise from the shared machine.\n\nThe branch itself costs about +0.3 ms update and +0.3 ms draw per frame against main, because it has more cars and draws parked cars. No new draw calls: cars go through the existing instanced car pools.",
+ "verdict": "ready",
+ "notes": "The builder's work (curb parking, buses to the stops, taxis, deliveries, police stops, garbage truck, zebra yields, slow starts, more cars on the mainland) holds up with no runtime errors. It merges cleanly: only owned files changed since 6277529, and the lab's gear holds in updateCar work (smoke test identical to baseline). The real problems were in how cars use the curb, and I measured them with a browser overlap monitor. Cars pulling over or parking slid through parked cars, and cars pulling out drove into the car in front. Other fixes: a frightened walker left at a car door for good, dropped blocks' cars that could later switch off another block's collision box, people walking through parked cars to taxis, lot cars sunk into the ground, and cars parked askew or half-in.\n\nAfter 12 commits the final code has 0 overlaps, no leaks and no page errors, and the lab smoke test matches the baseline. The verdict is ready.\n\nFiles touched:\n- /home/user/Test-1-/.claude/worktrees/wf_a71e1740-598-3/scribble-city/v5/js/game/traffic.js (pull model in mind(), roomBeside, sideOf, nearStop, steered tilt in drive(), gone filter, lot heights)\n- /home/user/Test-1-/.claude/worktrees/wf_a71e1740-598-3/scribble-city/v5/js/game/curbs.js (gap, laneClear, gapAt, freeRun, the waiting phase with backing up, wantPark, parkIt, lotHeight, drop and unvisit)\n- /home/user/Test-1-/.claude/worktrees/wf_a71e1740-598-3/scribble-city/v5/js/game/fleet.js (taxi stops at gaps)\n- /home/user/Test-1-/.claude/worktrees/wf_a71e1740-598-3/scribble-city/v5/js/game/patrol.js and deliveries.js (pullLeft, bus stops)\n\nShots and images:\n- Refreshed in /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/shots/traffic/: after_*.png, plus a new before_police.png and after_police.png pair (re-staged), after_lot_close.png, after_park_in.png and after_parked_in.png.\n- The after shots were taken on b97bdb4. The three later commits only tighten clearances during maneuvers, which do not show in these scenes.\n\nNot done:\n- traffic.draw costs about +0.3 ms per frame on phones too. Lowering it would mean caching parked cars' instances in render/cars.js, which is not an owned file.\n- Parked cars' headlights glow by day (render/cars.js).\n- The lab gear's per-frame gearfx.cars() array (not an owned file).\n\nRunning notes: /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/notes/review_traffic.txt. Scripts and run logs: /tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/review_traffic/.",
+ "images": [
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/traffic_1.jpg",
+   "caption_he": "רחוב צדדי ביבשה: לפני – שוליים ריקים; אחרי – שורות של מכוניות חונות משני צידי הרחוב. מכוניות נכנסות לחניה ויוצאות ממנה בפנייה מסביב לרכב החונה, בלי לעבור דרכו"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/traffic_2.jpg",
+   "caption_he": "תחנת אוטובוס בליטל הוואנה: אחרי – אוטובוס נשלח לתחנה שבה מחכים, נעצר עם אורות חירום, ואנשים עולים ויורדים"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/traffic_3.jpg",
+   "caption_he": "משלוח לחנות: טנדר בחנייה כפולה עם אורות חירום, ושליח שנושא ארגז מהדלת האחורית אל החנות"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/traffic_4.jpg",
+   "caption_he": "ניידת סיור עוצרת רכב בשדרה, הרחק מתחנת האוטובוס: אורות על הגג, הרכב בצד הדרך, השוטר ליד החלון והנהג מתרץ"
+  }
+ ]
+}

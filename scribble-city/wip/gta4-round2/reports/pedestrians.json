@@ -1,0 +1,53 @@
+{
+ "aspect": "pedestrians",
+ "worktree": "/home/user/Test-1-/.claude/worktrees/wf_a71e1740-598-2",
+ "branch": "gta4/pedestrians",
+ "commits": [
+  "4bda00c v5 GTA IV pass: pedestrians - groups, meetings, calls, a street musician, hands that talk",
+  "74425c6 v5 GTA IV pass: pedestrians - groups that last, friends joining and leaving, the work kept in check"
+ ],
+ "files_changed": [
+  "scribble-city/v5/js/game/streetsocial.js (new)",
+  "scribble-city/v5/js/game/civilians.js",
+  "scribble-city/v5/js/game/crowds.js",
+  "scribble-city/v5/js/game/routines.js",
+  "scribble-city/v5/js/game/voices.js",
+  "scribble-city/v5/js/game/ambient.js"
+ ],
+ "summary": "Pedestrians now act like people on a real street, in the GTA IV style. I added game/streetsocial.js (StreetSocial, owned by crowds.js) and extended civilians.js, voices.js, routines.js, crowds.js and ambient.js.\n- Talking groups: 2 to 4 people stand on the sidewalk, chosen by district and time of day (friends, office workers, tourists, youth, neighbours, shoppers, a night crowd). They take turns speaking in English bubbles (voices.group), lift a cup or phone, sway and laugh. Someone joins mid-chat (\"Sorry I'm late!\") or leaves early (\"That's my bus. Bye!\"), and at the end they say goodbye and walk off. Desktop allows 3 groups (4 in the evening) and touch allows 1.\n- Hand gestures: about 13 gesture kinds are tied to what is said (explain, point, wave, shrug, laugh, clap, fist, chin, and more). They are worked out from the line's text and tone. Each figure uses whichever hand is free (a phone stays at the ear, two-handed loads block both hands), and gestures only run within 38 m of the camera. Listeners turn their heads to the speaker.\n- Acquaintances meeting: two walkers coming toward each other call a name, stop, greet (hug, handshake, wave, or a fist bump for youth), talk, then part.\n- Phone calls: the caller paces a short stretch of sidewalk with the phone at the ear, gesturing with the other hand, and says call lines when you are close.\n- Noticing the player: a quick glance, or always if you run or carry a gun. If you run into someone they stumble, glare and grumble. They sidestep when you run at them. If you stand in their way they say \"Excuse me\", then speak more sharply if you stay.\n- Crossings: people wait at set spots on the curb a step back from the road, look up the road at the traffic, step off together after a short delay when the light changes, and hurry if it is about to change (older people more slowly). A jogger runs on the spot at a red light.\n- Lunch (11:24 to 14:36): people eat on benches, on planter edges and on fountain rims, and carry lunch items. Older people sometimes stop to rest; some on park benches feed pigeons, which flock and peck (ambient.feedFlock).\n- Street musician: a guitarist with an open case and coins, music notes, short song lines, a bow and claps. Up to 7 listeners gather in a ring; some film and some tip with a flying coin.\n- Tourists: they often travel in pairs. Photos come from the musician, a friend posing (peace sign, wave), a selfie, or a shop sign.\n- Evenings: more friends and couples go out, and couples walk hand in hand.\n- Shopping: shoppers carry bags and walk home to doors on residential blocks.\n- Load: people in groups, on calls or watching the musician count toward the existing walker cap, so there are not more people overall. Far from the camera (over 40 m) they move every other frame, the same rule walkers already use.\n- Bug fix: a duplicate method name in streetsocial.js (two clear() methods) was ending every group, call and meeting each time a spot was checked. They are now roomAt() and releaseAll().",
+ "images": [
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/pedestrians_1.jpg",
+   "caption_he": "נגן רחוב עם גיטרה ונרתיק פתוח עם מטבעות. מעליו מילות שיר, ועוברים עוצרים להקשיב ולצלם"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/pedestrians_2.jpg",
+   "caption_he": "מרכז העיר בצהריים: מכרים קוראים זה לזה בשם, עוצרים, ויוצאים יחד לארוחת צהריים"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/pedestrians_3.jpg",
+   "caption_he": "בצומת: ממתינים יחד על שפת המדרכה, מסתכלים על התנועה וחוצים יחד כשמתחלף האור"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/pedestrians_4.jpg",
+   "caption_he": "חברים עוצרים לשיחה ליד התחנה, מדברים בתורות ומניעים ידיים"
+  }
+ ],
+ "tests": [
+  "node --check passes on civilians.js, crowds.js, streetsocial.js, voices.js, routines.js, ambient.js and reactions.js",
+  "Browser runs through gta4/run_browser.sh at 1280x720 with SEED=11, on a copy of the code taken before the queue so later edits could not leak in. Four after runs (fa, fa3, fa4) and four before runs (fb, fb3, fb4, before_ev). No [pageerror] in any run.",
+  "Counts from one after run: groups 16, group talks 14, gestures 25, partings 5, meetings 9 (3 hugs, 2 handshakes), calls 12 with 16 call lines, musician sessions 4, listeners 22, claps 9, coins 6. Other runs also counted 1-2 people joining and 2 leaving groups, and 19 call lines",
+  "Staged scenes built correctly: a 3-person friends group and a 4-person office group (makeHuddle), and the musician with a crowd collecting coins (startBusker). Corner shot: people wait at the curb together. Evening: 2-4 couples walking",
+  "Lunch routines seen at 13:00: bench:lunch and ledge:lunch (planter seats) next to the older bus and bench routines",
+  "Before/after shots with the same cameras saved in gta4/shots/pedestrians (busker, downtown, corner, street)"
+ ],
+ "perf": "I ran the same script on the old and new code: 13:00 on the calle block, 900 warm-up frames, then 5 samples of 600 frames at 1/30 s each. Civilians update per frame: before 3.94 / 3.57 / 2.89 / 3.14 / 3.68 ms (mean 3.44, about 95-103 people); after 3.27 / 3.39 / 3.30 / 3.33 / 3.23 ms (mean 3.31, about 98-102 people). That is no measurable increase (-4% mean); this machine varies by about ±15% between samples. The new StreetSocial manager adds about 0.05 ms per frame (crowds 0.03 to 0.08-0.09 ms). Voices and reactions are unchanged. Of about 100 people, about 10-12 are in a group, call, meeting or musician crowd at any time, and they count toward the existing walker cap. An earlier version without the cap change and the far-away throttle measured +24%; both fixes are in the commits. No per-frame allocations: the gesture and look vectors are reused per person. Places are searched on timers every 1-2.5 s, never per frame, and never with a check of every person against every other. Gestures and head turns only run within 38 m of the camera. On touch screens: 1 group at a time and at most 5 group members.",
+ "known_issues": [
+  "The staged night group (makeHuddle 'night', 4 people) found no room on the calle block's café-terrace stretch at 19.7h, so I left out an evening before/after image. Groups do form on their own at night (4 within 23 s in the evening run).",
+  "In the street shot the third member of the staged group is hidden behind the bus shelter; only two friends are visible.",
+  "Groups and the musician only use mainland sidewalk stretches of 28 m or more, away from doors and crowded spots. The island's middle column and very short blocks get none.",
+  "The debug counters in StreetSocial (this.why / no(k)) are still in the code. They are cheap, but strings are joined each time a place is rejected, which happens on 1-2.5 s timers.",
+  "Unconfirmed: whether a gesture, which only runs when no other system is steering that hand, can still collide with another system's hand animation on the same frame."
+ ],
+ "outside_edits": []
+}

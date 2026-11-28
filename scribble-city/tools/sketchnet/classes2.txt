@@ -1,0 +1,12 @@
+sailboat
+speedboat
+canoe
+submarine
+cruise ship
+umbrella
+ladder
+key
+bridge
+parachute
+hot air balloon
+skateboard

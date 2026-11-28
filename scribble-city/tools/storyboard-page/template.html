@@ -1,0 +1,158 @@
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>סטוריבורד המפגש</title>
+<style>
+@font-face { font-family: 'Heebo'; font-weight: 300 800; font-display: swap; src: url({{F_heebo_he}}) format('woff2'); unicode-range: {{HE}}; }
+@font-face { font-family: 'Heebo'; font-weight: 300 800; font-display: swap; src: url({{F_heebo_la}}) format('woff2'); unicode-range: {{LA}}; }
+@font-face { font-family: 'Karantina'; font-weight: 700; font-display: swap; src: url({{F_kar_he}}) format('woff2'); }
+@font-face { font-family: 'Gveret Levin'; font-display: swap; src: url({{F_gl_he}}) format('woff2'); unicode-range: {{HE}}; }
+@font-face { font-family: 'Gveret Levin'; font-display: swap; src: url({{F_gl_la}}) format('woff2'); unicode-range: {{LA}}; }
+@font-face { font-family: 'Caveat Brush'; font-display: swap; src: url({{F_cav}}) format('woff2'); }
+
+/* one look, on purpose: a dark screening room, so the frames carry the colour */
+:root {
+  color-scheme: dark;
+  --ground: #15101a;
+  --panel: #1f1826;
+  --line: #3a2e46;
+  --ink: #f4ecdb;
+  --mute: #b7a8c3;
+  --sun: #ffcc4d;
+  --pink: #ff86b3;
+  --violet: #b98cf0;
+  --orange: #ffa552;
+  --teal: #5fd0c4;
+  --cold: #8fb1d4;
+  --paper: #fbf6e8;
+  --pencil: #2a2233;
+}
+body { background: var(--ground); color: var(--ink); font-family: 'Heebo', system-ui, 'Arial Hebrew', Arial, sans-serif; font-size: 16px; line-height: 1.55; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 30px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3, p, ol, ul { margin: 0; }
+ol, ul { padding: 0; list-style: none; }
+
+header { display: grid; gap: 10px; padding-bottom: 26px; border-bottom: 1px solid var(--line); }
+.kicker { font-size: 13px; letter-spacing: .08em; color: var(--sun); font-weight: 500; }
+h1 { font-family: 'Karantina', 'Heebo', sans-serif; font-weight: 700; font-size: clamp(54px, 15vw, 104px); line-height: .9; letter-spacing: .01em; text-wrap: balance; }
+.lede { max-width: 58ch; color: var(--mute); font-size: 16px; }
+.lede b { color: var(--ink); font-weight: 500; }
+
+.rules3 { display: grid; gap: 10px 22px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); padding-block: 22px 8px; }
+.rules3 li { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: baseline; min-width: 0; }
+.rules3 .k { font-family: 'Karantina', sans-serif; font-size: 30px; line-height: 1; color: var(--pink); }
+.rules3 p { font-size: 15px; color: var(--ink); }
+
+h2 { font-family: 'Karantina', 'Heebo', sans-serif; font-weight: 700; font-size: clamp(34px, 8vw, 46px); line-height: 1; padding-block: 30px 14px; text-wrap: balance; }
+
+.board { display: grid; gap: 26px 22px; grid-template-columns: 1fr; }
+@media (min-width: 780px) { .board { grid-template-columns: 1fr 1fr; } }
+.fr { display: grid; gap: 10px; min-width: 0; align-content: start; }
+
+.shot { position: relative; overflow: hidden; isolation: isolate; aspect-ratio: 882 / 411; max-width: 100%; background: #000; border-radius: 5px; container-type: inline-size; box-shadow: 0 0 0 1px var(--line); }
+.shot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.ov { position: absolute; inset: 0; width: 100%; height: 100%; direction: ltr; }
+.hw { font-family: 'Caveat Brush', 'Gveret Levin', cursive; }
+.shout { font-family: 'Karantina', 'Heebo', sans-serif; font-weight: 700; fill: #ffd23f; stroke: #2a1730; stroke-width: 9px; paint-order: stroke; stroke-linejoin: round; }
+
+/* two panels in one frame, the gutter between them closing */
+.panels { background: var(--paper); }
+.pan { position: absolute; inset: 0; overflow: hidden; }
+.pl { clip-path: polygon(0 0, 52.6% 0, 45.4% 100%, 0 100%); }
+.pr { clip-path: polygon(54.4% 0, 100% 0, 100% 100%, 47.2% 100%); }
+.pr img { transform: translateX(23%); }
+
+/* a name on a scrap torn from her sketchbook */
+.scrap { position: absolute; display: grid; gap: 0; padding: 1.6cqw 3.4cqw 2cqw; color: var(--pencil); text-align: center;
+  background: repeating-linear-gradient(to bottom, transparent 0 2.9cqw, rgba(80, 130, 200, .32) 2.9cqw 3.1cqw), var(--paper);
+  clip-path: polygon(0 6%, 4% 0, 9% 5%, 15% 1%, 22% 6%, 30% 0, 38% 5%, 47% 1%, 55% 6%, 64% 0, 72% 5%, 81% 1%, 89% 6%, 96% 0, 100% 5%, 98% 30%, 100% 62%, 97% 100%, 3% 97%, 0 70%, 2% 38%);
+  filter: drop-shadow(0 .5cqw 0 rgba(0, 0, 0, .4)); }
+.scrap b { font-family: 'Gveret Levin', 'Caveat Brush', cursive; font-weight: 400; font-size: 10cqw; line-height: .95; }
+.scrap i { font-family: 'Gveret Levin', 'Caveat Brush', cursive; font-style: normal; font-size: 3.7cqw; line-height: 1.15; color: #5a4a66; }
+.s1 { left: 5%; top: 17%; transform: rotate(-5deg); }
+.s1 b { color: #c2385f; }
+.s2 { left: 1.5%; top: 8%; transform: rotate(-4deg) scale(.84); transform-origin: left top; }
+.s2 b { color: #2f4a86; }
+
+/* her uncle's board: cold print */
+.cold .base { filter: grayscale(1) contrast(1.5) brightness(1.04); }
+.cold .tint { position: absolute; inset: 0; background: #2c4f7c; mix-blend-mode: color; opacity: .9; }
+.cold .dots { position: absolute; inset: 0; background-image: radial-gradient(circle, rgba(8, 18, 40, .6) 0 28%, transparent 34%); background-size: .95cqw .95cqw; mix-blend-mode: multiply; opacity: .8; }
+.cold .warm { -webkit-mask-image: radial-gradient(ellipse 22% 34% at 86% 100%, #000 0 62%, transparent 100%); mask-image: radial-gradient(ellipse 22% 34% at 86% 100%, #000 0 62%, transparent 100%); }
+
+/* the last frame, becoming a page of her sketchbook: flat crayon colour, the paper showing between the strokes */
+.freeze .pg { position: absolute; inset: 0; background: var(--paper); -webkit-mask-image: linear-gradient(100deg, transparent 20%, #000 38%); mask-image: linear-gradient(100deg, transparent 20%, #000 38%); }
+.freeze .pg .cr { filter: url(#poster) saturate(1.7) brightness(1.1); mix-blend-mode: multiply; }
+.freeze .gaps { position: absolute; inset: 0; background: repeating-linear-gradient(178.6deg, transparent 0 5.1cqw, rgba(251, 246, 232, .7) 5.1cqw 5.55cqw); }
+.freeze .hatch { position: absolute; inset: 0; background: repeating-linear-gradient(64deg, transparent 0 .95cqw, rgba(251, 246, 232, .22) .95cqw 1.2cqw); }
+.freeze .rules { position: absolute; inset: 0; background: repeating-linear-gradient(to bottom, transparent 0 5.6cqw, rgba(80, 130, 200, .3) 5.6cqw 5.85cqw); mix-blend-mode: multiply; }
+.freeze .holes { position: absolute; inset: 0 0 auto 0; height: 3.6cqw; background: radial-gradient(circle, #cfc6b0 0 .7cqw, transparent .76cqw) 0 0 / 4.5cqw 3.6cqw repeat-x; }
+.freeze .hw { position: absolute; direction: ltr; unicode-bidi: isolate; font-size: 6.6cqw; line-height: 1; }
+.freeze .t1 { right: 5%; top: 9%; color: #c2385f; transform: rotate(-4deg); }
+.freeze .t2 { right: 14%; bottom: 7%; color: #7a48d0; transform: rotate(-5deg); font-size: 5.6cqw; }
+.freeze .curl { position: absolute; right: 0; bottom: 0; width: 10.5%; aspect-ratio: 1; background: linear-gradient(315deg, var(--ground) 0 49%, #cfc3a6 50%, #f3ead2 72%, #fbf6e8 100%); box-shadow: -.6cqw -.6cqw 1.2cqw rgba(0, 0, 0, .35); }
+
+.cap { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; }
+.n { font-family: 'Karantina', sans-serif; font-size: 40px; line-height: .82; color: var(--sun); min-width: 1.05em; text-align: center; font-variant-numeric: tabular-nums; }
+.tx { display: grid; gap: 5px; min-width: 0; }
+.say { font-size: 17px; font-weight: 500; line-height: 1.4; color: var(--ink); }
+.say b { font-weight: 700; color: var(--pink); margin-inline-end: .5em; font-size: 14px; }
+.what { font-size: 15px; color: var(--mute); max-width: 52ch; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 2px; }
+.chip { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; font-family: 'Heebo', sans-serif; font-weight: 700; font-size: 14px; line-height: 1; color: var(--ground); background: var(--sun); flex: none; }
+.c1 { background: var(--orange); } .c2 { background: var(--pink); } .c3 { background: var(--violet); } .c4 { background: var(--paper); } .c5 { background: var(--cold); } .c6 { background: var(--teal); }
+
+.ideas { display: grid; gap: 18px 28px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.ideas li { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; min-width: 0; }
+.ideas .chip { width: 30px; height: 30px; font-size: 17px; margin-top: 2px; }
+.ideas h3 { font-size: 17px; font-weight: 700; line-height: 1.3; }
+.ideas p { font-size: 15px; color: var(--mute); }
+.ideas .where { font-size: 13px; color: var(--sun); padding-top: 2px; }
+
+.next { margin-top: 34px; padding: 18px 20px; background: var(--panel); border-radius: 8px; border-inline-start: 4px solid var(--sun); display: grid; gap: 8px; }
+.next h3 { font-size: 17px; font-weight: 700; }
+.next p { font-size: 15px; color: var(--mute); max-width: 62ch; }
+.next b { color: var(--ink); font-weight: 500; }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="cray" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="2" seed="4" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="5" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="poster" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+      <feGaussianBlur stdDeviation="1.3" result="b"/>
+      <feComponentTransfer in="b" result="p">
+        <feFuncR type="discrete" tableValues="0.1 0.42 0.72 1"/>
+        <feFuncG type="discrete" tableValues="0.1 0.42 0.72 1"/>
+        <feFuncB type="discrete" tableValues="0.1 0.42 0.72 1"/>
+      </feComponentTransfer>
+      <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="9" result="n"/>
+      <feDisplacementMap in="p" in2="n" scale="6" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+</svg>
+
+<div class="wrap" dir="rtl" lang="he">
+  <header>
+    <p class="kicker">Beyond the Outline · סצנה 2 · סטוריבורד לאישור</p>
+    <h1>המפגש עם לילי</h1>
+    <p class="lede">17 פריימים לפי הסדר. <b>כל תמונה צולמה בתוך המשחק, במצב טלפון</b> — אותה במה, אותה תאורה, אותן דמויות. התנוחות כאן הן סימון בלבד: את התנועה עצמה אני בונה אחרי שתאשר. הטקסטים, הקולות והסדר שלהם לא השתנו.</p>
+  </header>
+
+  <ul class="rules3">
+    <li><span class="k">1</span><p>הבמה נבחרה כך שלכל כיוון יש תמונה: צפונה הים והשמש, מזרחה הגלגל, דרומה השלט של הדוד.</p></li>
+    <li><span class="k">2</span><p>דני תמיד מואר מהשמש בפנים; לילי תמיד עם השמש בגב, בתלתלים.</p></li>
+    <li><span class="k">3</span><p>שום דבר לא עובר על הפנים. ניצבים ברקע ייכנסו רק במקומות שאבחר — בתמונות כאן הם עדיין לא מופיעים.</p></li>
+  </ul>
+
+  <h2>הפריימים</h2>
+  <ol class="board">{{FRAMES}}</ol>
+
+  <h2>מה מיוחד כאן</h2>
+  <ul class="ideas">{{IDEAS}}</ul>
+
+  <div class="next">
+    <h3>מה אני צריך ממך</h3>
+    <p>תגיד אילו אותיות נשארות ואילו יורדות, ואם יש פריים שלא עובד לך. <b>אחרי האישור</b> אני בונה את שכבת האנימציה (גוף מלא, מגע מדויק, תזמון), מצלם את הסצנה מחדש ושולח סרטון עם קול.</p>
+  </div>
+</div>

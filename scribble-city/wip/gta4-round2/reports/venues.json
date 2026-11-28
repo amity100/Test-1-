@@ -1,0 +1,69 @@
+{
+ "aspect": "venues: restaurants, bars, nightlife, mall hall",
+ "worktree": "/home/user/Test-1-/.claude/worktrees/wf_a71e1740-598-6",
+ "branch": "gta4/venues",
+ "base": "6277529",
+ "commits": [
+  "c9f3e85 (builder 1) work in progress, stopped on request",
+  "00a5dbb (builder 2) snapshot of a builder stopped by the usage limit",
+  "118f0bd kiosks spread down the hall (coffee and balloons too), benches taken, rail leaners; paintings, mirrors, lit lettering in the venues",
+  "6304b4c mall banners with their offer, kiosks between the columns, a busier hall; eateries fuller at lunch and dinner",
+  "a69628d festoons over the open court; a toast at dinner; the theatre's hall claps",
+  "78a494c the films' names on their posters; waiters keep their own place at the station",
+  "1573dd6 the club's coat check: an attendant, coats handed over the counter for a ticket",
+  "2c4d08d signs lettered in strokes (world/letters.js) instead of taking the city's neon",
+  "bc31d4e posters of four kinds; the auditorium's word lit on a dark panel"
+ ],
+ "files_changed": [
+  "scribble-city/v5/js/world/venues2.js (new)",
+  "scribble-city/v5/js/game/venuelife.js (new)",
+  "scribble-city/v5/js/world/letters.js (new)",
+  "scribble-city/v5/js/world/mainland/mall.js",
+  "scribble-city/v5/js/game/mall.js",
+  "scribble-city/v5/js/game/streetlife.js",
+  "scribble-city/v5/js/game/nightlife.js",
+  "scribble-city/v5/js/world/city.js (one import line)",
+  "scribble-city/v5/js/world/mainland/blocks.js (one import line)"
+ ],
+ "summary": "I continued from the two earlier builders' snapshots (c9f3e85 and 00a5dbb). The second snapshot had never been run in a browser. I tested it first: it built and ran cleanly, with no pageerror and 0 errors. I then added 7 commits on top. This is the whole aspect, measured against 6277529.\n\nWORLD (lazy stock plans in world/venues2.js, registered via FURNISH; the big parts are built with the block, the small things stream in near the player):\n- 'gourmet': a full kitchen line along the back (fridge, prep, a range with 6 lit burners and pans, flat top, sink, hood, copper pots, utensils) and a steel pass with warm lamps, plates, ticket rail and bell.\n  - A host stand with the booking book, menus and a lamp; a coat stand.\n  - A full bar, or in narrow rooms a lit wine wall with decanters and upturned glasses.\n  - A waiters' station; a leather banquette; tables with tablecloths falling in folds. Each place is fully laid (charger, plate, folded napkin, forks, knife, spoon, bread plate, wine glass, water glass), with a candle, a bud vase, salt and pepper, bread baskets and wine bottles.\n  - Panelling, drapes, a chandelier and pendants.\n  - New this session: paintings in 4 motifs with picture lamps, mirrors with light streaks, and visible wine in the decanters.\n- 'bar': a back bar with a lit bottle wall, TVs, the bar's name in neon, booths, a pool table, high tables, a jukebox, darts and neon shapes.\n- 'club': a stage, DJ decks, speaker stacks, a light wall, a truss with moving heads, a mirror ball and a lit dance floor.\n  - Also a bar, VIP booths behind ropes (the club name and VIP are now lettered on that wall), tall tables and a coat check.\n- 'cinema' and 'theatre' lobbies: a concession stand (popcorn machine, soda fountain, hot-dog rollers, nacho warmer, lettered menu boards POPCORN/SODAS/HOT DOGS), rope lanes and a box office (BOX OFFICE / TICKETS lettered).\n  - Lit posters, now in 4 motifs carrying parody film titles such as INK STORM, THE ERASER and SKETCHY.\n  - Screen doors and an usher stand; the theatre's arch reads AUDITORIUM.\n- Mall hall (world/mainland/mall.js):\n  - Kiosks are now placed reliably: up to 6 of them (sunglasses, coffee and cake, phone cases, balloons, sweets, watches), each with goods and its name on the roof band. Coffee and balloons are new.\n  - Benches back to back around planters; bins; advertising screen totems; and food-court trays and tray-return stations.\n  - Banners hang from the roof, now 2.3 m wide with the offer lettered on them. There are signs to the food court and exits, and window dressing on the store fronts (offer lettering, lightboxes, plants).\n  - Also new: floor stone bands, and strings of bulbs over the open court.\n\nLETTERING:\n- The mainland's neon atlas has only 128 places. Around the theatre and mall it is already full even on the main branch (127 of 128 used).\n- The earlier decorative neon words were taking places from shop names, adding 26 more misses at the theatre.\n- I added world/letters.js, a 5x7 lettering made of strokes, and moved all decorative words onto it, merged into the existing batches. Only the place's own name still uses neon, and only when space is left.\n- Result: 0 misses at the theatre, and over a tour 141/148/198 against the main branch's 138/142/192.\n\nBEHAVIOUR (game/venuelife.js, plus hooks in streetlife.js):\n- Restaurant evening: the host greets a party and leads it to its table; menus; a waiter takes each person's order on a pad and calls it at the pass; the chef draws the plates in the air; the waiter carries a tray out and serves.\n  - Diners eat with fork-to-mouth and knife motion and talk across the table. Plates are cleared; coffee or the check comes; one person pays; the host says goodbye; the table is laid again.\n  - New: a toast with raised glasses once per meal. Waiters now keep a fixed idle spot at the station, which stopped them recomputing a path every frame.\n- Bars and clubs: barmen take orders, shake and hand over drinks; people stand at the pool table, darts, jukebox and tall tables.\n  - New: the club's coat-check attendant. Guests walk to her, hand over a coat and get a ticket, and she hangs the coat up.\n  - Club door: the bouncer checks an ID card.\n- Lobbies: box office, poster browsing, the concession queue, the usher tearing tickets, and seats in the theatre's rows. New: the whole hall applauds now and then, with \"Bravo!\".\n- Eateries are fuller at lunch and dinner.\n- Mall (game/mall.js): walking paths around obstacles in the hall; kiosk sellers; a guard; a cleaner; shared tables at the food court; tray returns; escalator riders.\n  - New: buyers at the coffee kiosk carry a cup and at the balloon kiosk a balloon; some people sit on benches already, with phones; people lean on the gallery rail.\n  - The desktop crowd went from 18 to 22, and a per-frame array copy was removed.\n\nMEASURED (software WebGL, 320x180; per-update times are noisy):\n- Venue logic itself costs 0.05–0.24 ms per update (gourmet 0.14–0.24, club 0.05, theatre 0.12).\n- Civilians cost more because there are more people: mall 1.73 to 2.19 ms with 16 to 37 mall people; club 2.06 to 2.36 ms.\n- Whole frame: bar 6.7 to 5.4 ms, theatre 7.4 to 5.8 ms, mall 7.3 to 9.5 ms.\n- Geometry: mainland vertices near the galleria +35.9k (+1.6%); island room vertices 328k to 342k; streamed interior vertices near the player gourmet 158k to 206k, club 205k to 251k.\n- No new materials or batches; everything merges into the existing pens.\n- On a phone (touch mode): 1 waiter and no cook in the restaurant, no coat check, 10 mall people and 2 staff; no errors.\n\nNOT DONE:\n- The mall's escalators are animated by position, not by moving steps.\n- The theatre seats are on a flat floor, with no raked floor.",
+ "images": [
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/venues_1.jpg",
+   "caption_he": "מסעדת הגורמה: מטבח פתוח עם פס הגשה, קיר יין מואר, שולחנות ערוכים עד המזלג, ומלצרים וסועדים בפעולה"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/venues_2.jpg",
+   "caption_he": "התיאטרון: לובי עם שלט AUDITORIUM, דוכן פופקורן עם תפריט, חבלי תור וסדרן שקורע כרטיסים"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/venues_3.jpg",
+   "caption_he": "חצר הקניון הפתוחה: קיוסקים, שרשראות נורות, מסכי פרסום, עציצים בכניסות לחנויות ואנשים יושבים על ספסלים"
+  },
+  {
+   "path": "/tmp/claude-0/-home-user-Test-1-/1f04fdad-ca96-5cb8-bcb1-fccf2f5dd162/scratchpad/gta4/send/venues_4.jpg",
+   "caption_he": "המועדון: רחבת ריקודים מלאה, במה ו-DJ, קיר אורות, כדור מראות, תאי VIP ובר מואר"
+  }
+ ],
+ "tests": [
+  "node --check on every changed JS file (venues2.js, letters.js, mainland/mall.js, game/mall.js, venuelife.js, streetlife.js, nightlife.js): all OK",
+  "Browser r3/h0 (HEAD 00a5dbb as found): all venue/mall shots, errs 0, no pageerror",
+  "Browser r3/a1, m1, d1, n1, l1, f1 (1280x720): gourmet/club/theatre/cinema/bar/mall shots, errs 0, no pageerror",
+  "d1 dining cycle over 40 s at Le Crayon: parties eating/done/check/coffee/gone, host leads, waiters clear/pickup/check, toasts; theatre applause 16 clapping then reset",
+  "Neon-atlas probe on base vs mine (nbase/n1/l1): theatre 0 misses after the letters.js fix",
+  "Perf (perf3/perf_dine, 320x180) base_main vs mine, per system and per venue class",
+  "Touch sanity (g.touch=true, r3/t1): smaller staff and crowds, errs 0",
+  "LAB SMOKE (lab=1, 640x360): [eval] lines identical to smoke/main.log (harpoon tow 3.1 14, net, tesla emp, oil 2 spin, decoy ... 16.99 2), {errors:0}, no pageerror"
+ ],
+ "perf": "Measured at 320x180, ms per game update over 300 updates: venue code (Dining/BarLife/LobbyLife) 0.05–0.24 ms; mall logic 0.009 to 0.026 ms. Civilians cost more because there are more people (mall 1.73 to 2.19 ms with 16 to 37 mall people; club 2.06 to 2.36 ms). Whole-frame times are noisy: bar 6.7 to 5.4, theatre 7.4 to 5.8, mall 7.3 to 9.5. Mainland vertices +1.6% near the mall (+35.9k); island room vertices +13.7k; streamed interior soups near the player gourmet 158k to 206k and club 205k to 251k. No new materials or batches (everything merges into the existing pens). The mainland neon atlas is not used up any more than on the main branch (0 misses at the theatre). Fewer people on touch devices (restaurant 1 waiter and no cook; mall 7 shoppers + 2 staff, 10 people measured; no coat check).",
+ "known_issues": [
+  "The mainland neon atlas (128 places) is already full around the theatre and mall on the main branch itself (127 of 128 used, some shop signs miss). This work no longer adds to that, but does not fix it either.",
+  "Escalator riders move by position on the existing static steps; the steps do not move.",
+  "The theatre seats are on a flat floor (no raked floor).",
+  "Per-frame civilian cost rises with the fuller venues (more people, by design); the frame-time numbers from software WebGL are noisy."
+ ],
+ "outside_edits": [
+  "scribble-city/v5/js/world/city.js: one import line `import './venues2.js';` next to shops2.js (added by builder 1)",
+  "scribble-city/v5/js/world/mainland/blocks.js: one import line `import '../venues2.js';` next to shops2.js (added by builder 1)",
+  "NEW file scribble-city/v5/js/world/letters.js (stroke lettering used by venues2.js and mainland/mall.js)"
+ ]
+}

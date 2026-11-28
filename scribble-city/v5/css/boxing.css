@@ -1,0 +1,135 @@
+/* (ROADMAP 29.5) The boxing ring's screen (ui/boxinghud.js) and its buttons for a phone held sideways (index.html #bx-pad,
+   core/input.js): dark glass and a gold hairline, heavy narrow letters, as the find card has them (game/finds.js); the buttons
+   drawn as the game's other buttons are - ink round them, paper inside. Only while a bout or the gym's work is on (body.boxing). */
+
+/* ---------- the city's screen put away in the ring ---------- */
+body.boxing #topbar, body.boxing #crosshair, body.boxing #goals, body.boxing #weapon, body.boxing #prompt, body.boxing #district, body.boxing #clock,
+body.boxing #money, body.boxing #hidden-tag, body.boxing #minimap-wrap, body.boxing #wanted, body.boxing #scorebug { display: none !important; }
+body.boxing #look-zone, body.boxing #btn-fire, body.boxing #btn-jump, body.boxing #btn-draw, body.boxing #draw-hint, body.boxing #btn-photo,
+body.boxing #btn-enter, body.boxing #btn-swap, body.boxing #btn-radio, body.boxing #btn-view, body.boxing #btn-up, body.boxing #btn-down,
+body.boxing #btn-chute, body.boxing #btn-aim, body.boxing #btn-guard, body.boxing #btn-hands, body.boxing #btn-phone { display: none !important; }
+body.boxing #btn-pause { left: max(12px, env(safe-area-inset-left)); top: 76px; transform: none; }
+
+/* ---------- the screen ---------- */
+.bxh { position: fixed; inset: 0; z-index: 30; pointer-events: none; color: #f3ead8; font-family: "Rubik", sans-serif; direction: ltr; }
+.bxh-top { position: absolute; top: max(8px, env(safe-area-inset-top)); left: max(14px, env(safe-area-inset-left)); right: max(14px, env(safe-area-inset-right)); display: flex; align-items: flex-start; gap: 14px; }
+.bxh-f { flex: 1 1 0; min-width: 0; }
+.bxh-f1 { text-align: right; }
+.bxh-name { font: 400 20px/1 "Anton", "Rubik", "Arial Narrow", sans-serif; letter-spacing: .05em; color: #fff4dc; text-shadow: 0 1px 2px rgba(0, 0, 0, .75); margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bxh-hp { position: relative; height: 13px; background: rgba(14, 12, 10, .74); border: 1px solid rgba(216, 169, 78, .9); overflow: hidden; }
+.bxh-hp i, .bxh-sta i { position: absolute; inset: 0; transform-origin: left center; }
+.bxh-f1 .bxh-hp i, .bxh-f1 .bxh-sta i { transform-origin: right center; }
+.bxh-trail { background: #fff3d6; opacity: .8; }
+.bxh-fill { background: linear-gradient(180deg, #f6dc8e, #d49a3a 70%, #b8802a); }
+.bxh-f.low .bxh-fill { background: linear-gradient(180deg, #ef7a5c, #c0362a 70%, #9a2219); animation: bxLow .7s ease-in-out infinite alternate; }
+@keyframes bxLow { to { filter: brightness(1.3); } }
+.bxh-sta { position: relative; height: 5px; margin-top: 3px; background: rgba(14, 12, 10, .62); overflow: hidden; }
+.bxh-sta i { background: linear-gradient(90deg, #6fb8c9, #9fdbe6); }
+.bxh-sta.low i { background: #c98a4c; }
+.bxh-kd { min-height: 12px; }
+.bxh-kd b { display: inline-block; width: 9px; height: 9px; margin: 4px 4px 0 0; border-radius: 50%; background: #e2433f; border: 1px solid #f3ead8; }
+.bxh-f1 .bxh-kd b { margin: 4px 0 0 4px; }
+.bxh-mid { flex: 0 0 auto; min-width: 96px; padding: 4px 12px 5px; text-align: center; background: linear-gradient(180deg, rgba(14, 12, 10, .84), rgba(14, 12, 10, .56)); border-bottom: 2px solid #d8a94e; }
+.bxh-round { font: 600 10px/1 "Rubik", sans-serif; letter-spacing: .26em; color: #d8a94e; white-space: nowrap; }
+.bxh-clock { font: 400 28px/1.05 "Anton", "Rubik", sans-serif; letter-spacing: .04em; color: #fff4dc; }
+.bxh-train .bxh-f1, .bxh-train .bxh-mid { visibility: hidden; }
+
+/* what is said: a word thrown up, the round called across a band, the count */
+.bxh-msg { position: absolute; left: 50%; top: 27%; transform: translate(-50%, 10px) scale(.88); opacity: 0; white-space: nowrap; font: 400 46px/1 "Anton", "Rubik", sans-serif; letter-spacing: .06em; color: #fff4dc; text-shadow: 0 2px 0 #24242c, 0 0 18px rgba(0, 0, 0, .55); transition: opacity .16s ease, transform .28s cubic-bezier(.2, .9, .25, 1.35); }
+.bxh-msg.on { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.bxh-msg.k-counter { color: #ffd23f; }
+.bxh-msg.k-kd { color: #ff7052; font-size: 62px; letter-spacing: .08em; }
+.bxh-msg.k-hurt { color: #ffb58f; }
+.bxh-msg.k-slip { top: 64%; font-size: 24px; color: #a6e6f2; letter-spacing: .14em; }
+.bxh-big { position: absolute; left: 0; right: 0; top: 36%; padding: 14px 0 12px; text-align: center; opacity: 0; transform: scaleY(.6); background: linear-gradient(90deg, rgba(14, 12, 10, 0), rgba(14, 12, 10, .82) 26%, rgba(14, 12, 10, .82) 74%, rgba(14, 12, 10, 0)); border-top: 1px solid rgba(216, 169, 78, .7); border-bottom: 1px solid rgba(216, 169, 78, .7); transition: opacity .3s ease, transform .35s cubic-bezier(.2, .8, .2, 1); }
+.bxh-big.on { opacity: 1; transform: none; }
+.bxh-big-t { font: 400 54px/1 "Anton", "Rubik", sans-serif; letter-spacing: .14em; color: #fff4dc; }
+.bxh-big-s { min-height: 12px; margin-top: 7px; font: 600 12px/1 "Rubik", sans-serif; letter-spacing: .34em; color: #d8a94e; }
+.bxh-count { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); opacity: 0; font: 400 128px/1 "Anton", "Rubik", sans-serif; color: #fff4dc; -webkit-text-stroke: 2px #24242c; text-shadow: 0 6px 24px rgba(0, 0, 0, .5); }
+.bxh-count.on { animation: bxCount .95s ease-out forwards; }
+@keyframes bxCount {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.75); }
+  14% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  78% { opacity: 1; transform: translate(-50%, -50%) scale(.97); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(.9); }
+}
+.bxh-up { position: absolute; left: 50%; bottom: 20%; transform: translateX(-50%); text-align: center; }
+.bxh-up-t { font: 400 30px/1 "Anton", "Rubik", sans-serif; letter-spacing: .08em; color: #ffd23f; text-shadow: 0 2px 0 #24242c; animation: bxPulse .32s ease-in-out infinite alternate; }
+@keyframes bxPulse { to { transform: scale(1.07); } }
+.bxh-up-bar { position: relative; width: 280px; height: 12px; margin: 10px auto 0; background: rgba(14, 12, 10, .76); border: 1px solid #d8a94e; overflow: hidden; }
+.bxh-up-bar i { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0); background: linear-gradient(90deg, #d8a94e, #ffe08a); }
+
+/* the cards: between the rounds low down, at the end in the middle with the numbers */
+.bxh-card { position: absolute; left: 50%; bottom: 16%; transform: translateX(-50%); min-width: 260px; padding: 10px 22px 12px; text-align: center; background: linear-gradient(180deg, rgba(14, 12, 10, .88), rgba(14, 12, 10, .7)); border-top: 2px solid #d8a94e; }
+.bxh-card.final { bottom: auto; top: 50%; transform: translate(-50%, -46%); min-width: 320px; padding: 14px 28px 16px; }
+.bxh-c-k { font: 600 11px/1 "Rubik", sans-serif; letter-spacing: .32em; color: #d8a94e; }
+.bxh-c-win { margin-top: 6px; font: 400 46px/1 "Anton", "Rubik", sans-serif; letter-spacing: .06em; color: #fff4dc; }
+.bxh-c-sub { margin-top: 4px; font: 500 13px/1.2 "Rubik", sans-serif; color: #e8dcc4; }
+.bxh-c-row { display: flex; justify-content: center; gap: 14px; margin-top: 8px; font: 500 13px/1 "Rubik", sans-serif; color: #e8dcc4; }
+.bxh-c-tot { margin-top: 6px; font: 400 28px/1 "Anton", "Rubik", sans-serif; color: #fff4dc; }
+.bxh-c-stats { margin-top: 10px; display: grid; gap: 4px; }
+.bxh-c-stats div { display: grid; grid-template-columns: 1fr 1.6fr 1fr; align-items: baseline; gap: 10px; }
+.bxh-c-stats b { font: 400 18px/1 "Anton", "Rubik", sans-serif; color: #fff4dc; }
+.bxh-c-stats span { font: 600 10px/1 "Rubik", sans-serif; letter-spacing: .24em; color: #bfb29a; }
+
+/* the gym's work: the coach's call, how it came */
+.bxh-drill { position: absolute; left: 50%; top: 84px; transform: translateX(-50%); min-width: 220px; padding: 8px 22px 10px; text-align: center; background: linear-gradient(180deg, rgba(14, 12, 10, .78), rgba(14, 12, 10, .5)); border-bottom: 1px solid #d8a94e; }
+.bxh-d-call { font: 400 48px/1 "Anton", "Rubik", sans-serif; letter-spacing: .08em; color: #fff4dc; }
+.bxh-d-call.pop { animation: bxPop .4s cubic-bezier(.2, .9, .25, 1.4); }
+@keyframes bxPop { from { transform: scale(1.35); opacity: .2; } to { transform: none; opacity: 1; } }
+.bxh-d-rate { min-height: 30px; margin-top: 4px; font: 400 28px/1 "Anton", "Rubik", sans-serif; letter-spacing: .1em; }
+.bxh-d-rate.k-perfect { color: #ffd23f; }
+.bxh-d-rate.k-good { color: #9fe3b0; }
+.bxh-d-rate.k-late { color: #ffb58f; }
+.bxh-d-rate.k-miss { color: #ff7052; }
+.bxh-d-note { min-height: 14px; font: 500 13px/1.3 "Rubik", sans-serif; color: #e8dcc4; }
+.bxh-d-meta { margin-top: 3px; font: 600 10px/1 "Rubik", sans-serif; letter-spacing: .28em; color: #d8a94e; }
+
+.bxh-hurt { position: absolute; inset: 0; opacity: 0; box-shadow: inset 0 0 140px 34px rgba(170, 14, 12, .8); }
+.bxh-help { position: absolute; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: min(760px, 86vw); padding: 6px 14px; text-align: center; background: rgba(14, 12, 10, .72); border-top: 1px solid #d8a94e; font: 500 13px/1.35 "Rubik", sans-serif; color: #f3ead8; }
+html[dir=rtl] .bxh-help, html[dir=rtl] .bxh-d-note, html[dir=rtl] .bxh-up-t { direction: rtl; }
+
+/* ---------- the buttons (a phone; core/input.js) ---------- */
+#bx-pad { display: none; position: absolute; inset: 0; pointer-events: none; }
+body.boxing #bx-pad { display: block; }
+#bx-zone { position: absolute; right: 0; top: 64px; bottom: 0; width: 58%; pointer-events: auto; }
+.bxb { position: absolute; pointer-events: auto; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border-radius: 50%; border: 3px solid var(--ink, #24242c); background: rgba(248, 241, 228, .9); box-shadow: 3px 4px 0 var(--ink, #24242c); color: var(--ink, #24242c); -webkit-user-select: none; user-select: none; touch-action: none; }
+.bxb b { font: 400 26px/1 "Anton", "Rubik", sans-serif; }
+.bxb span { font: 700 10px/1 "Rubik", sans-serif; letter-spacing: .1em; }
+.bxb.on, .bxb:active { transform: scale(.9); background: #ffd0e4; }
+.bxb.p2 { background: linear-gradient(135deg, #ffd23f, #ff9a3c); }
+.bxb.g { border-radius: 18px; background: #d8fbe8; }
+.bxb.g svg { width: 26px; height: 26px; fill: none; stroke: var(--ink, #24242c); stroke-width: 2.2; stroke-linejoin: round; }
+.bxb.s { background: #c9f1f1; }
+.bxb.s b { font-size: 18px; }
+.bxb.q { width: 34px; height: 34px; border-width: 2px; box-shadow: 2px 3px 0 var(--ink, #24242c); }
+.bxb.q b { font-size: 15px; }
+#bx-cross { right: max(18px, env(safe-area-inset-right)); bottom: max(22px, env(safe-area-inset-bottom)); width: 80px; height: 80px; }
+#bx-jab { right: max(110px, calc(env(safe-area-inset-right) + 92px)); bottom: max(14px, env(safe-area-inset-bottom)); width: 72px; height: 72px; }
+#bx-hook { right: max(118px, calc(env(safe-area-inset-right) + 100px)); bottom: max(100px, calc(env(safe-area-inset-bottom) + 86px)); width: 64px; height: 64px; }
+#bx-upper { right: max(30px, calc(env(safe-area-inset-right) + 12px)); bottom: max(116px, calc(env(safe-area-inset-bottom) + 102px)); width: 64px; height: 64px; }
+#bx-guard { right: max(198px, calc(env(safe-area-inset-right) + 180px)); bottom: max(22px, env(safe-area-inset-bottom)); width: 66px; height: 66px; }
+#bx-slipl { right: max(196px, calc(env(safe-area-inset-right) + 178px)); bottom: max(112px, calc(env(safe-area-inset-bottom) + 98px)); width: 50px; height: 50px; }
+#bx-duck { right: max(132px, calc(env(safe-area-inset-right) + 114px)); bottom: max(180px, calc(env(safe-area-inset-bottom) + 166px)); width: 50px; height: 50px; }
+#bx-slipr { right: max(52px, calc(env(safe-area-inset-right) + 34px)); bottom: max(196px, calc(env(safe-area-inset-bottom) + 182px)); width: 50px; height: 50px; }
+#bx-quit { right: max(14px, env(safe-area-inset-right)); top: 76px; }
+
+/* a phone held sideways: the screen's words smaller, the buttons where the thumb is */
+body.touch .bxh-name { font-size: 15px; margin-bottom: 3px; }
+body.touch .bxh-hp { height: 10px; }
+body.touch .bxh-sta { height: 4px; }
+body.touch .bxh-clock { font-size: 22px; }
+body.touch .bxh-mid { min-width: 78px; padding: 3px 8px 4px; }
+body.touch .bxh-msg { font-size: 36px; }
+body.touch .bxh-msg.k-kd { font-size: 46px; }
+body.touch .bxh-big-t { font-size: 40px; }
+body.touch .bxh-count { font-size: 96px; }
+body.touch .bxh-up-t { font-size: 24px; }
+body.touch .bxh-up-bar { width: 220px; }
+body.touch .bxh-d-call { font-size: 36px; }
+body.touch .bxh-d-rate { font-size: 22px; min-height: 22px; }
+body.touch .bxh-drill { top: 64px; padding: 5px 16px 7px; }
+/* (the hint at the bottom, in the strip between the stick and the buttons - never over the bars, the call or the count) */
+body.touch .bxh-help { font-size: 11px; left: 40%; max-width: 44vw; bottom: max(8px, env(safe-area-inset-bottom)); }
+body.touch .bxh-c-win { font-size: 34px; }
+body.touch .bxh-card.final { min-width: 280px; padding: 10px 20px 12px; }
