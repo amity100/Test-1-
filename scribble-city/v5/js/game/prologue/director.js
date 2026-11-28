@@ -6300,10 +6300,17 @@ export class Prologue {
         sv = Math.max(5.2, sv - dec * dt);
         sx -= sv * dt;
         const y0 = floorY(sx, lane, sy);
-        // (its nose with the slope under it - not with the drop past the lip, a car's length before it is there)
-        const y1 = floorY(sx - 1.3, lane, sy + 0.8);
-        if (y1 > y0 - 0.5) pitch = Math.atan2(y1 - y0, 1.3);
-        sy = y0;
+        // (its nose with the slope under it - not with the drop past the lip, a car's length before it is there). R29, the owner:
+        // "one of them is half inside the ramp" - the body is tilted the game's way, a positive pitch its nose DOWN
+        // (game/vehicles.js floorTilt): it went up the ramp nose down, the front through the deck. Now as every car on a slope:
+        // the floor under its front wheels against the floor under its back ones
+        const L = 1.85;
+        const yf = floorY(sx - L, lane, sy + 1.2);
+        const yb = floorY(sx + L, lane, sy + 0.4);
+        if (yf > y0 - 0.6) pitch = -Math.atan2(yf - yb, 2 * L);
+        // (the body's middle over the deck where both wheels are, not where the middle of the slope is: on the curve up to
+        // the lip the deck under the middle is lower than the chord between the wheels)
+        sy = Math.max(y0, (yf + yb) / 2);
         if (dec && Math.random() < 0.75) puff(sc, 1);
         if (sx <= Lp + 0.35) {
           phase = 1;
@@ -6311,9 +6318,9 @@ export class Prologue {
           g.audio.play('crash', 0.45);
         }
       } else if (phase === 1) {
-        // (on the lip: its nose over, down)
+        // (on the lip: its nose over, down - positive, the game's way)
         sx -= 1.5 * dt;
-        pitch += (-0.5 - pitch) * Math.min(1, dt * 5);
+        pitch += (0.5 - pitch) * Math.min(1, dt * 5);
         if (st > 0.36) {
           phase = 2;
           vy = -1;
@@ -6323,7 +6330,7 @@ export class Prologue {
         vy -= 29 * dt;
         sy += vy * dt;
         sx -= sv * dt;
-        pitch -= 2.5 * dt;
+        pitch += 2.5 * dt;
         roll += 0.8 * dt;
         const q = wld(sx, 0, lane);
         const gy = groundHeight(q.x, q.z) + 0.45;
