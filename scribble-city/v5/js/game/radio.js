@@ -75,6 +75,10 @@ const STORE = 'scribble-city-v5-radio';
 export class Radio {
   constructor(game) {
     this.game = game;
+    // (R29, the owner: "a tune like this, from the very start, exactly as one gets into a car - a childish tune, I don't want it
+    // in the game". It was this radio's song, on by itself in every car. Out of the game: no station, no songs, no button;
+    // ?radio: as it was)
+    this.disabled = !(typeof location !== 'undefined' && new URLSearchParams(location.search).has('radio'));
     // the station it is on (-1: off)
     this.station = 0;
     try {
@@ -83,6 +87,7 @@ export class Radio {
     } catch (e) {
       // (no storage)
     }
+    if (this.disabled) this.station = -1;
     // the car it plays in, and the radio's own clock (the stations go on without you)
     this.car = null;
     this.clock = 0;
@@ -146,6 +151,7 @@ export class Radio {
 
   // ------------------------------------------------------------------ the dial
   next() {
+    if (this.disabled) return;
     this.station = this.station + 1 >= STATIONS.length ? -1 : this.station + 1;
     try {
       localStorage.setItem(STORE, String(this.station));
@@ -173,6 +179,7 @@ export class Radio {
     const game = this.game;
     const a = game.audio;
     this.clock += dt;
+    if (this.disabled) return;
     const p = game.player;
     const v = p.inVehicle;
     const inCar = !!(v && v.kind === 'car' && !v.dead);

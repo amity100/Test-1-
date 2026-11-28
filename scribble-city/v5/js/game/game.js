@@ -599,6 +599,8 @@ export class Game {
     slider('opt-vol-fx', 'fx');
     slider('opt-vol-music', 'music');
     slider('opt-vol-radio', 'radio');
+    // (R29: no radio in the game - game/radio.js disabled: nor its volume in the settings)
+    if (this.radio && this.radio.disabled && $('opt-vol-radio') && $('opt-vol-radio').closest('label')) $('opt-vol-radio').closest('label').style.display = 'none';
     slider('opt-sens', 'sens');
     box('opt-invert', 'invertY');
     box('opt-subs', 'subtitles');
@@ -2706,7 +2708,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     // (ROADMAP 11.8: one drawn to take off, to jump on its spring, to dive)
     $('btn-up').classList.toggle('hidden', !(v.flies || v.canLift || v.spring || v.dive));
     $('btn-down').classList.toggle('hidden', !(v.flies || v.canLift || v.dive));
-    $('btn-radio').classList.toggle('hidden', v.kind !== 'car');
+    $('btn-radio').classList.toggle('hidden', v.kind !== 'car' || !!(this.radio && this.radio.disabled));
     $('btn-view').classList.toggle('hidden', this.classic || (v.kind !== 'car' && v.kind !== 'bike'));
     // (the first time: the view from the car, the handbrake)
     // (one drawn freehand: how it goes, the first time - ROADMAP 11.6)
