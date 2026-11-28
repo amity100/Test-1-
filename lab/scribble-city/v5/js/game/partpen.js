@@ -1196,6 +1196,15 @@ export class PartPen {
         this.saveInvention();
         return;
       }
+      // (R29, the owner's word: what he has is ready at a tap - a part of the start kit, or one drawn once already, put on the
+      // ride with a touch on it here)
+      const it = e.target.closest('.pp-it[data-i]');
+      if (it && !it.classList.contains('lock')) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.tapPut(it.dataset.i);
+        return;
+      }
       const b = e.target.closest('[data-par]');
       if (!b) return;
       e.preventDefault();
@@ -1241,6 +1250,29 @@ export class PartPen {
     this.flyCv = cv;
   }
 
+  // (R29) a touch on one of the category's things: his already - on the ride at once (game/buildtray.js attach); not yet - it is
+  // drawn on the ride, the pen open for it
+  tapPut(id) {
+    const g = this.game;
+    const T = g.tray;
+    const v = g.player.inVehicle;
+    if (!T || !v || !T.attach) return false;
+    if (!T.knows(id)) {
+      g.hud.toast(tr(`${ITEMS[id] ? ITEMS[id].name : id}: עוד לא שלכם — ציירו אותו על הרכב פעם אחת`, `${ITEMS[id] ? ITEMS[id].name : id}: not yours yet — draw it on the ride once`), 'info', 2.6);
+      g.audio.play('click', 0.3);
+      return false;
+    }
+    if (v.fuse && v.fuse.parts && v.fuse.parts.some((q) => q.item === id)) {
+      g.hud.toast(tr(`${ITEMS[id] ? ITEMS[id].name : id} כבר על הרכב`, `${ITEMS[id] ? ITEMS[id].name : id} is on the ride already`), 'info', 1.8);
+      return false;
+    }
+    const got = T.attach(id, {});
+    this.legSig = '';
+    this.showLegend();
+    if (got) g.audio.play('ding', 0.45);
+    return !!got;
+  }
+
   showRow() {
     const el = this.rowEl;
     if (!el) return;
@@ -1270,7 +1302,7 @@ export class PartPen {
     // (ROADMAP 11.28: what is open yet, and at what level - game/gearplay.js)
     const play = this.game.gear && this.game.gear.play;
     const vv = this.game.player.inVehicle;
-    const sig = `${this.isOpen}|${this.cat}|${this.par}|${vv && vv.fuse ? vv.fuse.parts.length : 0}|${lit}|${L && L.ask ? L.ask.join() : ''}|${M ? 1 : 0}|${play ? `${play.state.open.length}:${JSON.stringify(play.state.lv)}` : ''}`;
+    const sig = `${this.isOpen}|${this.cat}|${this.par}|${vv && vv.fuse ? vv.fuse.parts.length : 0}|${lit}|${L && L.ask ? L.ask.join() : ''}|${M ? 1 : 0}|${play ? `${play.state.open.length}:${JSON.stringify(play.state.lv)}` : ''}|${this.hint || ''}|${this.game.tray && this.game.tray.store ? Object.keys(this.game.tray.store.learned).length : 0}`;
     if (sig === this.legSig) return;
     this.legSig = sig;
     el.classList.toggle('on', this.isOpen);
@@ -1288,7 +1320,7 @@ export class PartPen {
       el.innerHTML = `<div class="pp-say">${said}</div><div class="pp-its">${its}</div>${canSave ? tr('<button class="pp-inv-save" data-save="1">✦ לשמור כהמצאה</button>', '<button class="pp-inv-save" data-save="1">✦ Save as an invention</button>') : ''}`;
       return;
     }
-    const say = L && L.ask ? tr('עוד פרט אחד יכריע', 'One more detail will decide it') : M ? tr('לא יצא נכון? ↶ ומציירים שוב', 'Didn\'t come out right? ↶ and draw it again') : tr('מה שמציירים — זה מה שיוצא', 'What you draw — is what you get');
+    const say = L && L.ask ? tr('עוד פרט אחד יכריע', 'One more detail will decide it') : M ? tr('לא יצא נכון? ↶ ומציירים שוב', 'Didn\'t come out right? ↶ and draw it again') : tr('נגיעה במה שכבר שלכם — והוא על הרכב · או ציירו, ומה שמציירים זה מה שיוצא', 'Tap what is yours already — and it is on · or draw, and what you draw is what you get');
     // (round 17: a new player's car - the short list alone, the turbo first of its things: none of
     // the locked ones after it)
     // (round 19, the player's word: all of them shown, the ones not open locked - the open first)
@@ -1298,7 +1330,8 @@ export class PartPen {
     const items = order.map((id) => {
       const shut = play && !play.isOpen(id);
       const lv = play && !shut && !play.all() ? play.level(id) : 0;
-      const cls = ['pp-it', lit === id ? 'on' : '', L && L.ask && L.ask.includes(id) ? 'ask' : '', shut ? 'lock' : ''].filter(Boolean).join(' ');
+      const tap = !shut && this.game.tray && this.game.tray.knows && this.game.tray.knows(id);
+      const cls = ['pp-it', lit === id ? 'on' : '', L && L.ask && L.ask.includes(id) ? 'ask' : '', shut ? 'lock' : '', tap ? 'tap' : '', this.hint === id ? 'hint' : ''].filter(Boolean).join(' ');
       const tag = shut ? `<i class="pp-lock" title="${play.lockSay(id)}"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></i>` : lv > 1 ? `<i class="pp-lv">${'●'.repeat(lv)}</i>` : '';
       return `<div class="${cls}" data-i="${id}"><svg viewBox="0 0 24 24">${ITEMS[id].icon}</svg><b>${ITEMS[id].name}</b>${tag}</div>`;
     }).join('');

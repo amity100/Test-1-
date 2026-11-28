@@ -2,6 +2,7 @@ import { BLUEPRINTS, BLUEPRINT_ORDER, BLUEPRINT_MORE, BLUEPRINT_NEW, BLUEPRINT_C
 import { GRADE } from '../game/weapons.js';
 import { AVES, STREETS, nearestRoadInfo, districtName } from '../world/layout.js';
 import { EARLY_IDS } from '../game/drawlock.js';
+import { KIT_READY, START_BP } from '../game/finds.js';
 
 import { tr } from '../core/lang.js';
 const KEY = 'scribble-city-v5-album';
@@ -113,12 +114,15 @@ export class Album {
   // to be drawn - nothing is known before it has been drawn)
   known(id) {
     if (!BLUEPRINTS[id]) return false;
-    if (this.early) return this.early.has(id);
+    // (R29, the owner's word: everything he has from the start ready at a tap - the story's short list too: game/finds.js KIT_READY)
+    if (this.early) return KIT_READY ? EARLY_IDS.includes(id) : this.early.has(id);
     // (R26: had - the start kit or photographed - is not known till it has been drawn once; a test that does not ask for
     // the learning (?learn=1) knows what it has, as the parts tray's own tests do)
     const F = this.finding;
     if (F) {
       if (!F.bpOpen(id)) return false;
+      // (R29: the start kit at a tap; only what is found in the city is drawn once)
+      if (KIT_READY && START_BP.has(id)) return true;
       // (a ramp, a bridge, a barrier is drawn on the world each time - game/gadgets.js DRAWN_ON: nothing to learn first)
       if (id === 'ramp' || id === 'bridge' || id === 'barrier') return true;
       const P = this.game.params;

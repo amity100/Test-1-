@@ -599,6 +599,8 @@ export class Game {
     slider('opt-vol-fx', 'fx');
     slider('opt-vol-music', 'music');
     slider('opt-vol-radio', 'radio');
+    // (R29: no radio in the game - game/radio.js disabled: nor its volume in the settings)
+    if (this.radio && this.radio.disabled && $('opt-vol-radio') && $('opt-vol-radio').closest('label')) $('opt-vol-radio').closest('label').style.display = 'none';
     slider('opt-sens', 'sens');
     box('opt-invert', 'invertY');
     box('opt-subs', 'subtitles');
@@ -2706,7 +2708,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     // (ROADMAP 11.8: one drawn to take off, to jump on its spring, to dive)
     $('btn-up').classList.toggle('hidden', !(v.flies || v.canLift || v.spring || v.dive));
     $('btn-down').classList.toggle('hidden', !(v.flies || v.canLift || v.dive));
-    $('btn-radio').classList.toggle('hidden', v.kind !== 'car');
+    $('btn-radio').classList.toggle('hidden', v.kind !== 'car' || !!(this.radio && this.radio.disabled));
     $('btn-view').classList.toggle('hidden', this.classic || (v.kind !== 'car' && v.kind !== 'bike'));
     // (the first time: the view from the car, the handbrake)
     // (one drawn freehand: how it goes, the first time - ROADMAP 11.6)
@@ -2976,6 +2978,7 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
     let prompt = '';
     let photo = false;
     let enter = false;
+    let enterDraw = false;
     // (on a phone the buttons are on the screen; with a gamepad the prompt says which to press)
     const touch = this.touch && !this.pad.active;
     if (p.inVehicle) {
@@ -3017,6 +3020,11 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
       // (R26, the owner's word: a blueprint found in the city is photographed - F or the camera button, game/finds.js)
       const ft = this.finds.target();
       if (ft.photo) photo = true;
+      // (R29: and drawn right there - the enter button on a phone, E on a computer: game/finds.js drawHere)
+      if (ft.draw) {
+        enter = true;
+        enterDraw = true;
+      }
       prompt = ft.label;
     } else if (p.mode === 'foot' && this.places && this.places.target()) {
       // (ROADMAP 29.5: the boxing gym's ring, the coach's mitts, the bags - game/placegym.js)
@@ -3178,6 +3186,8 @@ CPU ${c && c.cpuE ? c.cpuE.toFixed(1) : '?'}ms · frame ${c && c.ema ? c.ema.toF
         document.body.classList.toggle('photo-ready', this.photoCls);
       }
       $('btn-enter').classList.toggle('hidden', !enter);
+      // (R29: by a page the enter button is the pencil's - draw it here)
+      $('btn-enter').classList.toggle('as-draw', !!enterDraw);
       // the pencil: how many photos you carry, and a wiggle when one is waiting to be drawn
       const n = this.album.size;
       const key = `${n}|${this.nudgeDraw}`;
