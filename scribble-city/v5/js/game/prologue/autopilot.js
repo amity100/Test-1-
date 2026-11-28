@@ -660,7 +660,7 @@ export class Autopilot {
         }
         return;
       }
-      if (this.since('penopen') > 2.4 && this.P.turboPts && (this.since('turbo') < 0 || this.since('turbo') > 4)) {
+      if (this.since('penopen') > 2.4 && this.P.turboPts && !(F.group && F.group.length) && (this.since('turbo') < 0 || this.since('turbo') > 4)) {
         this.did.turbo = g.time;
         this.drawLine(this.P.turboPts);
       }
