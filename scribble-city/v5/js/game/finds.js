@@ -1386,6 +1386,8 @@ function css() {
  padding:14px 20px 14px 18px;background:linear-gradient(90deg,rgba(14,12,10,.82),rgba(14,12,10,.55) 70%,rgba(14,12,10,0));
  border-left:2px solid #d8a94e;color:#f3ead8;opacity:0;transform:translateX(-18px);transition:opacity .5s ease,transform .6s cubic-bezier(.2,.8,.2,1);direction:ltr;text-align:left}
 .find-card.on{opacity:1;transform:none}
+/* (R29) the pen open: the card out of the way of its list */
+body.fd-open .find-card.on{opacity:0}
 .find-card .fc-k{font:600 11px/1 "Rubik",sans-serif;letter-spacing:.32em;color:#d8a94e;margin-bottom:6px}
 .find-card .fc-t{font:400 34px/1 "Anton","Rubik","Arial Narrow",sans-serif;letter-spacing:.04em;color:#fff4dc}
 .find-card .fc-l{font:400 14px/1.35 "Rubik",sans-serif;margin-top:8px;color:#e8dcc4}
